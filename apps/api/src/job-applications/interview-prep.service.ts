@@ -81,6 +81,7 @@ export class JobApplicationInterviewPrepService {
     userId: string,
     applicationId: string,
     adaptationId?: string,
+    sessionInternalId?: string | null,
   ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id: applicationId, userId },
@@ -226,6 +227,7 @@ export class JobApplicationInterviewPrepService {
       usedJobDescription,
       usedStructuredData,
       usedPastReflections,
+      sessionInternalId,
     }).catch((err) => {
       this.logger.error(
         `[interview-prep] ${prep.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
@@ -244,6 +246,7 @@ export class JobApplicationInterviewPrepService {
       usedJobDescription: boolean;
       usedStructuredData: boolean;
       usedPastReflections: boolean;
+      sessionInternalId?: string | null;
     },
   ): Promise<void> {
     const { applicationId, userId, context } = input;
@@ -316,6 +319,9 @@ export class JobApplicationInterviewPrepService {
             questions_count: Array.isArray(prepContent.questionsTheyMayAsk)
               ? prepContent.questionsTheyMayAsk.length
               : 0,
+            ...(input.sessionInternalId
+              ? { sessionInternalId: input.sessionInternalId }
+              : {}),
           },
         },
         {

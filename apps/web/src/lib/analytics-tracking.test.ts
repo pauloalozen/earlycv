@@ -172,6 +172,27 @@ describe("analytics tracking", () => {
     expect(base).toHaveProperty("sessionInternalId");
     expect(base).toHaveProperty("routeVisitId");
     expect(base).toHaveProperty("$session_id", "ph-session-123");
+    expect(base.visitor_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+  });
+
+  it("visitor_id (Fase C) is stable across repeated calls, distinct from sessionInternalId", () => {
+    const first = getAnalyticsBaseProperties();
+    const second = getAnalyticsBaseProperties();
+
+    expect(second.visitor_id).toBe(first.visitor_id);
+    expect(second.visitor_id).not.toBe(first.sessionInternalId);
+  });
+
+  it("includes visitor_id on the actual emitted payload for a priority event (page_view)", async () => {
+    await trackEvent({ eventName: "page_view" });
+
+    const [, options] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse((options as RequestInit)?.body as string);
+    expect(body.metadata.visitor_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
   });
 
   it("sends x-posthog-session-id header when available", async () => {

@@ -12,6 +12,7 @@ import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
 import { RadarPageShell } from "../../page-shell";
+import { RadarViewTracker } from "../../radar-view-tracker";
 
 type PageProps = {
   params: Promise<{ empresa: string }>;
@@ -76,6 +77,7 @@ export default async function RadarEmpresaPage({
       userRole={user?.internalRole}
       credits={availableCredits}
     >
+      <RadarViewTracker radarViewType="company" />
       <RadarJobsListing
         basePath={`/radar/empresa/${companySlug}`}
         user={user}

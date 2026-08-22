@@ -29,6 +29,7 @@ import {
   deleteJobApplication,
   restoreJobApplication,
 } from "@/lib/job-applications-api";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { CreateApplicationModal } from "./create-modal";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -867,7 +868,7 @@ function CandRow({
     setDeleteError(null);
     setDeleting(true);
     try {
-      await deleteJobApplication(application.id);
+      await deleteJobApplication(application.id, getJourneySessionInternalId());
       onDeleted(application.id);
     } catch (error) {
       if (error instanceof Error && error.message) {

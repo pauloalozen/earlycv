@@ -428,7 +428,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
                       href={
                         plan.id === "free"
                           ? "/entrar?next=/adaptar"
-                          : "/entrar?next=/planos"
+                          : "/entrar?next=/planos&ctx=checkout"
                       }
                       style={{
                         display: "block",

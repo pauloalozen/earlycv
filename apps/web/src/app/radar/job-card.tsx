@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { AnalyzeCardBtn } from "./analyze-card-btn";
 import { CompanyLogo } from "./company-logo";
+import { RadarOpportunityLink } from "./radar-opportunity-link";
 import {
   AdaptBtn,
   breakdownPct,
@@ -163,8 +163,9 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
           flexWrap: "wrap",
         }}
       >
-        <Link
+        <RadarOpportunityLink
           href={`/radar/${job.slug}`}
+          jobId={job.id}
           style={{
             fontSize: 15.5,
             fontWeight: 500,
@@ -175,7 +176,7 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
           }}
         >
           {job.title}
-        </Link>
+        </RadarOpportunityLink>
         {alreadyAnalyzed ? (
           <span
             style={{

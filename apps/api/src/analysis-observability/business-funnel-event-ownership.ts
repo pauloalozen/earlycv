@@ -7,6 +7,9 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   BusinessFunnelEventSource
 > = {
   analysis_started: "backend",
+  analysis_completed: "backend",
+  analysis_failed: "backend",
+  analysis_result_viewed: "frontend",
   analyze_submit_clicked: "frontend",
   auth_session_identified: "frontend",
   auth_oauth_redirect_started: "frontend",
@@ -19,6 +22,9 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   buy_credits_clicked: "frontend",
   checkout_abandoned: "frontend",
   checkout_started: "frontend",
+  checkout_brick_ready: "frontend",
+  checkout_brick_submit_started: "frontend",
+  checkout_brick_submit_failed: "frontend",
   cv_unlock_completed: "frontend",
   cv_unlock_started: "frontend",
   cv_upload_completed: "backend",
@@ -57,6 +63,8 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   candidatura_rejection_feedback_submitted: "backend",
   // Radar
   radar_view: "frontend",
+  radar_opportunity_clicked: "frontend",
+  job_detail_viewed: "frontend",
   // Interview Prep
   interview_prep_drawer_opened: "frontend",
   interview_prep_generate_clicked: "frontend",

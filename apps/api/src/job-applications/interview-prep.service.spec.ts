@@ -308,9 +308,9 @@ test("persists generatedContentJson once generation succeeds", async () => {
   await service.generateOrGet("user-1", "app-1");
   await sleep(20);
 
-  const finalUpdate = (
-    db._updatedPreps as Array<Record<string, unknown>>
-  ).at(-1);
+  const finalUpdate = (db._updatedPreps as Array<Record<string, unknown>>).at(
+    -1,
+  );
   assert.equal(finalUpdate?.status, "succeeded");
   assert.deepEqual(finalUpdate?.generatedContentJson, STUB_CONTENT);
 });
@@ -516,9 +516,9 @@ test("marks prep as failed without throwing out of generateOrGet", async () => {
 
   await sleep(20);
 
-  const finalUpdate = (
-    db._updatedPreps as Array<Record<string, unknown>>
-  ).at(-1);
+  const finalUpdate = (db._updatedPreps as Array<Record<string, unknown>>).at(
+    -1,
+  );
   assert.equal(finalUpdate?.status, "failed");
   assert.match(String(finalUpdate?.lastError), /AI timeout/);
   assert.equal(
@@ -559,9 +559,9 @@ test("retries generation on the next call after a failure", async () => {
   await sleep(20);
 
   assert.equal(aiCalls.length, 1);
-  const finalUpdate = (
-    db._updatedPreps as Array<Record<string, unknown>>
-  ).at(-1);
+  const finalUpdate = (db._updatedPreps as Array<Record<string, unknown>>).at(
+    -1,
+  );
   assert.equal(finalUpdate?.status, "succeeded");
 });
 
@@ -582,9 +582,9 @@ test("propagates validation error without leaving partial state", async () => {
   await service.generateOrGet("user-1", "app-1");
   await sleep(20);
 
-  const finalUpdate = (
-    db._updatedPreps as Array<Record<string, unknown>>
-  ).at(-1);
+  const finalUpdate = (db._updatedPreps as Array<Record<string, unknown>>).at(
+    -1,
+  );
   assert.equal(finalUpdate?.status, "failed");
   assert.match(String(finalUpdate?.lastError), /validation failed/i);
   assert.equal(
@@ -612,4 +612,55 @@ test("existing CvAdaptationAiService methods are not called by InterviewPrepServ
 
   // Just asserting the service ran successfully without any cross-contamination
   assert.equal(aiCalls.length, 1);
+});
+
+// ─── Fase B.3: sessionInternalId propagation ──────────────────────────────
+
+function makeFunnelEventsCapture() {
+  const calls: Array<{
+    eventName: string;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
+  return {
+    funnelEvents: {
+      record: async (input: {
+        eventName: string;
+        idempotencyKey?: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        calls.push(input);
+        return { event: {}, ingested: true };
+      },
+    },
+    calls,
+  };
+}
+
+test("interview_prep_generated carries sessionInternalId in metadata when the caller passes a journey session id", async () => {
+  const db = makeDb(makeApp());
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new InterviewPrepServiceCtor(db, makeAiMock(), funnelEvents);
+
+  await service.generateOrGet("user-1", "app-1", undefined, "journey-prep-1");
+  await sleep(20);
+
+  const prepEvent = calls.find(
+    (c) => c.eventName === "interview_prep_generated",
+  );
+  assert.equal(prepEvent?.metadata?.sessionInternalId, "journey-prep-1");
+});
+
+test("interview_prep_generated omits sessionInternalId from metadata when the caller has no reliable journey context — never invented", async () => {
+  const db = makeDb(makeApp());
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new InterviewPrepServiceCtor(db, makeAiMock(), funnelEvents);
+
+  await service.generateOrGet("user-1", "app-1");
+  await sleep(20);
+
+  const prepEvent = calls.find(
+    (c) => c.eventName === "interview_prep_generated",
+  );
+  assert.equal("sessionInternalId" in (prepEvent?.metadata ?? {}), false);
 });

@@ -23,6 +23,8 @@ import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { AnalysisCtaButtons } from "../analysis-cta";
 import { CompanyLogo } from "../company-logo";
+import { JobDetailViewTracker } from "../job-detail-view-tracker";
+import { RadarOpportunityLink } from "../radar-opportunity-link";
 import {
   breakdownPct,
   type MatchBreakdown,
@@ -269,7 +271,7 @@ function CompatCard({
       <CompatCardCta
         title="Cadastre-se para ver sua oportunidade"
         description="Análise gratuita, calculada a partir do seu CV."
-        href="/entrar?tab=cadastrar"
+        href="/entrar?tab=cadastrar&ctx=radar"
         linkLabel="Cadastre-se grátis"
       />
     );
@@ -497,8 +499,9 @@ export async function generateMetadata({
 
 function SimCard({ job }: { job: PublicJob }) {
   return (
-    <Link
+    <RadarOpportunityLink
       href={`/radar/${job.slug}`}
+      jobId={job.id}
       style={{
         background: "#fafaf6",
         border: "1px solid rgba(10,10,10,0.08)",
@@ -565,7 +568,7 @@ function SimCard({ job }: { job: PublicJob }) {
           ver vaga →
         </span>
       </div>
-    </Link>
+    </RadarOpportunityLink>
   );
 }
 
@@ -618,7 +621,7 @@ export default async function JobPage({ params }: JobPageProps) {
   const hasExistingAnalysisScore =
     typeof existingApplication?.bestScore === "number";
 
-  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar";
+  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar&ctx=radar";
   const adaptarJobHref = `${adaptarHref}${adaptarHref.includes("?") ? `&jobId=${job.id}` : `?jobId=${job.id}`}`;
 
   const sections = splitHtmlSections(job.descriptionHtml);
@@ -755,6 +758,7 @@ export default async function JobPage({ params }: JobPageProps) {
       <script type="application/ld+json">
         {JSON.stringify(breadcrumbJsonLd)}
       </script>
+      <JobDetailViewTracker jobId={job.id} />
 
       <div
         aria-hidden

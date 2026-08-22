@@ -42,4 +42,38 @@ describe("unlock tracking helpers", () => {
       },
     );
   });
+
+  it("passes remainingCredits as null when the backend does not reliably report the post-consumption balance — never a fictitious 0", () => {
+    const emitResultadoEventMock = vi.fn();
+
+    emitUnlockCompleted({
+      adaptationId: "adp-2",
+      emitResultadoEvent: emitResultadoEventMock,
+      remainingCredits: null,
+      sourceDetail: "resultado",
+      unlockMethod: "credit",
+    });
+
+    expect(emitResultadoEventMock).toHaveBeenCalledWith(
+      "cv_unlock_completed",
+      expect.objectContaining({ remainingCredits: null }),
+    );
+  });
+
+  it("passes through a real non-zero balance when the backend does report it", () => {
+    const emitResultadoEventMock = vi.fn();
+
+    emitUnlockCompleted({
+      adaptationId: "adp-3",
+      emitResultadoEvent: emitResultadoEventMock,
+      remainingCredits: 4,
+      sourceDetail: "resultado",
+      unlockMethod: "credit",
+    });
+
+    expect(emitResultadoEventMock).toHaveBeenCalledWith(
+      "cv_unlock_completed",
+      expect.objectContaining({ remainingCredits: 4 }),
+    );
+  });
 });

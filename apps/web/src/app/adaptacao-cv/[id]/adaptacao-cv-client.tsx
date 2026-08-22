@@ -8,6 +8,7 @@ import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import { DownloadProgressOverlay } from "@/components/download-progress-overlay";
 import { PageShell } from "@/components/page-shell";
 import { pollAnalysisJob } from "@/lib/analysis-job-polling";
+import { trackEvent } from "@/lib/analytics-tracking";
 import type { AppInternalRole } from "@/lib/app-session";
 import type { DownloadProgressStage } from "@/lib/client-download";
 import { downloadFromApi } from "@/lib/client-download";
@@ -24,6 +25,8 @@ import {
   saveReanalysisResult,
   updateCvAdaptationContent,
 } from "@/lib/cv-adaptation-api";
+import { getJourneyPreviousRoute } from "@/lib/journey-session";
+import type { ProductOrigin } from "@/lib/product-origin";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const SIDEBAR_W = 354;
@@ -2012,7 +2015,27 @@ export function AdaptacaoCvClient({
     }
   }
 
+  function resolveDownloadProductOrigin(): ProductOrigin {
+    const previousRoute = getJourneyPreviousRoute();
+    if (previousRoute?.startsWith("/radar")) return "radar";
+    if (previousRoute?.startsWith("/candidaturas")) return "candidatura";
+    return "analysis";
+  }
+
   async function handleDownload(format: "pdf" | "docx") {
+    // Mesmo evento e mesma semântica de /adaptar/resultado — representa
+    // clique/tentativa de download, não confirmação de transferência
+    // completa (ver docs/runbook/events.md). Cobre a tela de destino
+    // pós-unlock, onde a maioria dos downloads finais acontece de fato.
+    void trackEvent({
+      eventName: "optimized_cv_downloaded",
+      eventVersion: 1,
+      properties: {
+        format,
+        adaptation_id: adaptationId,
+        product_origin: resolveDownloadProductOrigin(),
+      },
+    });
     setDownloadFormat(format);
     setDownloadOpen(true);
     try {

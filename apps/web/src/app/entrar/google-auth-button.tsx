@@ -1,6 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
+
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const JOURNEY_SESSION_KEY = "journey_session_internal_id";
 
 export function GoogleAuthButton({
   href,
@@ -9,9 +13,37 @@ export function GoogleAuthButton({
   href: string;
   next: string;
 }) {
+  const [resolvedHref, setResolvedHref] = useState(href);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+
+    try {
+      const sessionInternalId = sessionStorage.getItem(JOURNEY_SESSION_KEY);
+      if (sessionInternalId) {
+        params.set("sid", sessionInternalId);
+      }
+    } catch {
+      // sessionStorage indisponível — segue sem sid.
+    }
+
+    const visitorId = getOrCreateVisitorId();
+    if (visitorId) {
+      params.set("vid", visitorId);
+    }
+
+    if (params.size === 0) {
+      setResolvedHref(href);
+      return;
+    }
+
+    const separator = href.includes("?") ? "&" : "?";
+    setResolvedHref(`${href}${separator}${params.toString()}`);
+  }, [href]);
+
   return (
     <a
-      href={href}
+      href={resolvedHref}
       onClick={() => {
         if (next) {
           try {

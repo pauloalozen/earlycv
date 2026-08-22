@@ -22,6 +22,9 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   auth_session_identified: "auth_session_identified",
   auth_oauth_redirect_started: "auth_oauth_redirect_started",
   analysis_started: "analysis_started",
+  analysis_completed: "analysis_completed",
+  analysis_failed: "analysis_failed",
+  analysis_result_viewed: "analysis_result_viewed",
   blog_cta_clicked: "blog_cta_clicked",
   blog_index_viewed: "blog_index_viewed",
   blog_post_viewed: "blog_post_viewed",
@@ -39,6 +42,9 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   unlock_cv_click: "unlock_cv_click",
   checkout_abandoned: "checkout_abandoned",
   checkout_started: "checkout_started",
+  checkout_brick_ready: "checkout_brick_ready",
+  checkout_brick_submit_started: "checkout_brick_submit_started",
+  checkout_brick_submit_failed: "checkout_brick_submit_failed",
   cv_unlock_completed: "cv_unlock_completed",
   cv_unlock_started: "cv_unlock_started",
   payment_approved: "payment_approved",
@@ -49,6 +55,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   dashboard_viewed: "dashboard_viewed",
   // Radar
   radar_view: "radar_view",
+  radar_opportunity_clicked: "radar_opportunity_clicked",
+  job_detail_viewed: "job_detail_viewed",
   // Candidaturas
   candidaturas_page_viewed: "candidaturas_page_viewed",
   candidatura_created: "candidatura_created",

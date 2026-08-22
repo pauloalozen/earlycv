@@ -12,6 +12,7 @@ import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
 import { RadarPageShell } from "../../page-shell";
+import { RadarViewTracker } from "../../radar-view-tracker";
 
 // Só existe conteúdo publicável na landing page de tecnologia se houver
 // pelo menos esse tanto de vagas ativas com ela — abaixo disso, notFound()
@@ -82,6 +83,7 @@ export default async function RadarTecnologiaPage({
       userRole={user?.internalRole}
       credits={availableCredits}
     >
+      <RadarViewTracker radarViewType="technology" technology={tech} />
       <RadarJobsListing
         basePath={`/radar/tecnologia/${tech}`}
         user={user}

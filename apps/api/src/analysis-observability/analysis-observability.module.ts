@@ -9,6 +9,8 @@ import { AnalysisRetentionService } from "./analysis-retention.service";
 import { BusinessFunnelEventService } from "./business-funnel-event.service";
 import { BusinessFunnelEventsController } from "./business-funnel-events.controller";
 import { BusinessFunnelProjectionService } from "./business-funnel-projection.service";
+import { JourneySessionClassificationService } from "./journey-session-classification.service";
+import { VisitorLifecycleClassificationService } from "./visitor-lifecycle-classification.service";
 
 @Module({
   imports: [DatabaseModule],
@@ -21,12 +23,16 @@ import { BusinessFunnelProjectionService } from "./business-funnel-projection.se
     RolesGuard,
     AnalysisRetentionService,
     AnalysisRetentionScheduler,
+    JourneySessionClassificationService,
+    VisitorLifecycleClassificationService,
   ],
   exports: [
     BusinessFunnelEventService,
     BusinessFunnelProjectionService,
     AdminEventsEmitterService,
     AnalysisRetentionService,
+    JourneySessionClassificationService,
+    VisitorLifecycleClassificationService,
   ],
 })
 export class AnalysisObservabilityModule {}

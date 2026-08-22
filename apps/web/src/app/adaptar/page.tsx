@@ -493,13 +493,6 @@ function AdaptarPageContent() {
             return;
           }
         }
-        emitUiFunnelEvent("analysis_started", {
-          attemptId: submitAttemptId,
-          metadata: {
-            cvMode,
-            isAuthenticated,
-          },
-        });
         const started = await startAndPoll(
           analyzeAuthenticatedCv(formData, "profile"),
         );
@@ -520,13 +513,6 @@ function AdaptarPageContent() {
         } else {
           formData.append("file", file);
         }
-        emitUiFunnelEvent("analysis_started", {
-          attemptId: submitAttemptId,
-          metadata: {
-            cvMode,
-            isAuthenticated,
-          },
-        });
         const started = await startAndPoll(
           analyzeAuthenticatedCv(
             formData,
@@ -545,13 +531,6 @@ function AdaptarPageContent() {
           formData.append("masterResumeId", savedResume.id);
           formData.append("saveAsMaster", "true");
         }
-        emitUiFunnelEvent("analysis_started", {
-          attemptId: submitAttemptId,
-          metadata: {
-            cvMode,
-            isAuthenticated,
-          },
-        });
         const started = await startAndPoll(
           analyzeAuthenticatedCv(
             formData,
@@ -561,13 +540,6 @@ function AdaptarPageContent() {
         analyzeResult = started.result;
       } else {
         if (cvMode === "text") {
-          emitUiFunnelEvent("analysis_started", {
-            attemptId: submitAttemptId,
-            metadata: {
-              cvMode,
-              isAuthenticated,
-            },
-          });
           const started = await startAndPoll(analyzeGuestCv(formData));
           analyzeResult = started.result;
           guestSessionPublicToken = started.guestSessionPublicToken;
@@ -596,13 +568,6 @@ function AdaptarPageContent() {
           return;
         }
         formData.append("file", uploadedFile);
-        emitUiFunnelEvent("analysis_started", {
-          attemptId: submitAttemptId,
-          metadata: {
-            cvMode,
-            isAuthenticated,
-          },
-        });
         const started = await startAndPoll(analyzeGuestCv(formData));
         analyzeResult = started.result;
         guestSessionPublicToken = started.guestSessionPublicToken;
@@ -1138,16 +1103,6 @@ function AdaptarPageContent() {
                           }
                           setFile(droppedFile);
                           setCvMode("upload");
-                          emitUiFunnelEvent("cv_upload_completed", {
-                            attemptId: buildClientAttemptId(),
-                            metadata: {
-                              fileExtension:
-                                droppedFile.name
-                                  .split(".")
-                                  .pop()
-                                  ?.toLowerCase() ?? null,
-                            },
-                          });
                         }}
                         style={{
                           width: "100%",
@@ -1282,16 +1237,6 @@ function AdaptarPageContent() {
                       setFile(nextFile);
                       if (nextFile) {
                         setCvMode("upload");
-                      }
-                      if (nextFile) {
-                        emitUiFunnelEvent("cv_upload_completed", {
-                          attemptId: buildClientAttemptId(),
-                          metadata: {
-                            fileExtension:
-                              nextFile.name.split(".").pop()?.toLowerCase() ??
-                              null,
-                          },
-                        });
                       }
                     }}
                   />

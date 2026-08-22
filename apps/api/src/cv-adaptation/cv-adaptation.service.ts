@@ -19,6 +19,8 @@ import type {
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import type { Response } from "express";
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
+import type { ProductOrigin } from "../analysis-observability/product-origin";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
@@ -189,6 +191,15 @@ export class CvAdaptationService {
       MasterCvCanonicalExtractionService,
       "enqueueFromMasterResumeUpload"
     >,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: Pick<
+      BusinessFunnelEventService,
+      "record"
+    > = {
+      async record() {
+        return { event: {}, ingested: false };
+      },
+    },
   ) {}
 
   // Fire-and-forget: um CV que virou master durante uma análise (primeiro
@@ -794,6 +805,23 @@ export class CvAdaptationService {
           routeKey: "cv-adaptation/analyze-guest",
         });
       }
+
+      await this.recordFunnelEvent(
+        "cv_upload_completed",
+        this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        "cv-adaptation/analyze-guest",
+        `cv_upload_completed:${this.buildFileFingerprint(file.buffer)}`,
+        {
+          mode: "guest",
+          fileExtension: file.originalname.includes(".")
+            ? (file.originalname.split(".").pop()?.toLowerCase() ?? null)
+            : null,
+        },
+      );
     }
 
     const protectionResult =
@@ -907,6 +935,7 @@ export class CvAdaptationService {
     masterCvText?: string,
     turnstileToken?: string,
     analysisContext?: AnalysisRequestContext,
+    radarJobId?: string,
   ): Promise<{
     jobId: string;
     status: "pending";
@@ -939,14 +968,26 @@ export class CvAdaptationService {
       },
     });
 
-    this.processAnalysisJob(job.id, () =>
-      this.analyzeGuest(
-        jobDescriptionText,
-        file,
-        masterCvText,
-        turnstileToken,
-        analysisContext,
-      ),
+    this.processAnalysisJob(
+      job.id,
+      () =>
+        this.analyzeGuest(
+          jobDescriptionText,
+          file,
+          masterCvText,
+          turnstileToken,
+          analysisContext,
+        ),
+      {
+        context: this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        mode: "guest",
+        cvSource: file ? "upload" : "master_cv",
+        productOrigin: radarJobId ? "radar" : "direct",
+      },
     ).catch((err) => {
       this.logger.error(
         `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
@@ -1063,6 +1104,16 @@ export class CvAdaptationService {
       job.id,
       () => this.analyzeAuthenticated(userId, dto, file, analysisContext),
       {
+        context: this.buildProtectionContext(
+          analysisContext,
+          userId,
+          "cv-adaptation/analyze",
+        ),
+        mode: "authenticated",
+        cvSource: file ? "upload" : "master_cv",
+        productOrigin: dto.radarJobId ? "radar" : "direct",
+      },
+      {
         jobTitle: resolved.radarJobTitle,
         companyName: resolved.radarCompanyName,
       },
@@ -1083,6 +1134,12 @@ export class CvAdaptationService {
       masterCvText: string;
       analysisCvSnapshotId: string;
     }>,
+    analytics: {
+      context: AnalysisRequestContext & { routeKey: string };
+      mode: "guest" | "authenticated";
+      cvSource: "master_cv" | "upload";
+      productOrigin: ProductOrigin;
+    },
     // Quando a análise veio do radar, o Job já tem cargo/empresa reais e
     // curados — sempre prevalecem sobre o que a IA reextrair do texto
     // colado (que frequentemente não repete o nome da empresa no corpo
@@ -1090,10 +1147,25 @@ export class CvAdaptationService {
     // disponível). Sem radar, cai pro que a IA extraiu, como antes.
     radarFallback?: { jobTitle: string | null; companyName: string | null },
   ): Promise<void> {
+    const startedAt = new Date();
+
     await this.database.analysisJob.update({
       where: { id: jobId },
-      data: { status: "processing", startedAt: new Date() },
+      data: { status: "processing", startedAt },
     });
+
+    await this.recordFunnelEvent(
+      "analysis_started",
+      analytics.context,
+      analytics.context.routeKey,
+      `analysis_started:${jobId}`,
+      {
+        analysis_id: jobId,
+        mode: analytics.mode,
+        origin: analytics.context.routeKey,
+        product_origin: analytics.productOrigin,
+      },
+    );
 
     try {
       const result = await run();
@@ -1115,6 +1187,21 @@ export class CvAdaptationService {
           scoreAfter: signals.scoreAfter,
         },
       });
+
+      await this.recordFunnelEvent(
+        "analysis_completed",
+        analytics.context,
+        analytics.context.routeKey,
+        `analysis_completed:${jobId}`,
+        {
+          analysis_id: jobId,
+          mode: analytics.mode,
+          origin: analytics.context.routeKey,
+          product_origin: analytics.productOrigin,
+          processing_time_ms: Date.now() - startedAt.getTime(),
+          cv_source: analytics.cvSource,
+        },
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`[analysis-job] ${jobId} failed: ${message}`);
@@ -1122,6 +1209,73 @@ export class CvAdaptationService {
         where: { id: jobId },
         data: { status: "failed", finishedAt: new Date(), lastError: message },
       });
+
+      const failure = this.classifyAnalysisFailure(error);
+      await this.recordFunnelEvent(
+        "analysis_failed",
+        analytics.context,
+        analytics.context.routeKey,
+        `analysis_failed:${jobId}`,
+        {
+          analysis_id: jobId,
+          mode: analytics.mode,
+          origin: analytics.context.routeKey,
+          product_origin: analytics.productOrigin,
+          processing_time_ms: Date.now() - startedAt.getTime(),
+          stage: failure.stage,
+          error_code: failure.errorCode,
+          retryable: failure.retryable,
+        },
+      );
+    }
+  }
+
+  private classifyAnalysisFailure(error: unknown): {
+    stage: "validation" | "protection" | "processing";
+    errorCode: string;
+    retryable: boolean;
+  } {
+    if (error instanceof BadRequestException) {
+      return {
+        stage: "validation",
+        errorCode: "invalid_input",
+        retryable: false,
+      };
+    }
+    if (error instanceof UnauthorizedException) {
+      return {
+        stage: "protection",
+        errorCode: "unauthorized",
+        retryable: false,
+      };
+    }
+    if (error instanceof NotFoundException) {
+      return { stage: "validation", errorCode: "not_found", retryable: false };
+    }
+    return {
+      stage: "processing",
+      errorCode: "processing_failed",
+      retryable: true,
+    };
+  }
+
+  private async recordFunnelEvent(
+    eventName: string,
+    context: AnalysisRequestContext,
+    routeKey: string,
+    idempotencyKey: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.funnelEvents.record(
+        { eventName, eventVersion: 1, idempotencyKey, metadata, routeKey },
+        context,
+        "backend",
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[analytics] failed to record ${eventName}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -1285,6 +1439,23 @@ export class CvAdaptationService {
           routeKey: "cv-adaptation/analyze",
         });
       }
+
+      await this.recordFunnelEvent(
+        "cv_upload_completed",
+        this.buildProtectionContext(
+          analysisContext,
+          userId,
+          "cv-adaptation/analyze",
+        ),
+        "cv-adaptation/analyze",
+        `cv_upload_completed:${this.buildFileFingerprint(file.buffer)}`,
+        {
+          mode: "authenticated",
+          fileExtension: file.originalname.includes(".")
+            ? (file.originalname.split(".").pop()?.toLowerCase() ?? null)
+            : null,
+        },
+      );
     }
 
     const protectionResult =

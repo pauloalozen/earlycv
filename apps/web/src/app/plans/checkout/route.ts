@@ -11,7 +11,7 @@ function isPlanId(value: string): value is PlanId {
 
 function loginRedirectPath(planId: PlanId): string {
   const next = encodeURIComponent(`/plans/checkout?plan=${planId}`);
-  return `/entrar?next=${next}`;
+  return `/entrar?next=${next}&ctx=checkout`;
 }
 
 async function createCheckoutRedirect(
@@ -61,7 +61,10 @@ export async function POST(request: Request) {
   const user = await getCurrentAppUserFromCookies();
 
   if (!user) {
-    return createPostRedirectResponse(request.url, "/entrar?next=/planos");
+    return createPostRedirectResponse(
+      request.url,
+      "/entrar?next=/planos&ctx=checkout",
+    );
   }
 
   const formData = await request.formData();

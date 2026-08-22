@@ -222,13 +222,36 @@ export class JobApplicationsService {
     userId: string,
     applicationId: string,
     metadata?: Record<string, unknown>,
+    options?: {
+      idempotencyKey?: string;
+      // UUID de jornada do frontend (metadata.sessionInternalId, nunca a
+      // coluna sessionInternalId do contexto — ver docs/runbook/events.md
+      // seção 2). null quando a chamada não carrega contexto confiável
+      // (ex.: criação automática de candidatura, disparada internamente
+      // fora de uma requisição do browser) — nunca inventado.
+      sessionInternalId?: string | null;
+    },
   ) {
     if (!this.funnelEvents) {
       return;
     }
     const context = this.buildBackendContext(userId, applicationId);
     await this.funnelEvents
-      .record({ eventName, eventVersion: 1, metadata }, context, "backend")
+      .record(
+        {
+          eventName,
+          eventVersion: 1,
+          idempotencyKey: options?.idempotencyKey,
+          metadata: {
+            ...metadata,
+            ...(options?.sessionInternalId
+              ? { sessionInternalId: options.sessionInternalId }
+              : {}),
+          },
+        },
+        context,
+        "backend",
+      )
       .catch((err: unknown) => {
         this.logger.warn(
           `[job-applications] failed to record ${eventName}: ${err}`,
@@ -466,7 +489,14 @@ export class JobApplicationsService {
     userId: string,
     jobIds: string[],
   ): Promise<
-    Map<string, { applicationId: string; status: JobApplicationStatus; bestScore: number | null }>
+    Map<
+      string,
+      {
+        applicationId: string;
+        status: JobApplicationStatus;
+        bestScore: number | null;
+      }
+    >
   > {
     if (jobIds.length === 0) {
       return new Map();
@@ -490,7 +520,11 @@ export class JobApplicationsService {
 
     const result = new Map<
       string,
-      { applicationId: string; status: JobApplicationStatus; bestScore: number | null }
+      {
+        applicationId: string;
+        status: JobApplicationStatus;
+        bestScore: number | null;
+      }
     >();
 
     for (const application of applications) {
@@ -508,7 +542,11 @@ export class JobApplicationsService {
     return result;
   }
 
-  async createManual(userId: string, dto: CreateJobApplicationDto) {
+  async createManual(
+    userId: string,
+    dto: CreateJobApplicationDto,
+    sessionInternalId?: string | null,
+  ) {
     const origin: JobApplicationOrigin = dto.origin ?? "manual";
 
     if (origin === "imported_url" && !dto.jobUrl) {
@@ -552,10 +590,23 @@ export class JobApplicationsService {
       return created;
     });
 
-    await this.recordEvent("candidatura_created", userId, application.id, {
-      origin,
-      has_job_description: Boolean(dto.jobDescriptionText),
-    });
+    await this.recordEvent(
+      "candidatura_created",
+      userId,
+      application.id,
+      {
+        origin,
+        has_job_description: Boolean(dto.jobDescriptionText),
+        // Criação manual acontece dentro da própria superfície de
+        // Candidaturas — nunca vem do Radar (esse caminho é a criação
+        // automática em upsertFromCvAdaptation, abaixo).
+        product_origin: "candidatura",
+      },
+      {
+        idempotencyKey: `candidatura_created:${application.id}`,
+        sessionInternalId,
+      },
+    );
 
     return application;
   }
@@ -564,6 +615,7 @@ export class JobApplicationsService {
     userId: string,
     id: string,
     data: { rejectionStrengths?: string; rejectionImprovements?: string },
+    sessionInternalId?: string | null,
   ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
@@ -605,12 +657,16 @@ export class JobApplicationsService {
         has_improvements: Boolean(data.rejectionImprovements),
         from_status: application.status,
       },
+      { sessionInternalId },
     );
 
-    await this.recordEvent("candidatura_status_changed", userId, id, {
-      from_status: application.status,
-      to_status: "REJECTED",
-    });
+    await this.recordEvent(
+      "candidatura_status_changed",
+      userId,
+      id,
+      { from_status: application.status, to_status: "REJECTED" },
+      { sessionInternalId },
+    );
 
     return result;
   }
@@ -625,6 +681,7 @@ export class JobApplicationsService {
       interviewMeetingUrl?: string;
       interviewLocation?: string;
     },
+    sessionInternalId?: string | null,
   ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
@@ -662,10 +719,13 @@ export class JobApplicationsService {
       return updated;
     });
 
-    await this.recordEvent("candidatura_status_changed", userId, id, {
-      from_status: previousStatus,
-      to_status: "INTERVIEW",
-    });
+    await this.recordEvent(
+      "candidatura_status_changed",
+      userId,
+      id,
+      { from_status: previousStatus, to_status: "INTERVIEW" },
+      { sessionInternalId },
+    );
 
     return result;
   }
@@ -709,6 +769,7 @@ export class JobApplicationsService {
     id: string,
     newStatus: JobApplicationStatus,
     currentCvAdaptationId?: string,
+    sessionInternalId?: string | null,
   ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
@@ -782,21 +843,41 @@ export class JobApplicationsService {
       return result;
     });
 
-    await this.recordEvent("candidatura_status_changed", userId, id, {
-      from_status: previousStatus,
-      to_status: newStatus,
-    });
+    await this.recordEvent(
+      "candidatura_status_changed",
+      userId,
+      id,
+      { from_status: previousStatus, to_status: newStatus },
+      { sessionInternalId },
+    );
 
     if (newStatus === "APPLIED") {
-      await this.recordEvent("candidatura_marked_as_applied", userId, id, {
-        from_status: previousStatus,
-      });
+      await this.recordEvent(
+        "candidatura_marked_as_applied",
+        userId,
+        id,
+        { from_status: previousStatus },
+        {
+          // Marco: transição pra APPLIED conta uma vez por candidatura —
+          // se newStatus já era APPLIED antes, o valor de status não muda
+          // de fato, mas o handler roda de novo; dedupar pelo id evita
+          // inflar a métrica de "candidaturas enviadas" em reenvios do
+          // mesmo formulário.
+          idempotencyKey: `candidatura_marked_as_applied:${id}`,
+          sessionInternalId,
+        },
+      );
     }
 
     return updated;
   }
 
-  async addNote(userId: string, id: string, note: string) {
+  async addNote(
+    userId: string,
+    id: string,
+    note: string,
+    sessionInternalId?: string | null,
+  ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
     });
@@ -822,14 +903,20 @@ export class JobApplicationsService {
       return result;
     });
 
-    await this.recordEvent("candidatura_note_added", userId, id, {
-      note_length: note.length,
-    });
+    // NOTE_ADDED é naturalmente repetível — nunca deduplicar por
+    // application_id sozinho, cada nota é uma ação distinta e legítima.
+    await this.recordEvent(
+      "candidatura_note_added",
+      userId,
+      id,
+      { note_length: note.length },
+      { sessionInternalId },
+    );
 
     return updated;
   }
 
-  async archive(userId: string, id: string) {
+  async archive(userId: string, id: string, sessionInternalId?: string | null) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
       select: { id: true, archivedAt: true },
@@ -840,12 +927,21 @@ export class JobApplicationsService {
     }
 
     if (application.archivedAt === null) {
-      await this.database.jobApplication.update({
+      const updated = await this.database.jobApplication.update({
         where: { id },
         data: { archivedAt: new Date() },
+        select: { archivedAt: true },
       });
 
-      await this.recordEvent("candidatura_archived", userId, id);
+      // Rearquivar após restaurar é uma ação legítima e distinta — a
+      // idempotencyKey inclui o timestamp da própria transição pra não
+      // bloquear isso, servindo só de defesa contra corrida de requests
+      // concorrentes na MESMA transição (o guard archivedAt === null
+      // acima já impede duplicidade em retry sequencial).
+      await this.recordEvent("candidatura_archived", userId, id, undefined, {
+        idempotencyKey: `candidatura_archived:${id}:${updated.archivedAt?.getTime()}`,
+        sessionInternalId,
+      });
     }
 
     return this.getById(userId, id);
@@ -871,7 +967,7 @@ export class JobApplicationsService {
     return this.getById(userId, id);
   }
 
-  async delete(userId: string, id: string) {
+  async delete(userId: string, id: string, sessionInternalId?: string | null) {
     const application = await this.database.jobApplication.findFirst({
       where: { id, userId, deletedAt: null },
       select: { id: true, archivedAt: true },
@@ -906,7 +1002,15 @@ export class JobApplicationsService {
       data: { deletedAt: new Date() },
     });
 
-    await this.recordEvent("candidatura_deleted", userId, id);
+    // Não existe fluxo de "restaurar exclusão" hoje — exclusão de um dado
+    // application_id acontece no máximo uma vez de verdade (a query
+    // acima já exige deletedAt: null pra achar a linha, então retry
+    // depois da 1ª exclusão bem-sucedida já cai em NotFoundException
+    // antes de chegar aqui).
+    await this.recordEvent("candidatura_deleted", userId, id, undefined, {
+      idempotencyKey: `candidatura_deleted:${id}`,
+      sessionInternalId,
+    });
 
     return deleted;
   }
@@ -1094,11 +1198,23 @@ export class JobApplicationsService {
           ],
         });
 
-        await this.recordEvent("candidatura_created", userId, created.id, {
-          origin,
-          has_job_description: Boolean(jobDescriptionText),
-          has_cv_adaptation: true,
-        });
+        // sessionInternalId fica de fora aqui de propósito: esse caminho
+        // roda dentro do hook pós-análise (upsertFromCvAdaptation),
+        // disparado internamente a partir de processAnalysisJob, sem uma
+        // requisição de browser ativa nesse momento pra carregar o
+        // header. Nunca inventar — fica null.
+        await this.recordEvent(
+          "candidatura_created",
+          userId,
+          created.id,
+          {
+            origin,
+            has_job_description: Boolean(jobDescriptionText),
+            has_cv_adaptation: true,
+            product_origin: radarJobId ? "radar" : "analysis",
+          },
+          { idempotencyKey: `candidatura_created:${created.id}` },
+        );
       }
     });
   }

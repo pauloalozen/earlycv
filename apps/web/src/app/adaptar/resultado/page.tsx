@@ -1776,7 +1776,10 @@ export default function ResultadoPage() {
         adaptationId: payload.id ?? reviewAdaptationId,
         source_detail: "resultado",
         unlockMethod: "credit",
-        remainingCredits: 0,
+        // claim-guest não devolve o saldo pós-consumo no payload — nunca
+        // reportar um 0 fictício (já foi bug: parecia "zerou o saldo"
+        // mesmo quando o usuário tinha mais créditos).
+        remainingCredits: null,
       });
       clearGuestAnalysisRaw();
       const unlockedId = payload.id ?? reviewAdaptationId;
@@ -1940,7 +1943,9 @@ export default function ResultadoPage() {
         adaptationId: reviewAdaptationId,
         source_detail: "resultado",
         unlockMethod: "review_redeem",
-        remainingCredits: 0,
+        // redeem-credit não devolve o saldo pós-consumo no payload —
+        // mesmo raciocínio do claim-guest acima, nunca um 0 fictício.
+        remainingCredits: null,
       });
       // Redireciona direto — a geração do CV roda em background e a tela de
       // destino (/adaptacao-cv) já tem seu próprio polling com microfeedback.
@@ -1988,9 +1993,24 @@ export default function ResultadoPage() {
     }).catch(() => undefined);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: emitResultadoEvent is recreated every render; including it would re-fire the event on every render instead of once per result render
+  useEffect(() => {
+    if (!rawData || (!isDemo && isAuthenticated === null)) return;
+
+    emitResultadoEvent("analysis_result_viewed", {
+      analysis_id: isDemo ? null : reviewAdaptationId,
+      mode: isAuthenticated ? "authenticated" : "guest",
+      is_locked: locked,
+    });
+  }, [rawData, isDemo, isAuthenticated, reviewAdaptationId, locked]);
+
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!reviewAdaptationId || downloading) return;
-    emitResultadoEvent("optimized_cv_downloaded", { format });
+    emitResultadoEvent("optimized_cv_downloaded", {
+      format,
+      adaptation_id: reviewAdaptationId,
+      product_origin: "analysis",
+    });
     if (releaseModalOpen) {
       setReleaseModalVisible(false);
       if (closeReleaseModalTimeoutRef.current !== null) {
@@ -4323,7 +4343,7 @@ export default function ResultadoPage() {
                     ) : (
                       <>
                         <a
-                          href={`/entrar?next=${encodeURIComponent("/adaptar/resultado?autoSave=1")}`}
+                          href={`/entrar?next=${encodeURIComponent("/adaptar/resultado?autoSave=1")}&ctx=analysis_guest`}
                           onClick={() => {
                             emitResultadoEvent("cta_signup_click", {
                               cta_location: "resultado_unlock",

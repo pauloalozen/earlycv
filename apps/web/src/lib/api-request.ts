@@ -13,11 +13,19 @@ function getApiBaseUrl() {
   return base.endsWith("/api") ? base : `${base}/api`;
 }
 
+// x-session-internal-id: mesmo header lido por requestContextMiddleware na
+// API (ver apps/api/src/common/journey-session-id.ts) — carrega o UUID de
+// jornada do frontend pra correlacionar eventos backend de produto com a
+// classificação de sessão (new/existing/anonymous). Passar só quando o
+// chamador já leu um valor confiável de sessionStorage — nunca inventar.
+const JOURNEY_SESSION_ID_HEADER = "x-session-internal-id";
+
 export async function apiRequest(
   method: string,
   path: string,
   body?: FormData | Record<string, unknown>,
   timeoutMs = 180_000,
+  sessionInternalId?: string | null,
 ): Promise<Response> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value;
@@ -29,6 +37,10 @@ export async function apiRequest(
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  if (sessionInternalId) {
+    headers[JOURNEY_SESSION_ID_HEADER] = sessionInternalId;
   }
 
   if (cookieHeader) {

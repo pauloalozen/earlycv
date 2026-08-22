@@ -3786,6 +3786,246 @@ test("startGuestAnalysisJob marks the job as failed when the background analysis
   );
 });
 
+// ─── Analytics v2 Fase B: analysis_started/completed/failed, cv_upload_completed ───
+
+test("startGuestAnalysisJob emits analysis_started once and analysis_completed on success, never analysis_failed", async () => {
+  const recordedEvents: Array<{
+    eventName: string;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-evt-1" }) },
+      analysisJob: {
+        create: async () => ({ id: "job-evt-1" }),
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-evt-1",
+        result: {
+          adaptedContentJson: { vaga: {} },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+    undefined, // storage
+    undefined, // analysisTelemetry
+    undefined, // jobApplicationsService
+    undefined, // profileMergeService
+    undefined, // profileReadinessService
+    undefined, // jobCanonicalizationService
+    undefined, // jobRequirementSetsService
+    undefined, // talentProfileCapture
+    undefined, // masterCvCanonicalExtractionService
+    {
+      record: async (input: {
+        eventName: string;
+        idempotencyKey?: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push(input);
+        return { event: {}, ingested: true };
+      },
+    },
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    undefined,
+    "Resumo do candidato com experiencia relevante para a vaga.",
+    "token",
+    undefined,
+  );
+
+  await sleep(20);
+
+  const eventNames = recordedEvents.map((e) => e.eventName);
+  assert.deepEqual(
+    eventNames.filter((n) => n.startsWith("analysis_")),
+    ["analysis_started", "analysis_completed"],
+  );
+
+  const started = recordedEvents.find(
+    (e) => e.eventName === "analysis_started",
+  );
+  assert.equal(started?.idempotencyKey, "analysis_started:job-evt-1");
+
+  const completed = recordedEvents.find(
+    (e) => e.eventName === "analysis_completed",
+  );
+  assert.equal(completed?.idempotencyKey, "analysis_completed:job-evt-1");
+  assert.equal(completed?.metadata?.mode, "guest");
+  assert.equal(completed?.metadata?.cv_source, "master_cv");
+  assert.equal(typeof completed?.metadata?.processing_time_ms, "number");
+});
+
+test("startGuestAnalysisJob emits analysis_started and analysis_failed on failure, never analysis_completed", async () => {
+  const recordedEvents: Array<{
+    eventName: string;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisJob: {
+        create: async () => ({ id: "job-evt-2" }),
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => {
+        throw new Error("modelo indisponível");
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      record: async (input: {
+        eventName: string;
+        idempotencyKey?: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push(input);
+        return { event: {}, ingested: true };
+      },
+    },
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    undefined,
+    "Resumo do candidato com experiencia relevante para a vaga.",
+    "token",
+    undefined,
+  );
+
+  await sleep(20);
+
+  const eventNames = recordedEvents.map((e) => e.eventName);
+  assert.deepEqual(
+    eventNames.filter((n) => n.startsWith("analysis_")),
+    ["analysis_started", "analysis_failed"],
+  );
+
+  const failed = recordedEvents.find((e) => e.eventName === "analysis_failed");
+  assert.equal(failed?.idempotencyKey, "analysis_failed:job-evt-2");
+  assert.equal(failed?.metadata?.stage, "processing");
+  assert.equal(failed?.metadata?.error_code, "processing_failed");
+  assert.equal(failed?.metadata?.retryable, true);
+  // Sem mensagem de erro livre no evento — só stage/error_code controlados.
+  assert.equal("errorMessage" in (failed?.metadata ?? {}), false);
+});
+
+test("analyzeGuest emits cv_upload_completed only after the backend accepts the uploaded file", async () => {
+  const recordedEvents: Array<{ eventName: string; idempotencyKey?: string }> =
+    [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-cv-1" }) },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-cv-1",
+        result: {
+          adaptedContentJson: {},
+          masterCvText: "CV extraído",
+          previewText: "preview",
+        },
+      }),
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      record: async (input: { eventName: string; idempotencyKey?: string }) => {
+        recordedEvents.push(input);
+        return { event: {}, ingested: true };
+      },
+    },
+  );
+
+  await service.analyzeGuest(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    makeFile(Buffer.from("%PDF-1.4 conteudo de cv valido")),
+    undefined,
+    "token",
+    undefined,
+  );
+
+  const cvUploadEvents = recordedEvents.filter(
+    (e) => e.eventName === "cv_upload_completed",
+  );
+  assert.equal(cvUploadEvents.length, 1);
+});
+
 // ─── startAuthenticatedAnalysisJob + radarJobId (fluxo de 1 clique) ───────────
 
 test("startAuthenticatedAnalysisJob prefers the radar Job's title/company over what the AI re-extracts from the text", async () => {
@@ -4297,4 +4537,184 @@ test("markAnalysisJobConverted is a no-op without a snapshot id", async () => {
   ).markAnalysisJobConverted(null, "user-9", "adapt-9");
 
   assert.equal(called, false);
+});
+
+// ─── Fase B.3: product_origin propagado a analysis_started/completed/failed ───
+
+type RecordedFunnelEvent = {
+  eventName: string;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+};
+
+function makeFunnelEventsCapture() {
+  const calls: RecordedFunnelEvent[] = [];
+  const funnelEvents = {
+    record: async (input: RecordedFunnelEvent) => {
+      calls.push(input);
+      return { event: {}, ingested: true };
+    },
+  };
+  return { funnelEvents, calls };
+}
+
+type ProcessAnalysisJobFn = (
+  jobId: string,
+  run: () => Promise<{
+    adaptedContentJson: unknown;
+    previewText: string;
+    masterCvText: string;
+    analysisCvSnapshotId: string;
+  }>,
+  analytics: {
+    context: Record<string, unknown>;
+    mode: "guest" | "authenticated";
+    cvSource: "master_cv" | "upload";
+    productOrigin: "radar" | "direct" | "analysis";
+  },
+) => Promise<void>;
+
+test("processAnalysisJob tags analysis_started and analysis_completed with product_origin=radar", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { update: async () => ({}) } },
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await (
+    service as unknown as { processAnalysisJob: ProcessAnalysisJobFn }
+  ).processAnalysisJob(
+    "job-radar-1",
+    async () => ({
+      adaptedContentJson: {},
+      previewText: "preview",
+      masterCvText: "cv",
+      analysisCvSnapshotId: "snap-1",
+    }),
+    {
+      context: { routeKey: "cv-adaptation/analyze" },
+      mode: "authenticated",
+      cvSource: "master_cv",
+      productOrigin: "radar",
+    },
+  );
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  const completed = calls.find((c) => c.eventName === "analysis_completed");
+  assert.equal(started?.metadata?.product_origin, "radar");
+  assert.equal(completed?.metadata?.product_origin, "radar");
+  assert.equal(started?.idempotencyKey, "analysis_started:job-radar-1");
+  assert.equal(completed?.idempotencyKey, "analysis_completed:job-radar-1");
+});
+
+test("processAnalysisJob tags analysis_failed with the same product_origin as analysis_started", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { update: async () => ({}) } },
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await (
+    service as unknown as { processAnalysisJob: ProcessAnalysisJobFn }
+  ).processAnalysisJob(
+    "job-direct-1",
+    async () => {
+      throw new Error("boom");
+    },
+    {
+      context: { routeKey: "cv-adaptation/analyze-guest" },
+      mode: "guest",
+      cvSource: "upload",
+      productOrigin: "direct",
+    },
+  );
+
+  const failed = calls.find((c) => c.eventName === "analysis_failed");
+  assert.equal(failed?.metadata?.product_origin, "direct");
+  assert.equal(failed?.idempotencyKey, "analysis_failed:job-direct-1");
+});
+
+test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId is passed", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const jobs = new Map<string, Record<string, unknown>>();
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          const id = `job-${jobs.size + 1}`;
+          const record = { id, ...data };
+          jobs.set(id, record);
+          return record;
+        },
+        update: async () => ({}),
+      },
+      resume: { findFirst: async () => null },
+    },
+    {},
+    {},
+    {},
+    {},
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash",
+        result: undefined,
+      }),
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com descricao suficientemente longa para passar na validacao interna.",
+    undefined,
+    validMasterCvText,
+    "token",
+    undefined,
+    "job-radar-9",
+  );
+
+  // processAnalysisJob roda fire-and-forget — aguarda o próximo tick.
+  await sleep(20);
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  assert.equal(started?.metadata?.product_origin, "radar");
 });

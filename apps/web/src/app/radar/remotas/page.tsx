@@ -11,6 +11,7 @@ import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../jobs-listing";
 import { RadarPageShell } from "../page-shell";
+import { RadarViewTracker } from "../radar-view-tracker";
 
 export function generateMetadata(): Metadata {
   const isGhostMode = isJobsGhostModeEnabled();
@@ -49,6 +50,7 @@ export default async function RadarRemotasPage({ searchParams }: PageProps) {
       userRole={user?.internalRole}
       credits={availableCredits}
     >
+      <RadarViewTracker radarViewType="remote" remoteFilter={true} />
       <RadarJobsListing
         basePath="/radar/remotas"
         user={user}

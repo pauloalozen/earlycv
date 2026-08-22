@@ -12,6 +12,10 @@ import type {
   AdminEventsEmitSummary,
 } from "./admin-events-emitter.service";
 import type { EmitAdminEventsDto } from "./dto/emit-admin-events.dto";
+import type { JourneySessionClassification } from "./journey-session-classification";
+import type { JourneySessionClassificationService } from "./journey-session-classification.service";
+import type { VisitorLifecycleClassification } from "./visitor-lifecycle-classification";
+import type { VisitorLifecycleClassificationService } from "./visitor-lifecycle-classification.service";
 
 type AdminEventsEmitterServiceStub = {
   buildCatalog: () => AdminEventsCatalog;
@@ -20,6 +24,14 @@ type AdminEventsEmitterServiceStub = {
     context: AnalysisRequestContext,
   ) => Promise<AdminEventsEmitSummary>;
 };
+
+const noopJourneyClassifier = {
+  classify: async () => "unknown" as JourneySessionClassification,
+} satisfies Pick<JourneySessionClassificationService, "classify">;
+
+const noopVisitorLifecycleClassifier = {
+  classify: async () => "unknown" as VisitorLifecycleClassification,
+} satisfies Pick<VisitorLifecycleClassificationService, "classify">;
 
 test("admin events controller enforces admin/superadmin guards", () => {
   const guards =
@@ -33,15 +45,19 @@ test("admin events controller enforces admin/superadmin guards", () => {
 });
 
 test("catalog returns protection and business arrays", async () => {
-  const controller = new AdminEventsController({
-    buildCatalog: () => ({
-      protection: [{ eventName: "payload_valid", eventVersion: 1 }],
-      business: [{ eventName: "page_view", eventVersion: 1 }],
-    }),
-    emit: async () => {
-      throw new Error("not called");
-    },
-  } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub);
+  const controller = new AdminEventsController(
+    {
+      buildCatalog: () => ({
+        protection: [{ eventName: "payload_valid", eventVersion: 1 }],
+        business: [{ eventName: "page_view", eventVersion: 1 }],
+      }),
+      emit: async () => {
+        throw new Error("not called");
+      },
+    } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub,
+    noopJourneyClassifier as JourneySessionClassificationService,
+    noopVisitorLifecycleClassifier as VisitorLifecycleClassificationService,
+  );
 
   const response = await controller.catalog();
 
@@ -57,21 +73,25 @@ test("emit forwards payload and context", async () => {
     context: AnalysisRequestContext;
   } | null = null;
 
-  const controller = new AdminEventsController({
-    buildCatalog: () => ({ protection: [], business: [] }),
-    emit: async (payload, context) => {
-      call = { payload, context };
+  const controller = new AdminEventsController(
+    {
+      buildCatalog: () => ({ protection: [], business: [] }),
+      emit: async (payload, context) => {
+        call = { payload, context };
 
-      return {
-        requested: 1,
-        sent: 1,
-        failed: 0,
-        results: [
-          { domain: "business", eventName: "page_view", status: "sent" },
-        ],
-      };
-    },
-  } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub);
+        return {
+          requested: 1,
+          sent: 1,
+          failed: 0,
+          results: [
+            { domain: "business", eventName: "page_view", status: "sent" },
+          ],
+        };
+      },
+    } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub,
+    noopJourneyClassifier as JourneySessionClassificationService,
+    noopVisitorLifecycleClassifier as VisitorLifecycleClassificationService,
+  );
 
   const req = {
     analysisContext: {
@@ -99,4 +119,98 @@ test("emit forwards payload and context", async () => {
   assert.equal(response.requested, 1);
   assert.equal(response.sent, 1);
   assert.equal(response.failed, 0);
+});
+
+test("journeyClassification forwards sessionInternalId to the classifier and returns its result", async () => {
+  let receivedSessionInternalId: string | null = null;
+
+  const controller = new AdminEventsController(
+    {
+      buildCatalog: () => ({ protection: [], business: [] }),
+      emit: async () => {
+        throw new Error("not called");
+      },
+    } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub,
+    {
+      classify: async (sessionInternalId: string) => {
+        receivedSessionInternalId = sessionInternalId;
+        return "new_user_journey" as JourneySessionClassification;
+      },
+    } as JourneySessionClassificationService,
+    noopVisitorLifecycleClassifier as VisitorLifecycleClassificationService,
+  );
+
+  const response = await controller.journeyClassification("journey-abc-123");
+
+  assert.equal(receivedSessionInternalId, "journey-abc-123");
+  assert.deepEqual(response, {
+    sessionInternalId: "journey-abc-123",
+    classification: "new_user_journey",
+  });
+});
+
+test("journeyClassification rejects an empty sessionInternalId", async () => {
+  const controller = new AdminEventsController(
+    {
+      buildCatalog: () => ({ protection: [], business: [] }),
+      emit: async () => {
+        throw new Error("not called");
+      },
+    } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub,
+    noopJourneyClassifier as JourneySessionClassificationService,
+    noopVisitorLifecycleClassifier as VisitorLifecycleClassificationService,
+  );
+
+  await assert.rejects(controller.journeyClassification("   "));
+});
+
+test("visitorLifecycle forwards visitorId and sessionInternalId to the classifier and returns its result", async () => {
+  let received: { visitorId: string; sessionInternalId: string } | null = null;
+
+  const controller = new AdminEventsController(
+    {
+      buildCatalog: () => ({ protection: [], business: [] }),
+      emit: async () => {
+        throw new Error("not called");
+      },
+    } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub,
+    noopJourneyClassifier as JourneySessionClassificationService,
+    {
+      classify: async (visitorId: string, sessionInternalId: string) => {
+        received = { visitorId, sessionInternalId };
+        return "returning_visitor" as VisitorLifecycleClassification;
+      },
+    } as VisitorLifecycleClassificationService,
+  );
+
+  const response = await controller.visitorLifecycle(
+    "visitor-abc-123",
+    "journey-xyz-456",
+  );
+
+  assert.deepEqual(received, {
+    visitorId: "visitor-abc-123",
+    sessionInternalId: "journey-xyz-456",
+  });
+  assert.deepEqual(response, {
+    visitorId: "visitor-abc-123",
+    sessionInternalId: "journey-xyz-456",
+    classification: "returning_visitor",
+  });
+});
+
+test("visitorLifecycle rejects an empty visitorId or sessionInternalId", async () => {
+  const controller = new AdminEventsController(
+    {
+      buildCatalog: () => ({ protection: [], business: [] }),
+      emit: async () => {
+        throw new Error("not called");
+      },
+    } satisfies AdminEventsEmitterServiceStub as AdminEventsEmitterServiceStub,
+    noopJourneyClassifier as JourneySessionClassificationService,
+    noopVisitorLifecycleClassifier as VisitorLifecycleClassificationService,
+  );
+
+  await assert.rejects(controller.visitorLifecycle("   ", "journey-1"));
+  await assert.rejects(controller.visitorLifecycle("visitor-1", "   "));
 });

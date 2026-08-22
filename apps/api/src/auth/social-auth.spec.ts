@@ -8,6 +8,7 @@ import { Test } from "@nestjs/testing";
 
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
+import { PosthogIntegrationModule } from "../posthog-integration/posthog-integration.module";
 import { AuthController } from "./auth.controller";
 import { AuthModule } from "./auth.module";
 import { AuthService, type AuthSession } from "./auth.service";
@@ -26,14 +27,25 @@ type SocialProfileInput = {
 };
 
 type SocialAuthService = AuthService & {
-  finishSocialLogin: (input: SocialProfileInput) => Promise<AuthSession>;
+  finishSocialLogin: (
+    input: SocialProfileInput,
+    conversionContext?: string,
+    sessionInternalId?: string | null,
+  ) => Promise<AuthSession>;
 };
+
+type FakeCookieResponse = { cookie: (...args: unknown[]) => unknown };
 
 type SocialAuthController = AuthController & {
   googleStart: () => void;
-  googleCallback: (request: {
-    oauthUser: SocialProfileInput;
-  }) => Promise<AuthSession>;
+  googleCallback: (
+    request: {
+      oauthUser: SocialProfileInput;
+      cookies?: Record<string, string>;
+      headers?: Record<string, string>;
+    },
+    response: FakeCookieResponse,
+  ) => Promise<{ url: string }>;
   linkedinStart: () => void;
   linkedinCallback: (request: {
     oauthUser: SocialProfileInput;
@@ -48,7 +60,7 @@ async function deleteUserByEmail(database: DatabaseService, email: string) {
 
 test("social login links a Google account to an existing user by verified email", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -66,13 +78,18 @@ test("social login links a Google account to an existing user by verified email"
     },
   });
 
-  const session = await service.finishSocialLogin({
-    provider: "google",
-    providerAccountId: `google-${randomUUID()}`,
-    email,
-    name: "Ana Silva",
-    emailVerified: true,
-  });
+  const sessionInternalId = `journey-${Date.now()}`;
+  const session = await service.finishSocialLogin(
+    {
+      provider: "google",
+      providerAccountId: `google-${randomUUID()}`,
+      email,
+      name: "Ana Silva",
+      emailVerified: true,
+    },
+    undefined,
+    sessionInternalId,
+  );
 
   const linkedAccount = await database.authAccount.findFirst({
     where: {
@@ -91,13 +108,38 @@ test("social login links a Google account to an existing user by verified email"
   assert.equal(Boolean(linkedAccount), true);
   assert.notEqual(linkedUser?.emailVerifiedAt, null);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: user.id },
+  });
+  assert.equal(
+    signupEvents.length,
+    0,
+    "social login into a pre-existing account must not emit signup_completed",
+  );
+
+  const loginEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "login_completed", userId: user.id },
+  });
+  assert.equal(
+    loginEvents.length,
+    1,
+    "social login into a pre-existing account must emit login_completed exactly once",
+  );
+  const loginMetadata = loginEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(loginMetadata?.login_method, "google");
+  assert.equal(
+    loginMetadata?.sessionInternalId,
+    sessionInternalId,
+    "Google login of an existing account must preserve the journey sessionInternalId that started the flow",
+  );
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
 
 test("social login creates a new user for a verified LinkedIn profile when no account exists", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -127,13 +169,120 @@ test("social login creates a new user for a verified LinkedIn profile when no ac
   assert.equal(createdUser?.authAccounts[0]?.provider, "linkedin");
   assert.notEqual(createdUser?.profile, null);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: createdUser?.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.signup_method, "linkedin");
+  assert.equal(metadata?.is_guest_conversion, false);
+  // conversionContext não foi passado pro callback -> "unknown", nunca
+  // inferido a partir de heurística.
+  assert.equal(metadata?.conversion_context, "unknown");
+
+  const loginEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "login_completed", userId: createdUser?.id },
+  });
+  assert.equal(
+    loginEvents.length,
+    0,
+    "creating a brand-new account via social login must not also emit login_completed",
+  );
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("social login (OAuth) propagates an explicit conversion_context for a new account originating from a guest analysis", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService) as SocialAuthService;
+  const email = `guestoauth+${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const sessionInternalId = randomUUID();
+  const session = await service.finishSocialLogin(
+    {
+      provider: "google",
+      providerAccountId: `google-${randomUUID()}`,
+      email,
+      name: "Diana Reis",
+      emailVerified: true,
+    },
+    "analysis_guest",
+    sessionInternalId,
+  );
+
+  assert.equal(typeof session.accessToken, "string");
+
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: session.user.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.conversion_context, "analysis_guest");
+  assert.equal(metadata?.is_guest_conversion, true);
+  assert.equal(metadata?.signup_method, "google");
+  assert.equal(
+    metadata?.sessionInternalId,
+    sessionInternalId,
+    "Google signup originating from a guest analysis must preserve the journey sessionInternalId",
+  );
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("social login (OAuth) propagates conversion_context and sessionInternalId for a new account originating from Radar", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService) as SocialAuthService;
+  const email = `radaroauth+${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const sessionInternalId = randomUUID();
+  const session = await service.finishSocialLogin(
+    {
+      provider: "google",
+      providerAccountId: `google-${randomUUID()}`,
+      email,
+      name: "Fabio Nogueira",
+      emailVerified: true,
+    },
+    "radar",
+    sessionInternalId,
+  );
+
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: session.user.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.conversion_context, "radar");
+  // Radar não é jornada guest conhecida -- is_guest_conversion só é true
+  // pra analysis_guest.
+  assert.equal(metadata?.is_guest_conversion, false);
+  assert.equal(
+    metadata?.sessionInternalId,
+    sessionInternalId,
+    "Google signup originating from Radar must preserve the journey sessionInternalId",
+  );
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
 
 test("social login remains idempotent when the same provider profile is completed twice", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [DatabaseModule, AuthModule],
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const database = moduleRef.get(DatabaseService);
@@ -170,13 +319,22 @@ test("social login remains idempotent when the same provider profile is complete
   assert.equal(users.length, 1);
   assert.equal(authAccounts.length, 1);
 
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: users[0]?.id },
+  });
+  assert.equal(
+    signupEvents.length,
+    1,
+    "concurrent duplicate social signups must record signup_completed only once",
+  );
+
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
 
 test("Google strategy enables OAuth state protection", async () => {
   const moduleRef = await Test.createTestingModule({
-    imports: [AuthModule],
+    imports: [PosthogIntegrationModule, AuthModule],
   }).compile();
 
   const strategy = moduleRef.get(GoogleStrategy) as GoogleStrategy & {
@@ -230,14 +388,18 @@ test("social auth controller callbacks delegate the OAuth user to AuthService", 
 
   controller.googleStart();
 
-  const googleSession = await controller.googleCallback({
-    oauthUser: googleProfile,
-  });
+  const fakeResponse: FakeCookieResponse = { cookie: () => undefined };
+
+  const googleSession = await controller.googleCallback(
+    { oauthUser: googleProfile, cookies: {}, headers: {} },
+    fakeResponse,
+  );
   const expectedBase = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
-  await controller.googleCallback({
-    oauthUser: linkedinProfile,
-  });
+  await controller.googleCallback(
+    { oauthUser: linkedinProfile, cookies: {}, headers: {} },
+    fakeResponse,
+  );
 
   assert.deepEqual(calls, [googleProfile, linkedinProfile]);
   assert.deepEqual(googleSession, {

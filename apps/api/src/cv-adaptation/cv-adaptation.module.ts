@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AnalysisObservabilityModule } from "../analysis-observability/analysis-observability.module";
 import { AnalysisProtectionModule } from "../analysis-protection/analysis-protection.module";
 import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
@@ -24,6 +25,7 @@ import { JobRequirementSetsService } from "./job-requirement-sets.service";
     DatabaseModule,
     ResumeTemplatesModule,
     AnalysisProtectionModule,
+    AnalysisObservabilityModule,
     JobApplicationsModule,
     ProfilesModule,
     TalentProfilesModule,

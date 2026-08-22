@@ -12,13 +12,14 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma, type UserStatus } from "@prisma/client";
 import * as argon2 from "argon2";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { RefreshDto } from "./dto/refresh.dto";
-import type { RegisterDto } from "./dto/register.dto";
+import type { RegisterDto, SignupConversionContext } from "./dto/register.dto";
 import type { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
 import type { ResetPasswordDto } from "./dto/reset-password.dto";
 import type { VerifyEmailDto } from "./dto/verify-email.dto";
@@ -82,13 +83,127 @@ export class AuthService {
     @Inject(APP_ENV) private readonly env: AppEnv,
     @Inject(EMAIL_DELIVERY_PORT)
     private readonly emailDelivery: EmailDeliveryPort,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: Pick<
+      BusinessFunnelEventService,
+      "record"
+    > = {
+      async record() {
+        return { event: {}, ingested: false };
+      },
+    },
   ) {}
+
+  private async recordSignupCompleted(input: {
+    userId: string;
+    signupMethod: string;
+    isGuestConversion: boolean;
+    conversionContext: string;
+    sessionInternalId?: string | null;
+    visitorId?: string | null;
+  }): Promise<void> {
+    try {
+      await this.funnelEvents.record(
+        {
+          eventName: "signup_completed",
+          eventVersion: 1,
+          idempotencyKey: `signup_completed:${input.userId}`,
+          metadata: {
+            user_id: input.userId,
+            signup_method: input.signupMethod,
+            is_guest_conversion: input.isGuestConversion,
+            conversion_context: input.conversionContext,
+            // journey sessionInternalId do frontend (sessionStorage) —
+            // conceito distinto do AnalysisSession referenciado pela FK
+            // da coluna context.sessionInternalId, por isso vai em
+            // metadata, igual ao resto dos eventos originados no
+            // frontend (ver getAnalyticsBaseProperties).
+            ...(input.sessionInternalId
+              ? { sessionInternalId: input.sessionInternalId }
+              : {}),
+            // visitor_id (Fase C) — identidade pseudônima de navegador,
+            // independente da jornada acima. Nunca inventado quando a
+            // jornada não começou no browser (ex.: staff criando conta).
+            ...(input.visitorId ? { visitor_id: input.visitorId } : {}),
+          },
+          routeKey: "auth/signup",
+        },
+        {
+          requestId: randomUUID(),
+          correlationId: randomUUID(),
+          sessionPublicToken: null,
+          sessionInternalId: null,
+          userId: input.userId,
+          ip: null,
+          routePath: null,
+          userAgentHash: null,
+        },
+        "backend",
+      );
+    } catch {
+      // Analytics failures never block signup/login.
+    }
+  }
+
+  // login_completed é exclusivo de autenticação EXPLÍCITA numa conta já
+  // existente (senha via /auth/login, ou social login que resolve pra
+  // conta pré-existente). Nunca chamar em refresh/restauração de sessão —
+  // isso preserva a classificação determinística de sessionInternalId em
+  // new_user (via signup_completed) / existing_user (via login_completed
+  // ou sessão já iniciada autenticada) / anonymous.
+  private async recordLoginCompleted(input: {
+    userId: string;
+    loginMethod: string;
+    sessionInternalId?: string | null;
+    visitorId?: string | null;
+  }): Promise<void> {
+    try {
+      await this.funnelEvents.record(
+        {
+          eventName: "login_completed",
+          eventVersion: 1,
+          metadata: {
+            user_id: input.userId,
+            login_method: input.loginMethod,
+            ...(input.sessionInternalId
+              ? { sessionInternalId: input.sessionInternalId }
+              : {}),
+            ...(input.visitorId ? { visitor_id: input.visitorId } : {}),
+          },
+          routeKey: "auth/login",
+        },
+        {
+          requestId: randomUUID(),
+          correlationId: randomUUID(),
+          sessionPublicToken: null,
+          sessionInternalId: null,
+          userId: input.userId,
+          ip: null,
+          routePath: null,
+          userAgentHash: null,
+        },
+        "backend",
+      );
+    } catch {
+      // Analytics failures never block signup/login.
+    }
+  }
 
   async register(input: RegisterDto): Promise<AuthSession> {
     const user = await this.createUser({
       email: input.email,
       password: input.password,
       name: input.name,
+    });
+
+    const conversionContext = input.conversionContext ?? "unknown";
+    await this.recordSignupCompleted({
+      userId: user.id,
+      signupMethod: "password",
+      isGuestConversion: conversionContext === "analysis_guest",
+      conversionContext,
+      sessionInternalId: input.sessionInternalId,
+      visitorId: input.visitorId,
     });
 
     await this.issueEmailVerificationChallenge(user.id, user.email);
@@ -125,7 +240,18 @@ export class AuthService {
     return user;
   }
 
-  async login(user: { id: string }): Promise<AuthSession> {
+  async login(
+    user: { id: string },
+    sessionInternalId?: string | null,
+    visitorId?: string | null,
+  ): Promise<AuthSession> {
+    await this.recordLoginCompleted({
+      userId: user.id,
+      loginMethod: "password",
+      sessionInternalId,
+      visitorId,
+    });
+
     return this.issueSession(user.id);
   }
 
@@ -179,7 +305,12 @@ export class AuthService {
     return { ok: true } as const;
   }
 
-  async finishSocialLogin(input: SocialProfileInput): Promise<AuthSession> {
+  async finishSocialLogin(
+    input: SocialProfileInput,
+    conversionContext: SignupConversionContext = "unknown",
+    sessionInternalId?: string | null,
+    visitorId?: string | null,
+  ): Promise<AuthSession> {
     const providerEmail = input.email.trim().toLowerCase();
     const providerAccountId = input.providerAccountId.trim();
 
@@ -213,7 +344,7 @@ export class AuthService {
       return null;
     };
 
-    let socialResult: { userId: string };
+    let socialResult: { userId: string; isNewUser: boolean };
 
     try {
       socialResult = await this.database.$transaction(async (tx) => {
@@ -227,8 +358,13 @@ export class AuthService {
         });
 
         if (existingAccount) {
-          return { userId: existingAccount.userId };
+          return { userId: existingAccount.userId, isNewUser: false };
         }
+
+        const existingUserByEmail = await tx.user.findUnique({
+          where: { email: providerEmail },
+          select: { id: true },
+        });
 
         const user = await tx.user.upsert({
           where: { email: providerEmail },
@@ -265,7 +401,10 @@ export class AuthService {
           },
         });
 
-        return { userId: authAccount.userId };
+        return {
+          userId: authAccount.userId,
+          isNewUser: !existingUserByEmail,
+        };
       });
     } catch (error) {
       if (
@@ -281,7 +420,25 @@ export class AuthService {
         throw error;
       }
 
-      socialResult = recovered;
+      socialResult = { ...recovered, isNewUser: false };
+    }
+
+    if (socialResult.isNewUser) {
+      await this.recordSignupCompleted({
+        userId: socialResult.userId,
+        signupMethod: input.provider,
+        isGuestConversion: conversionContext === "analysis_guest",
+        conversionContext,
+        sessionInternalId,
+        visitorId,
+      });
+    } else {
+      await this.recordLoginCompleted({
+        userId: socialResult.userId,
+        loginMethod: input.provider,
+        sessionInternalId,
+        visitorId,
+      });
     }
 
     return this.issueSession(socialResult.userId);
