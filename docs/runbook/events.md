@@ -1,7 +1,8 @@
 # Taxonomia de analytics — EarlyCV (fonte única de verdade)
 
 Última revisão: 2026-08-21, no âmbito da spec `specs/analytics-v2-saneamento-evolucao-plan.md`
-(Fases A+B, e Fase B.1 — contexto de conversão do signup e classificação de sessão).
+(Fases A+B, B.1 — contexto de conversão do signup e classificação de sessão —, B.2 —
+`sessionInternalId` no OAuth — e B.3 — contexto de produto + Radar mínimo).
 
 Este documento é a referência viva da taxonomia. Doc antiga (versão anterior deste
 arquivo, com contagem "52 eventos" e lista incompleta) estava divergente do código e
@@ -41,6 +42,14 @@ mesmo tempo.
   gerado no frontend, `journey_session_internal_id` em `sessionStorage`, usado por
   `page_view`/`signup_completed`/`login_completed` etc.). Escrever o UUID de jornada na
   coluna quebra com FK constraint violation — sempre usar `metadata`. Ver seção 5.2.
+- `product_origin` (Fase B.3) **não é** `conversion_context` nem UTM/`source`/`medium`.
+  `conversion_context` responde "que jornada de marketing/aquisição levou a esse
+  cadastro" (fechado no momento do signup). `product_origin` responde uma pergunta
+  diferente e recorrente ao longo de toda a vida do usuário: "qual superfície de
+  PRODUTO originou esta ação especifica" (análise, Radar, candidatura, dashboard, vaga
+  SEO, acesso direto). Os dois convivem sem se sobrepor — um evento de análise pode ter
+  `product_origin: radar` numa sessão cujo `conversion_context` foi `checkout` meses
+  atrás. Ver seção 5.3 para o contrato completo.
 
 ## 3. Eventos AnalysisProtectionEvent (27, todos v1, source interno)
 
@@ -59,9 +68,9 @@ produto. Não confundir com `BusinessFunnelEvent`.
 
 | Evento | Owner | Status | Notas |
 |---|---|---|---|
-| analysis_started | backend | ativo | Emitido em `CvAdaptationService.processAnalysisJob` quando o job de análise passa a `processing` (aceito para processamento de fato). Frontend **não** emite mais este evento — a emissão antiga era rejeitada silenciosamente pelo backend por ownership mismatch. |
-| analysis_completed | backend | **novo (Fase B)** | Emitido quando o job de análise conclui com `status: succeeded`. Propriedades: `analysis_id`, `mode` (guest\|authenticated), `origin`, `processing_time_ms`, `cv_source` (master_cv\|upload). |
-| analysis_failed | backend | **novo (Fase B)** | Emitido na falha terminal do job (`status: failed`). Propriedades: `analysis_id`, `mode`, `origin`, `processing_time_ms`, `stage` (validation\|protection\|processing), `error_code` (taxonomia fechada), `retryable`. Sem mensagem de erro livre — só `job.lastError` na tabela, nunca no evento. |
+| analysis_started | backend | ativo | Emitido em `CvAdaptationService.processAnalysisJob` quando o job de análise passa a `processing` (aceito para processamento de fato). Frontend **não** emite mais este evento — a emissão antiga era rejeitada silenciosamente pelo backend por ownership mismatch. Propriedades (Fase B.3): + `product_origin` (`radar` quando o job carrega `radarJobId`, `direct` caso contrário — nunca inferido pela rota HTTP). |
+| analysis_completed | backend | **novo (Fase B)** | Emitido quando o job de análise conclui com `status: succeeded`. Propriedades: `analysis_id`, `mode` (guest\|authenticated), `origin`, `processing_time_ms`, `cv_source` (master_cv\|upload), `product_origin` (Fase B.3, mesmo valor do `analysis_started` correspondente). |
+| analysis_failed | backend | **novo (Fase B)** | Emitido na falha terminal do job (`status: failed`). Propriedades: `analysis_id`, `mode`, `origin`, `processing_time_ms`, `stage` (validation\|protection\|processing), `error_code` (taxonomia fechada), `retryable`, `product_origin` (Fase B.3). Sem mensagem de erro livre — só `job.lastError` na tabela, nunca no evento. |
 | analysis_result_viewed | frontend | **novo (Fase B)** | Emitido em `/adaptar/resultado` quando o conteúdo do resultado efetivamente renderiza (`rawData` presente + auth status resolvido), não na simples chegada da rota. Idempotente por `routeVisitId`. |
 | analyze_submit_clicked | frontend | ativo | Intenção do usuário — não representa início real da análise. |
 | auth_session_identified | frontend | ambíguo | Mistura restauração de sessão e transição de auth. Não é proxy confiável de signup nem de login novo. Não usar em funis de conversão sem essa ressalva. |
@@ -70,14 +79,14 @@ produto. Não confundir com `BusinessFunnelEvent`.
 | seo_page_cta_clicked / seo_page_viewed | frontend | ativo | |
 | cta_signup_click | frontend | ativo | |
 | buy_credits_clicked | frontend | ativo | |
-| checkout_abandoned / checkout_started | frontend | ativo | |
+| checkout_abandoned / checkout_started | frontend | ativo | `checkout_started.payment_method` é sempre `"unknown"` — comportamento esperado, não bug (Fase B.3): o método real só é conhecido depois, quando o Brick/Checkout Pro do Mercado Pago resolve a forma de pagamento escolhida. O valor real aparece em `payment_failed.paymentMethod`/no fluxo de `payment_approved` mais adiante, nunca em `checkout_started`. |
 | checkout_brick_ready | frontend | **registrado (Fase A)** | Brick de pagamento pronto. Emitido de `pagamento/checkout/[purchaseId]/page.client.tsx`. Já era emitido em produção mas era rejeitado pelo backend por não estar no registry — corrigido. |
 | checkout_brick_submit_started | frontend | **registrado (Fase A)** | Usuário submeteu o brick. |
 | checkout_brick_submit_failed | frontend | **registrado (Fase A)** | Falha de submissão no client/SDK antes de aprovação transacional. |
-| cv_unlock_started / cv_unlock_completed | frontend | ativo | |
+| cv_unlock_started / cv_unlock_completed | frontend | ativo | `cv_unlock_completed.remainingCredits` (Fase B.3, bug corrigido): antes hardcoded `0`; agora envia o saldo real quando disponível de forma confiável, ou `null` quando não — nunca mais um `0` fictício. |
 | cv_upload_completed | backend | **corrigido (Fase A)** | Antes emitido pelo frontend na simples seleção local do arquivo (nunca chegava a ser aceito pelo backend, era rejeitado por ownership mismatch). Agora emitido em `CvAdaptationService.analyzeGuest`/`analyzeAuthenticated` logo após `validateCvFileEnvelope` aceitar o arquivo. |
 | dashboard_viewed | frontend | ativo | |
-| optimized_cv_downloaded | frontend | ambíguo | Hoje tende a representar clique/início de tentativa de download, não download confirmado. Não renomear histórico; se necessário no futuro, criar evento distinto de "download entregue". |
+| optimized_cv_downloaded | frontend | ambíguo (semântica documentada, Fase B.3) | Representa clique/início de tentativa de download, **não** download confirmado/transferência completa — nenhum evento hoje confirma que o arquivo chegou a ser salvo pelo usuário. Emitido em dois pontos: `/adaptar/resultado` (original) e `/adaptacao-cv/[id]` (Fase B.3 — cobertura corrigida; antes só `/adaptar/resultado` emitia, deixando de fora boa parte dos downloads finais que acontecem nessa tela pós-unlock). Mesmo evento nos dois lugares, mesma semântica. Propriedades: `format` (pdf\|docx), `adaptation_id` (quando disponível), `product_origin`. Não renomear histórico; se no futuro for necessário confirmar entrega de fato, criar evento distinto (`optimized_cv_download_confirmed` ou similar), nunca sobrecarregar este. |
 | full_analysis_viewed | backend | **stale catalog** | Está no registry/ownership mas não há emissor real no código hoje. Mantido por compatibilidade histórica; não usar em dashboards novos. |
 | job_description_focus / job_description_filled / job_description_paste | frontend | ativo | |
 | landing_cta_click | frontend | ativo | |
@@ -88,17 +97,19 @@ produto. Não confundir com `BusinessFunnelEvent`.
 | site_exit | frontend | **deprecated** | Sem emissor real confirmado no código atual. Mantido no registry por histórico; não emitir eventos novos. |
 | site_exit_candidate | frontend | **deprecated** | Tem emissor real (`journey-tracker-provider.tsx`), mas não entrega semântica confiável (spec 5.3). Mantido ativo tecnicamente, mas não deve ser usado como fonte para métricas de produto novas. |
 | page_view | frontend | ativo | Jornada interna — ver seção 1. |
-| payment_approved | backend | ativo | Fonte oficial de pagamento aprovado e receita. Backend-only, não alterado nesta rodada. |
-| payment_failed | backend | ativo | |
+| payment_approved | backend | ativo | Fonte oficial de pagamento aprovado e receita. Propriedades (Fase B.3): + `product_origin`, resolvido a partir de `PlanPurchase.originAdaptationId → JobApplication.currentCvAdaptationId → JobApplication.jobId` (não-nulo ⇒ `radar`, nulo ⇒ `analysis`, sem adaptação de origem ⇒ `direct`, erro na resolução ⇒ `unknown` — nunca quebra o registro do evento). `sessionInternalId` **não** é propagado aqui (ver seção 5.4, gap residual documentado). |
+| payment_failed | backend | ativo | Propriedades (Fase B.3): `paymentMethod` — bug corrigido, antes hardcoded `"pix"`; agora vem de `payment_type_id` do payload real do Mercado Pago, ou `"unknown"` quando não disponível, nunca um valor adivinhado. `product_origin` — mesma resolução de `payment_approved` (`unknown` quando a compra não é resolvida). |
 | session_engaged / session_started | frontend | ativo | |
 | signup_completed | backend | **implementado (Fase B), contexto corrigido (Fase B.1)** | Emitido em `AuthService.register` (signup por senha) e `AuthService.finishSocialLogin` (apenas quando a conta é criada de fato — não em login social de conta pré-existente, que agora emite `login_completed`). Propriedades: `user_id`, `signup_method` (`password`\|`google`\|`linkedin`), `is_guest_conversion`, `conversion_context` (conjunto fechado: `analysis_guest`\|`checkout`\|`direct_auth`\|`radar`\|`unknown`), `sessionInternalId` quando disponível. Idempotente por `user_id`. Não representa login nem restauração de sessão. Ver seção 5.1 para o contrato completo de `conversion_context`. |
 | signup_started | frontend | ativo | |
 | teaser_scroll / teaser_viewed | frontend/backend | ativo | |
 | unlock_cv_click | frontend | ativo | |
-| candidaturas_page_viewed / candidatura_created / candidatura_detail_viewed / candidatura_status_changed / candidatura_marked_as_applied / candidatura_archived / candidatura_deleted / candidatura_note_added / candidatura_rejection_feedback_submitted | ver registry | ativo | Módulo de Candidaturas — fora de escopo desta rodada. |
-| radar_view | frontend | ativo | Radar — evolução planejada na Fase D (fora de escopo). |
-| interview_prep_* | ver registry | ativo | |
-| cover_letter_* | ver registry | ativo | |
+| candidaturas_page_viewed / candidatura_created / candidatura_detail_viewed / candidatura_status_changed / candidatura_marked_as_applied / candidatura_archived / candidatura_deleted / candidatura_note_added / candidatura_rejection_feedback_submitted | ver registry | ativo | Módulo de Candidaturas. Fase B.3: `candidatura_created` ganhou `product_origin` (`candidatura` na criação manual; `radar`\|`analysis` na criação automática via `upsertFromCvAdaptation`, conforme `radarJobId`) e `idempotencyKey` por `application_id` (`candidatura_created:<id>`). `candidatura_marked_as_applied` ganhou `idempotencyKey` por `application_id` (`candidatura_marked_as_applied:<id>`) — marco por candidatura, não por transição. `candidatura_archived` ganhou `idempotencyKey` escopado à própria transição (`candidatura_archived:<id>:<timestamp>`) — rearquivar após restaurar é ação legítima e distinta, a chave só evita duplicidade de corrida na mesma transição. `candidatura_note_added` **não** ganhou idempotência — notas repetidas são ações legítimas e distintas, deduplicar quebraria o caso de uso. Todos os eventos backend do módulo ganharam `sessionInternalId` opcional em `metadata` quando o request carrega `x-session-internal-id` (ver seção 5.4). |
+| radar_view | frontend | ativo | Fase B.3: cobre agora todas as superfícies de listagem do Radar (`/radar`, `/radar/area/[area]`, `/radar/junior`, `/radar/senior`, `/radar/remotas`, `/radar/tecnologia/[tech]`, `/radar/empresa/[empresa]`), não só a home. Idempotente por `routeVisitId + radar_view` (`idempotencyKey: <routeVisitId>:radar_view`). Propriedades `radar_view_type`, `area`, `seniority`, `technology`, `remote_filter` incluídas só quando realmente disponíveis — nunca valores fictícios. |
+| radar_opportunity_clicked | frontend | **novo (Fase B.3)** | Clique numa oportunidade apresentada pelo Radar (listagem principal, carrossel de similares na listagem, carrossel de similares no detalhe). Propriedades: `job_id`, `product_origin: radar`, posição na lista (`position`, quando disponível de forma estável), filtros ativos (`active_filters`, quando disponíveis). **Sem** idempotência global — cliques distintos são ações reais, cada clique gera um evento novo; a implementação só evita duplo-disparo do mesmo handler, não dedupe entre cliques. |
+| job_detail_viewed | frontend | **novo (Fase B.3)** | Detalhe de vaga efetivamente renderizado — serve Radar, página pública/SEO de vaga e acesso direto, mesmo evento para os três (nunca eventos separados por origem). `product_origin` resolvido por prefixo exato de `previous_route`: começa com `/radar` → `radar`; sem `previous_route` (primeiro pageview da sessão) → `seo_job`; qualquer outra rota interna → `direct`. Nunca inferido por heurística de hostname/referrer. Idempotente por `routeVisitId + job_detail_viewed`. |
+| interview_prep_* | ver registry | ativo | `interview_prep_generated` ganhou `sessionInternalId` opcional em `metadata` (Fase B.3, ver seção 5.4). |
+| cover_letter_* | ver registry | ativo | `cover_letter_generated` ganhou `sessionInternalId` opcional em `metadata` (Fase B.3, ver seção 5.4). |
 
 ### Ownership mismatch corrigido (Fase A)
 
@@ -219,6 +230,113 @@ Dashboards de aquisição (fora do escopo desta rodada) devem excluir jornadas c
 como `existing_user_journey`, mesmo que os primeiros eventos daquela sessão tenham ocorrido
 anonimamente antes do login — e nunca usar o estado *atual* da pessoa como filtro, o que
 excluiria também quem converteu de fato durante o funil.
+
+## 5.3 `product_origin` (Fase B.3) — superfície de produto, não origem de marketing
+
+Enum fechado (`PRODUCT_ORIGINS`, espelhado em
+`apps/api/src/analysis-observability/product-origin.ts` e
+`apps/web/src/lib/product-origin.ts`): `radar`, `analysis`, `candidatura`, `dashboard`,
+`seo_job`, `direct`, `unknown`.
+
+Representa qual superfície funcional de PRODUTO originou uma ação específica — não a
+origem de aquisição/marketing (isso é `conversion_context` + UTM/`source`/`medium`, ver
+seção 5.1, contratos independentes e não intercambiáveis). Não existe uma supercolumn
+global `feature` em todo evento — o mapeamento evento canônico → feature (seção 5.5) já
+resolve segmentação por feature sem precisar de um campo genérico redundante em toda
+linha.
+
+Regra dura: quando a origem não é determinável com confiança, `product_origin: unknown`
+— nunca uma inferência frágil (nunca deduzido só pela rota HTTP, por exemplo
+`cv-adaptation/analyze` não vira `product_origin` sozinho).
+
+Como é resolvido, por evento:
+
+- `analysis_started` / `analysis_completed` / `analysis_failed`: `radar` quando o job de
+  análise carrega `radarJobId` (guest ou autenticado); `direct` caso contrário. O
+  frontend já enviava `radarJobId` incondicionalmente em ambos os fluxos
+  (`apps/web/src/app/adaptar/page.tsx`) — o guest endpoint só não estava lendo o campo,
+  corrigido nesta fase.
+- `candidatura_created`: `candidatura` na criação manual (sempre — não existe caminho
+  manual vindo do Radar); `radar` ou `analysis` na criação automática via
+  `upsertFromCvAdaptation`, reaproveitando a relação já existente
+  `radarJobId → Job.id → AnalysisJob → JobApplication.jobId` (sem join adicional em
+  tempo de análise só para analytics — o campo já é persistido na criação da
+  candidatura).
+- `payment_approved` / `payment_failed`: resolvido a partir de
+  `PlanPurchase.originAdaptationId → JobApplication.currentCvAdaptationId (lookup
+  reverso) → JobApplication.jobId` (não-nulo ⇒ `radar`, nulo ⇒ `analysis`, sem
+  adaptação de origem ⇒ `direct`). Erro na resolução (ex.: falha transitória de DB) ⇒
+  `unknown`, nunca quebra o registro do evento de pagamento em si — a resolução roda em
+  `try/catch` isolado.
+- `radar_opportunity_clicked`: sempre `radar` — o próprio evento só existe dentro do
+  Radar.
+- `job_detail_viewed`: ver tabela da seção 4 (resolvido por `previous_route`).
+- `optimized_cv_downloaded`: `radar` \| `candidatura` \| `analysis`, resolvido por
+  `previous_route` no momento do clique de download (`/radar` ⇒ `radar`,
+  `/candidaturas` ⇒ `candidatura`, qualquer outra rota interna ⇒ `analysis` — a tela de
+  resultado/adaptação em si não tem "Radar" nem "Candidaturas" como conceito próprio).
+
+## 5.4 `sessionInternalId` em eventos de produto backend (Fase B.3)
+
+Objetivo: correlacionar eventos de uso de produto (geração de carta, interview prep,
+candidaturas, pagamento) com a classificação de jornada da seção 5.2
+(`new_user_journey`/`existing_user_journey`/`anonymous_journey`/`unknown`) — hoje só
+`page_view`/`signup_completed`/`login_completed` carregavam esse UUID de forma
+consistente.
+
+**Padrão de propagação (browser → Server Action → NestJS API)**: o frontend lê o UUID
+de jornada de `sessionStorage` (`getJourneySessionInternalId()` em
+`apps/web/src/lib/journey-session.ts`) e passa como parâmetro final das funções de
+`apps/web/src/lib/job-applications-api.ts` (Server Actions `"use server"`), que por sua
+vez passam pra `apiRequest()` (`apps/web/src/lib/api-request.ts`), que grava no header
+HTTP `x-session-internal-id` só quando o valor está presente — nunca inventa um. Na API,
+`requestContextMiddleware` (`apps/api/src/analysis-protection/request-context.middleware.ts`)
+lê o header, valida o formato com o mesmo validador rigoroso usado no fluxo OAuth
+(`apps/api/src/common/journey-session-id.ts` — UUID de `crypto.randomUUID()` ou o
+fallback `journey-<timestamp>`) e grava em
+`AnalysisRequestContext.journeySessionInternalId`. Formato inválido ou header ausente ⇒
+`null`, nunca quebra o request.
+
+**Regra dura, igual à do OAuth (seção 5.1)**: o UUID de jornada só é escrito em
+`metadata.sessionInternalId` do evento — **nunca** na coluna
+`BusinessFunnelEvent.sessionInternalId` (FK pra `AnalysisSession`, ver seção 2). Quando
+o request não carrega contexto confiável, o campo fica ausente de `metadata` (não é
+enviado como `null` explícito nem inventado) — ver os eventos cobertos na seção 4.
+
+Eventos cobertos nesta fase (lista priorizada da spec, todos com `sessionInternalId`
+opcional em `metadata`): `cover_letter_generated`, `interview_prep_generated`,
+`candidatura_created`, `candidatura_status_changed`, `candidatura_marked_as_applied`,
+`candidatura_archived`, `candidatura_deleted`, `candidatura_note_added`,
+`candidatura_rejection_feedback_submitted`.
+
+**Gap residual documentado, aceito conscientemente**: `payment_approved` e
+`payment_failed` **não** recebem `sessionInternalId` nesta fase. Ambos costumam disparar
+via webhook servidor-a-servidor do Mercado Pago, sem nenhum contexto de browser vivo no
+momento do processamento. Propagar exigiria persistir o UUID de jornada em
+`PlanPurchase` no momento da criação do checkout (migration de schema) — fora do escopo
+de B.3. Ver seção "riscos residuais" na entrega da fase.
+
+## 5.5 Evento canônico por feature (sem supercolumn `feature`)
+
+A camada futura de BI/PostHog mapeia feature a partir do evento canônico, sem precisar
+de uma propriedade genérica `feature` replicada em todo evento:
+
+| Feature | Evento canônico |
+|---|---|
+| Analysis | `analysis_completed` |
+| CV | `cv_unlock_completed` |
+| Cover Letter | `cover_letter_generated` |
+| Interview Prep | `interview_prep_generated` |
+| Applications (Candidaturas) | `candidatura_created` / `candidaturas_page_viewed` |
+| Radar | `radar_opportunity_clicked` |
+
+## 5.6 Retenção — derivada de repetição temporal, não evento dedicado
+
+Não existe (e não deve ser criado) um evento tipo `user_retained`/`returning_user`.
+Retenção é derivada, na camada de análise/dashboard, a partir da repetição temporal de
+eventos já existentes (ex.: mais de um `analysis_completed` do mesmo `user_id` em
+janelas de tempo distintas, ou `session_started` recorrente) — nunca um evento novo
+gravado em runtime só para marcar "esse é um retorno".
 
 ## 6. Versionamento
 
