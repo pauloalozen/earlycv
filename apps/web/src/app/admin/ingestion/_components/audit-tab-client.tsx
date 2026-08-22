@@ -16,6 +16,7 @@ import type {
   CompanySourceAuditStatus,
   CompanySourceAuditTier,
 } from "@/lib/admin-ingestion-api";
+import { DraftsPanel } from "./drafts-panel";
 import { DuplicateSourcesPanel } from "./duplicate-sources-panel";
 
 const TIER_LABEL: Record<CompanySourceAuditTier, string> = {
@@ -83,7 +84,9 @@ export function AuditTabClient() {
   const [applyPending, setApplyPending] = useState(false);
   const [applyResult, setApplyResult] =
     useState<CompanySourceAuditApplySummary | null>(null);
-  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [secondaryView, setSecondaryView] = useState<
+    "none" | "drafts" | "duplicates"
+  >("none");
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -491,21 +494,38 @@ export function AuditTabClient() {
         </tbody>
       </AdminTable>
 
-      <div>
+      <div style={{ display: "flex", gap: 8 }}>
         <button
           className={buttonVariants({
-            variant: showDuplicates ? "default" : "outline",
+            variant: secondaryView === "drafts" ? "default" : "outline",
             size: "sm",
           })}
-          onClick={() => setShowDuplicates((v) => !v)}
+          onClick={() =>
+            setSecondaryView((v) => (v === "drafts" ? "none" : "drafts"))
+          }
           type="button"
         >
-          {showDuplicates
+          {secondaryView === "drafts" ? "Ocultar rascunhos" : "Ver rascunhos"}
+        </button>
+        <button
+          className={buttonVariants({
+            variant: secondaryView === "duplicates" ? "default" : "outline",
+            size: "sm",
+          })}
+          onClick={() =>
+            setSecondaryView((v) =>
+              v === "duplicates" ? "none" : "duplicates",
+            )
+          }
+          type="button"
+        >
+          {secondaryView === "duplicates"
             ? "Ocultar fontes duplicadas"
             : "Ver fontes duplicadas"}
         </button>
       </div>
-      {showDuplicates && <DuplicateSourcesPanel />}
+      {secondaryView === "drafts" && <DraftsPanel />}
+      {secondaryView === "duplicates" && <DuplicateSourcesPanel />}
     </div>
   );
 }

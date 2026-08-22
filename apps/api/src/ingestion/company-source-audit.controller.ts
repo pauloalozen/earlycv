@@ -94,4 +94,33 @@ export class CompanySourceAuditController {
   async apply(@Body("dryRun") dryRun: boolean | undefined) {
     return this.service.applyApproved({ dryRun: dryRun !== false });
   }
+
+  @Get("drafts")
+  async listDrafts() {
+    return this.service.listDrafts();
+  }
+
+  @Post("drafts/:companyId/rename")
+  @HttpCode(200)
+  async renameDraft(
+    @Param("companyId") companyId: string,
+    @Body("name") name: string | undefined,
+  ) {
+    if (!name?.trim()) {
+      throw new BadRequestException("name is required");
+    }
+    return this.service.renameDraft(companyId, name.trim());
+  }
+
+  @Post("drafts/:companyId/activate")
+  @HttpCode(200)
+  async activateDraft(@Param("companyId") companyId: string) {
+    return this.service.activateDraft(companyId);
+  }
+
+  @Post("drafts/:companyId/discard")
+  @HttpCode(200)
+  async discardDraft(@Param("companyId") companyId: string) {
+    return this.service.discardDraft(companyId);
+  }
 }

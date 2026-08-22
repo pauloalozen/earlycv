@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import {
@@ -564,6 +569,121 @@ export class CompanySourceAuditService {
     }
 
     return summary;
+  }
+
+  // Rascunhos: Company criada por applyApproved() quando o dono real de um
+  // achado nao existia no nosso banco (ver comentario da classe). Sao
+  // sempre isActive=false — hoje esse e o UNICO lugar do sistema que cria
+  // Company com isActive=false, entao esse campo funciona como o marcador
+  // de "e um rascunho pendente de revisao" sem precisar de coluna nova.
+  async listDrafts() {
+    const companies = await this.database.company.findMany({
+      where: { isActive: false },
+      orderBy: { createdAt: "desc" },
+    });
+    if (companies.length === 0) return [];
+
+    const companyIds = companies.map((c) => c.id);
+    const [sources, jobCounts] = await Promise.all([
+      this.database.jobSource.findMany({
+        where: { companyId: { in: companyIds } },
+      }),
+      this.database.job.groupBy({
+        by: ["companyId", "status"],
+        where: { companyId: { in: companyIds } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const sourcesByCompany = new Map<string, typeof sources>();
+    for (const source of sources) {
+      const list = sourcesByCompany.get(source.companyId) ?? [];
+      list.push(source);
+      sourcesByCompany.set(source.companyId, list);
+    }
+
+    const jobCountsByCompany = new Map<
+      string,
+      { active: number; inactive: number; removed: number }
+    >();
+    for (const row of jobCounts) {
+      const counts = jobCountsByCompany.get(row.companyId) ?? {
+        active: 0,
+        inactive: 0,
+        removed: 0,
+      };
+      counts[row.status as "active" | "inactive" | "removed"] = row._count._all;
+      jobCountsByCompany.set(row.companyId, counts);
+    }
+
+    return companies.map((company) => ({
+      ...company,
+      sources: sourcesByCompany.get(company.id) ?? [],
+      jobCounts: jobCountsByCompany.get(company.id) ?? {
+        active: 0,
+        inactive: 0,
+        removed: 0,
+      },
+    }));
+  }
+
+  private async getDraft(companyId: string) {
+    const company = await this.database.company.findUnique({
+      where: { id: companyId },
+    });
+    if (!company) throw new NotFoundException("company not found");
+    if (company.isActive) {
+      throw new BadRequestException("company is not a draft (isActive=true)");
+    }
+    return company;
+  }
+
+  async renameDraft(companyId: string, name: string) {
+    await this.getDraft(companyId);
+    return this.database.company.update({
+      where: { id: companyId },
+      data: { name, normalizedName: normalizeCompanyName(name) },
+    });
+  }
+
+  // Publica o rascunho: ativa a Company (passa a aparecer em listagens e
+  // participar de lote de crawling), reativa a(s) fonte(s) criada(s) junto
+  // com ela, e devolve as vagas que estavam "inactive" (reatribuidas por
+  // applyApproved) pra "active" — voltam a aparecer no radar publico.
+  async activateDraft(companyId: string) {
+    await this.getDraft(companyId);
+    await this.database.company.update({
+      where: { id: companyId },
+      data: { isActive: true },
+    });
+    await this.database.jobSource.updateMany({
+      where: { companyId },
+      data: { isActive: true, pauseReason: null },
+    });
+    await this.database.job.updateMany({
+      where: { companyId, status: "inactive" },
+      data: { status: "active" },
+    });
+    return { ok: true } as const;
+  }
+
+  // Descarta o rascunho: marca as vagas como removed (mesmo destino final
+  // de um achado sem dono conhecido, se voce tivesse rejeitado desde o
+  // inicio) e desativa a(s) fonte(s). A Company em si NAO e apagada — fica
+  // isActive=false pra sempre como registro de que foi revisada e
+  // descartada; continua aparecendo em listDrafts() (com jobCounts.inactive
+  // zerado, dando pra distinguir de um rascunho ainda pendente).
+  async discardDraft(companyId: string) {
+    await this.getDraft(companyId);
+    await this.database.jobSource.updateMany({
+      where: { companyId },
+      data: { isActive: false },
+    });
+    await this.database.job.updateMany({
+      where: { companyId, status: { not: "removed" } },
+      data: { status: "removed" },
+    });
+    return { ok: true } as const;
   }
 
   private async markApplied(id: string, dryRun: boolean) {

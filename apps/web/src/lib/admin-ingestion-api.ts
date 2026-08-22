@@ -904,3 +904,68 @@ export async function applyCompanySourceAudit(dryRun: boolean, token?: string) {
     },
   );
 }
+
+// Rascunhos: Company que o apply cria (isActive=false) quando o dono real
+// de um achado nao existia no nosso banco — ver "Rascunhos" na aba
+// "Audit de Fontes".
+export type CompanySourceAuditDraftSource = {
+  id: string;
+  sourceUrl: string;
+  sourceName: string;
+  sourceType: string;
+  isActive: boolean;
+};
+
+export type CompanySourceAuditDraft = {
+  id: string;
+  name: string;
+  careersUrl: string | null;
+  createdAt: string;
+  sources: CompanySourceAuditDraftSource[];
+  jobCounts: { active: number; inactive: number; removed: number };
+};
+
+export async function listCompanySourceAuditDrafts(token?: string) {
+  return apiRequest<CompanySourceAuditDraft[]>(
+    "/admin/company-source-audit/drafts",
+    token,
+  );
+}
+
+export async function renameCompanySourceAuditDraft(
+  companyId: string,
+  name: string,
+  token?: string,
+) {
+  return apiRequest<CompanySourceAuditDraft>(
+    `/admin/company-source-audit/drafts/${companyId}/rename`,
+    token,
+    {
+      body: JSON.stringify({ name }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
+export async function activateCompanySourceAuditDraft(
+  companyId: string,
+  token?: string,
+) {
+  return apiRequest<{ ok: true }>(
+    `/admin/company-source-audit/drafts/${companyId}/activate`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export async function discardCompanySourceAuditDraft(
+  companyId: string,
+  token?: string,
+) {
+  return apiRequest<{ ok: true }>(
+    `/admin/company-source-audit/drafts/${companyId}/discard`,
+    token,
+    { method: "POST" },
+  );
+}
