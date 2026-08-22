@@ -11,6 +11,7 @@ import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../jobs-listing";
 import { RadarPageShell } from "../page-shell";
+import { RadarViewTracker } from "../radar-view-tracker";
 
 export function generateMetadata(): Metadata {
   const isGhostMode = isJobsGhostModeEnabled();
@@ -49,6 +50,7 @@ export default async function RadarSeniorPage({ searchParams }: PageProps) {
       userRole={user?.internalRole}
       credits={availableCredits}
     >
+      <RadarViewTracker radarViewType="senior" seniority="SENIOR" />
       <RadarJobsListing
         basePath="/radar/senior"
         user={user}

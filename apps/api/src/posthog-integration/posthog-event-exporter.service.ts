@@ -55,6 +55,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   dashboard_viewed: "dashboard_viewed",
   // Radar
   radar_view: "radar_view",
+  radar_opportunity_clicked: "radar_opportunity_clicked",
+  job_detail_viewed: "job_detail_viewed",
   // Candidaturas
   candidaturas_page_viewed: "candidaturas_page_viewed",
   candidatura_created: "candidatura_created",

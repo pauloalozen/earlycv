@@ -14,6 +14,7 @@ import { Carousel } from "./carousel";
 import { CompanyLogo } from "./company-logo";
 import { type ActiveFilters, FiltersBar } from "./filters-bar";
 import { JobCard } from "./job-card";
+import { RadarOpportunityLink } from "./radar-opportunity-link";
 import {
   AdaptBtn,
   BREAKDOWN_MAX,
@@ -511,8 +512,9 @@ function CarouselCard({
         )}
       </div>
       <div>
-        <Link
+        <RadarOpportunityLink
           href={`/radar/${job.slug}`}
+          jobId={job.id}
           style={{
             display: "-webkit-box",
             WebkitLineClamp: 2,
@@ -528,7 +530,7 @@ function CarouselCard({
           }}
         >
           {job.title}
-        </Link>
+        </RadarOpportunityLink>
         <span
           style={{
             display: "block",

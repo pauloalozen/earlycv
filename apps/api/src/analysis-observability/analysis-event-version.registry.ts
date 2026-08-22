@@ -88,6 +88,8 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   candidatura_rejection_feedback_submitted: 1,
   // Radar
   radar_view: 1,
+  radar_opportunity_clicked: 1,
+  job_detail_viewed: 1,
   // Interview Prep
   interview_prep_drawer_opened: 1,
   interview_prep_generate_clicked: 1,

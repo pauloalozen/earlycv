@@ -82,7 +82,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
         </script>
       }
     >
-      <RadarViewTracker />
+      <RadarViewTracker radarViewType="all" />
       <RadarJobsListing basePath="/radar" user={user} searchParams={params} />
     </RadarPageShell>
   );

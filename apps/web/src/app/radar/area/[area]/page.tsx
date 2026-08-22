@@ -12,6 +12,7 @@ import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
 import { RadarPageShell } from "../../page-shell";
 import { RADAR_AREA_LABELS } from "../../radar-ui";
+import { RadarViewTracker } from "../../radar-view-tracker";
 
 // [area] chega em lowercase na URL (ex.: "data_ai") — as chaves de
 // RADAR_AREA_LABELS são os valores do enum JobArea, em upper case
@@ -86,6 +87,7 @@ export default async function RadarAreaPage({
       userRole={user?.internalRole}
       credits={availableCredits}
     >
+      <RadarViewTracker radarViewType="area" area={areaEnum} />
       <RadarJobsListing
         basePath={`/radar/area/${areaSlug}`}
         user={user}
