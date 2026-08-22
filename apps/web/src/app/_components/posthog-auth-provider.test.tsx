@@ -268,6 +268,48 @@ describe("PosthogAuthProvider", () => {
     expect(sessionStorage.getItem("analytics_auth_reset_allowed")).toBeNull();
   });
 
+  it("logout resets posthog account identity but never touches the persistent visitor_id (Fase C)", async () => {
+    localStorage.setItem(
+      "earlycv_visitor_id",
+      "11111111-1111-4111-8111-111111111111",
+    );
+    sessionStorage.setItem("analytics_auth_reset_allowed", "1");
+    sessionStorage.setItem("posthog_identified_user_id", "user-2");
+    sessionStorage.setItem(
+      "analytics_auth_context",
+      JSON.stringify({
+        authStatus: "authenticated",
+        isAuthenticated: true,
+        userId: "user-2",
+      }),
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ authenticated: false, user: null }),
+      }),
+    );
+
+    render(
+      <PosthogAuthProvider>
+        <div>logout</div>
+      </PosthogAuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(resetMock).toHaveBeenCalledTimes(1);
+    });
+
+    // A nova jornada pós-logout continua pertencendo ao mesmo navegador —
+    // reset() do PostHog só descarta a identidade de CONTA, nunca o
+    // visitor_id persistente do EarlyCV (chave separada, própria).
+    expect(localStorage.getItem("earlycv_visitor_id")).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+  });
+
   it("emits auth_session_identified again after logout then next login", async () => {
     const fetchMock = vi
       .fn()
