@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
+import { isForeignLocation } from "../jobs/geo-normalizer";
 import {
   companyNameTokens,
   isSameBoard,
@@ -98,16 +99,20 @@ function safeHost(rawUrl: string): string | null {
 //     crawlStrategy da fonte errada) e reatribui pra essa fonte nova, ja
 //     ativa.
 //   - tier "high"/"review" com sugestao de nome unica (nao um match
-//     ambiguo entre varias empresas nossas): cria (ou reaproveita, se
-//     outro achado ja criou) um RASCUNHO de Company com esse nome,
-//     isActive=false — nao aparece em listagem publica nem entra em lote
-//     de crawling ate revisao manual — mais uma JobSource tambem pausada,
-//     e reatribui as vagas pra la com status="inactive" (preservadas, so
-//     fora do radar ate voce revisar/ativar a empresa). Assim nenhum
-//     achado de fonte se perde so por a empresa dona ainda nao existir no
-//     nosso banco.
+//     ambiguo entre varias empresas nossas, e nao um board claramente
+//     estrangeiro — ver isForeignBoard): cria (ou reaproveita, se outro
+//     achado ja criou) um RASCUNHO de Company com esse nome, isActive=false
+//     — nao aparece em listagem publica nem entra em lote de crawling ate
+//     revisao manual — mais uma JobSource tambem pausada, e reatribui as
+//     vagas pra la com status="inactive" (preservadas, so fora do radar ate
+//     voce revisar/ativar a empresa, ver "Rascunhos" na aba Audit de
+//     Fontes). Assim nenhum achado de fonte se perde so por a empresa dona
+//     ainda nao existir no nosso banco.
 //   - tier "review" com match AMBIGUO entre varias empresas nossas (nao da
-//     pra saber sozinho qual delas e a dona real): fica no comportamento
+//     pra saber sozinho qual delas e a dona real), OU um board cujas vagas
+//     ja importadas sao TODAS de fora do Brasil (isForeignBoard — reusa
+//     isForeignLocation, o mesmo criterio da ingestao normal — entao nao
+//     vale criar rascunho de empresa pra isso): fica no comportamento
 //     seguro anterior — so desativa a fonte errada e marca as vagas como
 //     "removed". Precisa de decisao manual (ainda nao tem UI pra escolher
 //     entre os candidatos).
@@ -413,18 +418,37 @@ export class CompanySourceAuditService {
       // Resolve a Company de destino: o dono confirmado (ja existe no
       // nosso banco), OU — se ninguem confirmado mas temos um nome
       // sugerido de UM candidato so (nao a lista "A | B" de match ambiguo,
-      // que precisa de decisao humana manual) — um RASCUNHO de empresa,
+      // que precisa de decisao humana manual, e nao um board claramente
+      // estrangeiro sem nenhuma vaga no Brasil) — um RASCUNHO de empresa,
       // reaproveitado se outro achado ja criou um com esse mesmo nome.
       let destinationCompanyId: string | null = audit.suspectedOwnerId;
       const isAmbiguousMultiOwner =
         !destinationCompanyId &&
         (audit.suspectedOwnerName?.includes(" | ") ?? false);
+
+      // So decide isso quando ainda vamos criar rascunho (dono desconhecido
+      // no nosso banco) — pra um dono ja confirmado (Company nossa de
+      // verdade) a localizacao das vagas nao muda a decisao de reatribuir.
+      let isForeignBoard = false;
+      if (!destinationCompanyId && !isAmbiguousMultiOwner) {
+        const wrongSourceJobs = await this.database.job.findMany({
+          where: { jobSourceId: audit.jobSourceId },
+          select: { country: true, state: true },
+        });
+        isForeignBoard =
+          wrongSourceJobs.length > 0 &&
+          wrongSourceJobs.every((job) =>
+            isForeignLocation(job.country, job.state),
+          );
+      }
+
       let willCreateDraftInDryRun = false;
 
       if (
         !destinationCompanyId &&
         audit.suspectedOwnerName &&
-        !isAmbiguousMultiOwner
+        !isAmbiguousMultiOwner &&
+        !isForeignBoard
       ) {
         const normalizedName = normalizeCompanyName(audit.suspectedOwnerName);
         if (normalizedName) {
@@ -541,11 +565,13 @@ export class CompanySourceAuditService {
           });
         }
       } else {
-        // Match ambiguo entre varias empresas nossas (ver
-        // isAmbiguousMultiOwner) — sem como escolher sozinho qual delas e
-        // a dona real, entao so preserva o comportamento seguro anterior:
-        // desativa a fonte errada e marca as vagas ja importadas como
-        // removed. Precisa de decisao manual (SQL) por enquanto.
+        // Nenhum destino resolvido: ou match ambiguo entre varias empresas
+        // nossas (isAmbiguousMultiOwner — sem como escolher sozinho qual
+        // delas e a dona real), ou board claramente estrangeiro
+        // (isForeignBoard — todas as vagas ja importadas tem localizacao
+        // fora do Brasil, ex: "Webster, MA"; nao vale criar rascunho de
+        // empresa pra isso). Em ambos os casos so desativa a fonte errada e
+        // marca as vagas ja importadas como removed.
         if (!dryRun) {
           const result = await this.database.job.updateMany({
             where: {
