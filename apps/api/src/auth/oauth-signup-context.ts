@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { isValidJourneySessionInternalId } from "../common/journey-session-id";
+import { isValidVisitorId } from "../common/visitor-id";
 import {
   SIGNUP_CONVERSION_CONTEXTS,
   type SignupConversionContext,
@@ -15,6 +16,7 @@ import {
 // quebra o login.
 export const OAUTH_SIGNUP_CONTEXT_COOKIE = "oauth_signup_ctx";
 export const OAUTH_JOURNEY_SESSION_COOKIE = "oauth_journey_sid";
+export const OAUTH_VISITOR_ID_COOKIE = "oauth_visitor_id";
 const OAUTH_COOKIE_PATH = "/api/auth/google";
 // Mesmo TTL pros dois — é o mesmo round-trip OAuth, mesma janela de
 // exposição.
@@ -52,6 +54,17 @@ export function captureOAuthSignupContextMiddleware(
   const sidValue = firstQueryValue(req.query.sid);
   if (isValidJourneySessionInternalId(sidValue)) {
     res.cookie(OAUTH_JOURNEY_SESSION_COOKIE, sidValue, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: OAUTH_COOKIE_MAX_AGE_MS,
+      path: OAUTH_COOKIE_PATH,
+    });
+  }
+
+  const vidValue = firstQueryValue(req.query.vid);
+  if (isValidVisitorId(vidValue)) {
+    res.cookie(OAUTH_VISITOR_ID_COOKIE, vidValue, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -130,4 +143,20 @@ export function readAndClearOAuthJourneySessionId(
   });
 
   return isValidJourneySessionInternalId(decoded) ? decoded : null;
+}
+
+export function readAndClearOAuthVisitorId(
+  req: Request,
+  res: Response,
+): string | null {
+  const decoded = decodeCookieValue(
+    readRawCookie(req, OAUTH_VISITOR_ID_COOKIE),
+  );
+
+  res.cookie(OAUTH_VISITOR_ID_COOKIE, "", {
+    maxAge: 0,
+    path: OAUTH_COOKIE_PATH,
+  });
+
+  return isValidVisitorId(decoded) ? decoded : null;
 }
