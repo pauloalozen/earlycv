@@ -19,6 +19,9 @@ const saveGuestPreviewMock = vi.hoisted(() => vi.fn());
 const getAuthStatusMock = vi.hoisted(() => vi.fn());
 const getMyMasterResumeMock = vi.hoisted(() => vi.fn());
 const getMyMasterCvExtractionStatusMock = vi.hoisted(() => vi.fn());
+const uploadMasterResumeMock = vi.hoisted(() => vi.fn());
+const getJourneySessionInternalIdMock = vi.hoisted(() => vi.fn());
+const getOrCreateVisitorIdMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -47,6 +50,7 @@ vi.mock("@/lib/session-actions", () => ({
 vi.mock("@/lib/resumes-api", () => ({
   getMyMasterResume: getMyMasterResumeMock,
   getMyMasterCvExtractionStatus: getMyMasterCvExtractionStatusMock,
+  uploadMasterResume: uploadMasterResumeMock,
 }));
 
 vi.mock("@/lib/cv-adaptation-api", () => ({
@@ -61,6 +65,16 @@ vi.mock("@/lib/analysis-job-polling", () => ({
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
+}));
+
+vi.mock("@/lib/journey-session", () => ({
+  getJourneySessionInternalId: getJourneySessionInternalIdMock,
+  getJourneyPreviousRoute: vi.fn(() => null),
+  getJourneyRouteVisitId: vi.fn(() => null),
+}));
+
+vi.mock("@/lib/visitor-id", () => ({
+  getOrCreateVisitorId: getOrCreateVisitorIdMock,
 }));
 
 import AdaptarPage from "./page";
@@ -85,6 +99,12 @@ describe("AdaptarPage submit analytics flow", () => {
     getAuthStatusMock.mockReset();
     getMyMasterResumeMock.mockReset();
     getMyMasterCvExtractionStatusMock.mockReset();
+    uploadMasterResumeMock.mockReset();
+    uploadMasterResumeMock.mockResolvedValue({ id: "uploaded-resume-1" });
+    getJourneySessionInternalIdMock.mockReset();
+    getJourneySessionInternalIdMock.mockReturnValue("journey-session-1");
+    getOrCreateVisitorIdMock.mockReset();
+    getOrCreateVisitorIdMock.mockReturnValue("visitor-1");
     getAuthStatusMock.mockResolvedValue({ userName: null });
     getMyMasterResumeMock.mockResolvedValue(null);
     getMyMasterCvExtractionStatusMock.mockResolvedValue(null);
@@ -221,6 +241,40 @@ describe("AdaptarPage submit analytics flow", () => {
       | FormData
       | undefined;
     expect(formDataArg?.get("turnstileToken")).toBeNull();
+  });
+
+  it("passes sessionInternalId/visitorId (read client-side) to analyzeGuestCv — the Server Action has no access to sessionStorage/localStorage on its own", async () => {
+    const { container } = render(<AdaptarPage />);
+
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
+    const fileInput =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) {
+      throw new Error("Expected file input to exist");
+    }
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["cv"], "cv.pdf", { type: "application/pdf" })],
+      },
+    });
+    fireEvent.change(textarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeGuestCvMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(analyzeGuestCvMock.mock.calls[0]?.[1]).toEqual({
+      sessionInternalId: "journey-session-1",
+      visitorId: "visitor-1",
+    });
   });
 
   it("shows extraction feedback with missing fields CTA for authenticated users", async () => {
@@ -759,5 +813,51 @@ describe("AdaptarPage submit analytics flow", () => {
     expect(routerPushMock).toHaveBeenCalledWith(
       "/adaptar/resultado?adaptationId=saved-1",
     );
+  }, 20000);
+
+  it("passes sessionInternalId/visitorId to analyzeAuthenticatedCv and to saveGuestPreview (candidatura automática) — same journey context on both calls", async () => {
+    getAuthStatusMock.mockResolvedValue({ userName: "Claudio" });
+
+    const { container } = render(<AdaptarPage />);
+
+    const textarea = await screen.findByPlaceholderText("Cole a vaga completa");
+    const fileInput =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) {
+      throw new Error("Expected file input to exist");
+    }
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["cv"], "cv.pdf", { type: "application/pdf" })],
+      },
+    });
+    fireEvent.change(textarea, {
+      target: { value: "Descricao da vaga" },
+    });
+
+    const submitButton = screen.getAllByRole("button", {
+      name: /Descobrir meus erros no CV/i,
+    })[0];
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(analyzeAuthenticatedCvMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(
+      () => {
+        expect(saveGuestPreviewMock).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 15000 },
+    );
+
+    expect(analyzeAuthenticatedCvMock.mock.calls[0]?.[2]).toEqual({
+      sessionInternalId: "journey-session-1",
+      visitorId: "visitor-1",
+    });
+    expect(saveGuestPreviewMock.mock.calls[0]?.[0]).toMatchObject({
+      sessionInternalId: "journey-session-1",
+      visitorId: "visitor-1",
+    });
   }, 20000);
 });

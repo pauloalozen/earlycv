@@ -24,6 +24,7 @@ import {
   buildFunnelEventIdempotencyKey,
 } from "@/lib/cv-adaptation-flow-helpers";
 import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { getPublicJobById } from "@/lib/public-jobs-client-api";
 import type { MasterCvExtractionStatusDto, ResumeDto } from "@/lib/resumes-api";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/resumes-api";
 import { getAuthStatus } from "@/lib/session-actions";
 import { useTurnstileToken } from "@/lib/use-turnstile-token";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -452,6 +454,17 @@ function AdaptarPageContent() {
       const turnstileToken = await requestTurnstileToken();
       appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
 
+      // analyzeGuestCv/analyzeAuthenticatedCv/saveGuestPreview são Server
+      // Actions — rodam no servidor Next.js, sem acesso a sessionStorage/
+      // localStorage. sessionInternalId/visitorId precisam ser lidos aqui,
+      // no client, e repassados explicitamente, senão o backend nunca vê
+      // esses headers e analysis_started/completed/candidatura_created
+      // ficam sem correlação de jornada.
+      const journeyContext = {
+        sessionInternalId: getJourneySessionInternalId(),
+        visitorId: getOrCreateVisitorId(),
+      };
+
       // A análise em si roda em background no servidor (job assíncrono) —
       // startAndPoll dispara o job e espera aqui, junto com um piso mínimo
       // de tempo de loading pra não "piscar" quando a resposta é rápida.
@@ -494,7 +507,7 @@ function AdaptarPageContent() {
           }
         }
         const started = await startAndPoll(
-          analyzeAuthenticatedCv(formData, "profile"),
+          analyzeAuthenticatedCv(formData, "profile", journeyContext),
         );
         analyzeResult = started.result;
       } else if (isAuthenticated && cvMode === "upload" && file) {
@@ -517,6 +530,7 @@ function AdaptarPageContent() {
           analyzeAuthenticatedCv(
             formData,
             saveMasterDecisionRef.current ? "profile" : "file_upload",
+            journeyContext,
           ),
         );
         analyzeResult = started.result;
@@ -535,12 +549,15 @@ function AdaptarPageContent() {
           analyzeAuthenticatedCv(
             formData,
             saveMasterDecisionRef.current ? "profile" : "text_paste",
+            journeyContext,
           ),
         );
         analyzeResult = started.result;
       } else {
         if (cvMode === "text") {
-          const started = await startAndPoll(analyzeGuestCv(formData));
+          const started = await startAndPoll(
+            analyzeGuestCv(formData, journeyContext),
+          );
           analyzeResult = started.result;
           guestSessionPublicToken = started.guestSessionPublicToken;
           if (!analyzeResult.ok) {
@@ -568,7 +585,9 @@ function AdaptarPageContent() {
           return;
         }
         formData.append("file", uploadedFile);
-        const started = await startAndPoll(analyzeGuestCv(formData));
+        const started = await startAndPoll(
+          analyzeGuestCv(formData, journeyContext),
+        );
         analyzeResult = started.result;
         guestSessionPublicToken = started.guestSessionPublicToken;
       }
@@ -595,6 +614,8 @@ function AdaptarPageContent() {
             file: file ?? undefined,
             jobApplicationId: prefillApplicationId ?? undefined,
             radarJobId: jobIdParam ?? undefined,
+            sessionInternalId: journeyContext.sessionInternalId,
+            visitorId: journeyContext.visitorId,
           });
 
           router.push(`/adaptar/resultado?adaptationId=${saved.id}`);

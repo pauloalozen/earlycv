@@ -25,7 +25,9 @@ import {
   clearGuestAnalysisRaw,
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { getAuthStatus } from "@/lib/session-actions";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -1849,6 +1851,8 @@ export default function ResultadoPage() {
           guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
           jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
           companyName: parsed.adaptedContentJson?.vaga?.empresa,
+          sessionInternalId: getJourneySessionInternalId(),
+          visitorId: getOrCreateVisitorId(),
         });
 
         autoSaveAttempted.current = true;
