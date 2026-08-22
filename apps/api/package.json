@@ -25,7 +25,9 @@
     "talent:recover-orphaned-origins": "NODE_OPTIONS='--conditions=development' tsx src/scripts/recover-orphaned-guest-origins.ts",
     "talent:merge-conflicts": "NODE_OPTIONS='--conditions=development' tsx src/scripts/merge-talent-profile-conflicts.ts",
     "talent:fix-confirmed-cache": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-talent-profile-confirmed-cache.ts",
-    "fix:radar-cv-adaptation-job-info": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-radar-cv-adaptation-job-info.ts"
+    "fix:radar-cv-adaptation-job-info": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-radar-cv-adaptation-job-info.ts",
+    "audit:company-sources": "NODE_OPTIONS='--conditions=development' tsx src/scripts/audit-company-sources.ts",
+    "apply:company-source-audit": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-company-source-audit.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
