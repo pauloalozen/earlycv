@@ -406,3 +406,163 @@ test("AuthService.login emits login_completed exactly once for explicit password
   await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
+
+// ─── visitor_id (Fase C) ───────────────────────────────────────────────────
+
+test("AuthService.register preserves visitor_id on signup_completed — anonymous visitor becoming a new user", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-signup-${randomUUID()}@earlycv.dev`;
+  const visitorId = randomUUID();
+
+  await deleteUserByEmail(database, email);
+
+  const result = await service.register({
+    email,
+    password: "Super-secret-123",
+    name: "Visitante Novo",
+    visitorId,
+  });
+
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: result.user.id },
+  });
+  assert.equal(signupEvents.length, 1);
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.visitor_id, visitorId);
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("AuthService.register omits visitor_id from signup_completed metadata when the journey didn't carry one — never invented", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-signup-none-${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const result = await service.register({
+    email,
+    password: "Super-secret-123",
+    name: "Sem Visitor",
+  });
+
+  const signupEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: result.user.id },
+  });
+  const metadata = signupEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal("visitor_id" in metadata, false);
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("AuthService.login preserves visitor_id on login_completed — recurring visitor logging into an existing account", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-login-${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const registered = await service.register({
+    email,
+    password: "Super-secret-123",
+    name: "Visitante Recorrente",
+  });
+
+  const visitorId = randomUUID();
+  await service.login({ id: registered.user.id }, undefined, visitorId);
+
+  const loginEvents = await database.businessFunnelEvent.findMany({
+    where: { eventName: "login_completed", userId: registered.user.id },
+  });
+  assert.equal(loginEvents.length, 1);
+  const metadata = loginEvents[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadata?.visitor_id, visitorId);
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("visitor_id from one signup never leaks into another user's signup_completed event", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  }).compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const emailA = `visitor-a-${randomUUID()}@earlycv.dev`;
+  const emailB = `visitor-b-${randomUUID()}@earlycv.dev`;
+  const visitorA = randomUUID();
+  const visitorB = randomUUID();
+
+  await deleteUserByEmail(database, emailA);
+  await deleteUserByEmail(database, emailB);
+
+  const resultA = await service.register({
+    email: emailA,
+    password: "Super-secret-123",
+    name: "Visitante A",
+    visitorId: visitorA,
+  });
+  const resultB = await service.register({
+    email: emailB,
+    password: "Super-secret-123",
+    name: "Visitante B",
+    visitorId: visitorB,
+  });
+
+  const eventsA = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: resultA.user.id },
+  });
+  const eventsB = await database.businessFunnelEvent.findMany({
+    where: { eventName: "signup_completed", userId: resultB.user.id },
+  });
+
+  const metadataA = eventsA[0]?.metadataJson as Record<string, unknown>;
+  const metadataB = eventsB[0]?.metadataJson as Record<string, unknown>;
+  assert.equal(metadataA?.visitor_id, visitorA);
+  assert.equal(metadataB?.visitor_id, visitorB);
+  assert.notEqual(metadataA?.visitor_id, metadataB?.visitor_id);
+
+  await deleteUserByEmail(database, emailA);
+  await deleteUserByEmail(database, emailB);
+  await moduleRef.close();
+});

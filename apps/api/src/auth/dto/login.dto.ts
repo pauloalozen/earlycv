@@ -22,4 +22,9 @@ export class LoginDto {
   @IsString()
   @MaxLength(128)
   sessionInternalId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  visitorId?: string;
 }

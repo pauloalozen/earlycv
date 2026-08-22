@@ -1,8 +1,28 @@
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { RegisterForm } from "./register-form";
 
+function makeLocalStorageStub() {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+  };
+}
+
 describe("RegisterForm conversion context propagation", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: makeLocalStorageStub(),
+    });
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -59,5 +79,35 @@ describe("RegisterForm conversion context propagation", () => {
     expect(hiddenInput?.value).toBe("journey-abc-123");
 
     sessionStorage.removeItem("journey_session_internal_id");
+  });
+
+  it("renders the visitorId hidden field with a UUID once localStorage resolves it (Fase C)", () => {
+    localStorage.setItem("analytics_consent_status", "accepted");
+
+    const { container } = render(
+      <RegisterForm next="" conversionContext="direct_auth" />,
+    );
+
+    const hiddenInput = container.querySelector<HTMLInputElement>(
+      'input[name="visitorId"]',
+    );
+    expect(hiddenInput?.value).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+
+    localStorage.removeItem("earlycv_visitor_id");
+    localStorage.removeItem("analytics_consent_status");
+  });
+
+  it("does not render the visitorId hidden field without analytics consent", () => {
+    localStorage.removeItem("analytics_consent_status");
+    localStorage.removeItem("earlycv_visitor_id");
+
+    const { container } = render(
+      <RegisterForm next="" conversionContext="direct_auth" />,
+    );
+
+    const hiddenInput = container.querySelector('input[name="visitorId"]');
+    expect(hiddenInput).toBeNull();
   });
 });

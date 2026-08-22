@@ -32,9 +32,15 @@ export async function POST(request: Request) {
   const next = String(formData.get("next") ?? "").trim();
   const sessionInternalId =
     String(formData.get("sessionInternalId") ?? "").trim() || undefined;
+  const visitorId = String(formData.get("visitorId") ?? "").trim() || undefined;
 
   try {
-    const session = await loginWithPassword(email, password, sessionInternalId);
+    const session = await loginWithPassword(
+      email,
+      password,
+      sessionInternalId,
+      visitorId,
+    );
     await persistAppSession(session);
 
     const destination = next

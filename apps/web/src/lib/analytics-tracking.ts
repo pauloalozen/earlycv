@@ -8,6 +8,7 @@ import {
   getPosthogSessionId,
   waitForPosthogSessionId,
 } from "@/lib/posthog-session";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 const UTM_STORAGE_KEY = "analytics_first_touch_utm";
 const BUSINESS_FUNNEL_EVENTS_PATH =
@@ -513,6 +514,7 @@ export function getAnalyticsBaseProperties(): Record<string, unknown> {
     previous_route: journeyContext.previousRoute,
     routeVisitId: journeyContext.routeVisitId,
     sessionInternalId: journeyContext.sessionInternalId,
+    visitor_id: getOrCreateVisitorId(),
     ...(getPosthogSessionId() ? { $session_id: getPosthogSessionId() } : {}),
     isAuthenticated: authContext.isAuthenticated,
     userId: authContext.userId,

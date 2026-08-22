@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     String(formData.get("conversionContext") ?? "").trim() || undefined;
   const sessionInternalId =
     String(formData.get("sessionInternalId") ?? "").trim() || undefined;
+  const visitorId = String(formData.get("visitorId") ?? "").trim() || undefined;
 
   try {
     const session = await registerWithPassword(
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
       name,
       conversionContext,
       sessionInternalId,
+      visitorId,
     );
     await persistAppSession(session);
 

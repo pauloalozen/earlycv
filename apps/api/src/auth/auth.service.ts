@@ -100,6 +100,7 @@ export class AuthService {
     isGuestConversion: boolean;
     conversionContext: string;
     sessionInternalId?: string | null;
+    visitorId?: string | null;
   }): Promise<void> {
     try {
       await this.funnelEvents.record(
@@ -120,6 +121,10 @@ export class AuthService {
             ...(input.sessionInternalId
               ? { sessionInternalId: input.sessionInternalId }
               : {}),
+            // visitor_id (Fase C) — identidade pseudônima de navegador,
+            // independente da jornada acima. Nunca inventado quando a
+            // jornada não começou no browser (ex.: staff criando conta).
+            ...(input.visitorId ? { visitor_id: input.visitorId } : {}),
           },
           routeKey: "auth/signup",
         },
@@ -150,6 +155,7 @@ export class AuthService {
     userId: string;
     loginMethod: string;
     sessionInternalId?: string | null;
+    visitorId?: string | null;
   }): Promise<void> {
     try {
       await this.funnelEvents.record(
@@ -162,6 +168,7 @@ export class AuthService {
             ...(input.sessionInternalId
               ? { sessionInternalId: input.sessionInternalId }
               : {}),
+            ...(input.visitorId ? { visitor_id: input.visitorId } : {}),
           },
           routeKey: "auth/login",
         },
@@ -196,6 +203,7 @@ export class AuthService {
       isGuestConversion: conversionContext === "analysis_guest",
       conversionContext,
       sessionInternalId: input.sessionInternalId,
+      visitorId: input.visitorId,
     });
 
     await this.issueEmailVerificationChallenge(user.id, user.email);
@@ -235,11 +243,13 @@ export class AuthService {
   async login(
     user: { id: string },
     sessionInternalId?: string | null,
+    visitorId?: string | null,
   ): Promise<AuthSession> {
     await this.recordLoginCompleted({
       userId: user.id,
       loginMethod: "password",
       sessionInternalId,
+      visitorId,
     });
 
     return this.issueSession(user.id);
@@ -299,6 +309,7 @@ export class AuthService {
     input: SocialProfileInput,
     conversionContext: SignupConversionContext = "unknown",
     sessionInternalId?: string | null,
+    visitorId?: string | null,
   ): Promise<AuthSession> {
     const providerEmail = input.email.trim().toLowerCase();
     const providerAccountId = input.providerAccountId.trim();
@@ -419,12 +430,14 @@ export class AuthService {
         isGuestConversion: conversionContext === "analysis_guest",
         conversionContext,
         sessionInternalId,
+        visitorId,
       });
     } else {
       await this.recordLoginCompleted({
         userId: socialResult.userId,
         loginMethod: input.provider,
         sessionInternalId,
+        visitorId,
       });
     }
 

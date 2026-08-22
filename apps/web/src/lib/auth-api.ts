@@ -81,12 +81,14 @@ export async function loginWithPassword(
   email: string,
   password: string,
   sessionInternalId?: string,
+  visitorId?: string,
 ) {
   return authRequest<AuthApiSession>("/auth/login", {
     body: JSON.stringify({
       email,
       password,
       ...(sessionInternalId ? { sessionInternalId } : {}),
+      ...(visitorId ? { visitorId } : {}),
     }),
     method: "POST",
   });
@@ -98,6 +100,7 @@ export async function registerWithPassword(
   name: string,
   conversionContext?: string,
   sessionInternalId?: string,
+  visitorId?: string,
 ) {
   return authRequest<AuthApiSession>("/auth/register", {
     body: JSON.stringify({
@@ -106,6 +109,7 @@ export async function registerWithPassword(
       password,
       ...(conversionContext ? { conversionContext } : {}),
       ...(sessionInternalId ? { sessionInternalId } : {}),
+      ...(visitorId ? { visitorId } : {}),
     }),
     method: "POST",
   });

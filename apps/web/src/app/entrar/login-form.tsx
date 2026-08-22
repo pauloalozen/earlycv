@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 import { PasswordInput } from "./password-input";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -12,6 +13,7 @@ export function LoginForm({ next }: { next: string }) {
   const [password, setPassword] = useState("");
   const [touched, setTouched] = useState({ email: false, password: false });
   const [sessionInternalId, setSessionInternalId] = useState("");
+  const [visitorId, setVisitorId] = useState("");
 
   useEffect(() => {
     try {
@@ -19,6 +21,7 @@ export function LoginForm({ next }: { next: string }) {
     } catch {
       // sessionStorage indisponível — login segue sem correlação de sessão.
     }
+    setVisitorId(getOrCreateVisitorId() ?? "");
   }, []);
 
   const emailValid = EMAIL_REGEX.test(email);
@@ -70,6 +73,7 @@ export function LoginForm({ next }: { next: string }) {
           value={sessionInternalId}
         />
       )}
+      {visitorId && <input type="hidden" name="visitorId" value={visitorId} />}
 
       <div>
         <label htmlFor="login-email" style={labelStyle}>

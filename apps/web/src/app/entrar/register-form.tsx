@@ -5,6 +5,7 @@ import {
   SIGNUP_PASSWORD_RULES,
   validateSignupPassword,
 } from "@/lib/password-rules";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 import { PasswordInput } from "./password-input";
 import type { SignupConversionContext } from "./signup-conversion-context";
 
@@ -23,6 +24,7 @@ export function RegisterForm({
   const [password, setPassword] = useState("");
   const [touched, setTouched] = useState({ email: false, password: false });
   const [sessionInternalId, setSessionInternalId] = useState("");
+  const [visitorId, setVisitorId] = useState("");
 
   useEffect(() => {
     try {
@@ -31,6 +33,7 @@ export function RegisterForm({
       // sessionStorage indisponível (privacy mode etc.) — segue sem
       // correlação de sessão, conversionContext continua enviado.
     }
+    setVisitorId(getOrCreateVisitorId() ?? "");
   }, []);
 
   const emailValid = EMAIL_REGEX.test(email);
@@ -83,6 +86,7 @@ export function RegisterForm({
           value={sessionInternalId}
         />
       )}
+      {visitorId && <input type="hidden" name="visitorId" value={visitorId} />}
 
       <div>
         <label htmlFor="register-name" style={labelStyle}>

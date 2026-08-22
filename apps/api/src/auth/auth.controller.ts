@@ -31,6 +31,7 @@ import { VerifyEmailDto } from "./dto/verify-email.dto";
 import {
   readAndClearOAuthJourneySessionId,
   readAndClearOAuthSignupContext,
+  readAndClearOAuthVisitorId,
 } from "./oauth-signup-context";
 
 const authValidationPipe = new ValidationPipe({
@@ -75,7 +76,11 @@ export class AuthController {
     dto: LoginDto,
     @Req() request: { user: { id: string } },
   ) {
-    return this.authService.login(request.user, dto.sessionInternalId);
+    return this.authService.login(
+      request.user,
+      dto.sessionInternalId,
+      dto.visitorId,
+    );
   }
 
   @Post("refresh")
@@ -180,12 +185,14 @@ export class AuthController {
       request,
       response,
     );
+    const visitorId = readAndClearOAuthVisitorId(request, response);
 
     return this.buildSocialRedirect(
       await this.authService.finishSocialLogin(
         this.getSocialProfile(request),
         conversionContext,
         sessionInternalId,
+        visitorId,
       ),
     );
   }
