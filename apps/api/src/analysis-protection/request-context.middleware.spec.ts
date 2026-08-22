@@ -357,3 +357,96 @@ test("request context middleware never leaks one request's journeySessionInterna
   );
   assert.equal(reqB.analysisContext.journeySessionInternalId, null);
 });
+
+// ─── Fase C: visitorId (x-visitor-id) ─────────────────────────────────────
+
+test("request context middleware reads visitorId from x-visitor-id header when it is a valid UUID", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: { "x-visitor-id": "1e6b6f2a-4b8b-4e2f-9c3a-0f7e2c9a1b3d" },
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(
+    req.analysisContext.visitorId,
+    "1e6b6f2a-4b8b-4e2f-9c3a-0f7e2c9a1b3d",
+  );
+});
+
+test("request context middleware sets visitorId to null when the header is absent — never invents one", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {},
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.visitorId, null);
+});
+
+test("request context middleware discards a malformed x-visitor-id header instead of trusting it", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: { "x-visitor-id": "<script>alert(1)</script>" },
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.visitorId, null);
+});
+
+test("request context middleware also discards the journey-<timestamp> fallback format for x-visitor-id (visitor_id has no fallback format)", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: { "x-visitor-id": "journey-1717171717171" },
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.visitorId, null);
+});
+
+test("request context middleware never leaks one request's visitorId into another", () => {
+  const reqA = {
+    app: { get: () => false },
+    cookies: {},
+    headers: { "x-visitor-id": "1e6b6f2a-4b8b-4e2f-9c3a-0f7e2c9a1b3d" },
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+  const reqB = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {},
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(reqA, {} as any, () => {});
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(reqB, {} as any, () => {});
+
+  assert.equal(
+    reqA.analysisContext.visitorId,
+    "1e6b6f2a-4b8b-4e2f-9c3a-0f7e2c9a1b3d",
+  );
+  assert.equal(reqB.analysisContext.visitorId, null);
+});

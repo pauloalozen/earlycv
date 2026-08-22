@@ -12,6 +12,12 @@ export type AnalysisRequestContext = {
   // este valor na coluna sessionInternalId de BusinessFunnelEvent, sempre em
   // metadata.sessionInternalId. Ver docs/runbook/events.md seção 2.
   journeySessionInternalId?: string | null;
+  // visitor_id: identificador pseudônimo persistente de navegador (Fase C),
+  // recebido via header x-visitor-id. Conceito independente de
+  // sessionInternalId/journeySessionInternalId (jornada funcional) e de
+  // userId (conta autenticada) — representa o navegador/storage, nunca uma
+  // pessoa. Ver docs/runbook/events.md, seção "Identity model".
+  visitorId?: string | null;
   userId: string | null;
   ip: string | null;
   routePath: string | null;

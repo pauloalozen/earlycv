@@ -6,6 +6,7 @@ import {
   isValidJourneySessionInternalId,
   JOURNEY_SESSION_ID_HEADER,
 } from "../common/journey-session-id";
+import { isValidVisitorId, VISITOR_ID_HEADER } from "../common/visitor-id";
 import type { AnalysisRequestContext } from "./types";
 
 const SESSION_COOKIE_KEYS = [
@@ -306,6 +307,11 @@ function resolveJourneySessionInternalId(req: Request): string | null {
   return isValidJourneySessionInternalId(value) ? value : null;
 }
 
+function resolveVisitorId(req: Request): string | null {
+  const value = pickFirstHeaderValue(req.headers[VISITOR_ID_HEADER]);
+  return isValidVisitorId(value) ? value : null;
+}
+
 function resolveUserAgentHash(req: Request): string | null {
   const userAgent = pickFirstHeaderValue(req.headers["user-agent"]);
 
@@ -334,6 +340,7 @@ export function requestContextMiddleware(
     routePath: resolveRoutePath(req),
     userAgentHash: resolveUserAgentHash(req),
     journeySessionInternalId: resolveJourneySessionInternalId(req),
+    visitorId: resolveVisitorId(req),
   };
 
   req.analysisContext = context;
