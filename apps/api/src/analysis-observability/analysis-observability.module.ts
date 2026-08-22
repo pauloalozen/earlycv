@@ -10,6 +10,7 @@ import { BusinessFunnelEventService } from "./business-funnel-event.service";
 import { BusinessFunnelEventsController } from "./business-funnel-events.controller";
 import { BusinessFunnelProjectionService } from "./business-funnel-projection.service";
 import { JourneySessionClassificationService } from "./journey-session-classification.service";
+import { VisitorLifecycleClassificationService } from "./visitor-lifecycle-classification.service";
 
 @Module({
   imports: [DatabaseModule],
@@ -23,6 +24,7 @@ import { JourneySessionClassificationService } from "./journey-session-classific
     AnalysisRetentionService,
     AnalysisRetentionScheduler,
     JourneySessionClassificationService,
+    VisitorLifecycleClassificationService,
   ],
   exports: [
     BusinessFunnelEventService,
@@ -30,6 +32,7 @@ import { JourneySessionClassificationService } from "./journey-session-classific
     AdminEventsEmitterService,
     AnalysisRetentionService,
     JourneySessionClassificationService,
+    VisitorLifecycleClassificationService,
   ],
 })
 export class AnalysisObservabilityModule {}
