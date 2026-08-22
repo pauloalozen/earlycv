@@ -1,5 +1,5 @@
-import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
 import type { CvAnalysisData } from "./cv-adaptation-api";
+import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
 
 export type AnalysisJobStatusDto = {
   jobId: string;
@@ -9,6 +9,11 @@ export type AnalysisJobStatusDto = {
   previewText: string | null;
   masterCvText: string | null;
   analysisCvSnapshotId: string | null;
+  // Prioriza cargo/empresa curados do Radar sobre o que a IA reextrai do
+  // texto colado (frequentemente vazio) — null quando a análise não veio
+  // do Radar ou ainda não terminou. Ver getAnalysisJobStatus na API.
+  jobTitle: string | null;
+  companyName: string | null;
 };
 
 export type AnalysisJobResult =
@@ -18,6 +23,8 @@ export type AnalysisJobResult =
       previewText: string;
       masterCvText: string;
       analysisCvSnapshotId: string;
+      jobTitle: string | null;
+      companyName: string | null;
     }
   | { ok: false; error: string };
 
@@ -82,6 +89,8 @@ export async function pollAnalysisJob(
         previewText: status.previewText,
         masterCvText: status.masterCvText,
         analysisCvSnapshotId: status.analysisCvSnapshotId,
+        jobTitle: status.jobTitle,
+        companyName: status.companyName,
       };
     }
 

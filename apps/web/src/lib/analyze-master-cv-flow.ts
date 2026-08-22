@@ -52,8 +52,14 @@ export async function analyzeMasterCvForJob(params: {
   try {
     const saved = await saveGuestPreview({
       adaptedContentJson: result.adaptedContentJson,
-      companyName: result.adaptedContentJson?.vaga?.empresa,
-      jobTitle: result.adaptedContentJson?.vaga?.cargo,
+      // Prioriza o cargo/empresa curados do Radar (result.jobTitle/
+      // companyName, resolvidos server-side a partir do Job) sobre o que a
+      // IA reextraiu do texto colado — a IA raramente repete o nome da
+      // empresa no corpo da descrição colada, então falha silenciosamente
+      // mesmo com o dado real disponível no Job do Radar.
+      companyName:
+        result.companyName ?? result.adaptedContentJson?.vaga?.empresa,
+      jobTitle: result.jobTitle ?? result.adaptedContentJson?.vaga?.cargo,
       jobDescriptionText: params.jobDescriptionText,
       masterCvText: result.masterCvText,
       analysisCvSnapshotId: result.analysisCvSnapshotId,
