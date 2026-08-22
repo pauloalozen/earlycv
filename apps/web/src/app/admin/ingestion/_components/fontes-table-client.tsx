@@ -19,7 +19,6 @@ import {
   runJobSourceAction,
   toggleScheduleEnabledAction,
 } from "../actions";
-import { DuplicateSourcesPanel } from "./duplicate-sources-panel";
 
 type IngestionRunSummary = {
   id: string;
@@ -345,7 +344,6 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
   const [result, setResult] = useState<PagedResult>(initialData);
   const [togglePending, setTogglePending] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
-  const [showDuplicates, setShowDuplicates] = useState(false);
   const [logoFetchPendingId, setLogoFetchPendingId] = useState<string | null>(
     null,
   );
@@ -626,42 +624,48 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
           <option value="solides">solides</option>
           <option value="pandape">pandape</option>
         </select>
-        {typeFilter && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              type="button"
-              disabled={bulkPending}
-              onClick={() => handleBulkToggle(true)}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              Ativar agendamento ({typeFilter})
-            </button>
-            <button
-              type="button"
-              disabled={bulkPending}
-              onClick={() => handleBulkToggle(false)}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              Desativar agendamento ({typeFilter})
-            </button>
-            <button
-              type="button"
-              disabled={bulkPending}
-              onClick={() => handleBulkToggleActive(true)}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              Ativar fontes ({typeFilter})
-            </button>
-            <button
-              type="button"
-              disabled={bulkPending}
-              onClick={() => handleBulkToggleActive(false)}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              Desativar fontes ({typeFilter})
-            </button>
-          </div>
-        )}
+        {/* Sempre visiveis (nunca somem/aparecem) pra nao deslocar os
+            outros itens da barra — so ficam desabilitados sem adapter
+            selecionado. Evita clique indevido em botao que "pulou" de
+            posicao quando o filtro muda. */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            disabled={bulkPending || !typeFilter}
+            title={!typeFilter ? "Selecione um adapter primeiro" : undefined}
+            onClick={() => handleBulkToggle(true)}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Ativar agendamento{typeFilter ? ` (${typeFilter})` : ""}
+          </button>
+          <button
+            type="button"
+            disabled={bulkPending || !typeFilter}
+            title={!typeFilter ? "Selecione um adapter primeiro" : undefined}
+            onClick={() => handleBulkToggle(false)}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Desativar agendamento{typeFilter ? ` (${typeFilter})` : ""}
+          </button>
+          <button
+            type="button"
+            disabled={bulkPending || !typeFilter}
+            title={!typeFilter ? "Selecione um adapter primeiro" : undefined}
+            onClick={() => handleBulkToggleActive(true)}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Ativar fontes{typeFilter ? ` (${typeFilter})` : ""}
+          </button>
+          <button
+            type="button"
+            disabled={bulkPending || !typeFilter}
+            title={!typeFilter ? "Selecione um adapter primeiro" : undefined}
+            onClick={() => handleBulkToggleActive(false)}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Desativar fontes{typeFilter ? ` (${typeFilter})` : ""}
+          </button>
+        </div>
       </div>
 
       {/* Counter + CSV import */}
@@ -705,16 +709,6 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
           >
             Exportar fontes (CSV)
           </a>
-          <button
-            className={buttonVariants({
-              variant: showDuplicates ? "default" : "outline",
-              size: "sm",
-            })}
-            onClick={() => setShowDuplicates((v) => !v)}
-            type="button"
-          >
-            {showDuplicates ? "Voltar pra tabela" : "Ver fontes duplicadas"}
-          </button>
           <span
             style={{
               fontSize: 12,
@@ -758,355 +752,344 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
         </div>
       </div>
 
-      {showDuplicates && <DuplicateSourcesPanel />}
-
-      {!showDuplicates && (
-        <>
-          <AdminTable>
-            <thead>
-              <tr>
-                <SortableTh
-                  column="company"
-                  onSort={handleSort}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                >
-                  Empresa
-                </SortableTh>
-                <SortableTh
-                  column="sourceName"
-                  onSort={handleSort}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                >
-                  Fonte
-                </SortableTh>
-                <SortableTh
-                  column="sourceType"
-                  onSort={handleSort}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                  w={110}
-                >
-                  Adapter
-                </SortableTh>
-                <SortableTh
-                  column="activeJobsCount"
-                  onSort={handleSort}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                  w={70}
-                >
-                  Vagas
-                </SortableTh>
-                <SortableTh
-                  column="createdAt"
-                  onSort={handleSort}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                  w={110}
-                >
-                  Incluída em
-                </SortableTh>
-                <AdminTh w={180}>Status</AdminTh>
-                <AdminTh w={140}>Agendamento</AdminTh>
-                <AdminTh w={160}>Último run</AdminTh>
-                <AdminTh w={340} align="right">
-                  Ações
-                </AdminTh>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={9}
+      <AdminTable>
+        <thead>
+          <tr>
+            <SortableTh
+              column="company"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+            >
+              Empresa
+            </SortableTh>
+            <SortableTh
+              column="sourceName"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+            >
+              Fonte
+            </SortableTh>
+            <SortableTh
+              column="sourceType"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              w={110}
+            >
+              Adapter
+            </SortableTh>
+            <SortableTh
+              column="activeJobsCount"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              w={70}
+            >
+              Vagas
+            </SortableTh>
+            <SortableTh
+              column="createdAt"
+              onSort={handleSort}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              w={110}
+            >
+              Incluída em
+            </SortableTh>
+            <AdminTh w={180}>Status</AdminTh>
+            <AdminTh w={140}>Agendamento</AdminTh>
+            <AdminTh w={160}>Último run</AdminTh>
+            <AdminTh w={340} align="right">
+              Ações
+            </AdminTh>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td
+                colSpan={9}
+                style={{
+                  padding: "32px 16px",
+                  textAlign: "center",
+                  color: AT.muted,
+                  fontSize: 13,
+                }}
+              >
+                Nenhuma fonte encontrada.
+              </td>
+            </tr>
+          )}
+          {rows.map((source) => {
+            const latestRun = source.ingestionRuns?.[0] ?? null;
+            const isRunning = latestRun?.status === "running";
+            return (
+              <tr
+                key={source.id}
+                style={{
+                  borderBottom: `1px solid ${AT.borderSoft}`,
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLTableRowElement).style.background =
+                    AT.bgAlt;
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLTableRowElement).style.background =
+                    "";
+                }}
+              >
+                <AdminTd>
+                  <div
                     style={{
-                      padding: "32px 16px",
-                      textAlign: "center",
-                      color: AT.muted,
-                      fontSize: 13,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
-                    Nenhuma fonte encontrada.
-                  </td>
-                </tr>
-              )}
-              {rows.map((source) => {
-                const latestRun = source.ingestionRuns?.[0] ?? null;
-                const isRunning = latestRun?.status === "running";
-                return (
-                  <tr
-                    key={source.id}
-                    style={{
-                      borderBottom: `1px solid ${AT.borderSoft}`,
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      (
-                        e.currentTarget as HTMLTableRowElement
-                      ).style.background = AT.bgAlt;
-                    }}
-                    onMouseLeave={(e) => {
-                      (
-                        e.currentTarget as HTMLTableRowElement
-                      ).style.background = "";
-                    }}
-                  >
-                    <AdminTd>
-                      <div
+                    {source.company.logoUrl ? (
+                      // biome-ignore lint/performance/noImgElement: logo de domínio externo, sem otimização do next/image
+                      <img
+                        alt=""
+                        src={source.company.logoUrl}
                         style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          objectFit: "contain",
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        aria-hidden
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          background: AT.ink,
+                          color: AT.card,
                           display: "flex",
                           alignItems: "center",
-                          gap: 8,
+                          justifyContent: "center",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fontFamily: '"Geist Mono", monospace',
+                          flexShrink: 0,
                         }}
                       >
-                        {source.company.logoUrl ? (
-                          // biome-ignore lint/performance/noImgElement: logo de domínio externo, sem otimização do next/image
-                          <img
-                            alt=""
-                            src={source.company.logoUrl}
-                            style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: 5,
-                              objectFit: "contain",
-                              flexShrink: 0,
-                            }}
-                          />
-                        ) : (
-                          <div
-                            aria-hidden
-                            style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: 5,
-                              background: AT.ink,
-                              color: AT.card,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 10,
-                              fontWeight: 700,
-                              fontFamily: '"Geist Mono", monospace',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {source.company.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        {source.company.name}
+                        {source.company.name.charAt(0).toUpperCase()}
                       </div>
-                    </AdminTd>
-                    <AdminTd muted>{source.sourceName}</AdminTd>
-                    <AdminTd mono muted>
-                      {source.sourceType}
-                    </AdminTd>
-                    <AdminTd mono>
+                    )}
+                    {source.company.name}
+                  </div>
+                </AdminTd>
+                <AdminTd muted>{source.sourceName}</AdminTd>
+                <AdminTd mono muted>
+                  {source.sourceType}
+                </AdminTd>
+                <AdminTd mono>
+                  <span
+                    style={{
+                      color: source.activeJobsCount === 0 ? AT.muted : AT.ink2,
+                    }}
+                  >
+                    {source.activeJobsCount}
+                  </span>
+                </AdminTd>
+                <AdminTd mono muted>
+                  {dateLabel(source.createdAt)}
+                </AdminTd>
+                <AdminTd>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 2,
+                    }}
+                  >
+                    {source.consecutive403Count &&
+                    source.consecutive403Count > 0 ? (
+                      <AdminPill tone="warn" mono>
+                        {source.consecutive403Count} 403s
+                      </AdminPill>
+                    ) : null}
+                    {source.pausedUntil ? (
+                      <AdminPill tone="danger" mono>
+                        pausado
+                      </AdminPill>
+                    ) : null}
+                  </div>
+                </AdminTd>
+                <AdminTd>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      title={
+                        source.scheduleEnabled
+                          ? "Desativar agendamento"
+                          : "Ativar agendamento"
+                      }
+                      disabled={togglePending}
+                      onClick={() => {
+                        setTogglePending(true);
+                        const fd = new FormData();
+                        fd.set("jobSourceId", source.id);
+                        fd.set(
+                          "scheduleEnabled",
+                          source.scheduleEnabled ? "false" : "true",
+                        );
+                        fd.set("redirectPath", redirectPath);
+                        toggleScheduleEnabledAction(fd)
+                          .then(() => fetchSources(paramsRef.current))
+                          .finally(() => setTogglePending(false));
+                      }}
+                      style={{
+                        width: 36,
+                        height: 20,
+                        borderRadius: 10,
+                        border: "none",
+                        background: source.scheduleEnabled ? AT.ok : AT.faint,
+                        cursor: togglePending ? "not-allowed" : "pointer",
+                        position: "relative",
+                        transition: "background 0.2s",
+                        flexShrink: 0,
+                      }}
+                    >
                       <span
                         style={{
-                          color:
-                            source.activeJobsCount === 0 ? AT.muted : AT.ink2,
+                          position: "absolute",
+                          top: 2,
+                          left: source.scheduleEnabled ? 18 : 2,
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          background: "white",
+                          transition: "left 0.2s",
                         }}
-                      >
-                        {source.activeJobsCount}
-                      </span>
-                    </AdminTd>
-                    <AdminTd mono muted>
-                      {dateLabel(source.createdAt)}
-                    </AdminTd>
-                    <AdminTd>
-                      <div
+                      />
+                    </button>
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        color: AT.muted,
+                        fontFamily: '"Geist Mono", monospace',
+                      }}
+                    >
+                      {source.scheduleCron ?? "—"}
+                    </span>
+                  </div>
+                </AdminTd>
+                <AdminTd>
+                  <RunStatusBadge run={latestRun} />
+                </AdminTd>
+                <AdminTd align="right">
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "nowrap",
+                      gap: 6,
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <form action={runJobSourceAction}>
+                      <input
+                        name="jobSourceId"
+                        type="hidden"
+                        value={source.id}
+                      />
+                      <input
+                        name="redirectPath"
+                        type="hidden"
+                        value={redirectPath}
+                      />
+                      <button
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
+                        type="submit"
+                        disabled={isRunning}
+                        title={isRunning ? "Em execução" : undefined}
                         style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 2,
+                          whiteSpace: "nowrap",
+                          ...(isRunning
+                            ? { opacity: 0.45, cursor: "not-allowed" }
+                            : undefined),
                         }}
                       >
-                        {source.consecutive403Count &&
-                        source.consecutive403Count > 0 ? (
-                          <AdminPill tone="warn" mono>
-                            {source.consecutive403Count} 403s
-                          </AdminPill>
-                        ) : null}
-                        {source.pausedUntil ? (
-                          <AdminPill tone="danger" mono>
-                            pausado
-                          </AdminPill>
-                        ) : null}
-                      </div>
-                    </AdminTd>
-                    <AdminTd>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <button
-                          type="button"
-                          title={
-                            source.scheduleEnabled
-                              ? "Desativar agendamento"
-                              : "Ativar agendamento"
-                          }
-                          disabled={togglePending}
-                          onClick={() => {
-                            setTogglePending(true);
-                            const fd = new FormData();
-                            fd.set("jobSourceId", source.id);
-                            fd.set(
-                              "scheduleEnabled",
-                              source.scheduleEnabled ? "false" : "true",
-                            );
-                            fd.set("redirectPath", redirectPath);
-                            toggleScheduleEnabledAction(fd)
-                              .then(() => fetchSources(paramsRef.current))
-                              .finally(() => setTogglePending(false));
-                          }}
-                          style={{
-                            width: 36,
-                            height: 20,
-                            borderRadius: 10,
-                            border: "none",
-                            background: source.scheduleEnabled
-                              ? AT.ok
-                              : AT.faint,
-                            cursor: togglePending ? "not-allowed" : "pointer",
-                            position: "relative",
-                            transition: "background 0.2s",
-                            flexShrink: 0,
-                          }}
-                        >
-                          <span
-                            style={{
-                              position: "absolute",
-                              top: 2,
-                              left: source.scheduleEnabled ? 18 : 2,
-                              width: 16,
-                              height: 16,
-                              borderRadius: "50%",
-                              background: "white",
-                              transition: "left 0.2s",
-                            }}
-                          />
-                        </button>
-                        <span
-                          style={{
-                            fontSize: 11.5,
-                            color: AT.muted,
-                            fontFamily: '"Geist Mono", monospace',
-                          }}
-                        >
-                          {source.scheduleCron ?? "—"}
-                        </span>
-                      </div>
-                    </AdminTd>
-                    <AdminTd>
-                      <RunStatusBadge run={latestRun} />
-                    </AdminTd>
-                    <AdminTd align="right">
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "nowrap",
-                          gap: 6,
-                          justifyContent: "flex-end",
-                        }}
-                      >
-                        <form action={runJobSourceAction}>
-                          <input
-                            name="jobSourceId"
-                            type="hidden"
-                            value={source.id}
-                          />
-                          <input
-                            name="redirectPath"
-                            type="hidden"
-                            value={redirectPath}
-                          />
-                          <button
-                            className={buttonVariants({
-                              size: "sm",
-                              variant: "outline",
-                            })}
-                            type="submit"
-                            disabled={isRunning}
-                            title={isRunning ? "Em execução" : undefined}
-                            style={{
-                              whiteSpace: "nowrap",
-                              ...(isRunning
-                                ? { opacity: 0.45, cursor: "not-allowed" }
-                                : undefined),
-                            }}
-                          >
-                            Carregar vagas
-                          </button>
-                        </form>
-                        <button
-                          className={buttonVariants({
-                            size: "sm",
-                            variant: "outline",
-                          })}
-                          disabled={logoFetchPendingId === source.company.id}
-                          onClick={() => handleFetchLogo(source.company.id)}
-                          style={{ whiteSpace: "nowrap" }}
-                          type="button"
-                        >
-                          {logoFetchPendingId === source.company.id
-                            ? "Carregando..."
-                            : "Carregar logo"}
-                        </button>
-                        <Link
-                          className={buttonVariants({
-                            size: "sm",
-                            variant: "outline",
-                          })}
-                          href={`/admin/ingestion/${source.id}#editar-fonte`}
-                          style={{ whiteSpace: "nowrap" }}
-                        >
-                          Editar
-                        </Link>
-                        <RowActionsMenu
-                          activeJobsCount={source.activeJobsCount}
-                          companyName={source.company.name}
-                          redirectPath={redirectPath}
-                          sourceId={source.id}
-                          sourceName={source.sourceName}
-                        />
-                      </div>
-                    </AdminTd>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </AdminTable>
+                        Carregar vagas
+                      </button>
+                    </form>
+                    <button
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      disabled={logoFetchPendingId === source.company.id}
+                      onClick={() => handleFetchLogo(source.company.id)}
+                      style={{ whiteSpace: "nowrap" }}
+                      type="button"
+                    >
+                      {logoFetchPendingId === source.company.id
+                        ? "Carregando..."
+                        : "Carregar logo"}
+                    </button>
+                    <Link
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      href={`/admin/ingestion/${source.id}#editar-fonte`}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      Editar
+                    </Link>
+                    <RowActionsMenu
+                      activeJobsCount={source.activeJobsCount}
+                      companyName={source.company.name}
+                      redirectPath={redirectPath}
+                      sourceId={source.id}
+                      sourceName={source.sourceName}
+                    />
+                  </div>
+                </AdminTd>
+              </tr>
+            );
+          })}
+        </tbody>
+      </AdminTable>
 
-          <AdminPagination
-            summary={`Mostrando ${firstItem}–${lastItem} de ${total} · página ${currentPage} de ${totalPages}`}
+      <AdminPagination
+        summary={`Mostrando ${firstItem}–${lastItem} de ${total} · página ${currentPage} de ${totalPages}`}
+      >
+        {currentPage > 1 && (
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            type="button"
+            onClick={() => setPage((p) => p - 1)}
           >
-            {currentPage > 1 && (
-              <button
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                type="button"
-                onClick={() => setPage((p) => p - 1)}
-              >
-                ← anterior
-              </button>
-            )}
-            {currentPage < totalPages && (
-              <button
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                type="button"
-                onClick={() => setPage((p) => p + 1)}
-              >
-                próxima →
-              </button>
-            )}
-          </AdminPagination>
-        </>
-      )}
+            ← anterior
+          </button>
+        )}
+        {currentPage < totalPages && (
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            type="button"
+            onClick={() => setPage((p) => p + 1)}
+          >
+            próxima →
+          </button>
+        )}
+      </AdminPagination>
 
       <style>{`
         @keyframes pulse {

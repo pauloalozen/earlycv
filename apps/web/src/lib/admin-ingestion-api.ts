@@ -807,3 +807,98 @@ export async function deleteCompany(companyId: string, token?: string) {
     method: "DELETE",
   });
 }
+
+// ─── Audit de Fontes (saneamento de Company/JobSource com URL errada) ───
+
+export type CompanySourceAuditTier = "confirmed" | "high" | "review";
+export type CompanySourceAuditStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "applied";
+
+export type CompanySourceAuditFinding = {
+  id: string;
+  companyId: string;
+  company: { id: string; name: string };
+  jobSourceId: string | null;
+  field: "websiteUrl" | "careersUrl" | "sourceUrl";
+  currentUrl: string;
+  tier: CompanySourceAuditTier;
+  confidence: number;
+  suspectedOwnerId: string | null;
+  suspectedOwner: { id: string; name: string } | null;
+  suspectedOwnerName: string | null;
+  status: CompanySourceAuditStatus;
+  reviewNote: string | null;
+  detectedAt: string;
+  reviewedAt: string | null;
+  appliedAt: string | null;
+};
+
+export type CompanySourceAuditCounts = Record<CompanySourceAuditStatus, number>;
+
+export async function listCompanySourceAudits(
+  params: {
+    status?: CompanySourceAuditStatus;
+    tier?: CompanySourceAuditTier;
+    search?: string;
+  },
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set("status", params.status);
+  if (params.tier) qs.set("tier", params.tier);
+  if (params.search) qs.set("search", params.search);
+  return apiRequest<{
+    findings: CompanySourceAuditFinding[];
+    counts: CompanySourceAuditCounts;
+  }>(`/admin/company-source-audit?${qs}`, token);
+}
+
+export async function runCompanySourceAudit(token?: string) {
+  return apiRequest<{
+    found: number;
+    created: number;
+    updated: number;
+    skippedReviewed: number;
+  }>("/admin/company-source-audit/run", token, { method: "POST" });
+}
+
+export async function decideCompanySourceAudit(
+  id: string,
+  status: "approved" | "rejected",
+  note: string | undefined,
+  token?: string,
+) {
+  return apiRequest<CompanySourceAuditFinding>(
+    `/admin/company-source-audit/${id}/decide`,
+    token,
+    {
+      body: JSON.stringify({ status, note }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
+export type CompanySourceAuditApplySummary = {
+  dryRun: boolean;
+  processed: number;
+  jobSourcesDisabled: number;
+  companyFieldsCleared: number;
+  jobsReassigned: number;
+  jobsRemoved: number;
+};
+
+export async function applyCompanySourceAudit(dryRun: boolean, token?: string) {
+  return apiRequest<CompanySourceAuditApplySummary>(
+    "/admin/company-source-audit/apply",
+    token,
+    {
+      body: JSON.stringify({ dryRun }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+}
