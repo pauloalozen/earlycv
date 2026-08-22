@@ -2,9 +2,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
+const writeRadarJobNavigationContextMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
+}));
+vi.mock("@/lib/journey-session", () => ({
+  writeRadarJobNavigationContext: writeRadarJobNavigationContextMock,
 }));
 
 import { RadarOpportunityLink } from "./radar-opportunity-link";
@@ -13,6 +17,7 @@ describe("RadarOpportunityLink", () => {
   beforeEach(() => {
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
+    writeRadarJobNavigationContextMock.mockReset();
   });
 
   afterEach(() => {
@@ -84,5 +89,17 @@ describe("RadarOpportunityLink", () => {
     fireEvent.click(link);
 
     expect(trackEventMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("writes the radar click marker for the clicked jobId before the destination page mounts", () => {
+    render(
+      <RadarOpportunityLink href="/radar/vaga-5" jobId="job-5">
+        Vaga 5
+      </RadarOpportunityLink>,
+    );
+
+    fireEvent.click(screen.getByText("Vaga 5"));
+
+    expect(writeRadarJobNavigationContextMock).toHaveBeenCalledWith("job-5");
   });
 });

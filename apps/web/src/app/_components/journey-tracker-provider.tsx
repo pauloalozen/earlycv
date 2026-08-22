@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   isAnalyticsConsentGateEnabled,
   readAnalyticsConsentState,
@@ -28,6 +28,18 @@ import {
   markSessionStartedEmitted,
   markSessionStartedFailed,
 } from "@/lib/session-started-guard";
+
+// React comita TODOS os layout effects da árvore (pai e filhos) antes de
+// QUALQUER effect passivo (useEffect). RadarViewTracker/JobDetailViewTracker
+// (filhos, dentro da página) leem journey_current_route_visit_id/
+// journey_previous_route em useEffect no próprio mount — se este provider
+// também usasse useEffect, a ordem filho-antes-do-pai faria o filho ler
+// esses valores ainda com o estado da navegação anterior. useLayoutEffect
+// aqui garante que o sessionStorage já está atualizado para a rota atual
+// antes de qualquer useEffect filho rodar. SSR não roda useLayoutEffect —
+// cai para useEffect no servidor pra evitar o warning do React.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const SESSION_KEY = "journey_session_internal_id";
 const CHECKOUT_INTENT_KEY = "journey_checkout_intent";
@@ -845,7 +857,7 @@ export function JourneyTrackerProvider({
     pathnameRef.current = pathname;
   }, [pathname]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const sessionInternalId = getSessionInternalId();
     const currentSearch = search ? `?${search}` : "";
     const currentUrl = `${window.location.origin}${pathname}${currentSearch}`;

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const trackEventMock = vi.hoisted(() => vi.fn());
 const getJourneyRouteVisitIdMock = vi.hoisted(() => vi.fn());
 const getJourneyPreviousRouteMock = vi.hoisted(() => vi.fn());
+const consumeRadarJobNavigationContextMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
@@ -11,6 +12,7 @@ vi.mock("@/lib/analytics-tracking", () => ({
 vi.mock("@/lib/journey-session", () => ({
   getJourneyRouteVisitId: getJourneyRouteVisitIdMock,
   getJourneyPreviousRoute: getJourneyPreviousRouteMock,
+  consumeRadarJobNavigationContext: consumeRadarJobNavigationContextMock,
 }));
 
 import { JobDetailViewTracker } from "./job-detail-view-tracker";
@@ -22,6 +24,8 @@ describe("JobDetailViewTracker", () => {
     getJourneyRouteVisitIdMock.mockReset();
     getJourneyRouteVisitIdMock.mockReturnValue("route-visit-detail-1");
     getJourneyPreviousRouteMock.mockReset();
+    consumeRadarJobNavigationContextMock.mockReset();
+    consumeRadarJobNavigationContextMock.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -66,5 +70,35 @@ describe("JobDetailViewTracker", () => {
 
     const call = trackEventMock.mock.calls[0]?.[0];
     expect(call.idempotencyKey).toBe("route-visit-detail-1:job_detail_viewed");
+  });
+
+  it("prefers the radar click marker over previousRoute, even when previousRoute would resolve to direct", () => {
+    // previousRoute é escrito de forma assíncrona pelo JourneyTrackerProvider
+    // e pode ainda não refletir a navegação atual quando este efeito roda
+    // (child-before-parent effect ordering) — o marcador síncrono do clique
+    // deve vencer sempre que presente e válido.
+    getJourneyPreviousRouteMock.mockReturnValue("/candidaturas");
+    consumeRadarJobNavigationContextMock.mockReturnValue("radar");
+
+    render(<JobDetailViewTracker jobId="job-5" />);
+
+    const call = trackEventMock.mock.calls[0]?.[0];
+    expect(call.properties).toMatchObject({ product_origin: "radar" });
+  });
+
+  it("consumes the marker scoped to its own jobId", () => {
+    render(<JobDetailViewTracker jobId="job-6" />);
+
+    expect(consumeRadarJobNavigationContextMock).toHaveBeenCalledWith("job-6");
+  });
+
+  it("falls back to previousRoute-based resolution when the marker is absent/stale/mismatched", () => {
+    consumeRadarJobNavigationContextMock.mockReturnValue(null);
+    getJourneyPreviousRouteMock.mockReturnValue("/radar/area/dados");
+
+    render(<JobDetailViewTracker jobId="job-7" />);
+
+    const call = trackEventMock.mock.calls[0]?.[0];
+    expect(call.properties).toMatchObject({ product_origin: "radar" });
   });
 });

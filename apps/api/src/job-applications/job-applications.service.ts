@@ -28,6 +28,11 @@ type UpsertFromAdaptationInput = {
   targetStatus: JobApplicationStatus;
   origin: JobApplicationOrigin;
   radarJobId?: string | null;
+  // Contexto de jornada da análise que originou esta candidatura automática
+  // (ver CvAdaptationService.triggerJobApplicationHook) — undefined quando
+  // o caller não tinha o contexto disponível, nunca inventado.
+  visitorId?: string | null;
+  journeySessionInternalId?: string | null;
 };
 
 type CvState = "ready" | "locked" | "missing";
@@ -227,9 +232,12 @@ export class JobApplicationsService {
       // UUID de jornada do frontend (metadata.sessionInternalId, nunca a
       // coluna sessionInternalId do contexto — ver docs/runbook/events.md
       // seção 2). null quando a chamada não carrega contexto confiável
-      // (ex.: criação automática de candidatura, disparada internamente
-      // fora de uma requisição do browser) — nunca inventado.
+      // (ex.: criação automática de candidatura sem analysisContext
+      // disponível upstream) — nunca inventado.
       sessionInternalId?: string | null;
+      // visitor_id (Fase C) — mesmo raciocínio de sessionInternalId acima:
+      // só preenchido quando o caller realmente tem o dado.
+      visitorId?: string | null;
     },
   ) {
     if (!this.funnelEvents) {
@@ -247,6 +255,7 @@ export class JobApplicationsService {
             ...(options?.sessionInternalId
               ? { sessionInternalId: options.sessionInternalId }
               : {}),
+            ...(options?.visitorId ? { visitor_id: options.visitorId } : {}),
           },
         },
         context,
@@ -1029,6 +1038,8 @@ export class JobApplicationsService {
       targetStatus,
       origin,
       radarJobId,
+      visitorId,
+      journeySessionInternalId,
     } = input;
 
     if (!jobTitle || !companyName) {
@@ -1198,11 +1209,12 @@ export class JobApplicationsService {
           ],
         });
 
-        // sessionInternalId fica de fora aqui de propósito: esse caminho
-        // roda dentro do hook pós-análise (upsertFromCvAdaptation),
-        // disparado internamente a partir de processAnalysisJob, sem uma
-        // requisição de browser ativa nesse momento pra carregar o
-        // header. Nunca inventar — fica null.
+        // visitorId/journeySessionInternalId vêm do caller (ver
+        // CvAdaptationService.triggerJobApplicationHook) — disponíveis
+        // quando a análise que originou esta candidatura automática ainda
+        // tinha o analysisContext do request em mãos (claimGuest,
+        // saveGuestPreview). Caem para null quando o caller não os tinha —
+        // nunca inventado aqui.
         await this.recordEvent(
           "candidatura_created",
           userId,
@@ -1213,7 +1225,11 @@ export class JobApplicationsService {
             has_cv_adaptation: true,
             product_origin: radarJobId ? "radar" : "analysis",
           },
-          { idempotencyKey: `candidatura_created:${created.id}` },
+          {
+            idempotencyKey: `candidatura_created:${created.id}`,
+            sessionInternalId: journeySessionInternalId,
+            visitorId,
+          },
         );
       }
     });

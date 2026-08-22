@@ -1,5 +1,5 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
@@ -157,5 +157,79 @@ describe("Template journey tracking strict mode", () => {
       expect(leave?.properties?.leave_reason).toBe("route_change");
       expect(leave?.properties?.route).not.toBe("/entrar");
     });
+  });
+
+  it("resolves journey_current_route_visit_id/journey_previous_route in sessionStorage before any child useEffect reads them — same routeVisitId as page_view, no second generation", async () => {
+    // Regression test for the radar_view/job_detail_viewed race: trackers
+    // rendered inside Template read these sessionStorage keys in their own
+    // useEffect on mount. Because React commits all layout effects (parent
+    // and child) before any passive effect across the whole tree,
+    // JourneyTrackerProvider must resolve/write them in a layout effect —
+    // otherwise a child's passive effect can fire first and read stale
+    // values from the previous route.
+    const readsFromChildEffect: Array<{
+      routeVisitId: string | null;
+      previousRoute: string | null;
+    }> = [];
+
+    function ChildTracker() {
+      useEffect(() => {
+        readsFromChildEffect.push({
+          routeVisitId: sessionStorage.getItem(
+            "journey_current_route_visit_id",
+          ),
+          previousRoute: sessionStorage.getItem("journey_previous_route"),
+        });
+      }, []);
+
+      return null;
+    }
+
+    usePathnameMock.mockReturnValue("/");
+    const first = render(
+      <Template>
+        <div>home</div>
+      </Template>,
+    );
+
+    await waitFor(() => {
+      expect(
+        trackEventMock.mock.calls.some(
+          ([payload]) => payload.eventName === "page_view",
+        ),
+      ).toBe(true);
+    });
+
+    first.unmount();
+    usePathnameMock.mockReturnValue("/radar");
+
+    render(
+      <Template>
+        <ChildTracker />
+      </Template>,
+    );
+
+    await waitFor(() => {
+      expect(
+        trackEventMock.mock.calls.some(
+          ([payload]) =>
+            payload.eventName === "page_view" &&
+            payload.properties?.route === "/radar",
+        ),
+      ).toBe(true);
+    });
+
+    const pageViewForRadar = trackEventMock.mock.calls.find(
+      ([payload]) =>
+        payload.eventName === "page_view" &&
+        payload.properties?.route === "/radar",
+    )?.[0];
+
+    expect(readsFromChildEffect).toHaveLength(1);
+    expect(readsFromChildEffect[0]?.previousRoute).toBe("/");
+    expect(readsFromChildEffect[0]?.routeVisitId).not.toBeNull();
+    expect(readsFromChildEffect[0]?.routeVisitId).toBe(
+      pageViewForRadar?.properties?.routeVisitId,
+    );
   });
 });

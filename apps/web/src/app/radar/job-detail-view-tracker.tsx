@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
+  consumeRadarJobNavigationContext,
   getJourneyPreviousRoute,
   getJourneyRouteVisitId,
 } from "@/lib/journey-session";
@@ -27,7 +28,13 @@ export function JobDetailViewTracker({ jobId }: { jobId: string }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: dispara uma vez por mount/routeVisitId, não a cada re-render
   useEffect(() => {
     const routeVisitId = getJourneyRouteVisitId();
-    const productOrigin = resolveProductOrigin(getJourneyPreviousRoute());
+    // Prioriza o marcador síncrono do clique (escopado a este jobId, ver
+    // journey-session.ts) sobre previousRoute — previousRoute é escrito
+    // pelo JourneyTrackerProvider de forma assíncrona e pode ainda não
+    // refletir a navegação atual quando este efeito roda.
+    const clickOrigin = consumeRadarJobNavigationContext(jobId);
+    const productOrigin =
+      clickOrigin ?? resolveProductOrigin(getJourneyPreviousRoute());
 
     void trackEvent({
       eventName: "job_detail_viewed",
