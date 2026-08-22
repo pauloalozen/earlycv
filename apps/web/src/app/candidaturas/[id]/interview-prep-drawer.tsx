@@ -8,6 +8,7 @@ import type {
   InterviewPrepDto,
 } from "@/lib/job-applications-api";
 import { generateOrGetInterviewPrep } from "@/lib/job-applications-api";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -836,6 +837,7 @@ export function InterviewPrepDrawer({
         const result = await generateOrGetInterviewPrep(
           applicationId,
           adaptationId,
+          getJourneySessionInternalId(),
         );
 
         if (result.status === "succeeded") {

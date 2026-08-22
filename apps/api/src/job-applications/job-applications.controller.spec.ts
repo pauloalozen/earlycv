@@ -199,16 +199,27 @@ test("archive and restore/controller delegates with authenticated user", async (
   const service = new JobApplicationsServiceCtor(db);
   const controller = new JobApplicationsController(service, interviewPrepStub);
 
-  let archiveCaptured: string[] = [];
+  let archiveCaptured: unknown[] = [];
   let restoreCaptured: string[] = [];
+  const fakeReq = {
+    analysisContext: { journeySessionInternalId: null },
+  } as never;
 
   (
     service as unknown as {
-      archive: (userId: string, id: string) => Promise<{ id: string }>;
+      archive: (
+        userId: string,
+        id: string,
+        sessionInternalId?: string | null,
+      ) => Promise<{ id: string }>;
       restore: (userId: string, id: string) => Promise<{ id: string }>;
     }
-  ).archive = async (userId: string, id: string) => {
-    archiveCaptured = [userId, id];
+  ).archive = async (
+    userId: string,
+    id: string,
+    sessionInternalId?: string | null,
+  ) => {
+    archiveCaptured = [userId, id, sessionInternalId];
     return { id };
   };
 
@@ -222,10 +233,10 @@ test("archive and restore/controller delegates with authenticated user", async (
     return { id };
   };
 
-  const archived = await controller.archive({ id: "user-1" }, "app-1");
+  const archived = await controller.archive({ id: "user-1" }, fakeReq, "app-1");
   const restored = await controller.restore({ id: "user-1" }, "app-1");
 
-  assert.deepEqual(archiveCaptured, ["user-1", "app-1"]);
+  assert.deepEqual(archiveCaptured, ["user-1", "app-1", null]);
   assert.deepEqual(restoreCaptured, ["user-1", "app-1"]);
   assert.deepEqual(archived, { id: "app-1" });
   assert.deepEqual(restored, { id: "app-1" });
@@ -236,18 +247,29 @@ test("delete/controller delegates with authenticated user", async () => {
   const service = new JobApplicationsServiceCtor(db);
   const controller = new JobApplicationsController(service, interviewPrepStub);
 
-  let captured: string[] = [];
+  let captured: unknown[] = [];
+  const fakeReq = {
+    analysisContext: { journeySessionInternalId: null },
+  } as never;
   (
     service as unknown as {
-      delete: (userId: string, id: string) => Promise<{ id: string }>;
+      delete: (
+        userId: string,
+        id: string,
+        sessionInternalId?: string | null,
+      ) => Promise<{ id: string }>;
     }
-  ).delete = async (userId: string, id: string) => {
-    captured = [userId, id];
+  ).delete = async (
+    userId: string,
+    id: string,
+    sessionInternalId?: string | null,
+  ) => {
+    captured = [userId, id, sessionInternalId];
     return { id };
   };
 
-  const result = await controller.delete({ id: "user-1" }, "app-1");
+  const result = await controller.delete({ id: "user-1" }, fakeReq, "app-1");
 
-  assert.deepEqual(captured, ["user-1", "app-1"]);
+  assert.deepEqual(captured, ["user-1", "app-1", null]);
   assert.deepEqual(result, { id: "app-1" });
 });

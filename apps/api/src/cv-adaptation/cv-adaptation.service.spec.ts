@@ -4538,3 +4538,183 @@ test("markAnalysisJobConverted is a no-op without a snapshot id", async () => {
 
   assert.equal(called, false);
 });
+
+// ─── Fase B.3: product_origin propagado a analysis_started/completed/failed ───
+
+type RecordedFunnelEvent = {
+  eventName: string;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+};
+
+function makeFunnelEventsCapture() {
+  const calls: RecordedFunnelEvent[] = [];
+  const funnelEvents = {
+    record: async (input: RecordedFunnelEvent) => {
+      calls.push(input);
+      return { event: {}, ingested: true };
+    },
+  };
+  return { funnelEvents, calls };
+}
+
+type ProcessAnalysisJobFn = (
+  jobId: string,
+  run: () => Promise<{
+    adaptedContentJson: unknown;
+    previewText: string;
+    masterCvText: string;
+    analysisCvSnapshotId: string;
+  }>,
+  analytics: {
+    context: Record<string, unknown>;
+    mode: "guest" | "authenticated";
+    cvSource: "master_cv" | "upload";
+    productOrigin: "radar" | "direct" | "analysis";
+  },
+) => Promise<void>;
+
+test("processAnalysisJob tags analysis_started and analysis_completed with product_origin=radar", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { update: async () => ({}) } },
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await (
+    service as unknown as { processAnalysisJob: ProcessAnalysisJobFn }
+  ).processAnalysisJob(
+    "job-radar-1",
+    async () => ({
+      adaptedContentJson: {},
+      previewText: "preview",
+      masterCvText: "cv",
+      analysisCvSnapshotId: "snap-1",
+    }),
+    {
+      context: { routeKey: "cv-adaptation/analyze" },
+      mode: "authenticated",
+      cvSource: "master_cv",
+      productOrigin: "radar",
+    },
+  );
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  const completed = calls.find((c) => c.eventName === "analysis_completed");
+  assert.equal(started?.metadata?.product_origin, "radar");
+  assert.equal(completed?.metadata?.product_origin, "radar");
+  assert.equal(started?.idempotencyKey, "analysis_started:job-radar-1");
+  assert.equal(completed?.idempotencyKey, "analysis_completed:job-radar-1");
+});
+
+test("processAnalysisJob tags analysis_failed with the same product_origin as analysis_started", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { update: async () => ({}) } },
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await (
+    service as unknown as { processAnalysisJob: ProcessAnalysisJobFn }
+  ).processAnalysisJob(
+    "job-direct-1",
+    async () => {
+      throw new Error("boom");
+    },
+    {
+      context: { routeKey: "cv-adaptation/analyze-guest" },
+      mode: "guest",
+      cvSource: "upload",
+      productOrigin: "direct",
+    },
+  );
+
+  const failed = calls.find((c) => c.eventName === "analysis_failed");
+  assert.equal(failed?.metadata?.product_origin, "direct");
+  assert.equal(failed?.idempotencyKey, "analysis_failed:job-direct-1");
+});
+
+test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId is passed", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const jobs = new Map<string, Record<string, unknown>>();
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          const id = `job-${jobs.size + 1}`;
+          const record = { id, ...data };
+          jobs.set(id, record);
+          return record;
+        },
+        update: async () => ({}),
+      },
+      resume: { findFirst: async () => null },
+    },
+    {},
+    {},
+    {},
+    {},
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyzeAndPersist: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash",
+        result: undefined,
+      }),
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com descricao suficientemente longa para passar na validacao interna.",
+    undefined,
+    validMasterCvText,
+    "token",
+    undefined,
+    "job-radar-9",
+  );
+
+  // processAnalysisJob roda fire-and-forget — aguarda o próximo tick.
+  await sleep(20);
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  assert.equal(started?.metadata?.product_origin, "radar");
+});

@@ -50,6 +50,7 @@ export class CvAdaptationPublicController {
     @Body("jobDescriptionText") jobDescriptionText: string,
     @Body("masterCvText") masterCvText?: string,
     @Body("turnstileToken") turnstileToken?: string,
+    @Body("radarJobId") radarJobId?: string,
   ) {
     if (!jobDescriptionText?.trim()) {
       throw new BadRequestException("jobDescriptionText is required");
@@ -60,6 +61,7 @@ export class CvAdaptationPublicController {
       masterCvText,
       turnstileToken,
       req.analysisContext,
+      radarJobId,
     );
   }
 

@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { verify } from "jsonwebtoken";
 
+import {
+  isValidJourneySessionInternalId,
+  JOURNEY_SESSION_ID_HEADER,
+} from "../common/journey-session-id";
 import type { AnalysisRequestContext } from "./types";
 
 const SESSION_COOKIE_KEYS = [
@@ -297,6 +301,11 @@ function resolvePosthogSessionId(req: Request): string | null {
   return value;
 }
 
+function resolveJourneySessionInternalId(req: Request): string | null {
+  const value = pickFirstHeaderValue(req.headers[JOURNEY_SESSION_ID_HEADER]);
+  return isValidJourneySessionInternalId(value) ? value : null;
+}
+
 function resolveUserAgentHash(req: Request): string | null {
   const userAgent = pickFirstHeaderValue(req.headers["user-agent"]);
 
@@ -324,6 +333,7 @@ export function requestContextMiddleware(
     ip: resolveIp(req),
     routePath: resolveRoutePath(req),
     userAgentHash: resolveUserAgentHash(req),
+    journeySessionInternalId: resolveJourneySessionInternalId(req),
   };
 
   req.analysisContext = context;

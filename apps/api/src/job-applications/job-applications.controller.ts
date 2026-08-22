@@ -7,12 +7,14 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
 import type { Response } from "express";
 
+import type { AnalysisRequest } from "../analysis-protection/types";
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { JobApplicationCoverLetterService } from "./cover-letter.service";
@@ -92,6 +94,7 @@ export class JobApplicationsController {
   @Post()
   create(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Body(
       new ValidationPipe({
         transform: true,
@@ -102,12 +105,17 @@ export class JobApplicationsController {
     )
     dto: CreateJobApplicationDto,
   ) {
-    return this.service.createManual(user.id, dto);
+    return this.service.createManual(
+      user.id,
+      dto,
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Patch(":id/status")
   updateStatus(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Param("id") id: string,
     @Body(
       new ValidationPipe({
@@ -124,12 +132,14 @@ export class JobApplicationsController {
       id,
       dto.status,
       dto.currentCvAdaptationId,
+      req.analysisContext.journeySessionInternalId,
     );
   }
 
   @Patch(":id/rejection-feedback")
   submitRejectionFeedback(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Param("id") id: string,
     @Body(
       new ValidationPipe({
@@ -141,15 +151,21 @@ export class JobApplicationsController {
     )
     dto: RejectionFeedbackDto,
   ) {
-    return this.service.submitRejectionFeedback(user.id, id, {
-      rejectionStrengths: dto.rejectionStrengths,
-      rejectionImprovements: dto.rejectionImprovements,
-    });
+    return this.service.submitRejectionFeedback(
+      user.id,
+      id,
+      {
+        rejectionStrengths: dto.rejectionStrengths,
+        rejectionImprovements: dto.rejectionImprovements,
+      },
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Patch(":id/interview")
   scheduleInterview(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Param("id") id: string,
     @Body(
       new ValidationPipe({
@@ -161,13 +177,18 @@ export class JobApplicationsController {
     )
     dto: ScheduleInterviewDto,
   ) {
-    return this.service.scheduleInterview(user.id, id, {
-      scheduledAt: dto.scheduledAt,
-      interviewTitle: dto.interviewTitle,
-      interviewerName: dto.interviewerName,
-      interviewMeetingUrl: dto.interviewMeetingUrl,
-      interviewLocation: dto.interviewLocation,
-    });
+    return this.service.scheduleInterview(
+      user.id,
+      id,
+      {
+        scheduledAt: dto.scheduledAt,
+        interviewTitle: dto.interviewTitle,
+        interviewerName: dto.interviewerName,
+        interviewMeetingUrl: dto.interviewMeetingUrl,
+        interviewLocation: dto.interviewLocation,
+      },
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Patch(":id/description")
@@ -207,6 +228,7 @@ export class JobApplicationsController {
   @Post(":id/notes")
   addNote(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Param("id") id: string,
     @Body(
       new ValidationPipe({
@@ -218,12 +240,25 @@ export class JobApplicationsController {
     )
     dto: AddNoteDto,
   ) {
-    return this.service.addNote(user.id, id, dto.note);
+    return this.service.addNote(
+      user.id,
+      id,
+      dto.note,
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Post(":id/archive")
-  archive(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
-    return this.service.archive(user.id, id);
+  archive(
+    @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
+    @Param("id") id: string,
+  ) {
+    return this.service.archive(
+      user.id,
+      id,
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Post(":id/restore")
@@ -232,13 +267,22 @@ export class JobApplicationsController {
   }
 
   @Post(":id/delete")
-  delete(@AuthenticatedUser() user: { id: string }, @Param("id") id: string) {
-    return this.service.delete(user.id, id);
+  delete(
+    @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
+    @Param("id") id: string,
+  ) {
+    return this.service.delete(
+      user.id,
+      id,
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Post(":id/interview-prep")
   generateOrGetInterviewPrep(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Param("id") id: string,
     @Body() body?: { adaptationId?: string },
   ) {
@@ -246,12 +290,14 @@ export class JobApplicationsController {
       user.id,
       id,
       body?.adaptationId,
+      req.analysisContext.journeySessionInternalId,
     );
   }
 
   @Post(":id/cover-letter")
   generateOrGetCoverLetter(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: AnalysisRequest,
     @Param("id") id: string,
     @Body()
     body: {
@@ -261,7 +307,12 @@ export class JobApplicationsController {
       adaptationId?: string;
     },
   ) {
-    return this.coverLetterService.generateOrGet(user.id, id, body);
+    return this.coverLetterService.generateOrGet(
+      user.id,
+      id,
+      body,
+      req.analysisContext.journeySessionInternalId,
+    );
   }
 
   @Get(":id/cover-letter/download")

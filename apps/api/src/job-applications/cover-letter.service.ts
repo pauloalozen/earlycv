@@ -178,6 +178,7 @@ export class JobApplicationCoverLetterService {
     userId: string,
     applicationId: string,
     input: GenerateCoverLetterInput,
+    sessionInternalId?: string | null,
   ) {
     const application = await this.database.jobApplication.findFirst({
       where: { id: applicationId, userId },
@@ -300,6 +301,7 @@ export class JobApplicationCoverLetterService {
       applicationId,
       userId,
       context,
+      sessionInternalId,
     }).catch((err) => {
       this.logger.error(
         `[cover-letter] ${letter.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
@@ -405,6 +407,7 @@ export class JobApplicationCoverLetterService {
       applicationId: string;
       userId: string;
       context: CoverLetterContext;
+      sessionInternalId?: string | null;
     },
   ): Promise<void> {
     const { applicationId, userId, context } = input;
@@ -473,6 +476,9 @@ export class JobApplicationCoverLetterService {
             style: context.style,
             length_mode: context.lengthMode,
             character_count: content.characterCount,
+            ...(input.sessionInternalId
+              ? { sessionInternalId: input.sessionInternalId }
+              : {}),
           },
         },
         {

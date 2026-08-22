@@ -234,8 +234,15 @@ export async function listJobApplications(
 
 export async function archiveJobApplication(
   id: string,
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest("POST", `/job-applications/${id}/archive`);
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/archive`,
+    undefined,
+    180_000,
+    sessionInternalId,
+  );
   if (!response.ok) {
     let detail = "";
     try {
@@ -280,8 +287,15 @@ export async function restoreJobApplication(
 
 export async function deleteJobApplication(
   id: string,
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest("POST", `/job-applications/${id}/delete`);
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/delete`,
+    undefined,
+    180_000,
+    sessionInternalId,
+  );
   if (!response.ok) {
     let detail = "";
     try {
@@ -311,18 +325,25 @@ export async function getJobApplication(
 
 export async function createJobApplication(
   input: CreateJobApplicationInput,
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest("POST", "/job-applications", {
-    jobTitle: input.jobTitle,
-    companyName: input.companyName,
-    ...(input.location ? { location: input.location } : {}),
-    ...(input.jobUrl ? { jobUrl: input.jobUrl } : {}),
-    origin: input.origin ?? "manual",
-    ...(input.jobDescriptionText
-      ? { jobDescriptionText: input.jobDescriptionText }
-      : {}),
-    ...(input.notes ? { notes: input.notes } : {}),
-  });
+  const response = await apiRequest(
+    "POST",
+    "/job-applications",
+    {
+      jobTitle: input.jobTitle,
+      companyName: input.companyName,
+      ...(input.location ? { location: input.location } : {}),
+      ...(input.jobUrl ? { jobUrl: input.jobUrl } : {}),
+      origin: input.origin ?? "manual",
+      ...(input.jobDescriptionText
+        ? { jobDescriptionText: input.jobDescriptionText }
+        : {}),
+      ...(input.notes ? { notes: input.notes } : {}),
+    },
+    180_000,
+    sessionInternalId,
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "Erro ao criar candidatura");
     throw new Error(text);
@@ -334,11 +355,18 @@ export async function updateJobApplicationStatus(
   id: string,
   status: JobApplicationStatus,
   currentCvAdaptationId?: string,
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest("PATCH", `/job-applications/${id}/status`, {
-    status,
-    ...(currentCvAdaptationId !== undefined ? { currentCvAdaptationId } : {}),
-  });
+  const response = await apiRequest(
+    "PATCH",
+    `/job-applications/${id}/status`,
+    {
+      status,
+      ...(currentCvAdaptationId !== undefined ? { currentCvAdaptationId } : {}),
+    },
+    180_000,
+    sessionInternalId,
+  );
   if (!response.ok) throw new Error("Falha ao atualizar status");
   return response.json() as Promise<JobApplicationDto>;
 }
@@ -346,11 +374,14 @@ export async function updateJobApplicationStatus(
 export async function submitRejectionFeedback(
   id: string,
   data: { rejectionStrengths?: string; rejectionImprovements?: string },
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
   const response = await apiRequest(
     "PATCH",
     `/job-applications/${id}/rejection-feedback`,
     data,
+    180_000,
+    sessionInternalId,
   );
   if (!response.ok) throw new Error("Falha ao salvar feedback");
   return response.json() as Promise<JobApplicationDto>;
@@ -365,11 +396,14 @@ export async function scheduleInterview(
     interviewMeetingUrl?: string;
     interviewLocation?: string;
   },
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
   const response = await apiRequest(
     "PATCH",
     `/job-applications/${id}/interview`,
     data,
+    180_000,
+    sessionInternalId,
   );
   if (!response.ok) {
     let message = "Falha ao agendar entrevista";
@@ -417,10 +451,15 @@ export async function updateJobApplicationDescription(
 export async function addJobApplicationNote(
   id: string,
   note: string,
+  sessionInternalId?: string | null,
 ): Promise<JobApplicationDto> {
-  const response = await apiRequest("POST", `/job-applications/${id}/notes`, {
-    note,
-  });
+  const response = await apiRequest(
+    "POST",
+    `/job-applications/${id}/notes`,
+    { note },
+    180_000,
+    sessionInternalId,
+  );
   if (!response.ok) throw new Error("Falha ao salvar nota");
   return response.json() as Promise<JobApplicationDto>;
 }
@@ -428,11 +467,14 @@ export async function addJobApplicationNote(
 export async function generateOrGetInterviewPrep(
   id: string,
   adaptationId?: string,
+  sessionInternalId?: string | null,
 ): Promise<InterviewPrepDto> {
   const response = await apiRequest(
     "POST",
     `/job-applications/${id}/interview-prep`,
     adaptationId ? { adaptationId } : undefined,
+    180_000,
+    sessionInternalId,
   );
   if (!response.ok) {
     let detail = "";
@@ -459,11 +501,14 @@ export async function generateOrGetCoverLetter(
     maxCharacters?: number;
     adaptationId?: string;
   },
+  sessionInternalId?: string | null,
 ): Promise<CoverLetterDto> {
   const response = await apiRequest(
     "POST",
     `/job-applications/${id}/cover-letter`,
     input,
+    180_000,
+    sessionInternalId,
   );
   if (!response.ok) {
     let detail = "";

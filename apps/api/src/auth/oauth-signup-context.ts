@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { isValidJourneySessionInternalId } from "../common/journey-session-id";
 import {
   SIGNUP_CONVERSION_CONTEXTS,
   type SignupConversionContext,
@@ -19,14 +20,6 @@ const OAUTH_COOKIE_PATH = "/api/auth/google";
 // exposição.
 const OAUTH_COOKIE_MAX_AGE_MS = 10 * 60 * 1000;
 
-// Mesmo formato que o frontend gera em buildSessionInternalId()
-// (apps/web/src/lib/analytics-tracking.ts): crypto.randomUUID() ou, no
-// fallback sem crypto.randomUUID, `journey-${Date.now()}`.
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const JOURNEY_FALLBACK_PATTERN = /^journey-[0-9]{10,20}$/;
-const MAX_SESSION_INTERNAL_ID_LENGTH = 128;
-
 function isSignupConversionContext(
   value: unknown,
 ): value is SignupConversionContext {
@@ -34,14 +27,6 @@ function isSignupConversionContext(
     typeof value === "string" &&
     (SIGNUP_CONVERSION_CONTEXTS as readonly string[]).includes(value)
   );
-}
-
-function isValidJourneySessionInternalId(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  if (value.length === 0 || value.length > MAX_SESSION_INTERNAL_ID_LENGTH) {
-    return false;
-  }
-  return UUID_PATTERN.test(value) || JOURNEY_FALLBACK_PATTERN.test(value);
 }
 
 function firstQueryValue(value: unknown): unknown {

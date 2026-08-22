@@ -6,6 +6,12 @@ export type AnalysisRequestContext = {
   sessionPublicToken: string | null;
   sessionInternalId: string | null;
   posthogSessionId?: string | null;
+  // UUID de jornada do frontend (sessionStorage: journey_session_internal_id),
+  // recebido via header x-session-internal-id. Conceito DISTINTO de
+  // sessionInternalId acima (que tem FK pra AnalysisSession) — nunca escrever
+  // este valor na coluna sessionInternalId de BusinessFunnelEvent, sempre em
+  // metadata.sessionInternalId. Ver docs/runbook/events.md seção 2.
+  journeySessionInternalId?: string | null;
   userId: string | null;
   ip: string | null;
   routePath: string | null;

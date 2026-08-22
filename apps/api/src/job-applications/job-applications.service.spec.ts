@@ -397,7 +397,10 @@ test("upsertFromCvAdaptation leaves jobId null when analysis did not come from t
   const db = makeDb();
 
   const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
-  adaptations.set("adapt-manual", { id: "adapt-manual", jobApplicationId: null });
+  adaptations.set("adapt-manual", {
+    id: "adapt-manual",
+    jobApplicationId: null,
+  });
 
   const service = new JobApplicationsServiceCtor(db);
 
@@ -414,6 +417,217 @@ test("upsertFromCvAdaptation leaves jobId null when analysis did not come from t
   const apps = db._jobApplications as Map<string, Record<string, unknown>>;
   const app = Array.from(apps.values())[0];
   assert.equal(app.jobId, null);
+});
+
+// ─── Fase B.3: product_origin, sessionInternalId, idempotência ───────────
+
+type RecordedEvent = {
+  eventName: string;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+};
+
+function makeFunnelEventsCapture() {
+  const calls: RecordedEvent[] = [];
+  const funnelEvents = {
+    record: async (input: RecordedEvent) => {
+      calls.push(input);
+      return { event: {}, ingested: true };
+    },
+  };
+  return { funnelEvents, calls };
+}
+
+test("upsertFromCvAdaptation records candidatura_created with product_origin=radar when radarJobId is present", async () => {
+  const db = makeDb();
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-radar-origin", {
+    id: "adapt-radar-origin",
+    jobApplicationId: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-radar-origin",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+    radarJobId: "job-radar-2",
+  });
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal(created?.metadata?.product_origin, "radar");
+  // sessionInternalId nunca inventado — não existe request de browser
+  // ativa nesse caminho automático.
+  assert.equal("sessionInternalId" in (created?.metadata ?? {}), false);
+});
+
+test("upsertFromCvAdaptation records candidatura_created with product_origin=analysis when radarJobId is absent", async () => {
+  const db = makeDb();
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-analysis-origin", {
+    id: "adapt-analysis-origin",
+    jobApplicationId: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-analysis-origin",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+  });
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal(created?.metadata?.product_origin, "analysis");
+});
+
+test("createManual records candidatura_created with product_origin=candidatura, sessionInternalId when provided, and a stable idempotencyKey", async () => {
+  const db = makeDb();
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  const application = await service.createManual(
+    "user-1",
+    {
+      jobTitle: "Analista de Dados",
+      companyName: "Acme",
+    } as never,
+    "journey-abc-123",
+  );
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal(created?.metadata?.product_origin, "candidatura");
+  assert.equal(created?.metadata?.sessionInternalId, "journey-abc-123");
+  assert.equal(
+    created?.idempotencyKey,
+    `candidatura_created:${application.id}`,
+  );
+});
+
+test("createManual omits sessionInternalId from metadata when the caller has no journey context", async () => {
+  const db = makeDb();
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.createManual("user-1", {
+    jobTitle: "Analista de Dados",
+    companyName: "Acme",
+  } as never);
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal("sessionInternalId" in (created?.metadata ?? {}), false);
+});
+
+test("updateStatus to APPLIED uses a stable candidatura_marked_as_applied idempotencyKey per application", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  apps.set("app-applied-1", {
+    id: "app-applied-1",
+    userId: "user-1",
+    status: "ANALYZED",
+    appliedAt: null,
+    currentCvAdaptationId: null,
+    archivedAt: null,
+    deletedAt: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.updateStatus(
+    "user-1",
+    "app-applied-1",
+    "APPLIED",
+    undefined,
+    "journey-marked-1",
+  );
+
+  const markedAsApplied = calls.find(
+    (c) => c.eventName === "candidatura_marked_as_applied",
+  );
+  assert.equal(
+    markedAsApplied?.idempotencyKey,
+    "candidatura_marked_as_applied:app-applied-1",
+  );
+  assert.equal(
+    markedAsApplied?.metadata?.sessionInternalId,
+    "journey-marked-1",
+  );
+
+  const statusChanged = calls.find(
+    (c) => c.eventName === "candidatura_status_changed",
+  );
+  assert.equal(statusChanged?.metadata?.sessionInternalId, "journey-marked-1");
+});
+
+test("archive uses an idempotencyKey scoped to the archivedAt transition and propagates sessionInternalId", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  apps.set("app-archive-1", {
+    id: "app-archive-1",
+    userId: "user-1",
+    jobTitle: "Role",
+    companyName: "Company",
+    normalizedJobTitle: "role",
+    normalizedCompanyName: "company",
+    status: "INTERVIEW",
+    archivedAt: null,
+    deletedAt: null,
+    cvAdaptations: [],
+    events: [],
+    interviewPrep: null,
+    coverLetter: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.archive("user-1", "app-archive-1", "journey-archive-1");
+
+  const archived = calls.find((c) => c.eventName === "candidatura_archived");
+  assert.match(
+    archived?.idempotencyKey ?? "",
+    /^candidatura_archived:app-archive-1:\d+$/,
+  );
+  assert.equal(archived?.metadata?.sessionInternalId, "journey-archive-1");
+});
+
+test("addNote never sets an idempotencyKey — repeated notes are legitimate and must not be deduplicated", async () => {
+  const db = makeDb();
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  apps.set("app-note-1", { id: "app-note-1", userId: "user-1" });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.addNote(
+    "user-1",
+    "app-note-1",
+    "primeira nota",
+    "journey-note-1",
+  );
+  await service.addNote(
+    "user-1",
+    "app-note-1",
+    "segunda nota",
+    "journey-note-1",
+  );
+
+  const notes = calls.filter((c) => c.eventName === "candidatura_note_added");
+  assert.equal(notes.length, 2);
+  assert.equal(notes[0]?.idempotencyKey, undefined);
+  assert.equal(notes[1]?.idempotencyKey, undefined);
 });
 
 test("upsertFromCvAdaptation derives score from score_pos_ajustes payload", async () => {

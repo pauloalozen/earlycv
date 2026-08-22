@@ -9,6 +9,7 @@ import type {
   CoverLetterStyle,
 } from "@/lib/job-applications-api";
 import { generateOrGetCoverLetter } from "@/lib/job-applications-api";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { EcvBuildLoader } from "./ecv-loader";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -196,10 +197,14 @@ export function CoverLetterPanel({
 
     try {
       while (Date.now() < deadline) {
-        const result = await generateOrGetCoverLetter(applicationId, {
-          ...input,
-          adaptationId,
-        });
+        const result = await generateOrGetCoverLetter(
+          applicationId,
+          {
+            ...input,
+            adaptationId,
+          },
+          getJourneySessionInternalId(),
+        );
 
         if (result.status === "succeeded") {
           setLetter(result);

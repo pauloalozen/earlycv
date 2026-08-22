@@ -20,6 +20,7 @@ import type {
 import { Prisma } from "@prisma/client";
 import type { Response } from "express";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
+import type { ProductOrigin } from "../analysis-observability/product-origin";
 import type { ProtectedAnalysisBlockedResult } from "../analysis-protection/analysis-protection.facade";
 import { AnalysisTelemetryService } from "../analysis-protection/analysis-telemetry.service";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
@@ -934,6 +935,7 @@ export class CvAdaptationService {
     masterCvText?: string,
     turnstileToken?: string,
     analysisContext?: AnalysisRequestContext,
+    radarJobId?: string,
   ): Promise<{
     jobId: string;
     status: "pending";
@@ -984,6 +986,7 @@ export class CvAdaptationService {
         ),
         mode: "guest",
         cvSource: file ? "upload" : "master_cv",
+        productOrigin: radarJobId ? "radar" : "direct",
       },
     ).catch((err) => {
       this.logger.error(
@@ -1108,6 +1111,7 @@ export class CvAdaptationService {
         ),
         mode: "authenticated",
         cvSource: file ? "upload" : "master_cv",
+        productOrigin: dto.radarJobId ? "radar" : "direct",
       },
       {
         jobTitle: resolved.radarJobTitle,
@@ -1134,6 +1138,7 @@ export class CvAdaptationService {
       context: AnalysisRequestContext & { routeKey: string };
       mode: "guest" | "authenticated";
       cvSource: "master_cv" | "upload";
+      productOrigin: ProductOrigin;
     },
     // Quando a análise veio do radar, o Job já tem cargo/empresa reais e
     // curados — sempre prevalecem sobre o que a IA reextrair do texto
@@ -1158,6 +1163,7 @@ export class CvAdaptationService {
         analysis_id: jobId,
         mode: analytics.mode,
         origin: analytics.context.routeKey,
+        product_origin: analytics.productOrigin,
       },
     );
 
@@ -1191,6 +1197,7 @@ export class CvAdaptationService {
           analysis_id: jobId,
           mode: analytics.mode,
           origin: analytics.context.routeKey,
+          product_origin: analytics.productOrigin,
           processing_time_ms: Date.now() - startedAt.getTime(),
           cv_source: analytics.cvSource,
         },
@@ -1213,6 +1220,7 @@ export class CvAdaptationService {
           analysis_id: jobId,
           mode: analytics.mode,
           origin: analytics.context.routeKey,
+          product_origin: analytics.productOrigin,
           processing_time_ms: Date.now() - startedAt.getTime(),
           stage: failure.stage,
           error_code: failure.errorCode,

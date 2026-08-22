@@ -48,6 +48,7 @@ import {
   JOB_DESCRIPTION_MAX_CHARS,
   validateJobDescription,
 } from "@/lib/job-description-validation";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
 
 const USER_VISIBLE_STATUS_OPTIONS: Array<{
@@ -2402,7 +2403,11 @@ function NotesSection({
     if (!note.trim() || !isDirty || pending) return;
     startTransition(async () => {
       try {
-        await addJobApplicationNote(applicationId, note.trim());
+        await addJobApplicationNote(
+          applicationId,
+          note.trim(),
+          getJourneySessionInternalId(),
+        );
         setSaved(true);
         setEditing(false);
         onUpdated();
@@ -3191,7 +3196,12 @@ function HiredCelebrationModal({
   function handleConfirm() {
     startTransition(async () => {
       try {
-        await updateJobApplicationStatus(applicationId, "HIRED");
+        await updateJobApplicationStatus(
+          applicationId,
+          "HIRED",
+          undefined,
+          getJourneySessionInternalId(),
+        );
         close();
         onUpdated();
       } catch {
@@ -3482,12 +3492,18 @@ function RejectionFeedbackModal({
   function handleSave(skip = false) {
     startTransition(async () => {
       try {
-        await submitRejectionFeedback(applicationId, {
-          rejectionStrengths: skip ? undefined : strengths.trim() || undefined,
-          rejectionImprovements: skip
-            ? undefined
-            : improvements.trim() || undefined,
-        });
+        await submitRejectionFeedback(
+          applicationId,
+          {
+            rejectionStrengths: skip
+              ? undefined
+              : strengths.trim() || undefined,
+            rejectionImprovements: skip
+              ? undefined
+              : improvements.trim() || undefined,
+          },
+          getJourneySessionInternalId(),
+        );
         close();
         onUpdated();
       } catch {
@@ -3849,6 +3865,7 @@ function StatusPopover({
           applicationId,
           "APPLIED",
           currentCvAdaptationId,
+          getJourneySessionInternalId(),
         );
         onClose();
         onUpdated();
@@ -3888,7 +3905,12 @@ function StatusPopover({
     setSavingStatus(newStatus);
     startTransition(async () => {
       try {
-        await updateJobApplicationStatus(applicationId, newStatus);
+        await updateJobApplicationStatus(
+          applicationId,
+          newStatus,
+          undefined,
+          getJourneySessionInternalId(),
+        );
         onClose();
         onUpdated();
       } catch {
@@ -4157,13 +4179,17 @@ function InterviewScheduleModal({
     setError(null);
     startTransition(async () => {
       try {
-        await scheduleInterview(applicationId, {
-          scheduledAt,
-          interviewTitle: title.trim(),
-          interviewerName: interviewer.trim() || undefined,
-          interviewMeetingUrl: url,
-          interviewLocation: location.trim() || undefined,
-        });
+        await scheduleInterview(
+          applicationId,
+          {
+            scheduledAt,
+            interviewTitle: title.trim(),
+            interviewerName: interviewer.trim() || undefined,
+            interviewMeetingUrl: url,
+            interviewLocation: location.trim() || undefined,
+          },
+          getJourneySessionInternalId(),
+        );
         close();
         onUpdated();
       } catch (err) {
@@ -5223,7 +5249,10 @@ export function DetailClient({
     setArchiveError(null);
     setArchiving(true);
     try {
-      await archiveJobApplication(application.id);
+      await archiveJobApplication(
+        application.id,
+        getJourneySessionInternalId(),
+      );
       router.push("/candidaturas?view=arquivadas");
     } catch (err) {
       setArchiveError(
@@ -5255,7 +5284,7 @@ export function DetailClient({
     setArchiveError(null);
     setDeleting(true);
     try {
-      await deleteJobApplication(application.id);
+      await deleteJobApplication(application.id, getJourneySessionInternalId());
       closeDeleteModal();
       router.push("/candidaturas?view=arquivadas");
       router.refresh();
@@ -5326,6 +5355,7 @@ export function DetailClient({
         application.id,
         application.status,
         adaptationId,
+        getJourneySessionInternalId(),
       );
       closeCvPicker();
       handleUpdated();
