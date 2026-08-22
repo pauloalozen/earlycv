@@ -3186,6 +3186,73 @@ test("claimGuest: chama upsertFromCvAdaptation com CV_READY e origin optimized_c
   assert.equal(call.cvAdaptationId, "adapt-claimed");
 });
 
+test("claimGuest: repassa visitorId/journeySessionInternalId do analysisContext para o hook — candidatura_created automática não deve perder a jornada da análise", async () => {
+  const spy = makeHookSpy();
+  const adaptation = makeAdaptationRecord("adapt-claimed-ctx");
+
+  const mockTx = {
+    resume: {
+      findFirst: async () => ({ id: "master-1" }),
+      create: async () => ({ id: "adapted-resume-1" }),
+    },
+    cvAdaptation: {
+      create: async () => adaptation,
+      update: async () => adaptation,
+    },
+    user: { update: async () => ({}) },
+    cvUnlock: { create: async () => ({}) },
+    analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      user: {
+        findUnique: async () => ({ creditsRemaining: 5, internalRole: "user" }),
+      },
+      resumeTemplate: { findFirst: async () => null },
+      $transaction: async (fn: (tx: typeof mockTx) => Promise<unknown>) =>
+        fn(mockTx),
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    spy.service,
+  );
+
+  await service.claimGuest(
+    "user-1",
+    {
+      adaptedContentJson: { sections: [] },
+      jobDescriptionText: adaptation.jobDescriptionText,
+      masterCvText: "CV text",
+      analysisCvSnapshotId: "snap-1",
+      jobTitle: adaptation.jobTitle,
+      companyName: adaptation.companyName,
+    },
+    {
+      correlationId: "corr-1",
+      requestId: "req-1",
+      sessionPublicToken: null,
+      sessionInternalId: null,
+      journeySessionInternalId: "journey-abc",
+      visitorId: "visitor-abc",
+      userId: null,
+      ip: null,
+      routePath: "/adaptar",
+      userAgentHash: null,
+    },
+  );
+
+  assert.equal(spy.calls.length, 1);
+  const call = spy.calls[0] as Record<string, unknown>;
+  assert.equal(call.visitorId, "visitor-abc");
+  assert.equal(call.journeySessionInternalId, "journey-abc");
+});
+
 test("deliverAdaptation: chama upsertFromCvAdaptation com CV_READY após persistir adaptedResume", async () => {
   const spy = makeHookSpy();
   const adaptation = makeAdaptationRecord("adapt-delivered");
@@ -3881,6 +3948,102 @@ test("startGuestAnalysisJob emits analysis_started once and analysis_completed o
   assert.equal(typeof completed?.metadata?.processing_time_ms, "number");
 });
 
+test("startGuestAnalysisJob: visitor_id/sessionInternalId do analysisContext chegam a analysis_started/completed — a mesma jornada guest do analyze_submit_clicked não pode ter buraco", async () => {
+  const recordedEvents: Array<{
+    eventName: string;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-evt-ctx" }) },
+      analysisJob: {
+        create: async () => ({ id: "job-evt-ctx" }),
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-evt-ctx",
+        result: {
+          adaptedContentJson: { vaga: {} },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+    undefined, // storage
+    undefined, // analysisTelemetry
+    undefined, // jobApplicationsService
+    undefined, // profileMergeService
+    undefined, // profileReadinessService
+    undefined, // jobCanonicalizationService
+    undefined, // jobRequirementSetsService
+    undefined, // talentProfileCapture
+    undefined, // masterCvCanonicalExtractionService
+    {
+      record: async (input: {
+        eventName: string;
+        idempotencyKey?: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push(input);
+        return { event: {}, ingested: true };
+      },
+    },
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    undefined,
+    "Resumo do candidato com experiencia relevante para a vaga.",
+    "token",
+    {
+      correlationId: "corr-2",
+      requestId: "req-2",
+      sessionPublicToken: "guest-token-1",
+      sessionInternalId: null,
+      journeySessionInternalId: "journey-guest-1",
+      visitorId: "visitor-guest-1",
+      userId: null,
+      ip: null,
+      routePath: "/adaptar",
+      userAgentHash: null,
+    },
+  );
+
+  await sleep(20);
+
+  const started = recordedEvents.find(
+    (e) => e.eventName === "analysis_started",
+  );
+  const completed = recordedEvents.find(
+    (e) => e.eventName === "analysis_completed",
+  );
+  assert.equal(started?.metadata?.visitor_id, "visitor-guest-1");
+  assert.equal(started?.metadata?.sessionInternalId, "journey-guest-1");
+  assert.equal(completed?.metadata?.visitor_id, "visitor-guest-1");
+  assert.equal(completed?.metadata?.sessionInternalId, "journey-guest-1");
+});
+
 test("startGuestAnalysisJob emits analysis_started and analysis_failed on failure, never analysis_completed", async () => {
   const recordedEvents: Array<{
     eventName: string;
@@ -4165,6 +4328,108 @@ test("startAuthenticatedAnalysisJob with a valid radarJobId loads descriptionCle
     (createdJob as Record<string, unknown> | null)?.jobDescriptionText,
     "Vaga para analista com responsabilidades, requisitos de experiencia, habilidades tecnicas e colaboracao com produto e dados.",
   );
+});
+
+test("startAuthenticatedAnalysisJob: analysis_started/completed carregam user_id (da coluna) e visitor_id/sessionInternalId (do analysisContext) juntos", async () => {
+  const recordedEvents: Array<{
+    eventName: string;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => ({ rawText: "CV base do usuario" }) },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-auth-ctx" }),
+      },
+      analysisJob: {
+        create: async () => ({ id: "job-auth-ctx" }),
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-auth-ctx",
+        result: {
+          adaptedContentJson: { vaga: {} },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+    undefined, // storage
+    undefined, // analysisTelemetry
+    undefined, // jobApplicationsService
+    undefined, // profileMergeService
+    undefined, // profileReadinessService
+    undefined, // jobCanonicalizationService
+    undefined, // jobRequirementSetsService
+    undefined, // talentProfileCapture
+    undefined, // masterCvCanonicalExtractionService
+    {
+      record: async (input: {
+        eventName: string;
+        idempotencyKey?: string;
+        metadata?: Record<string, unknown>;
+      }) => {
+        recordedEvents.push(input);
+        return { event: {}, ingested: true };
+      },
+    },
+  );
+
+  await service.startAuthenticatedAnalysisJob(
+    "user-auth-1",
+    {
+      masterResumeId: "resume-1",
+      jobDescriptionText:
+        "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+      turnstileToken: "token",
+    },
+    undefined,
+    {
+      correlationId: "corr-3",
+      requestId: "req-3",
+      sessionPublicToken: null,
+      sessionInternalId: null,
+      journeySessionInternalId: "journey-auth-1",
+      visitorId: "visitor-auth-1",
+      userId: "user-auth-1",
+      ip: null,
+      routePath: "/adaptar",
+      userAgentHash: null,
+    },
+  );
+
+  await sleep(20);
+
+  const started = recordedEvents.find(
+    (e) => e.eventName === "analysis_started",
+  );
+  const completed = recordedEvents.find(
+    (e) => e.eventName === "analysis_completed",
+  );
+  assert.equal(started?.metadata?.visitor_id, "visitor-auth-1");
+  assert.equal(started?.metadata?.sessionInternalId, "journey-auth-1");
+  assert.equal(completed?.metadata?.visitor_id, "visitor-auth-1");
+  assert.equal(completed?.metadata?.sessionInternalId, "journey-auth-1");
 });
 
 test("startAuthenticatedAnalysisJob throws NotFoundException when radarJobId does not exist", async () => {
@@ -4660,6 +4925,102 @@ test("processAnalysisJob tags analysis_failed with the same product_origin as an
   const failed = calls.find((c) => c.eventName === "analysis_failed");
   assert.equal(failed?.metadata?.product_origin, "direct");
   assert.equal(failed?.idempotencyKey, "analysis_failed:job-direct-1");
+});
+
+test("processAnalysisJob propaga visitor_id/sessionInternalId do context para analysis_started e analysis_completed", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { update: async () => ({}) } },
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await (
+    service as unknown as { processAnalysisJob: ProcessAnalysisJobFn }
+  ).processAnalysisJob(
+    "job-ctx-1",
+    async () => ({
+      adaptedContentJson: {},
+      previewText: "preview",
+      masterCvText: "cv",
+      analysisCvSnapshotId: "snap-1",
+    }),
+    {
+      context: {
+        routeKey: "cv-adaptation/analyze",
+        visitorId: "visitor-xyz",
+        journeySessionInternalId: "journey-xyz",
+      },
+      mode: "authenticated",
+      cvSource: "master_cv",
+      productOrigin: "direct",
+    },
+  );
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  const completed = calls.find((c) => c.eventName === "analysis_completed");
+  assert.equal(started?.metadata?.visitor_id, "visitor-xyz");
+  assert.equal(started?.metadata?.sessionInternalId, "journey-xyz");
+  assert.equal(completed?.metadata?.visitor_id, "visitor-xyz");
+  assert.equal(completed?.metadata?.sessionInternalId, "journey-xyz");
+});
+
+test("processAnalysisJob propaga visitor_id/sessionInternalId do context para analysis_failed", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { update: async () => ({}) } },
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await (
+    service as unknown as { processAnalysisJob: ProcessAnalysisJobFn }
+  ).processAnalysisJob(
+    "job-ctx-2",
+    async () => {
+      throw new Error("boom");
+    },
+    {
+      context: {
+        routeKey: "cv-adaptation/analyze-guest",
+        visitorId: "visitor-fail",
+        journeySessionInternalId: "journey-fail",
+      },
+      mode: "guest",
+      cvSource: "upload",
+      productOrigin: "direct",
+    },
+  );
+
+  const failed = calls.find((c) => c.eventName === "analysis_failed");
+  assert.equal(failed?.metadata?.visitor_id, "visitor-fail");
+  assert.equal(failed?.metadata?.sessionInternalId, "journey-fail");
 });
 
 test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId is passed", async () => {

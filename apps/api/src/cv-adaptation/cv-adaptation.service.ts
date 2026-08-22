@@ -74,6 +74,12 @@ type JobApplicationHookInput = {
   origin: JobApplicationOrigin;
   callerMethod: string;
   radarJobId?: string | null;
+  // Contexto de jornada da análise que originou esta candidatura automática
+  // (quando disponível no caller — ex.: claimGuest/saveGuestPreview rodam
+  // dentro do request original e têm analysisContext em mãos). Nunca
+  // inventado: fica undefined quando o caller não tem o contexto.
+  visitorId?: string | null;
+  journeySessionInternalId?: string | null;
 };
 
 type AuditEntry = {
@@ -253,6 +259,8 @@ export class CvAdaptationService {
         targetStatus: input.targetStatus,
         origin: input.origin,
         radarJobId: input.radarJobId,
+        visitorId: input.visitorId,
+        journeySessionInternalId: input.journeySessionInternalId,
       });
     } catch (err) {
       this.logger.error(
@@ -727,6 +735,8 @@ export class CvAdaptationService {
       targetStatus: "CV_READY",
       origin: "optimized_cv_auto",
       callerMethod: "claimGuest",
+      visitorId: analysisContext?.visitorId,
+      journeySessionInternalId: analysisContext?.journeySessionInternalId,
     });
 
     // Generate aiAuditJson (structured CV sections) synchronously so
@@ -1154,6 +1164,10 @@ export class CvAdaptationService {
       data: { status: "processing", startedAt },
     });
 
+    const journeyMetadata = this.buildAnalysisJourneyMetadata(
+      analytics.context,
+    );
+
     await this.recordFunnelEvent(
       "analysis_started",
       analytics.context,
@@ -1164,6 +1178,7 @@ export class CvAdaptationService {
         mode: analytics.mode,
         origin: analytics.context.routeKey,
         product_origin: analytics.productOrigin,
+        ...journeyMetadata,
       },
     );
 
@@ -1200,6 +1215,7 @@ export class CvAdaptationService {
           product_origin: analytics.productOrigin,
           processing_time_ms: Date.now() - startedAt.getTime(),
           cv_source: analytics.cvSource,
+          ...journeyMetadata,
         },
       );
     } catch (error) {
@@ -1225,6 +1241,7 @@ export class CvAdaptationService {
           stage: failure.stage,
           error_code: failure.errorCode,
           retryable: failure.retryable,
+          ...journeyMetadata,
         },
       );
     }
@@ -1256,6 +1273,21 @@ export class CvAdaptationService {
       stage: "processing",
       errorCode: "processing_failed",
       retryable: true,
+    };
+  }
+
+  // BusinessFunnelEventService.exportToPostHog só lê visitor_id/sessionInternalId
+  // de dentro de metadata (nunca de campos soltos do context) — mesmo padrão
+  // que o frontend já usa via getAnalyticsBaseProperties(). Sem isso aqui,
+  // analysis_started/completed/failed chegam ao PostHog com os dois nulos
+  // mesmo com buildProtectionContext preservando os valores.
+  private buildAnalysisJourneyMetadata(context: AnalysisRequestContext): {
+    visitor_id: string | null;
+    sessionInternalId: string | null;
+  } {
+    return {
+      visitor_id: context.visitorId ?? null,
+      sessionInternalId: context.journeySessionInternalId ?? null,
     };
   }
 
@@ -1658,6 +1690,15 @@ export class CvAdaptationService {
     return {
       correlationId: context?.correlationId ?? randomUUID(),
       ip: context?.ip ?? null,
+      // journeySessionInternalId/visitorId (jornada de frontend, ver
+      // analysis-protection/types.ts) precisam sobreviver aqui: este
+      // context é capturado de forma síncrona ainda dentro do request
+      // original (startGuestAnalysisJob/startAuthenticatedAnalysisJob) e
+      // reaproveitado depois, no job assíncrono, para popular
+      // analysis_started/completed/failed — sem isso os dois campos
+      // ficam null nesses eventos mesmo estando disponíveis na origem.
+      journeySessionInternalId: context?.journeySessionInternalId ?? null,
+      visitorId: context?.visitorId ?? null,
       requestId: context?.requestId ?? randomUUID(),
       routeKey,
       routePath: context?.routePath ?? null,
@@ -2172,6 +2213,8 @@ export class CvAdaptationService {
         origin: "analysis_auto",
         callerMethod: "saveGuestPreview(existing)",
         radarJobId: dto.radarJobId,
+        visitorId: analysisContext?.visitorId,
+        journeySessionInternalId: analysisContext?.journeySessionInternalId,
       });
       const refreshedExisting = await this.database.cvAdaptation.findUnique({
         where: { id: existingAdaptation.id },
@@ -2236,6 +2279,8 @@ export class CvAdaptationService {
       origin: "analysis_auto",
       callerMethod: "saveGuestPreview",
       radarJobId: dto.radarJobId,
+      visitorId: analysisContext?.visitorId,
+      journeySessionInternalId: analysisContext?.journeySessionInternalId,
     });
 
     const refreshedAdaptation = await this.database.cvAdaptation.findUnique({

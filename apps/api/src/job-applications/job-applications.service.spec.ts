@@ -462,9 +462,41 @@ test("upsertFromCvAdaptation records candidatura_created with product_origin=rad
 
   const created = calls.find((c) => c.eventName === "candidatura_created");
   assert.equal(created?.metadata?.product_origin, "radar");
-  // sessionInternalId nunca inventado — não existe request de browser
-  // ativa nesse caminho automático.
+  // sessionInternalId/visitor_id nunca inventados: quando o caller (ver
+  // CvAdaptationService.triggerJobApplicationHook) não repassa o contexto
+  // de jornada da análise, ficam de fora da metadata — nunca um valor
+  // fabricado.
   assert.equal("sessionInternalId" in (created?.metadata ?? {}), false);
+  assert.equal("visitor_id" in (created?.metadata ?? {}), false);
+});
+
+test("upsertFromCvAdaptation propagates visitorId/journeySessionInternalId into candidatura_created metadata when the caller has them", async () => {
+  const db = makeDb();
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-radar-ctx", {
+    id: "adapt-radar-ctx",
+    jobApplicationId: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-radar-ctx",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+    radarJobId: "job-radar-3",
+    visitorId: "visitor-hook-1",
+    journeySessionInternalId: "journey-hook-1",
+  });
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal(created?.metadata?.visitor_id, "visitor-hook-1");
+  assert.equal(created?.metadata?.sessionInternalId, "journey-hook-1");
 });
 
 test("upsertFromCvAdaptation records candidatura_created with product_origin=analysis when radarJobId is absent", async () => {
