@@ -25,8 +25,12 @@ import {
   saveReanalysisResult,
   updateCvAdaptationContent,
 } from "@/lib/cv-adaptation-api";
-import { getJourneyPreviousRoute } from "@/lib/journey-session";
+import {
+  getJourneyPreviousRoute,
+  getJourneySessionInternalId,
+} from "@/lib/journey-session";
 import type { ProductOrigin } from "@/lib/product-origin";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const SIDEBAR_W = 354;
@@ -1964,7 +1968,16 @@ export function AdaptacaoCvClient({
       formData.set("masterCvText", cvText);
       formData.set("inputMode", "text_paste");
 
-      const started = await analyzeAuthenticatedCv(formData, "text_paste");
+      const reanaliseJourneyContext = {
+        sessionInternalId: getJourneySessionInternalId(),
+        visitorId: getOrCreateVisitorId(),
+      };
+
+      const started = await analyzeAuthenticatedCv(
+        formData,
+        "text_paste",
+        reanaliseJourneyContext,
+      );
       if (!started.ok) {
         setReanaliseError(started.error);
         setReanaliseState("error");
@@ -1989,6 +2002,8 @@ export function AdaptacaoCvClient({
         jobDescriptionText,
         jobTitle: jobTitle ?? undefined,
         companyName: companyName ?? undefined,
+        sessionInternalId: reanaliseJourneyContext.sessionInternalId,
+        visitorId: reanaliseJourneyContext.visitorId,
       });
 
       const newScore =

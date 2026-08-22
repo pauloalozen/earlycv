@@ -408,11 +408,18 @@ export async function emitBusinessFunnelEvent(
 
 export async function analyzeGuestCv(
   formData: FormData,
+  journeyContext?: {
+    sessionInternalId?: string | null;
+    visitorId?: string | null;
+  },
 ): Promise<AnalysisJobStartResult> {
   const response = await apiRequest(
     "POST",
     "/cv-adaptation/analyze-guest",
     formData,
+    180_000,
+    journeyContext?.sessionInternalId,
+    journeyContext?.visitorId,
   );
   if (!response.ok) {
     const raw = await response.text();
@@ -444,12 +451,17 @@ export async function claimGuestAnalysis(payload: {
   jobTitle?: string;
   companyName?: string;
   guestSessionPublicToken?: string;
+  sessionInternalId?: string | null;
+  visitorId?: string | null;
 }): Promise<CvAdaptationDto> {
+  const { sessionInternalId, visitorId, ...body } = payload;
   const response = await apiRequest(
     "POST",
     "/cv-adaptation/claim-guest",
-    payload,
+    body,
     180_000,
+    sessionInternalId,
+    visitorId,
   );
   if (!response.ok) {
     const error = await response.text();
@@ -471,6 +483,8 @@ export async function saveGuestPreview(payload: {
   guestSessionPublicToken?: string;
   jobApplicationId?: string;
   radarJobId?: string;
+  sessionInternalId?: string | null;
+  visitorId?: string | null;
 }): Promise<CvAdaptationDto> {
   const body = (() => {
     const formData = new FormData();
@@ -496,8 +510,7 @@ export async function saveGuestPreview(payload: {
       formData.append("saveAsMaster", String(payload.saveAsMaster));
     if (payload.jobApplicationId)
       formData.append("jobApplicationId", payload.jobApplicationId);
-    if (payload.radarJobId)
-      formData.append("radarJobId", payload.radarJobId);
+    if (payload.radarJobId) formData.append("radarJobId", payload.radarJobId);
     return formData;
   })();
 
@@ -506,6 +519,8 @@ export async function saveGuestPreview(payload: {
     "/cv-adaptation/save-guest-preview",
     body,
     180_000,
+    payload.sessionInternalId,
+    payload.visitorId,
   );
   if (!response.ok) {
     const error = await response.text();
@@ -517,11 +532,22 @@ export async function saveGuestPreview(payload: {
 export async function analyzeAuthenticatedCv(
   formData: FormData,
   inputMode?: "file_upload" | "text_paste" | "profile",
+  journeyContext?: {
+    sessionInternalId?: string | null;
+    visitorId?: string | null;
+  },
 ): Promise<AnalysisJobStartResult> {
   if (inputMode) {
     formData.set("inputMode", inputMode);
   }
-  const response = await apiRequest("POST", "/cv-adaptation/analyze", formData);
+  const response = await apiRequest(
+    "POST",
+    "/cv-adaptation/analyze",
+    formData,
+    180_000,
+    journeyContext?.sessionInternalId,
+    journeyContext?.visitorId,
+  );
   if (!response.ok) {
     const raw = await response.text();
     return {

@@ -8,6 +8,8 @@ import {
   clearGuestAnalysisRaw,
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 type GuestAnalysisStored = {
   adaptedContentJson: CvAnalysisData;
@@ -52,6 +54,8 @@ export function GuestAnalysisClaimer() {
       guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
       jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
       companyName: parsed.adaptedContentJson?.vaga?.empresa,
+      sessionInternalId: getJourneySessionInternalId(),
+      visitorId: getOrCreateVisitorId(),
     })
       .then((saved) => {
         clearGuestAnalysisRaw();

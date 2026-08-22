@@ -13,12 +13,14 @@ function getApiBaseUrl() {
   return base.endsWith("/api") ? base : `${base}/api`;
 }
 
-// x-session-internal-id: mesmo header lido por requestContextMiddleware na
-// API (ver apps/api/src/common/journey-session-id.ts) — carrega o UUID de
-// jornada do frontend pra correlacionar eventos backend de produto com a
-// classificação de sessão (new/existing/anonymous). Passar só quando o
-// chamador já leu um valor confiável de sessionStorage — nunca inventar.
+// x-session-internal-id / x-visitor-id: mesmos headers lidos por
+// requestContextMiddleware na API (ver apps/api/src/common/journey-session-id.ts
+// e apps/api/src/common/visitor-id.ts) — carregam o UUID de jornada e a
+// identidade pseudônima do navegador pra correlacionar eventos backend de
+// produto com a jornada de frontend. Passar só quando o chamador já leu um
+// valor confiável de sessionStorage/localStorage — nunca inventar.
 const JOURNEY_SESSION_ID_HEADER = "x-session-internal-id";
+const VISITOR_ID_HEADER = "x-visitor-id";
 
 export async function apiRequest(
   method: string,
@@ -26,6 +28,7 @@ export async function apiRequest(
   body?: FormData | Record<string, unknown>,
   timeoutMs = 180_000,
   sessionInternalId?: string | null,
+  visitorId?: string | null,
 ): Promise<Response> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(APP_ACCESS_TOKEN_COOKIE_NAME)?.value;
@@ -41,6 +44,10 @@ export async function apiRequest(
 
   if (sessionInternalId) {
     headers[JOURNEY_SESSION_ID_HEADER] = sessionInternalId;
+  }
+
+  if (visitorId) {
+    headers[VISITOR_ID_HEADER] = visitorId;
   }
 
   if (cookieHeader) {
