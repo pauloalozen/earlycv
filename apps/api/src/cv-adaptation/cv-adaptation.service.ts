@@ -1380,6 +1380,13 @@ export class CvAdaptationService {
       masterCvText: job.status === "succeeded" ? job.masterCvText : null,
       analysisCvSnapshotId:
         job.status === "succeeded" ? job.analysisCvSnapshotId : null,
+      // job.jobTitle/companyName já priorizam o cargo/empresa curados do
+      // Radar sobre o que a IA reextrai do texto colado (ver radarFallback
+      // em processAnalysisJob) — sem isso aqui, quem consome este status
+      // só enxerga adaptedContentJson.vaga.cargo/empresa, que fica vazio
+      // sempre que a IA não repete o nome da empresa no corpo da vaga.
+      jobTitle: job.status === "succeeded" ? job.jobTitle : null,
+      companyName: job.status === "succeeded" ? job.companyName : null,
     };
   }
 

@@ -4652,6 +4652,76 @@ test("getAnalysisJobStatus returns the job for its guest session owner", async (
   assert.equal(result.analysisCvSnapshotId, "snapshot-1");
 });
 
+test("getAnalysisJobStatus exposes jobTitle/companyName (radar-curated, set by processAnalysisJob's radarFallback) — without this, callers only see adaptedContentJson.vaga which the AI frequently leaves empty", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          id: "job-radar-status-1",
+          status: "succeeded",
+          userId: "user-1",
+          guestSessionHash: null,
+          lastError: null,
+          adaptedContentJson: { vaga: {} },
+          previewText: "preview",
+          masterCvText: "cv text",
+          analysisCvSnapshotId: "snapshot-1",
+          jobTitle: "Analista de Dados",
+          companyName: "EarlyCV",
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getAnalysisJobStatus("job-radar-status-1", {
+    userId: "user-1",
+    sessionPublicToken: null,
+  });
+
+  assert.equal(result.jobTitle, "Analista de Dados");
+  assert.equal(result.companyName, "EarlyCV");
+});
+
+test("getAnalysisJobStatus does not leak jobTitle/companyName before the job succeeds", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          id: "job-pending-1",
+          status: "processing",
+          userId: "user-1",
+          guestSessionHash: null,
+          lastError: null,
+          adaptedContentJson: null,
+          previewText: null,
+          masterCvText: null,
+          analysisCvSnapshotId: null,
+          jobTitle: "Analista de Dados",
+          companyName: "EarlyCV",
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getAnalysisJobStatus("job-pending-1", {
+    userId: "user-1",
+    sessionPublicToken: null,
+  });
+
+  assert.equal(result.jobTitle, null);
+  assert.equal(result.companyName, null);
+});
+
 test("getAnalysisJobStatus hides the job from a different guest session", async () => {
   const service = new CvAdaptationServiceCtor(
     {

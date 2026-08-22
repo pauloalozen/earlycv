@@ -102,6 +102,54 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     expect(formData.get("turnstileToken")).toBe("token-9");
   });
 
+  it("prioritizes the radar-curated jobTitle/companyName over what the AI extracted into adaptedContentJson.vaga", async () => {
+    pollAnalysisJobMock.mockResolvedValue({
+      ok: true,
+      adaptedContentJson: { vaga: { cargo: "Não informado", empresa: "" } },
+      previewText: "preview",
+      masterCvText: "master-cv",
+      analysisCvSnapshotId: "snapshot-radar-1",
+      jobTitle: "Analista de Dados Sênior",
+      companyName: "Nubank",
+    });
+
+    await analyzeMasterCvForJob({
+      masterResumeId: "resume-1",
+      radarJobId: "job-abc",
+      jobDescriptionText: "Descricao da vaga",
+      turnstileToken: "token-1",
+    });
+
+    expect(saveGuestPreviewMock.mock.calls[0]?.[0]).toMatchObject({
+      jobTitle: "Analista de Dados Sênior",
+      companyName: "Nubank",
+    });
+  });
+
+  it("falls back to the AI-extracted vaga.cargo/empresa when the job has no curated jobTitle/companyName (non-radar analysis)", async () => {
+    pollAnalysisJobMock.mockResolvedValue({
+      ok: true,
+      adaptedContentJson: { vaga: { cargo: "Analista", empresa: "Acme" } },
+      previewText: "preview",
+      masterCvText: "master-cv",
+      analysisCvSnapshotId: "snapshot-radar-1",
+      jobTitle: null,
+      companyName: null,
+    });
+
+    await analyzeMasterCvForJob({
+      masterResumeId: "resume-1",
+      radarJobId: "job-abc",
+      jobDescriptionText: "Descricao da vaga",
+      turnstileToken: "token-1",
+    });
+
+    expect(saveGuestPreviewMock.mock.calls[0]?.[0]).toMatchObject({
+      jobTitle: "Analista",
+      companyName: "Acme",
+    });
+  });
+
   it("does not call saveGuestPreview when analyzeAuthenticatedCv fails", async () => {
     analyzeAuthenticatedCvMock.mockResolvedValue({
       ok: false,

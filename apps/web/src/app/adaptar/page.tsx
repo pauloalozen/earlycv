@@ -603,11 +603,20 @@ function AdaptarPageContent() {
         try {
           const saved = await saveGuestPreview({
             adaptedContentJson: analyzeResult.adaptedContentJson,
-            companyName: analyzeResult.adaptedContentJson?.vaga?.empresa,
+            // Prioriza o cargo/empresa curados do Radar (analyzeResult.
+            // jobTitle/companyName, resolvidos server-side a partir do Job)
+            // sobre o que a IA reextraiu do texto colado — a IA raramente
+            // repete o nome da empresa no corpo da descrição colada, então
+            // falha silenciosamente mesmo com o dado real disponível no Job.
+            companyName:
+              analyzeResult.companyName ??
+              analyzeResult.adaptedContentJson?.vaga?.empresa,
             jobDescriptionText: jobDescription.trim()
               ? jobDescription
               : (radarJob?.description ?? jobDescription),
-            jobTitle: analyzeResult.adaptedContentJson?.vaga?.cargo,
+            jobTitle:
+              analyzeResult.jobTitle ??
+              analyzeResult.adaptedContentJson?.vaga?.cargo,
             masterCvText: analyzeResult.masterCvText,
             analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
             previewText: analyzeResult.previewText,
