@@ -1,6 +1,8 @@
 import { pollAnalysisJob } from "./analysis-job-polling";
 import { analyzeAuthenticatedCv, saveGuestPreview } from "./cv-adaptation-api";
 import { appendTurnstileTokenToAnalyzeFormData } from "./cv-adaptation-flow-helpers";
+import { getJourneySessionInternalId } from "./journey-session";
+import { getOrCreateVisitorId } from "./visitor-id";
 
 export type AnalyzeMasterCvForJobResult =
   | { ok: true; adaptationId: string }
@@ -22,7 +24,22 @@ export async function analyzeMasterCvForJob(params: {
   formData.append("radarJobId", params.radarJobId);
   appendTurnstileTokenToAnalyzeFormData(formData, params.turnstileToken);
 
-  const started = await analyzeAuthenticatedCv(formData);
+  // analyzeAuthenticatedCv/saveGuestPreview são Server Actions — rodam no
+  // servidor Next.js, sem acesso a sessionStorage/localStorage. Precisam
+  // receber sessionInternalId/visitorId explicitamente daqui (lidos no
+  // client), senão o backend nunca vê esses headers e analysis_started/
+  // completed/candidatura_created ficam sem correlação de jornada — mesmo
+  // fix já aplicado em /adaptar/page.tsx, este é o outro caller.
+  const journeyContext = {
+    sessionInternalId: getJourneySessionInternalId(),
+    visitorId: getOrCreateVisitorId(),
+  };
+
+  const started = await analyzeAuthenticatedCv(
+    formData,
+    undefined,
+    journeyContext,
+  );
   if (!started.ok) {
     return { ok: false, error: started.error };
   }
@@ -42,6 +59,8 @@ export async function analyzeMasterCvForJob(params: {
       analysisCvSnapshotId: result.analysisCvSnapshotId,
       previewText: result.previewText,
       radarJobId: params.radarJobId,
+      sessionInternalId: journeyContext.sessionInternalId,
+      visitorId: journeyContext.visitorId,
     });
     return { ok: true, adaptationId: saved.id };
   } catch {
