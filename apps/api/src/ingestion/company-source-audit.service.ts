@@ -3,6 +3,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import {
   companyNameTokens,
+  isSameBoard,
   isStrictLiteralSlugHost,
   MATCH_THRESHOLD,
   normToken,
@@ -38,6 +39,7 @@ export type ApplySummary = {
   dryRun: boolean;
   processed: number;
   jobSourcesDisabled: number;
+  jobSourcesCreated: number;
   companyFieldsCleared: number;
   jobsReassigned: number;
   jobsRemoved: number;
@@ -71,6 +73,20 @@ function safeHost(rawUrl: string): string | null {
 // nunca mexe em Company/JobSource/Job. applyApproved() e quem aplica, e so
 // processa linhas com status="approved" (decidido manualmente via decide()
 // ou pela tela admin).
+//
+// applyApproved(), pro tier "confirmed" (dono real ja e uma Company nossa):
+//   1. Desativa sempre a JobSource errada (isActive=false + pauseReason).
+//   2. Procura entre as fontes do dono real (ativas OU pausadas) uma que
+//      seja o MESMO board (isSameBoard — compara por identidade, nao por
+//      string exata, pra nao perder caso de barra final/maiuscula/dominio
+//      de provedor migrado). Se achar, reatribui as vagas ja importadas
+//      pra ela.
+//   3. Se o dono real nao tem nenhuma fonte pra esse board ainda, CRIA uma
+//      nova JobSource nele (copiando parserKey/sourceType/crawlStrategy da
+//      fonte errada, que e a mesma URL/plataforma, so com o nome errado) e
+//      reatribui as vagas pra essa fonte nova.
+// Tier "high"/"review" (sem dono conhecido no nosso banco): so desativa a
+// fonte errada e marca as vagas ja importadas como "removed".
 @Injectable()
 export class CompanySourceAuditService {
   constructor(
@@ -325,6 +341,7 @@ export class CompanySourceAuditService {
       dryRun,
       processed: approved.length,
       jobSourcesDisabled: 0,
+      jobSourcesCreated: 0,
       companyFieldsCleared: 0,
       jobsReassigned: 0,
       jobsRemoved: 0,
@@ -346,6 +363,11 @@ export class CompanySourceAuditService {
       // field === "sourceUrl"
       if (!audit.jobSourceId) continue;
 
+      const wrongSource = await this.database.jobSource.findUnique({
+        where: { id: audit.jobSourceId },
+      });
+      if (!wrongSource) continue;
+
       if (!dryRun) {
         await this.database.jobSource.update({
           where: { id: audit.jobSourceId },
@@ -360,18 +382,53 @@ export class CompanySourceAuditService {
       let destination: { companyId: string; jobSourceId: string } | null = null;
 
       if (audit.tier === "confirmed" && audit.suspectedOwnerId) {
-        const correctSource = await this.database.jobSource.findFirst({
-          where: {
-            companyId: audit.suspectedOwnerId,
-            sourceUrl: audit.currentUrl,
-            isActive: true,
-          },
+        // Mesmo board, URL so difere de forma cosmetica (barra final,
+        // maiuscula, migracao de dominio do provedor) — nao exige URL
+        // identica nem fonte ativa: a atribuicao (de quem e a vaga) e
+        // independente de estarmos crawleando ali agora.
+        const ownerSources = await this.database.jobSource.findMany({
+          where: { companyId: audit.suspectedOwnerId },
         });
+        const correctSource = ownerSources.find((source) =>
+          isSameBoard(audit.currentUrl, source.sourceUrl),
+        );
+
         if (correctSource) {
           destination = {
             companyId: audit.suspectedOwnerId,
             jobSourceId: correctSource.id,
           };
+        } else {
+          // Dono real ja existe como Company mas ainda nao tem NENHUMA
+          // fonte pra esse board — cria uma nova (copiando adapter/config
+          // da fonte errada, que e a mesma URL/plataforma, so com o nome
+          // errado) em vez de so descartar a vaga.
+          const ownerName = audit.suspectedOwnerName ?? "Empresa";
+          if (!dryRun) {
+            const created = await this.database.jobSource.create({
+              data: {
+                companyId: audit.suspectedOwnerId,
+                sourceUrl: audit.currentUrl,
+                sourceName: `${ownerName} careers`,
+                sourceType: wrongSource.sourceType,
+                parserKey: wrongSource.parserKey,
+                crawlStrategy: wrongSource.crawlStrategy,
+                checkIntervalMinutes: wrongSource.checkIntervalMinutes,
+                isFallbackAdapter: wrongSource.isFallbackAdapter,
+                isActive: true,
+              },
+            });
+            destination = {
+              companyId: audit.suspectedOwnerId,
+              jobSourceId: created.id,
+            };
+          } else {
+            destination = {
+              companyId: audit.suspectedOwnerId,
+              jobSourceId: "(dry-run: nova fonte seria criada aqui)",
+            };
+          }
+          summary.jobSourcesCreated += 1;
         }
       }
 

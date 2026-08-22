@@ -385,3 +385,17 @@ export function scoreUrlAgainstCompany(
 // com sufixo tipo "Brasil"/"(Workday)"); abaixo disso, nos dados
 // observados, a URL nao tinha nenhuma relacao plausivel com o nome.
 export const MATCH_THRESHOLD = 0.6;
+
+// Duas URLs sao o "mesmo board" quando compartilham pelo menos um token de
+// identidade — cobre diferenca cosmetica que uma comparacao de string exata
+// erra: barra final, maiusculas ("Linear" x "linear"), ou o dominio do
+// provedor ter mudado (Greenhouse migrou de "boards.greenhouse.io" pra
+// "job-boards.greenhouse.io" mas o slug da empresa e o mesmo). Usado pelo
+// apply da auditoria (CompanySourceAuditService) pra achar se a empresa
+// dona real ja tem uma fonte cadastrada pro MESMO board, mesmo que a URL
+// nao seja identica caractere por caractere.
+export function isSameBoard(urlA: string, urlB: string): boolean {
+  const tokensA = new Set(identityTokens(urlA));
+  const tokensB = identityTokens(urlB);
+  return tokensB.some((token) => tokensA.has(token));
+}

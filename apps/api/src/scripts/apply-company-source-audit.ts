@@ -31,7 +31,7 @@ async function main() {
     );
     const summary = await service.applyApproved({ dryRun: DRY_RUN });
     console.log(
-      `[apply-company-source-audit] ${summary.processed} linha(s) approved processada(s) — ${summary.jobSourcesDisabled} fonte(s) desativada(s), ${summary.companyFieldsCleared} campo(s) de Company limpo(s), ${summary.jobsReassigned} vaga(s) reatribuida(s), ${summary.jobsRemoved} vaga(s) marcada(s) como removed.`,
+      `[apply-company-source-audit] ${summary.processed} linha(s) approved processada(s) — ${summary.jobSourcesDisabled} fonte(s) desativada(s), ${summary.jobSourcesCreated} fonte(s) nova(s) criada(s), ${summary.companyFieldsCleared} campo(s) de Company limpo(s), ${summary.jobsReassigned} vaga(s) reatribuida(s), ${summary.jobsRemoved} vaga(s) marcada(s) como removed.`,
     );
     if (DRY_RUN) {
       console.log(

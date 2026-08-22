@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   identityTokens,
   isKnownAtsPlatformHost,
+  isSameBoard,
   registrableDomain,
   scoreUrlAgainstCompany,
 } from "./company-source-audit-heuristics";
@@ -90,4 +91,44 @@ test("scoreUrlAgainstCompany: unrelated company/URL pair scores low", () => {
     "UFRA",
   );
   assert.ok(result.score < 0.3, `expected very low match, got ${result.score}`);
+});
+
+test("isSameBoard: recognizes the same Gupy board despite a trailing path (BUY4 x Swap Financial case)", () => {
+  assert.equal(
+    isSameBoard(
+      "https://swapfinancial.gupy.io/",
+      "https://swapfinancial.gupy.io/jobs",
+    ),
+    true,
+  );
+});
+
+test("isSameBoard: recognizes Greenhouse's boards.* -> job-boards.* domain migration as the same board", () => {
+  assert.equal(
+    isSameBoard(
+      "https://boards.greenhouse.io/jusbrasil",
+      "https://job-boards.greenhouse.io/jusbrasil",
+    ),
+    true,
+  );
+});
+
+test("isSameBoard: is case-insensitive on the slug", () => {
+  assert.equal(
+    isSameBoard(
+      "https://jobs.ashbyhq.com/Linear",
+      "https://jobs.ashbyhq.com/linear",
+    ),
+    true,
+  );
+});
+
+test("isSameBoard: different platforms for the same company are NOT the same board", () => {
+  assert.equal(
+    isSameBoard(
+      "https://liber.teamtailor.com/",
+      "https://liber.inhire.app/vagas",
+    ),
+    false,
+  );
 });

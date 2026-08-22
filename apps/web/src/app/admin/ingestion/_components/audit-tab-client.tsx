@@ -360,6 +360,7 @@ export function AuditTabClient() {
             {applyResult.dryRun ? "[dry-run] " : ""}
             {applyResult.processed} processada(s) ·{" "}
             {applyResult.jobSourcesDisabled} fonte(s) desativada(s) ·{" "}
+            {applyResult.jobSourcesCreated} fonte(s) nova(s) ·{" "}
             {applyResult.companyFieldsCleared} campo(s) limpo(s) ·{" "}
             {applyResult.jobsReassigned} vaga(s) reatribuída(s) ·{" "}
             {applyResult.jobsRemoved} vaga(s) removida(s)

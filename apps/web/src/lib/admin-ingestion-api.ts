@@ -886,6 +886,7 @@ export type CompanySourceAuditApplySummary = {
   dryRun: boolean;
   processed: number;
   jobSourcesDisabled: number;
+  jobSourcesCreated: number;
   companyFieldsCleared: number;
   jobsReassigned: number;
   jobsRemoved: number;
