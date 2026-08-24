@@ -4,10 +4,6 @@ import { notFound } from "next/navigation";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getPublicJobsByCompanySlug } from "@/lib/internal-jobs-api";
-import {
-  canAccessJobsInGhostMode,
-  isJobsGhostModeEnabled,
-} from "@/lib/jobs-ghost-mode";
 import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
@@ -32,14 +28,12 @@ export async function generateMetadata({
     };
   }
 
-  const isGhostMode = isJobsGhostModeEnabled();
   const url = getAbsoluteUrl(`/radar/empresa/${companySlug}`);
 
   return {
     title: `Vagas na ${companyName} | EarlyCV`,
     description: `Veja as vagas abertas na ${companyName} e analise seu CV gratuitamente.`,
     alternates: { canonical: url },
-    robots: { index: !isGhostMode, follow: !isGhostMode },
   };
 }
 
@@ -47,12 +41,7 @@ export default async function RadarEmpresaPage({
   params,
   searchParams,
 }: PageProps) {
-  const isGhostMode = isJobsGhostModeEnabled();
   const user = await getCurrentAppUserFromCookies().catch(() => null);
-
-  if (isGhostMode && !canAccessJobsInGhostMode(user?.internalRole)) {
-    notFound();
-  }
 
   const availableCredits = user
     ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
