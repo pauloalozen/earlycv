@@ -110,6 +110,7 @@ export class GoogleIndexingBackfillService {
     pending: number;
     dailyLimit: number;
     estimatedDaysRemaining: number;
+    ingestionJobId: string | null;
   }> {
     const eligible = await this.getEligibleJobs();
     const notified = await this.getNotifiedSlugs(
@@ -117,6 +118,13 @@ export class GoogleIndexingBackfillService {
     );
     const dailyLimit = this.getDailyLimit();
     const pending = eligible.length - notified.size;
+    // Resolvido por jobType (não pelo id fixo do seed) — se o job precisar
+    // ser recriado manualmente algum dia, o botão "Rodar agora" continua
+    // funcionando sem precisar tocar no frontend.
+    const ingestionJob = await this.database.ingestionJob.findFirst({
+      where: { jobType: "GOOGLE_INDEXING_BACKFILL" },
+      select: { id: true },
+    });
 
     return {
       totalEligible: eligible.length,
@@ -124,6 +132,7 @@ export class GoogleIndexingBackfillService {
       pending,
       dailyLimit,
       estimatedDaysRemaining: Math.max(0, Math.ceil(pending / dailyLimit)),
+      ingestionJobId: ingestionJob?.id ?? null,
     };
   }
 }

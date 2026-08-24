@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { IngestionJob, IngestionJobTrigger } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { GoogleIndexingBackfillService } from "../google-indexing/google-indexing-backfill.service";
 import { calculateNextRunAt } from "./ingestion-job-schedule.util";
 import { JobEnrichmentWorker } from "./job-enrichment.worker";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
@@ -10,8 +11,9 @@ import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.reposit
 // (IngestionJobSchedulerService) e o disparo manual
 // (IngestionJobService.runNow) — um unico lugar decide como um
 // IngestionJob vira um IngestionBatchRun (CRAWL ou LOGO_FETCH, drenados por
-// IngestionManualRunnerService) ou um ciclo do worker de enriquecimento
-// (ENRICHMENT), e como a proxima execucao e recalculada.
+// IngestionManualRunnerService) ou um ciclo de worker/service que roda por
+// conta propria (ENRICHMENT, GOOGLE_INDEXING_BACKFILL), e como a proxima
+// execucao e recalculada.
 @Injectable()
 export class IngestionJobDispatchService {
   private readonly logger = new Logger(IngestionJobDispatchService.name);
@@ -22,6 +24,8 @@ export class IngestionJobDispatchService {
     private readonly manualBatchRepository: ManualIngestionBatchRepository,
     @Inject(JobEnrichmentWorker)
     private readonly enrichmentWorker: JobEnrichmentWorker,
+    @Inject(GoogleIndexingBackfillService)
+    private readonly googleIndexingBackfillService: GoogleIndexingBackfillService,
   ) {}
 
   async dispatchJob(job: IngestionJob, trigger: IngestionJobTrigger) {
@@ -55,7 +59,7 @@ export class IngestionJobDispatchService {
           },
           where: { id: jobRun.id },
         });
-      } else {
+      } else if (job.jobType === "ENRICHMENT") {
         await this.database.ingestionJobRun.update({
           data: { startedAt: new Date(), status: "RUNNING" },
           where: { id: jobRun.id },
@@ -63,6 +67,24 @@ export class IngestionJobDispatchService {
         await this.enrichmentWorker.runNow();
         await this.database.ingestionJobRun.update({
           data: { finishedAt: new Date(), status: "COMPLETED" },
+          where: { id: jobRun.id },
+        });
+      } else {
+        await this.database.ingestionJobRun.update({
+          data: { startedAt: new Date(), status: "RUNNING" },
+          where: { id: jobRun.id },
+        });
+        const result =
+          await this.googleIndexingBackfillService.runBackfillBatch();
+        await this.database.ingestionJobRun.update({
+          data: {
+            finishedAt: new Date(),
+            status: "COMPLETED",
+            errorMessage:
+              result.processed === 0
+                ? "nenhuma vaga pendente"
+                : `${result.succeeded}/${result.processed} notificados, ${result.failed} falharam`,
+          },
           where: { id: jobRun.id },
         });
       }

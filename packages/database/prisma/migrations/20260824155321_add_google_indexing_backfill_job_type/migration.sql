@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "IngestionJobType" ADD VALUE 'GOOGLE_INDEXING_BACKFILL';

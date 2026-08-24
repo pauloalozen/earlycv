@@ -14,7 +14,12 @@ import {
 
 type ScopeType = "ADAPTER" | "SOURCE" | "ALL";
 type ScheduleType = "MANUAL" | "DAILY" | "EVERY_N_HOURS" | "WEEKLY";
-type JobType = "CRAWL" | "ENRICHMENT" | "LOGO_FETCH" | "DISCOVERY_VALIDATE";
+type JobType =
+  | "CRAWL"
+  | "ENRICHMENT"
+  | "LOGO_FETCH"
+  | "DISCOVERY_VALIDATE"
+  | "GOOGLE_INDEXING_BACKFILL";
 
 // Adapters com extractor de logo implementado no backend (ver
 // LOGO_EXTRACTORS em apps/api/src/ingestion/company-logo/logo-extractors.ts)
@@ -130,7 +135,12 @@ function frequencyLabel(job: IngestionJobRow) {
 }
 
 function scopeLabel(job: IngestionJobRow) {
-  if (job.jobType === "ENRICHMENT") return "—";
+  if (
+    job.jobType === "ENRICHMENT" ||
+    job.jobType === "GOOGLE_INDEXING_BACKFILL"
+  ) {
+    return "—";
+  }
   if (job.jobType === "DISCOVERY_VALIDATE") {
     return job.discoveryValidateLimit
       ? `Até ${job.discoveryValidateLimit} candidato(s)`

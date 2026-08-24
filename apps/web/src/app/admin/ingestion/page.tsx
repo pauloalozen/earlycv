@@ -17,6 +17,7 @@ import { AuditTabClient } from "./_components/audit-tab-client";
 import { DiscoveryTabClient } from "./_components/discovery-tab-client";
 import { EnrichmentTabContent } from "./_components/enrichment-tab-content";
 import { FontesTableClient } from "./_components/fontes-table-client";
+import { IndexacaoTabClient } from "./_components/indexacao-tab-client";
 import { IngestionDashboardCards } from "./_components/ingestion-dashboard-cards";
 import { JobsTabClient } from "./_components/jobs-tab-client";
 import { VagasTabClient } from "./_components/vagas-tab-client";
@@ -24,7 +25,14 @@ import { VagasTabClient } from "./_components/vagas-tab-client";
 export const metadata = buildAdminMetadata("Ingestao");
 
 type SearchParams = Promise<{
-  tab?: "fontes" | "vagas" | "jobs" | "enrichment" | "descoberta" | "audit";
+  tab?:
+    | "fontes"
+    | "vagas"
+    | "jobs"
+    | "enrichment"
+    | "descoberta"
+    | "audit"
+    | "indexacao";
   message?: string;
   status?: string;
   vagaQuery?: string;
@@ -142,6 +150,7 @@ export default async function AdminIngestionPage({
     "enrichment",
     "descoberta",
     "audit",
+    "indexacao",
   ] as const;
   const activeTab = VALID_TABS.includes(tab as (typeof VALID_TABS)[number])
     ? (tab as (typeof VALID_TABS)[number])
@@ -236,6 +245,9 @@ export default async function AdminIngestionPage({
           >
             Fontes
           </TabLink>
+          <TabLink active={activeTab === "audit"} href={buildTabHref("audit")}>
+            Audit de Fontes
+          </TabLink>
           <TabLink
             active={activeTab === "descoberta"}
             badgeCount={promotableDiscoveriesCount}
@@ -252,11 +264,14 @@ export default async function AdminIngestionPage({
           <TabLink active={activeTab === "vagas"} href={buildTabHref("vagas")}>
             Vagas
           </TabLink>
+          <TabLink
+            active={activeTab === "indexacao"}
+            href={buildTabHref("indexacao")}
+          >
+            Indexação de vagas
+          </TabLink>
           <TabLink active={activeTab === "jobs"} href={buildTabHref("jobs")}>
             Jobs
-          </TabLink>
-          <TabLink active={activeTab === "audit"} href={buildTabHref("audit")}>
-            Audit de Fontes
           </TabLink>
         </div>
 
@@ -303,6 +318,9 @@ export default async function AdminIngestionPage({
             sources={jobSourceOptions}
           />
         )}
+
+        {/* ── INDEXAÇÃO DE VAGAS ── */}
+        {activeTab === "indexacao" && <IndexacaoTabClient />}
 
         {/* ── DESCOBERTA ── */}
         {activeTab === "descoberta" && <DiscoveryTabClient />}

@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { IngestionJob } from "@prisma/client";
 import type { DatabaseService } from "../database/database.service";
+import type { GoogleIndexingBackfillService } from "../google-indexing/google-indexing-backfill.service";
 import { IngestionJobDispatchService } from "./ingestion-job-dispatch.service";
 import type { JobEnrichmentWorker } from "./job-enrichment.worker";
 import type { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
@@ -128,15 +129,25 @@ function createFixture() {
     },
   } as unknown as JobEnrichmentWorker;
 
+  let backfillCalls = 0;
+  const googleIndexingBackfillService = {
+    runBackfillBatch: async () => {
+      backfillCalls += 1;
+      return { dailyLimit: 200, failed: 0, processed: 3, succeeded: 3 };
+    },
+  } as unknown as GoogleIndexingBackfillService;
+
   const service = new IngestionJobDispatchService(
     database,
     manualBatchRepository,
     enrichmentWorker,
+    googleIndexingBackfillService,
   );
 
   return {
     createdBatchRuns,
     discoveryValidateInputs,
+    getBackfillCalls: () => backfillCalls,
     getJobUpdates: () => jobUpdates,
     getRunNowCalls: () => runNowCalls,
     jobRuns,
@@ -276,6 +287,26 @@ test("dispatchJob DISCOVERY_VALIDATE sem limit passa undefined (fila inteira)", 
   await service.dispatchJob(job, "MANUAL");
 
   assert.equal(discoveryValidateInputs[0]?.candidateLimit, undefined);
+});
+
+test("dispatchJob GOOGLE_INDEXING_BACKFILL chama runBackfillBatch() e resume o resultado em errorMessage", async () => {
+  const { service, getBackfillCalls, getJobUpdates } = createFixture();
+  const job = createJob({
+    jobType: "GOOGLE_INDEXING_BACKFILL",
+    scheduleHour: 3,
+    scheduleType: "DAILY",
+    scopeType: null,
+  });
+
+  const run = await service.dispatchJob(job, "SCHEDULE");
+
+  assert.equal(getBackfillCalls(), 1);
+  assert.equal(run.status, "COMPLETED");
+  assert.equal(run.errorMessage, "3/3 notificados, 0 falharam");
+
+  const jobUpdates = getJobUpdates();
+  assert.equal(jobUpdates.length, 1);
+  assert.ok(jobUpdates[0]?.data.nextRunAt instanceof Date);
 });
 
 test("dispatchJob LOGO_FETCH com escopo SOURCE falha (nao suportado)", async () => {
