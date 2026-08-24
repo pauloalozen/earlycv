@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
-import { AT } from "@/app/admin/_components/admin-primitives";
-import type { GoogleIndexingBackfillStatus } from "@/lib/admin-ingestion-api";
+import {
+  AdminPagination,
+  AdminPill,
+  AdminTable,
+  AdminTd,
+  AdminTh,
+  AT,
+} from "@/app/admin/_components/admin-primitives";
+import type {
+  GoogleIndexingBackfillStatus,
+  GoogleIndexingJobStatus,
+  GoogleIndexingJobsPage,
+} from "@/lib/admin-ingestion-api";
 
 const STAT_ITEMS: Array<{
   key: keyof GoogleIndexingBackfillStatus;
@@ -12,9 +23,26 @@ const STAT_ITEMS: Array<{
   { key: "totalEligible", label: "Elegíveis" },
   { key: "notified", label: "Notificadas" },
   { key: "pending", label: "Pendentes (passivo)" },
+  { key: "notifiedToday", label: "Cota usada hoje" },
   { key: "dailyLimit", label: "Cota diária" },
   { key: "estimatedDaysRemaining", label: "Dias restantes (estimado)" },
 ];
+
+const STATUS_LABELS: Record<
+  GoogleIndexingJobStatus,
+  { label: string; tone: "warn" | "ok" | "danger" }
+> = {
+  pending: { label: "Pendente", tone: "warn" },
+  notified: { label: "Notificada", tone: "ok" },
+  failed: { label: "Falhou", tone: "danger" },
+};
+
+function formatDateTime(value: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR");
+}
+
+const PAGE_SIZE = 20;
 
 export function IndexacaoTabClient() {
   const [status, setStatus] = useState<GoogleIndexingBackfillStatus | null>(
@@ -23,6 +51,12 @@ export function IndexacaoTabClient() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [statusFilter, setStatusFilter] =
+    useState<GoogleIndexingJobStatus>("pending");
+  const [page, setPage] = useState(1);
+  const [jobsPage, setJobsPage] = useState<GoogleIndexingJobsPage | null>(null);
+  const [jobsLoading, setJobsLoading] = useState(true);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -40,9 +74,39 @@ export function IndexacaoTabClient() {
     }
   }, []);
 
+  const fetchJobs = useCallback(async () => {
+    setJobsLoading(true);
+    try {
+      const qs = new URLSearchParams({
+        status: statusFilter,
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+      const res = await fetch(
+        `/api/admin/ingestion/google-indexing/jobs?${qs}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) throw new Error("failed to fetch jobs");
+      setJobsPage(await res.json());
+    } catch {
+      setJobsPage(null);
+    } finally {
+      setJobsLoading(false);
+    }
+  }, [statusFilter, page]);
+
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
+
+  function handleStatusFilterChange(next: GoogleIndexingJobStatus) {
+    setStatusFilter(next);
+    setPage(1);
+  }
 
   async function handleRunNow() {
     if (!status?.ingestionJobId) return;
@@ -52,11 +116,15 @@ export function IndexacaoTabClient() {
         `/api/admin/ingestion/ingestion-jobs/${status.ingestionJobId}/run-now`,
         { method: "POST" },
       );
-      await fetchStatus();
+      await Promise.all([fetchStatus(), fetchJobs()]);
     } finally {
       setRunning(false);
     }
   }
+
+  const totalPages = jobsPage
+    ? Math.max(1, Math.ceil(jobsPage.total / jobsPage.pageSize))
+    : 1;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -91,7 +159,7 @@ export function IndexacaoTabClient() {
           style={{
             display: "grid",
             gap: 16,
-            gridTemplateColumns: "repeat(5, 1fr)",
+            gridTemplateColumns: "repeat(6, 1fr)",
           }}
         >
           {STAT_ITEMS.map((item) => (
@@ -128,6 +196,92 @@ export function IndexacaoTabClient() {
         Histórico de execuções (agendadas e manuais) fica na aba{" "}
         <strong>Jobs</strong>, job “Indexação de vagas (Google)”.
       </p>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        {(Object.keys(STATUS_LABELS) as GoogleIndexingJobStatus[]).map(
+          (option) => (
+            <button
+              className={buttonVariants({
+                size: "sm",
+                variant: statusFilter === option ? "default" : "outline",
+              })}
+              key={option}
+              onClick={() => handleStatusFilterChange(option)}
+              type="button"
+            >
+              {STATUS_LABELS[option].label}
+            </button>
+          ),
+        )}
+      </div>
+
+      <AdminTable>
+        <thead>
+          <tr>
+            <AdminTh>Vaga</AdminTh>
+            <AdminTh>Empresa</AdminTh>
+            <AdminTh w={90}>Status</AdminTh>
+            <AdminTh w={150}>Última tentativa</AdminTh>
+            <AdminTh>Erro</AdminTh>
+          </tr>
+        </thead>
+        <tbody>
+          {!jobsLoading && (!jobsPage || jobsPage.jobs.length === 0) && (
+            <tr>
+              <td
+                colSpan={5}
+                style={{
+                  color: AT.muted,
+                  padding: "32px 16px",
+                  textAlign: "center",
+                }}
+              >
+                Nenhuma vaga nesse status.
+              </td>
+            </tr>
+          )}
+          {jobsPage?.jobs.map((job) => (
+            <tr key={job.id}>
+              <AdminTd>{job.title}</AdminTd>
+              <AdminTd muted>{job.companyName}</AdminTd>
+              <AdminTd>
+                <AdminPill tone={STATUS_LABELS[statusFilter].tone} mono>
+                  {STATUS_LABELS[statusFilter].label}
+                </AdminPill>
+              </AdminTd>
+              <AdminTd mono muted>
+                {formatDateTime(job.lastAttemptAt)}
+              </AdminTd>
+              <AdminTd muted>{job.lastError ?? "—"}</AdminTd>
+            </tr>
+          ))}
+        </tbody>
+      </AdminTable>
+
+      {jobsPage && (
+        <AdminPagination
+          summary={`página ${page} de ${totalPages} · ${jobsPage.total} vagas`}
+        >
+          {page > 1 && (
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              onClick={() => setPage((p) => p - 1)}
+              type="button"
+            >
+              ← anterior
+            </button>
+          )}
+          {page < totalPages && (
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              onClick={() => setPage((p) => p + 1)}
+              type="button"
+            >
+              próxima →
+            </button>
+          )}
+        </AdminPagination>
+      )}
     </div>
   );
 }
