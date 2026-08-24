@@ -219,16 +219,28 @@ export class AuthController {
     // nunca antes do login em si, e nunca condiciona se o login acontece.
     // Um state ausente/expirado/já consumido/inexistente só significa "esta
     // ida ao Google não nasceu de uma análise guest pendente (ou o vínculo
-    // já morreu)" — nunca quebra o fluxo de autenticação. A associação
-    // real da análise ao usuário (claim) é Fase 4; aqui só repassamos o
-    // analysisJobId resolvido adiante, via query — não é segredo (o
-    // guestPossessionToken, que era o segredo, já foi gasto no passo
-    // anterior, em POST /auth/oauth-attempts).
+    // já morreu)" — nunca quebra o fluxo de autenticação.
     const state =
       typeof request.query?.state === "string" ? request.query.state : null;
     const resolvedAttempt = state
       ? await this.oauthAttemptService.resolveAndConsume(state)
       : null;
+
+    if (resolvedAttempt) {
+      // Única porta de transferência de ownership do AnalysisJob guest —
+      // a correlação já foi provada criptograficamente (possession token
+      // na criação do OAuthAttempt + state amarrado a esta tentativa
+      // específica). A materialização da CvAdaptation em si (sem
+      // reprocessar IA) é Fase 4, acionada depois via polling autenticado
+      // — aqui só repassamos o analysisJobId adiante via query do
+      // redirect, o que é seguro porque não é mais segredo (o
+      // guestPossessionToken, que era o segredo, já foi gasto no passo
+      // anterior, em POST /auth/oauth-attempts).
+      await this.oauthAttemptService.transferAnalysisJobOwnership(
+        resolvedAttempt.analysisJobId,
+        tokens.user.id,
+      );
+    }
 
     return this.buildSocialRedirect(tokens, resolvedAttempt?.analysisJobId);
   }

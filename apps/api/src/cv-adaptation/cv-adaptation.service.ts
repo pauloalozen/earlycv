@@ -1441,6 +1441,80 @@ export class CvAdaptationService {
     return { status: job.status };
   }
 
+  // Fase 4 do gate de autenticação guest — claim server-side, sem
+  // reprocessar IA. Diferente de getGuestAnalysisJobStatusOnly, este
+  // método é chamado só depois de autenticado: ownership do AnalysisJob
+  // já foi transferida em transferAnalysisJobOwnership
+  // (OAuthAttemptService, disparada a partir da correlação provada por
+  // possession token + state no callback OAuth) — aqui a checagem é
+  // simplesmente job.userId === userId, o mesmo padrão de
+  // getAnalysisJobStatus para autenticado. Não aceita jobId "solto" de
+  // outro usuário, nunca.
+  //
+  // O conteúdo (adaptedContentJson/previewText/masterCvText/jobTitle/
+  // companyName/jobDescriptionText) vem estritamente do que
+  // processAnalysisJob já gravou no AnalysisJob — nunca do corpo da
+  // requisição. Delega para saveGuestPreview (já testado, já usado hoje)
+  // só trocando a FONTE dos dados de entrada; toda a lógica de resolução
+  // de master CV, dedupe por (userId, analysisCvSnapshotId), hook de
+  // candidatura e markAnalysisJobConverted é reaproveitada sem alteração
+  // — o que garante, pelas mesmas garantias já existentes, que a
+  // CvAdaptation criada aqui continua vinculada ao analysisCvSnapshotId
+  // (crítico: é essa vinculação que exclui o snapshot do cleanup de 30
+  // dias em cleanupExpiredGuestSnapshots).
+  async claimGuestAnalysisJob(
+    userId: string,
+    jobId: string,
+  ): Promise<
+    | { status: "pending" | "processing" | "failed" }
+    | { status: "succeeded"; cvAdaptationId: string }
+  > {
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (!job || job.userId !== userId) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    // Idempotente: se já convertida (claim repetido, callback duplicado,
+    // tentativa concorrente que já terminou antes), devolve o resultado
+    // existente sem tocar em nada de novo.
+    if (job.convertedAt && job.convertedCvAdaptationId) {
+      return {
+        status: "succeeded",
+        cvAdaptationId: job.convertedCvAdaptationId,
+      };
+    }
+
+    if (job.status !== "succeeded") {
+      return { status: job.status };
+    }
+
+    if (!job.analysisCvSnapshotId) {
+      throw new BadRequestException(
+        "Succeeded analysis job is missing its snapshot reference.",
+      );
+    }
+
+    const dto: SaveGuestPreviewDto = {
+      adaptedContentJson: (job.adaptedContentJson ?? {}) as Record<
+        string,
+        unknown
+      >,
+      previewText: job.previewText ?? undefined,
+      jobDescriptionText: job.jobDescriptionText,
+      masterCvText: job.masterCvText ?? "",
+      analysisCvSnapshotId: job.analysisCvSnapshotId,
+      jobTitle: job.jobTitle ?? undefined,
+      companyName: job.companyName ?? undefined,
+    };
+
+    const adaptation = await this.saveGuestPreview(userId, dto);
+
+    return { status: "succeeded", cvAdaptationId: adaptation.id };
+  }
+
   async analyzeAuthenticated(
     userId: string,
     dto: AnalyzeCvDto,

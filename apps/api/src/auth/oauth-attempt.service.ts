@@ -122,6 +122,28 @@ export class OAuthAttemptService {
     return attempt;
   }
 
+  // Transferência de posse do AnalysisJob guest para o usuário recém-
+  // autenticado — a ÚNICA porta pela qual isso pode acontecer, porque só
+  // aqui a correlação já foi provada criptograficamente (possession token
+  // verificado na criação do OAuthAttempt + state amarrado àquela tentativa
+  // específica). Nenhum outro endpoint aceita um jobId "solto" para
+  // transferir ownership. Idempotente: só atualiza se o job ainda não tem
+  // dono (userId null) ou já pertence a este mesmo usuário (retry seguro);
+  // nunca sobrescreve um dono diferente.
+  async transferAnalysisJobOwnership(
+    analysisJobId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.database.analysisJob.updateMany({
+      where: {
+        id: analysisJobId,
+        ownerKind: "guest",
+        OR: [{ userId: null }, { userId }],
+      },
+      data: { userId },
+    });
+  }
+
   private normalizeConversionContext(value: string | undefined) {
     return value &&
       (SIGNUP_CONVERSION_CONTEXTS as readonly string[]).includes(value)

@@ -5437,3 +5437,227 @@ test("getGuestAnalysisJobStatusOnly throws NotFoundException when the token belo
     /analysis job not found/,
   );
 });
+
+// Fase 4: claimGuestAnalysisJob — claim server-side sem reprocessar IA. O
+// conteúdo vem estritamente do AnalysisJob já processado, nunca de um
+// payload externo; ownership é job.userId === userId (já transferida em
+// transferAnalysisJobOwnership); idempotente para callback repetido, claim
+// repetido e tentativa concorrente.
+
+const baseSucceededJob = () => ({
+  id: "job-succeeded-1",
+  userId: "user-1",
+  ownerKind: "guest",
+  status: "succeeded",
+  convertedAt: null,
+  convertedCvAdaptationId: null,
+  analysisCvSnapshotId: "snapshot-1",
+  adaptedContentJson: { fit: { score: 88 }, vaga: { cargo: "Analista" } },
+  previewText: "preview do backend",
+  masterCvText: "CV completo extraído pelo backend",
+  jobDescriptionText:
+    "Vaga com descricao suficientemente longa para passar na validacao interna.",
+  jobTitle: "Analista de Dados",
+  companyName: "EarlyCV",
+});
+
+function makeClaimServiceMocks(job: ReturnType<typeof baseSucceededJob>) {
+  const capturedCvAdaptationCreateData: Array<Record<string, unknown>> = [];
+
+  const database = {
+    resumeTemplate: { findFirst: async () => null },
+    resume: {
+      findFirst: async ({ where }: { where: { kind?: string } }) => {
+        if (where.kind === "master") return null;
+        return { id: "adapted-resume-1" };
+      },
+      create: async () => ({ id: "new-master-1" }),
+    },
+    cvAdaptation: {
+      findFirst: async () => null,
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        capturedCvAdaptationCreateData.push(data);
+        return {
+          id: "cv-adaptation-claimed-1",
+          isUnlocked: false,
+          paidAt: null,
+          paymentStatus: "none",
+          unlockedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...data,
+        };
+      },
+    },
+    analysisCvSnapshot: {
+      findUnique: async () => ({
+        id: job.analysisCvSnapshotId,
+        userId: null,
+        guestSessionHash: null,
+        expiresAt: null,
+        claimedAt: null,
+        claimedByUserId: null,
+      }),
+      update: async () => ({
+        id: job.analysisCvSnapshotId,
+        originalFileName: null,
+      }),
+    },
+    analysisJob: {
+      findUnique: async () => ({ ...job }),
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { analysisCvSnapshotId: string; convertedAt: null };
+        data: Record<string, unknown>;
+      }) => {
+        if (
+          where.analysisCvSnapshotId === job.analysisCvSnapshotId &&
+          job.convertedAt === null
+        ) {
+          Object.assign(job, data);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      },
+    },
+  };
+
+  const aiService = {
+    analyzeAndAdapt: async () => {},
+    analyzeAndAdaptDirect: async () => {
+      throw new Error("claimGuestAnalysisJob must never call AI");
+    },
+    buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+  };
+
+  const protectedAnalyzeService = {
+    executeProtectedAnalyze: async () => {
+      throw new Error(
+        "claimGuestAnalysisJob must never call the AI provider gateway",
+      );
+    },
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    database,
+    aiService,
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    protectedAnalyzeService,
+  );
+
+  return { service, capturedCvAdaptationCreateData, database };
+}
+
+test("claimGuestAnalysisJob rejects when the job does not belong to the caller — jobId alone never grants access", async () => {
+  const job = baseSucceededJob();
+  const { service } = makeClaimServiceMocks(job);
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("someone-else", job.id),
+    /analysis job not found/,
+  );
+});
+
+test("claimGuestAnalysisJob rejects when the job does not exist", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("user-1", "job-missing"),
+    /analysis job not found/,
+  );
+});
+
+test("claimGuestAnalysisJob returns { status } without materializing anything while the job is still processing", async () => {
+  const job = { ...baseSucceededJob(), status: "processing" };
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const result = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.deepEqual(result, { status: "processing" });
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob returns { status: 'failed' } for a failed job, no materialization", async () => {
+  const job = { ...baseSucceededJob(), status: "failed" };
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const result = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.deepEqual(result, { status: "failed" });
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob materializes CvAdaptation strictly from AnalysisJob content — never from an external payload — and never calls AI", async () => {
+  const job = baseSucceededJob();
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const result = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(
+    (result as { cvAdaptationId: string }).cvAdaptationId,
+    "cv-adaptation-claimed-1",
+  );
+
+  assert.equal(capturedCvAdaptationCreateData.length, 1);
+  const created = capturedCvAdaptationCreateData[0];
+  assert.deepEqual(created.adaptedContentJson, job.adaptedContentJson);
+  assert.equal(created.previewText, job.previewText);
+  assert.equal(created.jobDescriptionText, job.jobDescriptionText);
+  assert.equal(created.jobTitle, job.jobTitle);
+  assert.equal(created.companyName, job.companyName);
+  // Critério crítico: continua vinculada ao analysisCvSnapshotId — é essa
+  // vinculação que exclui o snapshot do cleanup de 30 dias.
+  assert.equal(created.analysisCvSnapshotId, job.analysisCvSnapshotId);
+});
+
+test("claimGuestAnalysisJob throws when a succeeded job is missing its snapshot reference", async () => {
+  const job = { ...baseSucceededJob(), analysisCvSnapshotId: null };
+  const { service } = makeClaimServiceMocks(job as never);
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("user-1", job.id),
+    /missing its snapshot reference/,
+  );
+});
+
+test("claimGuestAnalysisJob is idempotent — a repeated call after conversion returns the cached result without creating a second CvAdaptation (callback duplicado / claim repetido)", async () => {
+  const job = baseSucceededJob();
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const first = await service.claimGuestAnalysisJob("user-1", job.id);
+  const second = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.deepEqual(first, second);
+  assert.equal(capturedCvAdaptationCreateData.length, 1);
+});
+
+// Nota sobre concorrência real: um teste unitário com mocks síncronos não
+// prova nada sobre duas requisições HTTP verdadeiramente concorrentes —
+// mocks resolvem de forma determinística no event loop, sem a latência
+// real de I/O que cria a janela de corrida. A proteção estrutural real
+// contra duas CvAdaptation duplicadas para o mesmo snapshot é a constraint
+// `@unique` em `CvAdaptation.analysisCvSnapshotId` (schema.prisma, já
+// existente, não alterada por esta fase) — o Postgres rejeita a segunda
+// inserção concorrente com um erro de constraint, não duplica
+// silenciosamente. Um teste e2e com duas requisições HTTP reais em paralelo
+// contra o Postgres de teste cobre isso em cv-adaptation.e2e-spec.ts.

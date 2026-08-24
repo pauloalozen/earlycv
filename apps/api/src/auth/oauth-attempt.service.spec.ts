@@ -271,3 +271,73 @@ test("duas abas com dois jobs diferentes: cada state resolve para o analysisJobI
   assert.equal(await service.resolveAndConsume("state-tab-a"), null);
   assert.equal(await service.resolveAndConsume("state-tab-b"), null);
 });
+
+// Fase 4: transferAnalysisJobOwnership é a ÚNICA porta pela qual um
+// AnalysisJob guest ganha userId — nunca aceita um jobId "solto" de um
+// endpoint autenticado genérico, só é chamada logo após resolveAndConsume
+// já ter provado a correlação.
+
+test("transferAnalysisJobOwnership sets userId when the job has no owner yet", async () => {
+  let receivedWhere: Record<string, unknown> | null = null;
+  let receivedData: Record<string, unknown> | null = null;
+
+  const service = new OAuthAttemptServiceCtor({
+    analysisJob: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
+        receivedWhere = where;
+        receivedData = data;
+        return { count: 1 };
+      },
+    },
+  });
+
+  await service.transferAnalysisJobOwnership("job-1", "user-1");
+
+  assert.deepEqual(receivedData, { userId: "user-1" });
+  assert.deepEqual(receivedWhere, {
+    id: "job-1",
+    ownerKind: "guest",
+    OR: [{ userId: null }, { userId: "user-1" }],
+  });
+});
+
+test("transferAnalysisJobOwnership is idempotent — calling it twice for the same user never errors and never needs a different code path", async () => {
+  let calls = 0;
+  const service = new OAuthAttemptServiceCtor({
+    analysisJob: {
+      updateMany: async () => {
+        calls += 1;
+        return { count: calls === 1 ? 1 : 1 };
+      },
+    },
+  });
+
+  await service.transferAnalysisJobOwnership("job-1", "user-1");
+  await service.transferAnalysisJobOwnership("job-1", "user-1");
+
+  assert.equal(calls, 2);
+});
+
+test("transferAnalysisJobOwnership never overwrites a job already owned by a different user (where clause excludes it — count would be 0 against real Postgres)", async () => {
+  const service = new OAuthAttemptServiceCtor({
+    analysisJob: {
+      updateMany: async ({ where }: { where: { OR: unknown[] } }) => {
+        // Simula o comportamento real do Postgres: como where.OR só casa
+        // userId:null OU userId:"user-1", uma linha com userId:"user-2"
+        // nunca seria atingida — count 0, nada muda.
+        assert.deepEqual(where.OR, [{ userId: null }, { userId: "user-1" }]);
+        return { count: 0 };
+      },
+    },
+  });
+
+  // Não deve lançar mesmo quando o update não afeta nenhuma linha (job já
+  // pertence a outro usuário) — é um no-op silencioso por desenho.
+  await service.transferAnalysisJobOwnership("job-1", "user-1");
+});

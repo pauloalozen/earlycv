@@ -35,8 +35,12 @@ const makeAuthService = () =>
 const fakeResponse = { cookie: () => undefined };
 const expectedBase = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
-test("googleCallback resolves a valid state and appends analysisJobId to the redirect — login proceeds regardless", async () => {
+test("googleCallback resolves a valid state, transfers AnalysisJob ownership to the just-authenticated user, and appends analysisJobId to the redirect — login proceeds regardless", async () => {
   let receivedState: string | undefined;
+  let receivedOwnershipTransfer: {
+    analysisJobId: string;
+    userId: string;
+  } | null = null;
   const oauthAttemptService = {
     resolveAndConsume: async (state: string) => {
       receivedState = state;
@@ -46,6 +50,12 @@ test("googleCallback resolves a valid state and appends analysisJobId to the red
         journeySessionInternalId: "sid-1",
         visitorId: "vid-1",
       };
+    },
+    transferAnalysisJobOwnership: async (
+      analysisJobId: string,
+      userId: string,
+    ) => {
+      receivedOwnershipTransfer = { analysisJobId, userId };
     },
   } as unknown as OAuthAttemptService;
 
@@ -68,6 +78,10 @@ test("googleCallback resolves a valid state and appends analysisJobId to the red
   );
 
   assert.equal(receivedState, "valid-state");
+  assert.deepEqual(receivedOwnershipTransfer, {
+    analysisJobId: "job-resolved-1",
+    userId: expectedSession.user.id,
+  });
   assert.equal(
     result.url,
     `${expectedBase}/auth/social-callback?accessToken=${expectedSession.accessToken}&refreshToken=${expectedSession.refreshToken}&analysisJobId=job-resolved-1`,
