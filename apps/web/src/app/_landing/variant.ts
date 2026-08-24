@@ -1,4 +1,4 @@
-export type LandingVariant = "A" | "B" | "C" | "D" | "E";
+export type LandingVariant = "A" | "B" | "C" | "D" | "E" | "F";
 
 export function resolveLandingVariant(
   rawVariant: string | undefined,
@@ -7,5 +7,6 @@ export function resolveLandingVariant(
   if (rawVariant === "C") return "C";
   if (rawVariant === "D") return "D";
   if (rawVariant === "E") return "E";
+  if (rawVariant === "F") return "F";
   return "A";
 }

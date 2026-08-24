@@ -12,5 +12,6 @@ describe("resolveLandingVariant", () => {
     expect(resolveLandingVariant("A")).toBe("A");
     expect(resolveLandingVariant("B")).toBe("B");
     expect(resolveLandingVariant("C")).toBe("C");
+    expect(resolveLandingVariant("F")).toBe("F");
   });
 });
