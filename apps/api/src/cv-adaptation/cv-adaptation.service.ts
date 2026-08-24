@@ -30,6 +30,10 @@ import {
   extractTextFromCvFile,
   validateCvFileEnvelope,
 } from "../common/cv-text-extractor";
+import {
+  hashGuestPossessionToken,
+  possessionTokenMatchesHash,
+} from "../common/guest-possession-token";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
@@ -977,7 +981,7 @@ export class CvAdaptationService {
     // uma única vez ao cliente, só o hash SHA-256 é persistido.
     const guestPossessionToken = randomBytes(32).toString("hex");
     const guestPossessionTokenHash =
-      this.hashGuestPossessionToken(guestPossessionToken);
+      hashGuestPossessionToken(guestPossessionToken);
 
     const job = await this.database.analysisJob.create({
       data: {
@@ -5027,16 +5031,15 @@ export class CvAdaptationService {
     return createHash("sha256").update(token).digest("hex");
   }
 
-  private hashGuestPossessionToken(rawToken: string): string {
-    return createHash("sha256").update(rawToken).digest("hex");
-  }
-
   // Prova de posse real de uma AnalysisJob guest — jobId (cuid) sozinho
   // identifica a análise, mas nunca autentica posse dela; só quem recebeu
   // o guestPossessionToken cru na resposta de analyze-guest consegue
-  // passar aqui. Comparação em tempo constante (mesmo padrão já usado para
-  // assinatura de webhook em verifyWebhookSignature) para não vazar o hash
-  // por diferença de timing.
+  // passar aqui. Comparação em tempo constante via possessionTokenMatchesHash
+  // (mesmo padrão já usado para assinatura de webhook em
+  // verifyWebhookSignature) para não vazar o hash por diferença de timing.
+  // Job já convertido (claimed) também falha aqui deliberadamente — uma vez
+  // vinculado a um usuário, o token de posse guest deixa de valer como
+  // credencial (o dono passa a ser o userId, não mais o token).
   async verifyGuestPossessionToken(
     jobId: string,
     rawToken: string,
@@ -5045,20 +5048,23 @@ export class CvAdaptationService {
 
     const job = await this.database.analysisJob.findUnique({
       where: { id: jobId },
-      select: { ownerKind: true, guestPossessionTokenHash: true },
+      select: {
+        ownerKind: true,
+        guestPossessionTokenHash: true,
+        convertedAt: true,
+      },
     });
 
-    if (!job || job.ownerKind !== "guest" || !job.guestPossessionTokenHash) {
+    if (
+      !job ||
+      job.ownerKind !== "guest" ||
+      !job.guestPossessionTokenHash ||
+      job.convertedAt
+    ) {
       return false;
     }
 
-    const expectedBuf = Buffer.from(job.guestPossessionTokenHash);
-    const receivedBuf = Buffer.from(this.hashGuestPossessionToken(rawToken));
-
-    return (
-      expectedBuf.length === receivedBuf.length &&
-      timingSafeEqual(expectedBuf, receivedBuf)
-    );
+    return possessionTokenMatchesHash(rawToken, job.guestPossessionTokenHash);
   }
 
   private getSnapshotEnforcementReleaseDate() {
