@@ -64,6 +64,9 @@ function createFixture() {
             (!where.createdAt || log.createdAt >= where.createdAt.gte),
         ).length,
     },
+    ingestionJob: {
+      findFirst: async () => ({ id: "seed-google-indexing-backfill-job" }),
+    },
   };
 
   // Espelha o comportamento real de GoogleIndexingService.notify: sempre

@@ -1340,6 +1340,7 @@ enum IngestionJobType {
   ENRICHMENT
   LOGO_FETCH
   DISCOVERY_VALIDATE
+  GOOGLE_INDEXING_BACKFILL
 }
 
 enum IngestionJobScopeType {
