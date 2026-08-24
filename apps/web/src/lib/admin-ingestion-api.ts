@@ -387,8 +387,29 @@ export type GoogleIndexingBackfillStatus = {
   notified: number;
   pending: number;
   dailyLimit: number;
+  notifiedToday: number;
   estimatedDaysRemaining: number;
   ingestionJobId: string | null;
+};
+
+export type GoogleIndexingJobStatus = "pending" | "notified" | "failed";
+
+export type GoogleIndexingJobRow = {
+  id: string;
+  slug: string;
+  title: string;
+  companyName: string;
+  firstSeenAt: string;
+  lastAttemptAt: string | null;
+  lastAttemptStatus: "SUCCESS" | "ERROR" | null;
+  lastError: string | null;
+};
+
+export type GoogleIndexingJobsPage = {
+  jobs: GoogleIndexingJobRow[];
+  total: number;
+  page: number;
+  pageSize: number;
 };
 
 export async function listAllIngestionRuns(
