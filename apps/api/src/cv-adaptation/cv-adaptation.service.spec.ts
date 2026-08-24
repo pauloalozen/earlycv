@@ -5149,3 +5149,167 @@ test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId i
   const started = calls.find((c) => c.eventName === "analysis_started");
   assert.equal(started?.metadata?.product_origin, "radar");
 });
+
+// Fase 1 do gate de autenticação (guestPossessionToken): jobId (cuid)
+// identifica a análise, mas nunca deve autenticar posse dela sozinho — só
+// quem recebeu o token cru na resposta de analyze-guest consegue provar
+// posse depois. Ver specs/no-guest-analysis-preview-auth-gate-diagnostic-plan-ADENDO-hardening.md.
+
+test("startGuestAnalysisJob generates a guestPossessionToken and persists only its SHA-256 hash", async () => {
+  let createdData: Record<string, unknown> | null = null;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-tok-1" }) },
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          createdData = data;
+          return { id: "job-tok-1", ...data };
+        },
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+    },
+    { analyzeAndAdapt: async () => {} },
+    {},
+    {},
+    {},
+    { precheckTurnstile: async () => ({ ok: true }) },
+  );
+
+  const started = await service.startGuestAnalysisJob(
+    "Vaga com descricao suficientemente longa para passar na validacao interna.",
+    undefined,
+    validMasterCvText,
+    "token",
+    undefined,
+  );
+
+  assert.equal(typeof started.guestPossessionToken, "string");
+  // randomBytes(32).toString("hex") => 64 caracteres hex.
+  assert.match(started.guestPossessionToken, /^[0-9a-f]{64}$/);
+
+  const persistedHash = (createdData as Record<string, unknown> | null)
+    ?.guestPossessionTokenHash as string;
+  assert.equal(typeof persistedHash, "string");
+  assert.notEqual(persistedHash, started.guestPossessionToken);
+  assert.equal(
+    persistedHash,
+    createHash("sha256").update(started.guestPossessionToken).digest("hex"),
+  );
+});
+
+test("verifyGuestPossessionToken succeeds when the raw token matches the stored hash", async () => {
+  const rawToken = "a".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async ({ where }: { where: { id: string } }) =>
+          where.id === "job-ok"
+            ? { ownerKind: "guest", guestPossessionTokenHash: hash }
+            : null,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken("job-ok", rawToken);
+  assert.equal(ok, true);
+});
+
+test("verifyGuestPossessionToken fails when the raw token does not match the stored hash", async () => {
+  const hash = createHash("sha256").update("correct-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken(
+    "job-1",
+    "wrong-token",
+  );
+  assert.equal(ok, false);
+});
+
+test("verifyGuestPossessionToken fails when only jobId is known and no token is presented — jobId alone is not ownership", async () => {
+  const hash = createHash("sha256").update("real-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  // Sem token nenhum (string vazia) — só o jobId não é suficiente.
+  const ok = await service.verifyGuestPossessionToken("job-1", "");
+  assert.equal(ok, false);
+});
+
+test("verifyGuestPossessionToken fails for a job that never had a possession token issued (e.g. authenticated job)", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "authenticated",
+          guestPossessionTokenHash: null,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken(
+    "job-authenticated-1",
+    "any-token",
+  );
+  assert.equal(ok, false);
+});
+
+test("verifyGuestPossessionToken fails when the job does not exist", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken(
+    "job-does-not-exist",
+    "any-token",
+  );
+  assert.equal(ok, false);
+});
