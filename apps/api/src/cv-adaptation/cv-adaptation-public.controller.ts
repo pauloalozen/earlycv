@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Inject,
   Param,
   Post,
@@ -13,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
+import { AnalysisConfigService } from "../analysis-protection/analysis-config.service";
 import {
   ALLOWED_CV_FORMATS_LABEL,
   isAllowedCvUploadMimeType,
@@ -26,6 +28,8 @@ export class CvAdaptationPublicController {
   constructor(
     @Inject(CvAdaptationService)
     private readonly cvAdaptationService: CvAdaptationService,
+    @Inject(AnalysisConfigService)
+    private readonly analysisConfig: AnalysisConfigService,
   ) {}
 
   @Post("analyze-guest")
@@ -66,9 +70,28 @@ export class CvAdaptationPublicController {
   }
 
   @Get("analysis-jobs/:jobId")
-  getAnalysisJobStatus(@Req() req: Request, @Param("jobId") jobId: string) {
+  async getAnalysisJobStatus(
+    @Req() req: Request,
+    @Param("jobId") jobId: string,
+    @Headers("x-guest-possession-token") guestPossessionToken?: string,
+  ) {
+    const userId = req.analysisContext?.userId ?? null;
+
+    if (!userId) {
+      const { value: gateEnabled } = await this.analysisConfig.getBoolean(
+        "guest_analysis_auth_gate_enabled",
+      );
+
+      if (gateEnabled) {
+        return this.cvAdaptationService.getGuestAnalysisJobStatusOnly(
+          jobId,
+          guestPossessionToken ?? null,
+        );
+      }
+    }
+
     return this.cvAdaptationService.getAnalysisJobStatus(jobId, {
-      userId: req.analysisContext?.userId ?? null,
+      userId,
       sessionPublicToken: req.analysisContext?.sessionPublicToken ?? null,
     });
   }

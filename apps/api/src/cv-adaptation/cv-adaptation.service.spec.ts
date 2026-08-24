@@ -5242,10 +5242,7 @@ test("verifyGuestPossessionToken fails when the raw token does not match the sto
     {},
   );
 
-  const ok = await service.verifyGuestPossessionToken(
-    "job-1",
-    "wrong-token",
-  );
+  const ok = await service.verifyGuestPossessionToken("job-1", "wrong-token");
   assert.equal(ok, false);
 });
 
@@ -5312,4 +5309,131 @@ test("verifyGuestPossessionToken fails when the job does not exist", async () =>
     "any-token",
   );
   assert.equal(ok, false);
+});
+
+// Fase 2: getGuestAnalysisJobStatusOnly — o único método que a rota pública
+// de polling deve chamar quando guest_analysis_auth_gate_enabled está ligado
+// e a requisição não está autenticada. Nunca deve devolver conteúdo, e
+// nunca deve depender só do jobId para "provar" posse.
+
+test("getGuestAnalysisJobStatusOnly returns only { status } for a valid possession token, never content", async () => {
+  const rawToken = "b".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+  let callCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        // Primeira chamada (dentro de verifyGuestPossessionToken) só
+        // precisa do hash; a segunda (leitura do status em si) simula um
+        // select real, que nunca traria adaptedContentJson/previewText/etc.
+        findUnique: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return { ownerKind: "guest", guestPossessionTokenHash: hash };
+          }
+          return { status: "succeeded" };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getGuestAnalysisJobStatusOnly(
+    "job-guest-1",
+    rawToken,
+  );
+
+  assert.deepEqual(result, { status: "succeeded" });
+  assert.equal(
+    (result as Record<string, unknown>).adaptedContentJson,
+    undefined,
+  );
+  assert.equal((result as Record<string, unknown>).previewText, undefined);
+  assert.equal((result as Record<string, unknown>).masterCvText, undefined);
+  assert.equal(
+    (result as Record<string, unknown>).analysisCvSnapshotId,
+    undefined,
+  );
+  assert.equal((result as Record<string, unknown>).jobTitle, undefined);
+  assert.equal((result as Record<string, unknown>).companyName, undefined);
+});
+
+test("getGuestAnalysisJobStatusOnly throws NotFoundException when no possession token is presented", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisJobStatusOnly("job-guest-1", null),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisJobStatusOnly throws NotFoundException for a wrong possession token — jobId alone never grants access", async () => {
+  const hash = createHash("sha256").update("correct-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisJobStatusOnly("job-guest-1", "wrong-token"),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisJobStatusOnly throws NotFoundException when the token belongs to a different job (cross-job ownership must never work)", async () => {
+  const rawToken = "c".repeat(64);
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async ({ where }: { where: { id?: string } }) => {
+          if (where.id === "job-b") {
+            // job-b tem um hash diferente — o token do guest é válido só
+            // para job-a, nunca para job-b.
+            return {
+              ownerKind: "guest",
+              guestPossessionTokenHash: createHash("sha256")
+                .update("token-for-job-b")
+                .digest("hex"),
+            };
+          }
+          return null;
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisJobStatusOnly("job-b", rawToken),
+    /analysis job not found/,
+  );
 });

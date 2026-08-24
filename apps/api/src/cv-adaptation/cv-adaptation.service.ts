@@ -15,6 +15,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type {
+  AnalysisJobStatus as AnalysisJobStatusValue,
   JobApplicationOrigin,
   JobApplicationStatus,
 } from "@prisma/client";
@@ -975,9 +976,8 @@ export class CvAdaptationService {
     // PasswordResetToken em auth.service.ts: randomBytes(32) cru devolvido
     // uma única vez ao cliente, só o hash SHA-256 é persistido.
     const guestPossessionToken = randomBytes(32).toString("hex");
-    const guestPossessionTokenHash = this.hashGuestPossessionToken(
-      guestPossessionToken,
-    );
+    const guestPossessionTokenHash =
+      this.hashGuestPossessionToken(guestPossessionToken);
 
     const job = await this.database.analysisJob.create({
       data: {
@@ -1401,6 +1401,40 @@ export class CvAdaptationService {
       jobTitle: job.status === "succeeded" ? job.jobTitle : null,
       companyName: job.status === "succeeded" ? job.companyName : null,
     };
+  }
+
+  // DTO deliberadamente estreito (nunca reaproveitar o shape autenticado
+  // com campos "a mais" que o cliente ignora — isso é exatamente o tipo de
+  // acidente de serialização que vaza dado, ver ADENDO-hardening.md seção
+  // 2). Usado só quando guest_analysis_auth_gate_enabled está ligado e a
+  // requisição não está autenticada — nunca contém conteúdo derivado da
+  // análise, só o status.
+  async getGuestAnalysisJobStatusOnly(
+    jobId: string,
+    possessionToken: string | null,
+  ): Promise<{ status: AnalysisJobStatusValue }> {
+    if (!possessionToken) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    // jobId (cuid) identifica a análise, mas nunca autentica posse dela —
+    // sem o token de posse correto, nem o status é revelado.
+    const owns = await this.verifyGuestPossessionToken(jobId, possessionToken);
+
+    if (!owns) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    return { status: job.status };
   }
 
   async analyzeAuthenticated(
