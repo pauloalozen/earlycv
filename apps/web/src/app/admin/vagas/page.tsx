@@ -1,6 +1,11 @@
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState, Input } from "@/components/ui";
-import { listJobSources, listJobs } from "@/lib/admin-ingestion-api";
+import {
+  getGoogleIndexingBackfillStatus,
+  type GoogleIndexingBackfillStatus,
+  listJobSources,
+  listJobs,
+} from "@/lib/admin-ingestion-api";
 import { buildSourceStatus, filterJobs } from "@/lib/admin-operations";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
@@ -40,6 +45,7 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
       status: ReturnType<typeof buildSourceStatus>;
     }
   >;
+  let indexingStatus: GoogleIndexingBackfillStatus | null = null;
 
   try {
     const [fetchedJobs, jobSources] = await Promise.all([
@@ -51,6 +57,11 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
       ...s,
       status: buildSourceStatus(s),
     }));
+    // Não bloqueia a página se o endpoint de status do Google Indexing
+    // falhar — é um painel informativo, não crítico pra listagem de vagas.
+    indexingStatus = await getGoogleIndexingBackfillStatus().catch(
+      () => null,
+    );
   } catch (error) {
     const state = buildAdminStateModel(
       getAdminDataErrorKind(error),
@@ -89,6 +100,54 @@ export default async function AdminJobsPage({ searchParams }: JobsPageProps) {
           subtitle="Consulta operacional das vagas ja ingeridas no catalogo atual."
           title="Vagas"
         />
+
+        {indexingStatus && (
+          <Card
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"
+            padding="sm"
+          >
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Elegíveis
+              </p>
+              <p className="text-2xl font-bold text-stone-950">
+                {indexingStatus.totalEligible}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Notificadas
+              </p>
+              <p className="text-2xl font-bold text-stone-950">
+                {indexingStatus.notified}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Pendentes (passivo)
+              </p>
+              <p className="text-2xl font-bold text-stone-950">
+                {indexingStatus.pending}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Cota diária
+              </p>
+              <p className="text-2xl font-bold text-stone-950">
+                {indexingStatus.dailyLimit}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Dias restantes (estimado)
+              </p>
+              <p className="text-2xl font-bold text-stone-950">
+                {indexingStatus.estimatedDaysRemaining}
+              </p>
+            </div>
+          </Card>
+        )}
 
         <Card
           className="grid gap-3 lg:grid-cols-[1.3fr_1fr_0.8fr_auto]"

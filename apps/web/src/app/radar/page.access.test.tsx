@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSessionUser } from "@/lib/app-session";
 
@@ -137,9 +137,7 @@ function buildUser(overrides: Partial<AppSessionUser> = {}): AppSessionUser {
   };
 }
 
-describe("/radar ghost mode access", () => {
-  const previousGhost = process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
-
+describe("/radar access (ghost mode only hides the nav link, never blocks access)", () => {
   beforeEach(() => {
     mocks.notFound.mockReset();
     mocks.getCurrentAppUserFromCookies.mockReset();
@@ -168,12 +166,7 @@ describe("/radar ghost mode access", () => {
     mocks.getMyRadarProfile.mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = previousGhost;
-  });
-
-  it("ghost ON allows admin", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
+  it("allows admin", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(
       buildUser({ internalRole: "admin", isStaff: true }),
     );
@@ -184,11 +177,8 @@ describe("/radar ghost mode access", () => {
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
-  it("ghost ON allows superadmin", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
-    mocks.getCurrentAppUserFromCookies.mockResolvedValue(
-      buildUser({ internalRole: "superadmin", isStaff: true }),
-    );
+  it("allows regular user", async () => {
+    mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
 
@@ -196,26 +186,7 @@ describe("/radar ghost mode access", () => {
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
-  it("ghost ON returns notFound for regular user", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
-    mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
-
-    await expect(
-      VagasPage({ searchParams: Promise.resolve({}) }),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-
-  it("ghost ON returns notFound for anonymous", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
-    mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
-
-    await expect(
-      VagasPage({ searchParams: Promise.resolve({}) }),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-
-  it("ghost OFF allows anonymous", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "false";
+  it("allows anonymous", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
 
     const result = await VagasPage({ searchParams: Promise.resolve({}) });
@@ -270,10 +241,7 @@ async function findOpportunityRingProps(
 }
 
 describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
-  const previousGhost = process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
-
   beforeEach(async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "false";
     mocks.notFound.mockReset();
     mocks.getCurrentAppUserFromCookies.mockReset();
     mocks.getPublicJobFacets.mockReset();
@@ -289,10 +257,6 @@ describe("/radar score badge (usuário logado com UserRadarProfile)", () => {
 
     const radarUiModule = await import("./radar-ui");
     opportunityRingRef = radarUiModule.OpportunityRing;
-  });
-
-  afterEach(() => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = previousGhost;
   });
 
   function buildJob(overrides: Record<string, unknown> = {}) {

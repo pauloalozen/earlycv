@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSessionUser } from "@/lib/app-session";
 
@@ -55,9 +55,7 @@ function buildUser(overrides: Partial<AppSessionUser> = {}): AppSessionUser {
   };
 }
 
-describe("/radar/[slug] ghost mode access", () => {
-  const previousGhost = process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
-
+describe("/radar/[slug] access (ghost mode only hides the nav link, never blocks access)", () => {
   beforeEach(() => {
     mocks.notFound.mockReset();
     mocks.getCurrentAppUserFromCookies.mockReset();
@@ -99,12 +97,7 @@ describe("/radar/[slug] ghost mode access", () => {
     mocks.getJobMatchScore.mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = previousGhost;
-  });
-
-  it("ghost ON allows admin", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
+  it("allows admin", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(
       buildUser({ internalRole: "admin", isStaff: true }),
     );
@@ -117,11 +110,8 @@ describe("/radar/[slug] ghost mode access", () => {
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
-  it("ghost ON allows superadmin", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
-    mocks.getCurrentAppUserFromCookies.mockResolvedValue(
-      buildUser({ internalRole: "superadmin", isStaff: true }),
-    );
+  it("allows regular user", async () => {
+    mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
 
     const result = await JobPage({
       params: Promise.resolve({ slug: "eng-1" }),
@@ -131,26 +121,7 @@ describe("/radar/[slug] ghost mode access", () => {
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
-  it("ghost ON returns notFound for regular user", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
-    mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
-
-    await expect(
-      JobPage({ params: Promise.resolve({ slug: "eng-1" }) }),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-
-  it("ghost ON returns notFound for anonymous", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
-    mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
-
-    await expect(
-      JobPage({ params: Promise.resolve({ slug: "eng-1" }) }),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-  });
-
-  it("ghost OFF allows anonymous", async () => {
-    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "false";
+  it("allows anonymous", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
 
     const result = await JobPage({

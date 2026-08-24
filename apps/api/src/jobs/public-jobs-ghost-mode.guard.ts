@@ -1,39 +1,15 @@
-import {
-  type CanActivate,
-  type ExecutionContext,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import type { Response } from "express";
+import type { CanActivate } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 
-import { JwtAuthGuard } from "../common/jwt-auth.guard";
-import { RolesGuard } from "../common/roles.guard";
-import { APP_ENV, type AppEnv } from "../config/env.module";
-
+// Ghost mode deixou de controlar acesso (ver ADR do modo ghost do Radar,
+// ago/2026): agora só oculta o link de navegação pra quem não é admin,
+// via canSeeJobsLink no front — os endpoints públicos ficam sempre
+// acessíveis, inclusive pra crawlers. Guard mantido como no-op (em vez de
+// removido dos controllers) pra reativar bloqueio de acesso rápido se
+// precisar de novo, sem reconectar guard em 4 endpoints.
 @Injectable()
 export class PublicJobsGhostModeGuard implements CanActivate {
-  constructor(
-    @Inject(APP_ENV) private readonly env: AppEnv,
-    @Inject(JwtAuthGuard) private readonly jwtAuthGuard: JwtAuthGuard,
-    @Inject(RolesGuard) private readonly rolesGuard: RolesGuard,
-  ) {}
-
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    if (!this.env.JOBS_GHOST_MODE) {
-      return true;
-    }
-
-    const response = context.switchToHttp().getResponse<Response>();
-    response.setHeader("Cache-Control", "no-store");
-    response.setHeader("X-Robots-Tag", "noindex, nofollow");
-
-    try {
-      await this.jwtAuthGuard.canActivate(context);
-      this.rolesGuard.canActivate(context);
-      return true;
-    } catch {
-      throw new NotFoundException("job not found");
-    }
+  canActivate(): boolean {
+    return true;
   }
 }

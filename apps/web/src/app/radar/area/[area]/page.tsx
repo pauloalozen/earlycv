@@ -3,10 +3,6 @@ import { notFound } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import {
-  canAccessJobsInGhostMode,
-  isJobsGhostModeEnabled,
-} from "@/lib/jobs-ghost-mode";
 import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
@@ -46,7 +42,6 @@ export async function generateMetadata({
     };
   }
 
-  const isGhostMode = isJobsGhostModeEnabled();
   const label = RADAR_AREA_LABELS[areaEnum];
   const url = getAbsoluteUrl(`/radar/area/${areaSlug}`);
 
@@ -54,7 +49,6 @@ export async function generateMetadata({
     title: `Vagas de ${label} no Brasil | EarlyCV`,
     description: `Encontre vagas de ${label} com score de compatibilidade. Analise seu CV gratuitamente.`,
     alternates: { canonical: url },
-    robots: { index: !isGhostMode, follow: !isGhostMode },
   };
 }
 
@@ -62,12 +56,7 @@ export default async function RadarAreaPage({
   params,
   searchParams,
 }: PageProps) {
-  const isGhostMode = isJobsGhostModeEnabled();
   const user = await getCurrentAppUserFromCookies().catch(() => null);
-
-  if (isGhostMode && !canAccessJobsInGhostMode(user?.internalRole)) {
-    notFound();
-  }
 
   const availableCredits = user
     ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))

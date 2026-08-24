@@ -386,6 +386,21 @@ export async function listJobs(token?: string) {
   return apiRequest<JobRecord[]>("/jobs", token);
 }
 
+export type GoogleIndexingBackfillStatus = {
+  totalEligible: number;
+  notified: number;
+  pending: number;
+  dailyLimit: number;
+  estimatedDaysRemaining: number;
+};
+
+export async function getGoogleIndexingBackfillStatus(token?: string) {
+  return apiRequest<GoogleIndexingBackfillStatus>(
+    "/admin/google-indexing/backfill-status",
+    token,
+  );
+}
+
 export async function listAllIngestionRuns(
   filters: {
     page?: number;

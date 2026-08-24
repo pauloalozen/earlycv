@@ -16,7 +16,6 @@ import {
 } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
-import { InternalRoles } from "../common/roles.decorator";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import {
   MatchingEngine,
@@ -42,13 +41,6 @@ export class PublicJobsController {
   ) {}
 
   @Get()
-  @InternalRoles("admin", "superadmin")
-  // PublicJobsGhostModeGuard, sozinho, só roda o JwtAuthGuard quando o ghost
-  // mode está ligado — com ghost mode desligado ele libera o acesso sem
-  // nunca tentar identificar quem está logado, então @AuthenticatedUser()
-  // nunca é preenchido e o score personalizado nunca aparece. O
-  // OptionalJwtAuthGuard garante que a identidade é sempre tentada,
-  // independente do estado do ghost mode, sem bloquear quem não tem token.
   @UseGuards(PublicJobsGhostModeGuard, OptionalJwtAuthGuard)
   async list(
     @Req() _request: Request,
@@ -293,7 +285,6 @@ export class PublicJobsController {
   }
 
   @Get("facets")
-  @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)
   async getFacets(@Req() _request: Request, @Query("state") state?: string) {
     return this.jobsService.listPublicFacets({ state });
@@ -304,7 +295,6 @@ export class PublicJobsController {
   // que os dois cobrem o mesmo caso de uso (fluxo de 1 clique a partir de
   // /vagas, que só tem o Job.id, não o slug).
   @Get("by-id/:id")
-  @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)
   async getById(@Req() _request: Request, @Param("id") id: string) {
     const found = await this.jobsService.getPublicById(id);
@@ -317,7 +307,6 @@ export class PublicJobsController {
   }
 
   @Get(":slug")
-  @InternalRoles("admin", "superadmin")
   @UseGuards(PublicJobsGhostModeGuard)
   async getBySlug(@Req() _request: Request, @Param("slug") slug: string) {
     const found = await this.jobsService.getPublicBySlug(slug);

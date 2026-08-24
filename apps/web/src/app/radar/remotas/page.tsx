@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import {
-  canAccessJobsInGhostMode,
-  isJobsGhostModeEnabled,
-} from "@/lib/jobs-ghost-mode";
 import { getMyPlan } from "@/lib/plans-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { RadarJobsListing, type RadarSearchParams } from "../jobs-listing";
@@ -14,7 +9,6 @@ import { RadarPageShell } from "../page-shell";
 import { RadarViewTracker } from "../radar-view-tracker";
 
 export function generateMetadata(): Metadata {
-  const isGhostMode = isJobsGhostModeEnabled();
   const url = getAbsoluteUrl("/radar/remotas");
 
   return {
@@ -22,7 +16,6 @@ export function generateMetadata(): Metadata {
     description:
       "Vagas 100% remotas de tecnologia com score de compatibilidade personalizado.",
     alternates: { canonical: url },
-    robots: { index: !isGhostMode, follow: !isGhostMode },
   };
 }
 
@@ -31,12 +24,7 @@ type PageProps = {
 };
 
 export default async function RadarRemotasPage({ searchParams }: PageProps) {
-  const isGhostMode = isJobsGhostModeEnabled();
   const user = await getCurrentAppUserFromCookies().catch(() => null);
-
-  if (isGhostMode && !canAccessJobsInGhostMode(user?.internalRole)) {
-    notFound();
-  }
 
   const availableCredits = user
     ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
