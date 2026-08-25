@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPendingGuestAnalysis } from "@/lib/guest-analysis-pending";
 import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -16,29 +17,75 @@ export function GoogleAuthButton({
   const [resolvedHref, setResolvedHref] = useState(href);
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    let cancelled = false;
 
-    try {
-      const sessionInternalId = sessionStorage.getItem(JOURNEY_SESSION_KEY);
-      if (sessionInternalId) {
-        params.set("sid", sessionInternalId);
+    async function resolve() {
+      const params = new URLSearchParams();
+      let sessionInternalId: string | null = null;
+
+      try {
+        sessionInternalId = sessionStorage.getItem(JOURNEY_SESSION_KEY);
+        if (sessionInternalId) {
+          params.set("sid", sessionInternalId);
+        }
+      } catch {
+        // sessionStorage indisponível — segue sem sid.
       }
-    } catch {
-      // sessionStorage indisponível — segue sem sid.
+
+      const visitorId = getOrCreateVisitorId();
+      if (visitorId) {
+        params.set("vid", visitorId);
+      }
+
+      // Fase 3/5 do gate de autenticação guest: se há uma análise guest
+      // pendente nesta aba, cria a tentativa de OAuth (state gerado só
+      // pelo backend) ANTES de montar o href final. Falha aqui nunca
+      // impede o login — só significa que essa análise não será
+      // retomada automaticamente.
+      const pending = getPendingGuestAnalysis();
+      if (pending) {
+        try {
+          const ctx = new URL(href, window.location.origin).searchParams.get(
+            "ctx",
+          );
+          const response = await fetch("/api/auth/oauth-attempts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jobId: pending.jobId,
+              guestPossessionToken: pending.guestPossessionToken,
+              ...(ctx ? { conversionContext: ctx } : {}),
+              ...(sessionInternalId
+                ? { journeySessionInternalId: sessionInternalId }
+                : {}),
+              ...(visitorId ? { visitorId } : {}),
+            }),
+          });
+          if (response.ok) {
+            const body = (await response.json()) as { state: string };
+            params.set("state", body.state);
+          }
+        } catch {
+          // segue sem state — login normal, sem retomada automática.
+        }
+      }
+
+      if (cancelled) return;
+
+      if (params.size === 0) {
+        setResolvedHref(href);
+        return;
+      }
+
+      const separator = href.includes("?") ? "&" : "?";
+      setResolvedHref(`${href}${separator}${params.toString()}`);
     }
 
-    const visitorId = getOrCreateVisitorId();
-    if (visitorId) {
-      params.set("vid", visitorId);
-    }
+    resolve();
 
-    if (params.size === 0) {
-      setResolvedHref(href);
-      return;
-    }
-
-    const separator = href.includes("?") ? "&" : "?";
-    setResolvedHref(`${href}${separator}${params.toString()}`);
+    return () => {
+      cancelled = true;
+    };
   }, [href]);
 
   return (

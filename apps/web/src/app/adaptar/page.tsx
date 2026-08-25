@@ -23,6 +23,8 @@ import {
   appendTurnstileTokenToAnalyzeFormData,
   buildFunnelEventIdempotencyKey,
 } from "@/lib/cv-adaptation-flow-helpers";
+import { fetchGuestAnalysisAuthGateEnabled } from "@/lib/guest-analysis-auth-gate";
+import { setPendingGuestAnalysis } from "@/lib/guest-analysis-pending";
 import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
 import { getJourneySessionInternalId } from "@/lib/journey-session";
 import type { PublicJob } from "@/lib/public-jobs-api";
@@ -142,6 +144,7 @@ function AdaptarPageContent() {
   const formRef = useRef<HTMLFormElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [guestAuthGateEnabled, setGuestAuthGateEnabled] = useState(false);
   const jobDescriptionFilledTrackedRef = useRef(false);
   const jobDescriptionFocusTrackedRef = useRef(false);
   const jobDescriptionPasteTrackedRef = useRef(false);
@@ -284,7 +287,9 @@ function AdaptarPageContent() {
       getMyMasterCvExtractionStatus().catch(
         () => null as MasterCvExtractionStatusDto,
       ),
-    ]).then(([status, resume, extractionStatus]) => {
+      fetchGuestAnalysisAuthGateEnabled(),
+    ]).then(([status, resume, extractionStatus, guestAuthGateEnabled]) => {
+      setGuestAuthGateEnabled(guestAuthGateEnabled);
       setUserName(status.userName ?? null);
       setUserRole(status.internalRole ?? null);
       setAvailableCredits(status.availableCreditsDisplay);
@@ -553,6 +558,41 @@ function AdaptarPageContent() {
           ),
         );
         analyzeResult = started.result;
+      } else if (guestAuthGateEnabled) {
+        // Fase 5 do gate de autenticação guest: a análise ainda roda
+        // normalmente no backend (sem mudança nenhuma no pipeline), mas o
+        // frontend não faz polling de conteúdo, não grava resultado em
+        // storage nenhum — só o jobId + guestPossessionToken (nunca o
+        // resultado) para retomar depois da autenticação.
+        if (cvMode !== "text") {
+          const uploadedFile = file;
+          if (!uploadedFile) {
+            setError("Selecione seu CV em PDF, DOCX ou ODT.");
+            setLoading(false);
+            return;
+          }
+          formData.append("file", uploadedFile);
+        }
+
+        const started = await analyzeGuestCv(formData, journeyContext);
+        if (!started.ok) {
+          setLoading(false);
+          setError(started.error);
+          return;
+        }
+
+        setLoadingStep(3);
+        await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
+
+        if (started.guestPossessionToken) {
+          setPendingGuestAnalysis({
+            jobId: started.jobId,
+            guestPossessionToken: started.guestPossessionToken,
+          });
+        }
+
+        router.push("/entrar?ctx=analysis_guest");
+        return;
       } else {
         if (cvMode === "text") {
           const started = await startAndPoll(

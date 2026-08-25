@@ -1,0 +1,61 @@
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+
+import {
+  getAppSessionTokens,
+  getCurrentAppSession,
+} from "@/lib/app-session.server";
+
+function getApiBaseUrl() {
+  const base =
+    process.env.API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:4000";
+  return base.endsWith("/api") ? base : `${base}/api`;
+}
+
+// Fase 5 do gate de autenticação guest — claim server-side por jobId
+// (Fase 4, apps/api/src/cv-adaptation/cv-adaptation.controller.ts). Só
+// repassa o que o browser já mandou; ownership/possession token são
+// validados inteiramente no backend, nunca aqui.
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ jobId: string }> },
+) {
+  const { jobId } = await params;
+  const session = await getCurrentAppSession();
+  const fallbackTokens = await getAppSessionTokens();
+  const token = session?.accessToken ?? fallbackTokens.accessToken;
+
+  if (!token) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.text();
+  const cookieHeader = request.headers.get("cookie") ?? "";
+
+  const apiResponse = await fetch(
+    `${getApiBaseUrl()}/cv-adaptation/analysis-jobs/${jobId}/claim`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      },
+      cache: "no-store",
+      body: body || "{}",
+    },
+  );
+
+  if (!apiResponse.ok) {
+    const error = await apiResponse.text();
+    return NextResponse.json(
+      { message: error },
+      { status: apiResponse.status },
+    );
+  }
+
+  const json = (await apiResponse.json()) as unknown;
+  return NextResponse.json(json);
+}

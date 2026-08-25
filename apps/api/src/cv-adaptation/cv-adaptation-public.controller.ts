@@ -96,6 +96,20 @@ export class CvAdaptationPublicController {
     });
   }
 
+  // Único ponto de leitura do flag pelo frontend (ADENDO-hardening.md
+  // seção 8.2) — o backend continua a autoridade final em todo endpoint
+  // que importa (analyze-guest/analysis-jobs/:jobId/claim já leem a
+  // config por conta própria); isto só existe para o frontend decidir
+  // qual UI mostrar. Leitura fresca a cada chamada (cache de 5s do
+  // AnalysisConfigService já existente) — nunca cacheado em build-time.
+  @Get("config/public")
+  async publicConfig() {
+    const { value: guestAnalysisAuthGateEnabled } =
+      await this.analysisConfig.getBoolean("guest_analysis_auth_gate_enabled");
+
+    return { guestAnalysisAuthGateEnabled };
+  }
+
   @Get("job-count")
   async jobCount(
     @Query("jobTitle") jobTitle?: string,
