@@ -77,7 +77,7 @@ vi.mock("@/lib/visitor-id", () => ({
   getOrCreateVisitorId: getOrCreateVisitorIdMock,
 }));
 
-import AdaptarPage from "./page";
+import { AdaptarPageClient as AdaptarPage } from "./adaptar-client";
 
 describe("AdaptarPage submit analytics flow", () => {
   let turnstileCallback: ((token: string) => void) | null = null;

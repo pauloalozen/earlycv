@@ -5510,9 +5510,30 @@ function makeClaimServiceMocks(job: ReturnType<typeof baseSucceededJob>) {
         where,
         data,
       }: {
-        where: { analysisCvSnapshotId: string; convertedAt: null };
+        where: {
+          analysisCvSnapshotId?: string;
+          convertedAt?: null;
+          id?: string;
+          ownerKind?: string;
+          OR?: Array<{ userId: string | null }>;
+        };
         data: Record<string, unknown>;
       }) => {
+        if (where.id !== undefined) {
+          // Formato da transferência de ownership por possession token
+          // (claimGuestAnalysisJob) — job.id + guard de dono atual.
+          const currentUserId = (job as { userId?: string | null }).userId;
+          const matches =
+            where.id === job.id &&
+            where.ownerKind === job.ownerKind &&
+            (where.OR ?? []).some((clause) => clause.userId === currentUserId);
+          if (matches) {
+            Object.assign(job, data);
+            return { count: 1 };
+          }
+          return { count: 0 };
+        }
+
         if (
           where.analysisCvSnapshotId === job.analysisCvSnapshotId &&
           job.convertedAt === null
@@ -5649,6 +5670,89 @@ test("claimGuestAnalysisJob is idempotent — a repeated call after conversion r
 
   assert.deepEqual(first, second);
   assert.equal(capturedCvAdaptationCreateData.length, 1);
+});
+
+// Caminho de login/cadastro por email (ao contrário do Google OAuth, que
+// já transfere ownership via transferAnalysisJobOwnership antes de chegar
+// aqui): o job guest ainda está com userId null quando claimAnalysisJob é
+// chamado — só o guestPossessionToken prova a posse e libera a
+// transferência. Sem essa prova, jobId sozinho nunca basta (mesmo
+// princípio do teste "jobId alone never grants access" acima).
+const GUEST_POSSESSION_RAW_TOKEN = "d".repeat(64);
+
+function baseUnclaimedGuestJob() {
+  return {
+    ...baseSucceededJob(),
+    userId: null,
+    guestPossessionTokenHash: createHash("sha256")
+      .update(GUEST_POSSESSION_RAW_TOKEN)
+      .digest("hex"),
+  };
+}
+
+test("claimGuestAnalysisJob transfers ownership via guestPossessionToken when the job is still guest-owned (email login/register)", async () => {
+  const job = baseUnclaimedGuestJob();
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  const result = await service.claimGuestAnalysisJob(
+    "user-1",
+    job.id,
+    GUEST_POSSESSION_RAW_TOKEN,
+  );
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(job.userId, "user-1");
+  assert.equal(capturedCvAdaptationCreateData.length, 1);
+});
+
+test("claimGuestAnalysisJob rejects an unclaimed guest job when no guestPossessionToken is sent", async () => {
+  const job = baseUnclaimedGuestJob();
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("user-1", job.id),
+    /analysis job not found/,
+  );
+  assert.equal(job.userId, null);
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob rejects an unclaimed guest job when guestPossessionToken doesn't match", async () => {
+  const job = baseUnclaimedGuestJob();
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.claimGuestAnalysisJob("user-1", job.id, "wrong-token".repeat(8)),
+    /analysis job not found/,
+  );
+  assert.equal(job.userId, null);
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob never lets guestPossessionToken override a job already owned by someone else", async () => {
+  const job = { ...baseSucceededJob(), userId: "someone-else" };
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.claimGuestAnalysisJob(
+        "user-1",
+        job.id,
+        GUEST_POSSESSION_RAW_TOKEN,
+      ),
+    /analysis job not found/,
+  );
+  assert.equal(job.userId, "someone-else");
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
 });
 
 // Nota sobre concorrência real: um teste unitário com mocks síncronos não

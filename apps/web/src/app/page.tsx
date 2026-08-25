@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { fetchGuestAnalysisAuthGateEnabledServer } from "@/lib/guest-analysis-auth-gate.server";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { resolveLandingVariant } from "./_landing/variant";
 import { LandingVariantA } from "./_landing/variant-a";
@@ -37,7 +39,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
+export default async function Home() {
   const variant = resolveLandingVariant(
     process.env.NEXT_PUBLIC_LANDING_VARIANT,
   );
@@ -59,7 +61,16 @@ export default function Home() {
   }
 
   if (variant === "F") {
-    return <LandingVariantF />;
+    const [guestAnalysisAuthGateEnabled, user] = await Promise.all([
+      fetchGuestAnalysisAuthGateEnabledServer(),
+      getCurrentAppUserFromCookies(),
+    ]);
+    return (
+      <LandingVariantF
+        guestAnalysisAuthGateEnabled={guestAnalysisAuthGateEnabled}
+        isAuthenticated={!!user}
+      />
+    );
   }
 
   return <LandingVariantA />;

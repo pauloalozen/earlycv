@@ -5,6 +5,7 @@ import { siteConfig } from "@/lib/site";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
 import { FeatureShowcase } from "./_feature-showcase";
 import { FEATURE_PAGES } from "./_shared";
+import { GuestAnalysisWidget } from "./guest-analysis-widget";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -109,7 +110,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div style={sectionLabel}>{children}</div>;
 }
 
-export function LandingVariantF() {
+export function LandingVariantF({
+  guestAnalysisAuthGateEnabled,
+  isAuthenticated,
+}: {
+  guestAnalysisAuthGateEnabled: boolean;
+  isAuthenticated: boolean;
+}) {
   return (
     <main
       style={{ fontFamily: GEIST, color: "#0a0a0a", background: "#ffffff" }}
@@ -119,9 +126,10 @@ export function LandingVariantF() {
       {/* NAV */}
       <nav
         style={{
-          display: "flex",
-          justifyContent: "space-between",
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
           alignItems: "center",
+          gap: 16,
           padding: "18px 32px",
           position: "sticky",
           top: 0,
@@ -138,6 +146,7 @@ export function LandingVariantF() {
             alignItems: "center",
             gap: 8,
             textDecoration: "none",
+            justifySelf: "start",
           }}
         >
           <Logo />
@@ -155,12 +164,20 @@ export function LandingVariantF() {
             v2.1
           </span>
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 26 }}>
-          <a href="#como-funciona" style={{ fontSize: 13, color: "#3a3a38" }}>
-            Como funciona
-          </a>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 26,
+            justifySelf: "center",
+          }}
+        >
           <div className="lp-f-nav-dropdown">
-            <span style={{ fontSize: 13, color: "#3a3a38", cursor: "default" }}>
+            <span
+              className="lp-f-nav-dropdown-trigger"
+              style={{ fontSize: 13, color: "#3a3a38", cursor: "default" }}
+            >
               Produtos
               <svg
                 width="10"
@@ -171,7 +188,6 @@ export function LandingVariantF() {
                 strokeWidth="2.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ marginLeft: 5, verticalAlign: "middle" }}
               >
                 <title>abrir menu</title>
                 <path d="M6 9l6 6 6-6" />
@@ -189,14 +205,29 @@ export function LandingVariantF() {
               ))}
             </div>
           </div>
+          <a href="#como-funciona" style={{ fontSize: 13, color: "#3a3a38" }}>
+            Como funciona
+          </a>
           <a href="#faq" style={{ fontSize: 13, color: "#3a3a38" }}>
             Perguntas
           </a>
-          <Link href="/entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
-            Entrar
-          </Link>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 26,
+            justifySelf: "end",
+          }}
+        >
+          {!isAuthenticated && (
+            <Link href="/entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
+              Entrar
+            </Link>
+          )}
           <Link
-            href="/adaptar"
+            href={isAuthenticated ? "/meu-perfil" : "/entrar?tab=cadastro"}
             style={{
               ...btnPrimary,
               padding: "0 16px",
@@ -205,7 +236,7 @@ export function LandingVariantF() {
               fontSize: 12.5,
             }}
           >
-            Analisar meu CV grátis
+            {isAuthenticated ? "Meu Perfil" : "Criar conta"}
           </Link>
         </div>
       </nav>
@@ -275,7 +306,7 @@ export function LandingVariantF() {
             saem.
           </p>
 
-          <Link href="/adaptar" style={{ ...btnPrimary, marginBottom: 56 }}>
+          <Link href="#analise" style={{ ...btnPrimary, marginBottom: 56 }}>
             <svg
               width="14"
               height="14"
@@ -340,163 +371,60 @@ export function LandingVariantF() {
       </section>
 
       {/* UPLOAD MODULE */}
-      <section style={{ padding: "0 32px 110px" }}>
-        <div style={{ ...container, maxWidth: 640, textAlign: "center" }}>
-          <h2
-            className="reveal-card"
-            style={{
-              fontSize: "clamp(24px, 3.6vw, 36px)",
-              fontWeight: 500,
-              letterSpacing: -1,
-              margin: "0 0 10px",
-            }}
-          >
-            Receba seu score ATS{" "}
-            <em
+      <section
+        id="analise"
+        style={{
+          padding: "72px 32px",
+          minHeight: "100dvh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxSizing: "border-box",
+        }}
+      >
+        <div style={{ ...container, maxWidth: 1120, textAlign: "center" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto" }}>
+            <h2
+              className="reveal-card"
               style={{
-                fontFamily: SERIF_ITALIC,
-                fontStyle: "italic",
-                fontWeight: 400,
+                fontSize: "clamp(24px, 3.6vw, 36px)",
+                fontWeight: 500,
+                letterSpacing: -1,
+                margin: "0 0 10px",
               }}
             >
-              grátis
-            </em>
-          </h2>
-          <p
-            className="reveal-card"
-            style={{ fontSize: 15, color: "#45443e", margin: "0 0 34px" }}
-          >
-            <strong style={{ color: "#0a0a0a" }}>32% de ganho médio</strong> de
-            aderência à vaga já no primeiro ajuste.
-          </p>
-
-          <div
-            className="reveal-card"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 32,
-            }}
-          >
-            {[
-              { n: 1, label: "Enviar CV", done: true },
-              { n: 2, label: "Colar vaga", done: false },
-              { n: 3, label: "Ver resultado", done: false },
-            ].map((s, i) => (
-              <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
-                {i > 0 && (
-                  <div
-                    style={{
-                      width: 64,
-                      height: 1,
-                      background: "rgba(10,10,10,0.14)",
-                      margin: "0 6px 22px",
-                    }}
-                  />
-                )}
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: "50%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontFamily: MONO,
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      background: s.done ? "#0a0a0a" : "transparent",
-                      color: s.done ? "#c6ff3a" : "#8a8a85",
-                      border: s.done ? "none" : "1px solid rgba(10,10,10,0.16)",
-                    }}
-                  >
-                    {s.n}
-                  </div>
-                  <div
-                    className="lp-f-step-name"
-                    style={{
-                      fontSize: 12,
-                      color: "#6a6a66",
-                      fontWeight: 500,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {s.label}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div
-            className="reveal-card"
-            style={{
-              background: "#fff",
-              border: "1.5px dashed rgba(10,10,10,0.18)",
-              borderRadius: 16,
-              padding: "52px 32px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 14,
-              textAlign: "center",
-            }}
-          >
-            <svg
-              width="34"
-              height="34"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#8a8a85"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              Receba seu score ATS{" "}
+              <em
+                style={{
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                }}
+              >
+                grátis
+              </em>
+            </h2>
+            <p
+              className="reveal-card"
+              style={{ fontSize: 15, color: "#45443e", margin: "0 0 28px" }}
             >
-              <title>Enviar CV</title>
-              <path d="M12 3v12M12 3l-4 4M12 3l4 4" />
-              <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" />
-            </svg>
-            <div style={{ fontSize: 15, fontWeight: 500, color: "#0a0a0a" }}>
-              Arraste ou clique para enviar
-            </div>
-            <div style={{ fontSize: 12.5, color: "#8a8a85" }}>
-              PDF, DOCX ou ODT · até 5 MB
-            </div>
+              <strong style={{ color: "#0a0a0a" }}>32% de ganho médio</strong>{" "}
+              de aderência à vaga já no primeiro ajuste.
+            </p>
           </div>
 
-          <button
-            type="button"
-            style={{
-              display: "block",
-              margin: "18px auto 22px",
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: GEIST,
-              fontSize: 13.5,
-              fontWeight: 500,
-              color: "#0a0a0a",
-              textDecoration: "underline",
-              textDecorationColor: "rgba(10,10,10,0.2)",
-              textUnderlineOffset: 4,
-            }}
-          >
-            Ou cole o texto do currículo
-          </button>
+          <div style={{ maxWidth: 940, margin: "0 auto" }}>
+            <GuestAnalysisWidget
+              guestAnalysisAuthGateEnabled={guestAnalysisAuthGateEnabled}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
 
           <Link
             href="/demo-resultado"
             className="reveal-card"
             style={{
+              marginTop: 20,
               border: "1px solid rgba(10,10,10,0.14)",
               color: "#0a0a0a",
               background: "#fff",
@@ -524,34 +452,6 @@ export function LandingVariantF() {
             </svg>
             Ver um exemplo de análise
           </Link>
-
-          <div
-            className="reveal-card"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              marginTop: 30,
-              fontSize: 12,
-              color: "#8a8a85",
-            }}
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#8a8a85"
-              strokeWidth="1.8"
-            >
-              <title>Login necessário</title>
-              <rect x="5" y="11" width="14" height="9" rx="2" />
-              <path d="M8 11V7a4 4 0 018 0v4" />
-            </svg>
-            Depois de enviar o CV e colar a vaga, você cria uma conta grátis pra
-            ver o resultado completo.
-          </div>
         </div>
       </section>
 
@@ -1317,7 +1217,8 @@ export function LandingVariantF() {
       <PublicFooter />
 
       <style>{`
-        .lp-f-nav-dropdown { position: relative; padding: 4px 0; }
+        .lp-f-nav-dropdown { position: relative; display: flex; align-items: center; }
+        .lp-f-nav-dropdown-trigger { display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
         .lp-f-nav-dropdown-panel {
           position: absolute; top: 100%; left: 50%; transform: translateX(-50%) translateY(4px);
           background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 12px;

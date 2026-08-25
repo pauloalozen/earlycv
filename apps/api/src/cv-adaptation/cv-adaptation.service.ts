@@ -1465,16 +1465,50 @@ export class CvAdaptationService {
   async claimGuestAnalysisJob(
     userId: string,
     jobId: string,
+    guestPossessionToken?: string,
   ): Promise<
     | { status: "pending" | "processing" | "failed" }
     | { status: "succeeded"; cvAdaptationId: string }
   > {
-    const job = await this.database.analysisJob.findUnique({
+    let job = await this.database.analysisJob.findUnique({
       where: { id: jobId },
     });
 
-    if (!job || job.userId !== userId) {
+    if (!job) {
       throw new NotFoundException("analysis job not found");
+    }
+
+    if (job.userId !== userId) {
+      // Único caminho de transferência de ownership fora do OAuth: prova
+      // de posse via guestPossessionToken (mesma garantia criptográfica de
+      // OAuthAttemptService.transferAnalysisJobOwnership — job ainda sem
+      // dono + token bate com o hash). Job de outro usuário, ou sem token
+      // válido, nunca é aceito.
+      const canTransfer =
+        job.userId === null &&
+        !!guestPossessionToken &&
+        (await this.verifyGuestPossessionToken(jobId, guestPossessionToken));
+
+      if (!canTransfer) {
+        throw new NotFoundException("analysis job not found");
+      }
+
+      await this.database.analysisJob.updateMany({
+        where: {
+          id: jobId,
+          ownerKind: "guest",
+          OR: [{ userId: null }, { userId }],
+        },
+        data: { userId },
+      });
+
+      job = await this.database.analysisJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job || job.userId !== userId) {
+        throw new NotFoundException("analysis job not found");
+      }
     }
 
     // Idempotente: se já convertida (claim repetido, callback duplicado,

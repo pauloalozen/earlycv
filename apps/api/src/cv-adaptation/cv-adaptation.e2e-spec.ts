@@ -2232,6 +2232,111 @@ test("POST /cv-adaptation/analysis-jobs/:jobId/claim materializes CvAdaptation f
   }
 });
 
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim transfers ownership via guestPossessionToken — the real email login/register path (no manual DB userId, unlike the OAuth-simulating test above)", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "claim-job-email-flow");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    const guestPossessionToken = analyzeResponse.body
+      .guestPossessionToken as string;
+    assert.equal(typeof guestPossessionToken, "string");
+
+    await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+    );
+
+    // Nunca setamos job.userId manualmente aqui — é exatamente isso que o
+    // login/cadastro por email precisa fazer sozinho a partir só do
+    // guestPossessionToken, ao contrário do Google OAuth (que já chega com
+    // ownership transferida por transferAnalysisJobOwnership antes deste
+    // endpoint). Sem essa cobertura, o bug (endpoint ignorando o token do
+    // body e rejeitando qualquer job ainda com userId null) passou
+    // despercebido.
+    const claimResponse = await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({ guestPossessionToken })
+      .expect(201);
+
+    assert.equal(claimResponse.body.status, "succeeded");
+    const cvAdaptationId = claimResponse.body.cvAdaptationId as string;
+
+    const adaptation = await database.cvAdaptation.findUnique({
+      where: { id: cvAdaptationId },
+    });
+    assert.equal(adaptation?.userId, user.userId);
+
+    const refreshedJob = await database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+    assert.equal(refreshedJob?.userId, user.userId);
+    assert.ok(refreshedJob?.convertedAt);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim rejects an unclaimed guest job when the caller sends no guestPossessionToken or the wrong one", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "claim-job-no-token");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+    );
+
+    await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({ guestPossessionToken: "wrong-token-value" })
+      .expect(404);
+
+    const refreshedJob = await database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+    assert.equal(refreshedJob?.userId, null);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
 test("POST /cv-adaptation/analysis-jobs/:jobId/claim rejects a caller who does not own the job — jobId alone never grants access", async () => {
   const { app, database } = await createApp();
   const owner = await registerUser(app, database, "claim-owner");
