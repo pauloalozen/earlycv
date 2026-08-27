@@ -55,7 +55,11 @@ function Star({ size, fill }: { size: number; fill: string }) {
   );
 }
 
-export function DepoimentosSection() {
+export function DepoimentosSection({
+  background = "radial-gradient(ellipse 90% 70% at 50% 0%, #f9f8f4 0%, #eeede7 100%)",
+}: {
+  background?: string;
+}) {
   const [idx, setIdx] = useState(0);
   const [leaving, setLeaving] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -82,8 +86,7 @@ export function DepoimentosSection() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       style={{
-        background:
-          "radial-gradient(ellipse 90% 70% at 50% 0%, #f9f8f4 0%, #eeede7 100%)",
+        background,
         minHeight: "100dvh",
         display: "flex",
         alignItems: "center",

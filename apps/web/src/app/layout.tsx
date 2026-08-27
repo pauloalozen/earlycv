@@ -6,9 +6,13 @@ import {
   Geist_Mono,
   Gugi,
   Instrument_Serif,
+  Inter,
   JetBrains_Mono,
+  Noto_Sans,
   Playfair_Display,
   Syne,
+  Ubuntu,
+  Ubuntu_Mono,
 } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
@@ -59,6 +63,28 @@ const geist = Geist({
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const notoSans = Noto_Sans({
+  subsets: ["latin"],
+  variable: "--font-noto-sans",
+});
+
+const ubuntu = Ubuntu({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "700"],
+  variable: "--font-ubuntu",
+});
+
+const ubuntuMono = Ubuntu_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-ubuntu-mono",
 });
 
 const instrumentSerif = Instrument_Serif({
@@ -156,7 +182,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable} ${playfairDisplay.variable} ${dancingScript.variable} ${syne.variable} ${geist.variable} ${geistMono.variable} ${instrumentSerif.variable}`}
+      className={`${dmSans.variable} ${jetBrainsMono.variable} ${gugi.variable} ${playfairDisplay.variable} ${dancingScript.variable} ${syne.variable} ${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} ${inter.variable} ${notoSans.variable} ${ubuntu.variable} ${ubuntuMono.variable}`}
     >
       <head>
         {isProduction ? (

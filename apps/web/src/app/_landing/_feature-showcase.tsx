@@ -1,160 +1,1970 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { BrowserChrome, browserFrame, GEIST, MONO } from "./_shared";
+import {
+  BrowserChrome,
+  browserFrame,
+  GEIST,
+  MONO,
+  SERIF_ITALIC,
+} from "./_shared";
 
-/** Illustrative mockup — no real screenshot exists yet for this feature. */
-export function GestaoMock() {
-  const rows = [
+const ORANGE = "#e08a4c";
+const LIME = "#c6ff3a";
+const LIME_DEEP = "#405410";
+const BLUE = "#5da0e8";
+const RED = "#ef4444";
+const AMBER = "#f59e0b";
+const GRAY = "#8a8a85";
+const BORDER = "rgba(10,10,10,0.08)";
+
+function ScoreRing({
+  value,
+  size = 84,
+  color,
+  dark = true,
+}: {
+  value: number;
+  size?: number;
+  color: string;
+  dark?: boolean;
+}) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: `conic-gradient(${color} ${pct * 3.6}deg, ${
+          dark ? "rgba(255,255,255,0.12)" : "rgba(10,10,10,0.08)"
+        } 0deg)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          width: size - 12,
+          height: size - 12,
+          borderRadius: "50%",
+          background: dark ? "#0a0a0a" : "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span
+          style={{
+            fontSize: size * 0.34,
+            fontWeight: 700,
+            color: dark ? "#fff" : "#0a0a0a",
+            fontFamily: GEIST,
+            lineHeight: 1,
+          }}
+        >
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        fontFamily: MONO,
+        fontSize: 10,
+        color: "#3a3a36",
+        background: "rgba(10,10,10,0.05)",
+        border: `1px solid ${BORDER}`,
+        borderRadius: 6,
+        padding: "3px 7px",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Same wordmark + icon used in the real app header (PublicNav) — for mockups that show a nav bar. */
+function LogoMark() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <svg
+        width="17"
+        height="17"
+        viewBox="0 0 40 40"
+        fill="none"
+        aria-hidden="true"
+      >
+        <title>earlyCV</title>
+        <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="16" y="0" width="12" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="0" y="11.2" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="20" y="11.2" width="18" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="0" y="22.4" width="7" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="11" y="22.4" width="16" height="6.5" rx="2" fill="#c6ff3a" />
+        <rect x="30" y="22.4" width="8" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect x="0" y="33.5" width="22" height="6.5" rx="2" fill="#0a0a0a" />
+        <rect
+          x="26"
+          y="33.5"
+          width="9"
+          height="6.5"
+          rx="2"
+          fill="rgba(10,10,10,0.14)"
+        />
+      </svg>
+      <span style={{ fontSize: 15, letterSpacing: -0.6, lineHeight: 1 }}>
+        <span style={{ fontWeight: 300 }}>early</span>
+        <span style={{ fontWeight: 700 }}>CV</span>
+      </span>
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 9,
+          color: GRAY,
+          border: "1px solid #d8d6ce",
+          borderRadius: 3,
+          padding: "1px 5px",
+          fontWeight: 500,
+        }}
+      >
+        v2.1
+      </span>
+    </div>
+  );
+}
+
+/** Fade-out at the bottom of a clipped preview + a CTA driving to the real, full feature. */
+function FadeCta({
+  maxHeight,
+  href,
+  label,
+  children,
+}: {
+  maxHeight: number;
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div style={{ position: "relative", maxHeight, overflow: "hidden" }}>
+        {children}
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 130,
+            background:
+              "linear-gradient(to bottom, rgba(255,255,255,0), #fff 78%)",
+            pointerEvents: "none",
+          }}
+        />
+      </div>
+      <div style={{ textAlign: "center", padding: "16px 0 28px" }}>
+        <Link
+          href={href}
+          style={{
+            fontFamily: GEIST,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#0a0a0a",
+            textDecoration: "underline",
+            textDecorationColor: "rgba(10,10,10,0.25)",
+            textUnderlineOffset: 4,
+          }}
+        >
+          {label}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** Compact mockup based on /adaptar/resultado — a critical-score example, two-column detail. */
+export function AnaliseMock() {
+  return (
+    <div style={{ background: "#fff", fontFamily: GEIST, textAlign: "left" }}>
+      <FadeCta
+        maxHeight={620}
+        href="/adaptar"
+        label="Clique aqui e veja uma análise completa real →"
+      >
+        <div style={{ padding: "32px 34px 0" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 26,
+              marginBottom: 26,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  marginBottom: 10,
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: RED,
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                    color: GRAY,
+                  }}
+                >
+                  Relatório · Analista de Dados Sênior · iFood
+                </span>
+              </div>
+              <h3
+                style={{
+                  fontSize: 29,
+                  fontWeight: 500,
+                  letterSpacing: -0.6,
+                  margin: "0 0 10px",
+                  color: "#0a0a0a",
+                  lineHeight: 1.15,
+                }}
+              >
+                Análise completa{" "}
+                <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic" }}>
+                  do seu CV.
+                </em>
+              </h3>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#5a5a56",
+                  margin: "0 0 16px",
+                  maxWidth: 440,
+                  lineHeight: 1.5,
+                }}
+              >
+                Seu CV cobre parte dos requisitos técnicos, mas faltam
+                evidências centrais pra essa vaga.
+              </p>
+              <div style={{ display: "flex", gap: 26 }}>
+                {[
+                  { n: "52", l: "SCORE ATUAL" },
+                  { n: "+33", l: "PTS DISPONÍVEIS" },
+                  { n: "9", l: "AJUSTES IDENTIFICADOS" },
+                ].map((s) => (
+                  <div key={s.l}>
+                    <div
+                      style={{
+                        fontSize: 21,
+                        fontWeight: 600,
+                        color: "#0a0a0a",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {s.n}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 8.5,
+                        letterSpacing: 0.6,
+                        color: GRAY,
+                        marginTop: 4,
+                      }}
+                    >
+                      {s.l}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: "#0a0a0a",
+                borderRadius: 14,
+                padding: "18px 30px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  color: "rgba(255,255,255,0.45)",
+                  letterSpacing: 0.6,
+                }}
+              >
+                ATS SCORE · ATUAL
+              </div>
+              <ScoreRing value={52} color={RED} size={104} />
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9.5,
+                  color: RED,
+                  letterSpacing: 0.4,
+                }}
+              >
+                +33 pts possíveis
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              borderRadius: 999,
+              overflow: "hidden",
+              height: 8,
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ flex: 22, background: ORANGE }} />
+            <div style={{ width: 3, background: "#fff" }} />
+            <div style={{ flex: 15, background: LIME }} />
+            <div style={{ width: 3, background: "#fff" }} />
+            <div style={{ flex: 8, background: BLUE }} />
+            <div style={{ flex: 55, background: "rgba(10,10,10,0.06)" }} />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 18,
+              fontSize: 11.5,
+              color: GRAY,
+              marginBottom: 24,
+            }}
+          >
+            <span>
+              <span style={{ color: ORANGE }}>●</span> S1 Experiência 22/50
+            </span>
+            <span>
+              <span style={{ color: LIME_DEEP }}>●</span> S2 Keywords 15/40
+            </span>
+            <span>
+              <span style={{ color: BLUE }}>●</span> S3 Formatação 8/10
+            </span>
+          </div>
+
+          <div
+            style={{
+              border: `1px solid ${BORDER}`,
+              borderRadius: 14,
+              padding: "18px 20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 16,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#fff",
+                  background: ORANGE,
+                  borderRadius: 5,
+                  padding: "2px 6px",
+                }}
+              >
+                S1
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 500, color: "#0a0a0a" }}>
+                Experiência Profissional
+              </span>
+              <span style={{ marginLeft: "auto", fontSize: 11, color: GRAY }}>
+                22 / 50 pts
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 26 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    letterSpacing: 0.5,
+                    color: GRAY,
+                    marginBottom: 10,
+                  }}
+                >
+                  PONTOS FORTES
+                </div>
+                {[
+                  "Experiência sólida com SQL e Python",
+                  "Boa comunicação escrita nas descrições",
+                ].map((t) => (
+                  <div
+                    key={t}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "8px 0",
+                      borderTop: `1px solid ${BORDER}`,
+                      fontSize: 12.5,
+                      color: "#3a3a36",
+                    }}
+                  >
+                    {t}
+                    <span
+                      style={{
+                        color: LIME_DEEP,
+                        background: "rgba(198,255,58,0.25)",
+                        borderRadius: 5,
+                        padding: "2px 6px",
+                        fontSize: 10.5,
+                        fontWeight: 600,
+                        flexShrink: 0,
+                        marginLeft: 10,
+                      }}
+                    >
+                      +6 pts
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    letterSpacing: 0.5,
+                    color: GRAY,
+                    marginBottom: 10,
+                  }}
+                >
+                  O QUE O EARLYCV PODE MELHORAR AO LIBERAR CV
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    padding: "8px 0",
+                    borderTop: `1px solid ${BORDER}`,
+                    fontSize: 12,
+                    color: "#3a3a36",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <div>
+                    <strong>Liderança técnica</strong> — não menciona times
+                    liderados ou mentoria.
+                  </div>
+                  <span
+                    style={{
+                      color: LIME_DEEP,
+                      background: "rgba(198,255,58,0.25)",
+                      borderRadius: 5,
+                      padding: "2px 6px",
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      flexShrink: 0,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    +5 pts
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    padding: "8px 0",
+                    borderTop: `1px solid ${BORDER}`,
+                    fontSize: 12,
+                    color: RED,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: "#3a3a36" }}>
+                      Machine learning
+                    </strong>{" "}
+                    <span style={{ color: "#3a3a36" }}>
+                      — sem evidência no CV, pedido na vaga.
+                    </span>
+                  </div>
+                  <span style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
+                    -6 pts
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </FadeCta>
+    </div>
+  );
+}
+
+/** Compact mockup based on the CV editor / adapted-resume view — antes/depois + document preview. */
+export function OtimizacaoMock() {
+  return (
+    <div style={{ fontFamily: GEIST, textAlign: "left", background: "#fff" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 22px",
+          borderBottom: `1px solid ${BORDER}`,
+        }}
+      >
+        <LogoMark />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: GRAY, marginRight: 6 }}>
+            Ver candidatura ↗
+          </span>
+          {["Editar CV", "Carta de apresentação", "DOCX"].map((b) => (
+            <span
+              key={b}
+              style={{
+                fontSize: 10.5,
+                color: "#3a3a36",
+                border: `1px solid ${BORDER}`,
+                borderRadius: 6,
+                padding: "5px 9px",
+              }}
+            >
+              {b}
+            </span>
+          ))}
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: "#0a0a0a",
+              background: LIME,
+              borderRadius: 6,
+              padding: "5px 9px",
+            }}
+          >
+            PDF
+          </span>
+        </div>
+      </div>
+
+      <FadeCta
+        maxHeight={520}
+        href="/adaptar"
+        label="Clique aqui e veja a otimização completa real →"
+      >
+        <div style={{ display: "flex" }}>
+          <div
+            style={{
+              width: 260,
+              flexShrink: 0,
+              background: "#0a0a0a",
+              padding: "24px 20px",
+              color: "#fff",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                color: "rgba(255,255,255,0.4)",
+                marginBottom: 16,
+              }}
+            >
+              ← análise completa
+            </div>
+            <div style={{ display: "flex", gap: 22, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: RED }}>
+                  52
+                </div>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 8.5,
+                    color: "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  CRÍTICO
+                </div>
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.35)",
+                  alignSelf: "center",
+                }}
+              >
+                +33
+              </div>
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: LIME }}>
+                  85
+                </div>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 8.5,
+                    color: "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  BOM
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                height: 5,
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.12)",
+                marginBottom: 20,
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ width: "85%", height: "100%", background: LIME }} />
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                letterSpacing: 0.6,
+                color: "rgba(255,255,255,0.45)",
+                marginBottom: 12,
+              }}
+            >
+              12 AJUSTES APLICADOS
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 8.5,
+                letterSpacing: 0.5,
+                color: "rgba(255,255,255,0.3)",
+                marginBottom: 6,
+              }}
+            >
+              TEXTO REESCRITO
+            </div>
+            {[
+              {
+                l: "Reescrita do Perfil Profissional",
+                d: "Destaca aderência à vaga",
+                pts: null,
+              },
+              {
+                l: "Conhecimento em gestão de portfólio incluído",
+                d: 'Keyword "Gestão de Portfólio"',
+                pts: "+3",
+              },
+              {
+                l: "Business Case incluído",
+                d: 'Keyword "Business Case"',
+                pts: "+3",
+              },
+              {
+                l: "Conhecimento sobre LGPD aplicado",
+                d: "Reforça compliance na experiência",
+                pts: "+2",
+              },
+            ].map((it) => (
+              <div
+                key={it.l}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 9,
+                  padding: "9px 10px",
+                  marginBottom: 7,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    lineHeight: 1.4,
+                    color: "#e4e4e0",
+                    fontWeight: 500,
+                  }}
+                >
+                  {it.l}
+                  {it.pts && (
+                    <span style={{ color: LIME, fontWeight: 600 }}>
+                      {" "}
+                      {it.pts}
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.4)",
+                    marginTop: 2,
+                  }}
+                >
+                  {it.d}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ flex: 1, padding: "30px 36px", minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#0a0a0a" }}>
+              PAULO CESAR ALOZEN
+            </div>
+            <div style={{ fontSize: 11, color: GRAY, marginBottom: 18 }}>
+              Curitiba, PR · pc_alozen@yahoo.com · linkedin.com/in/pauloalozen
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: 0.8,
+                color: "#0a0a0a",
+                fontWeight: 700,
+                marginBottom: 10,
+              }}
+            >
+              EXPERIÊNCIA
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#0a0a0a" }}>
+              Gerente — Dados, Analytics e Plataformas Digitais
+            </div>
+            <div style={{ fontSize: 11, color: GRAY, marginBottom: 10 }}>
+              Suzano SA · Jun 2023 – Mar 2026
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: "#3a3a36",
+                background: "rgba(198,255,58,0.14)",
+                borderRadius: 8,
+                padding: "12px 14px",
+                marginBottom: 10,
+              }}
+            >
+              Conduzi o portfólio corporativo de inovação e transformação
+              digital, priorizando iniciativas de maior impacto por meio de{" "}
+              <span
+                style={{ background: "rgba(198,255,58,0.55)", fontWeight: 600 }}
+              >
+                business cases estruturados e acompanhamento de value
+                realization
+              </span>{" "}
+              validado com a Controladoria.
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: "#3a3a36" }}>
+              Estruturei programa de automação com metodologia Lean e gestão da
+              mudança ativa, gerando ganho superior a 6.500 horas/ano.
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: "#3a3a36",
+                marginTop: 6,
+              }}
+            >
+              Defini e implementei arquitetura de dados corporativa com{" "}
+              <span
+                style={{ background: "rgba(198,255,58,0.55)", fontWeight: 600 }}
+              >
+                Data Lake e plataformas analíticas
+              </span>
+              , viabilizando ambientes escaláveis para analytics e IA.
+            </div>
+
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#0a0a0a",
+                marginTop: 20,
+              }}
+            >
+              Founder &amp; AI Engineer
+            </div>
+            <div style={{ fontSize: 11, color: GRAY, marginBottom: 8 }}>
+              EarlyCV · Mar 2026 – Atual
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: "#3a3a36" }}>
+              Idealizei e liderei todo o ciclo de vida do produto, desde a
+              concepção até o lançamento, utilizando IA como acelerador de
+              engenharia e produtividade.
+            </div>
+          </div>
+        </div>
+      </FadeCta>
+    </div>
+  );
+}
+
+/** Compact mockup based on /radar — job matches with real aderência scoring. */
+export function RadarMock() {
+  const jobs = [
     {
-      role: "Engenheira de Dados Sênior",
-      status: "Entrevista agendada",
-      tone: "#84cc16",
-      when: "vaga salva há 3 dias",
+      company: "GRUPO ZELO",
+      title: "Analista Desenvolvedor SR – Full Stack",
+      location: "Belo Horizonte, MG",
+      tags: ["typescript", "nodejs", "nestjs"],
     },
     {
-      role: "Analista de Produto Pleno",
-      status: "CV enviado",
-      tone: "#8a8a85",
-      when: "vaga salva há 6 dias",
+      company: "CRESOL",
+      title: "Analista de Processos | Serviços de IA",
+      location: "Francisco Beltrão, PR",
+      tags: ["machine learning", "deep learning", "automação"],
     },
     {
-      role: "Desenvolvedora Backend",
-      status: "Em preparação",
-      tone: "#f59e0b",
-      when: "vaga salva há 1 semana",
+      company: "NUCLEA",
+      title: "Engenheiro de Dados (Tech Lead)",
+      location: "São Paulo, SP",
+      tags: ["engenharia de dados", "databricks", "aws"],
+    },
+    {
+      company: "PRIVY",
+      title: "Fullstack Engineer",
+      location: "NYC-Privy, US-Remote",
+      tags: ["react", "typescript", "next.js"],
     },
   ];
   return (
     <div
       style={{
         background: "#fff",
-        padding: "28px 26px",
+        padding: "32px 34px 30px",
         fontFamily: GEIST,
         textAlign: "left",
       }}
     >
       <div
         style={{
-          fontFamily: MONO,
-          fontSize: 10.5,
-          letterSpacing: 1,
-          textTransform: "uppercase",
-          color: "#8a8a85",
-          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          marginBottom: 10,
         }}
       >
-        Minhas candidaturas
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: LIME,
+          }}
+        />
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: GRAY,
+          }}
+        >
+          Radar de Oportunidades
+        </span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {rows.map((r) => (
+      <h3
+        style={{
+          fontSize: 27,
+          fontWeight: 500,
+          letterSpacing: -0.6,
+          margin: "0 0 16px",
+          color: "#0a0a0a",
+          lineHeight: 1.15,
+        }}
+      >
+        Calibrado para{" "}
+        <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic" }}>
+          Dados &amp; IA &amp; Engenharia de Software
+        </em>{" "}
+        · lead
+      </h3>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+          marginBottom: 22,
+        }}
+      >
+        <span style={{ fontSize: 14, color: "#0a0a0a" }}>
+          <strong>5019</strong>{" "}
+          <span style={{ color: GRAY }}>vagas analisadas</span>
+        </span>
+        <span style={{ fontSize: 14, color: LIME_DEEP }}>
+          <strong>32</strong>{" "}
+          <span style={{ color: GRAY }}>altamente compatíveis</span>
+        </span>
+        <span
+          style={{
+            marginLeft: "auto",
+            fontFamily: MONO,
+            fontSize: 10,
+            color: LIME_DEEP,
+            background: "rgba(198,255,58,0.25)",
+            borderRadius: 999,
+            padding: "5px 11px",
+          }}
+        >
+          ✓ CV calibrado
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 14 }}>
+        {jobs.map((j) => (
           <div
-            key={r.role}
+            key={j.title}
             style={{
+              flex: 1,
+              minWidth: 0,
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              background: "#fafaf6",
-              border: "1px solid rgba(10,10,10,0.08)",
+              flexDirection: "column",
+              border: `1px solid ${BORDER}`,
               borderRadius: 12,
-              padding: "14px 16px",
+              padding: "14px 15px",
             }}
           >
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: "#0a0a0a" }}>
-                {r.role}
-              </div>
-              <div style={{ fontSize: 11.5, color: "#8a8a85", marginTop: 2 }}>
-                {r.when}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 10,
+              }}
+            >
+              <span style={{ fontFamily: MONO, fontSize: 8.5, color: GRAY }}>
+                {j.company}
+              </span>
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 8,
+                  color: LIME_DEEP,
+                  background: "rgba(198,255,58,0.25)",
+                  borderRadius: 999,
+                  padding: "2px 6px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                muito aderente
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: "#0a0a0a",
+                lineHeight: 1.35,
+                marginBottom: 4,
+                minHeight: 34,
+              }}
+            >
+              {j.title}
+            </div>
+            <div style={{ fontSize: 10, color: GRAY, marginBottom: 10 }}>
+              {j.location}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 5,
+                flexWrap: "wrap",
+                marginBottom: 14,
+                minHeight: 42,
+                alignContent: "flex-start",
+              }}
+            >
+              {j.tags.map((t) => (
+                <Tag key={t}>✓ {t}</Tag>
+              ))}
+            </div>
+            <div
+              style={{
+                background: "#0a0a0a",
+                color: "#fff",
+                borderRadius: 7,
+                padding: "7px 0",
+                textAlign: "center",
+                fontSize: 10.5,
+                fontWeight: 500,
+                marginTop: "auto",
+              }}
+            >
+              ⚡ Analisar meu CV
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          border: `1px solid ${BORDER}`,
+          borderRadius: 12,
+          padding: "16px 18px",
+          marginTop: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 8,
+              background: "#0a0a0a",
+              flexShrink: 0,
+            }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>
+              Analista Desenvolvedor SR – Full Stack
+            </div>
+            <div style={{ fontSize: 10.5, color: GRAY, marginTop: 2 }}>
+              GRUPO ZELO · Belo Horizonte, MG · há 19 semanas
+            </div>
+          </div>
+          <div style={{ textAlign: "center", flexShrink: 0 }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: `conic-gradient(${LIME} 288deg, rgba(10,10,10,0.08) 0deg)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "#0a0a0a",
+                    lineHeight: 1,
+                  }}
+                >
+                  4
+                </span>
+                <span style={{ fontSize: 7, color: GRAY, lineHeight: 1 }}>
+                  de 5
+                </span>
               </div>
             </div>
-            <span
+            <div
               style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: r.tone,
-                background: `${r.tone}1a`,
-                borderRadius: 999,
-                padding: "5px 10px",
+                fontFamily: MONO,
+                fontSize: 7.5,
+                color: LIME_DEEP,
+                marginTop: 4,
                 whiteSpace: "nowrap",
               }}
             >
-              {r.status}
-            </span>
+              MUITO ADERENTE
+            </div>
           </div>
-        ))}
+          <span
+            style={{
+              background: "#0a0a0a",
+              color: "#fff",
+              borderRadius: 7,
+              padding: "9px 14px",
+              fontSize: 10.5,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            ⚡ Analisar meu CV
+          </span>
+        </div>
+
+        <div
+          style={{
+            borderTop: `1px solid ${BORDER}`,
+            marginTop: 14,
+            paddingTop: 12,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 9,
+              letterSpacing: 0.5,
+              color: GRAY,
+              marginBottom: 10,
+            }}
+          >
+            COMPOSIÇÃO DO SCORE
+          </div>
+          <div style={{ display: "flex", gap: 22 }}>
+            {[
+              { k: "ÁREA", pct: 100, frac: "1 de 1" },
+              { k: "SKILLS", pct: 80, frac: "4 de 5" },
+              { k: "SENIORIDADE", pct: 0, frac: "0 de 1" },
+              { k: "TECNOLOGIAS", pct: 80, frac: "7 de 9" },
+            ].map((d) => (
+              <div key={d.k} style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 10,
+                    marginBottom: 5,
+                  }}
+                >
+                  <span style={{ fontFamily: MONO, color: GRAY }}>{d.k}</span>
+                  <span style={{ color: "#0a0a0a", fontWeight: 600 }}>
+                    {d.pct}%
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 4,
+                    borderRadius: 999,
+                    background: "rgba(10,10,10,0.08)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${d.pct}%`,
+                      height: "100%",
+                      background: LIME,
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 9.5, color: GRAY, marginTop: 4 }}>
+                  {d.frac}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ textAlign: "center", padding: "18px 0 4px" }}>
+        <Link
+          href="/radar"
+          style={{
+            fontFamily: GEIST,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#0a0a0a",
+            textDecoration: "underline",
+            textDecorationColor: "rgba(10,10,10,0.25)",
+            textUnderlineOffset: 4,
+          }}
+        >
+          Ver minhas oportunidades no Radar →
+        </Link>
       </div>
     </div>
   );
 }
 
-/** Illustrative mockup — no real screenshot exists yet for this feature. */
-export function PreparacaoMock() {
-  const items = [
-    {
-      label: "Perguntas técnicas",
-      example:
-        "Como você lidaria com um pipeline que falha silenciosamente em produção?",
-    },
-    {
-      label: "Perguntas comportamentais",
-      example:
-        "Conte sobre uma vez que discordou de uma decisão do seu gestor.",
-    },
-    {
-      label: "Ponto do seu CV",
-      example:
-        "Redução de 30% no tempo de processamento — prepare-se pra detalhar como chegou lá.",
-    },
+/** Compact mockup based on a candidatura detail page — status journey + interview + side panel. */
+export function GestaoMock() {
+  const steps = [
+    { l: "Analisada", state: "done" },
+    { l: "CV liberado", state: "done" },
+    { l: "Candidatado", state: "done" },
+    { l: "Em entrevista", state: "active" },
+    { l: "Resultado", state: "pending" },
+  ] as const;
+  const events = [
+    { d: "26 de ago.", l: "Status atualizado para Em entrevista", done: false },
+    { d: "21 de ago.", l: "Candidatura criada automaticamente", done: false },
+    { d: "21 de ago.", l: "Análise concluída. Score inicial 54%", done: true },
   ];
   return (
     <div
       style={{
-        background: "#0a0a0a",
-        padding: "28px 26px",
+        background: "#fff",
+        padding: "30px 34px 28px",
+        fontFamily: GEIST,
+        textAlign: "left",
+      }}
+    >
+      <div style={{ fontSize: 11, color: GRAY, marginBottom: 4 }}>
+        Minhas candidaturas / COORDENADOR DATA ANALYTICS
+      </div>
+      <div style={{ fontSize: 10.5, color: GRAY, marginBottom: 6 }}>ASSAÍ</div>
+      <h3
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          margin: "0 0 10px",
+          color: "#0a0a0a",
+        }}
+      >
+        COORDENADOR DATA ANALYTICS
+      </h3>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          rowGap: 10,
+          gap: 20,
+          marginBottom: 20,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 12,
+            color: GRAY,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 9.5,
+              color: AMBER,
+              background: "rgba(245,158,11,0.14)",
+              borderRadius: 999,
+              padding: "3px 9px",
+            }}
+          >
+            ● EM ENTREVISTA
+          </span>
+          <span>
+            1 análise · melhor score{" "}
+            <strong style={{ color: LIME_DEEP }}>71%</strong>
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          {["Status ▾", "+ Link da vaga"].map((b) => (
+            <span
+              key={b}
+              style={{
+                border: `1px solid ${BORDER}`,
+                color: "#3a3a36",
+                borderRadius: 8,
+                padding: "9px 13px",
+                fontSize: 11.5,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {b}
+            </span>
+          ))}
+          <span
+            style={{
+              background: "#0a0a0a",
+              color: "#fff",
+              borderRadius: 8,
+              padding: "9px 14px",
+              fontSize: 11.5,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Liberar CV para entrevista
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 22 }}>
+        <div style={{ flex: "0 0 66%", minWidth: 0 }}>
+          <div
+            style={{
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              padding: "18px 20px 14px",
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center" }}>
+              {steps.map((s, i) => (
+                <div
+                  key={s.l}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flex: i < steps.length - 1 ? 1 : "none",
+                  }}
+                >
+                  <div style={{ textAlign: "center", flexShrink: 0 }}>
+                    <div
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        margin: "0 auto",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background:
+                          s.state === "done"
+                            ? LIME
+                            : s.state === "active"
+                              ? "#fff"
+                              : "rgba(10,10,10,0.06)",
+                        border:
+                          s.state === "active" ? `2px solid ${AMBER}` : "none",
+                      }}
+                    >
+                      {s.state === "done" && (
+                        <span style={{ fontSize: 12, color: "#0a0a0a" }}>
+                          ✓
+                        </span>
+                      )}
+                      {s.state === "active" && (
+                        <span
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            background: AMBER,
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: s.state === "pending" ? "#c4c3bd" : "#3a3a36",
+                        marginTop: 6,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {s.l}
+                    </div>
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div
+                      style={{
+                        height: 2,
+                        flex: 1,
+                        background:
+                          s.state === "done"
+                            ? LIME
+                            : "repeating-linear-gradient(90deg, rgba(10,10,10,0.15) 0 4px, transparent 4px 8px)",
+                        marginBottom: 18,
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "rgba(245,158,11,0.1)",
+              border: "1px solid rgba(245,158,11,0.25)",
+              borderRadius: 10,
+              padding: "12px 16px",
+              marginBottom: 16,
+              fontSize: 12,
+              color: "#3a3a36",
+            }}
+          >
+            <span>📅</span>
+            <span>
+              <strong>Entrevista agendada</strong> — 27 de ago. · 17:20 — RH com
+              Assaí
+            </span>
+          </div>
+
+          <div
+            style={{
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              padding: "14px 18px",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                letterSpacing: 0.5,
+                color: GRAY,
+                marginBottom: 10,
+              }}
+            >
+              ANÁLISES DESTA CANDIDATURA
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}
+                  >
+                    COORDENADOR DATA ANALYTICS · Assaí
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 8.5,
+                      color: LIME_DEEP,
+                      background: "rgba(198,255,58,0.25)",
+                      borderRadius: 999,
+                      padding: "2px 7px",
+                    }}
+                  >
+                    MELHOR SCORE
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: GRAY, marginTop: 3 }}>
+                  +17% após ajustes
+                </div>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: LIME_DEEP }}>
+                71<span style={{ fontSize: 14 }}>%</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <span
+                style={{
+                  border: `1px solid ${BORDER}`,
+                  color: "#3a3a36",
+                  borderRadius: 7,
+                  padding: "7px 11px",
+                  fontSize: 11,
+                }}
+              >
+                Rever análise
+              </span>
+              <span
+                style={{
+                  border: `1px solid ${BORDER}`,
+                  color: "#3a3a36",
+                  borderRadius: 7,
+                  padding: "7px 11px",
+                  fontSize: 11,
+                }}
+              >
+                Liberar CV · 1 crédito
+              </span>
+              <span
+                style={{
+                  color: "#8a8a85",
+                  borderRadius: 7,
+                  padding: "7px 4px",
+                  fontSize: 11,
+                }}
+              >
+                + Fazer nova análise desta vaga
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              padding: "14px 18px",
+              marginTop: 16,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 10,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 9.5,
+                  letterSpacing: 0.5,
+                  color: GRAY,
+                }}
+              >
+                NOTAS
+              </span>
+              <span style={{ fontSize: 11, color: "#3a3a36" }}>
+                + Adicionar
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "#8a8a85" }}>
+              Nenhuma nota adicionada ainda.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              padding: "16px 18px",
+              marginBottom: 16,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                letterSpacing: 0.5,
+                color: GRAY,
+                marginBottom: 12,
+              }}
+            >
+              DETALHES
+            </div>
+            {[
+              ["Empresa", "Assaí"],
+              ["Origem", "analysis.auto"],
+              ["Criada", "21 de ago. de 2026"],
+              ["Entrevista", "27 de ago. · 17:20"],
+            ].map(([k, v]) => (
+              <div
+                key={k}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "7px 0",
+                  borderTop: `1px solid ${BORDER}`,
+                  fontSize: 11.5,
+                }}
+              >
+                <span style={{ color: GRAY }}>{k}</span>
+                <span style={{ color: "#0a0a0a", fontWeight: 500 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              padding: "16px 18px",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 9.5,
+                letterSpacing: 0.5,
+                color: GRAY,
+                marginBottom: 12,
+              }}
+            >
+              REGISTRO DE EVENTOS
+            </div>
+            {events.map((e) => (
+              <div
+                key={e.l}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  paddingBottom: 12,
+                  marginBottom: 12,
+                  borderBottom: `1px solid ${BORDER}`,
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: e.done ? LIME : "rgba(10,10,10,0.15)",
+                    flexShrink: 0,
+                    marginTop: 4,
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 9.5, color: GRAY }}>{e.d}</div>
+                  <div style={{ fontSize: 11.5, color: "#3a3a36" }}>{e.l}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact mockup based on the interview-prep drawer — estratégia + pontos de atenção/fortes. */
+export function PreparacaoMock() {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        padding: "30px 34px 28px",
         fontFamily: GEIST,
         textAlign: "left",
       }}
     >
       <div
         style={{
-          fontFamily: MONO,
-          fontSize: 10.5,
-          letterSpacing: 1,
-          textTransform: "uppercase",
-          color: "#8a8a85",
-          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
         }}
       >
-        Roteiro — Engenheira de Dados Sênior
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {items.map((it) => (
-          <div
-            key={it.label}
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span
             style={{
-              background: "rgba(250,250,246,0.06)",
-              border: "1px solid rgba(250,250,246,0.1)",
-              borderRadius: 12,
-              padding: "14px 16px",
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: LIME,
+            }}
+          />
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              color: GRAY,
             }}
           >
-            <div
+            Preparação com IA · baseada no seu CV
+          </span>
+        </div>
+        <span
+          style={{
+            border: `1px solid ${BORDER}`,
+            color: "#3a3a36",
+            borderRadius: 8,
+            padding: "7px 12px",
+            fontSize: 11,
+          }}
+        >
+          Exportar PDF
+        </span>
+      </div>
+      <h3
+        style={{
+          fontSize: 27,
+          fontWeight: 500,
+          letterSpacing: -0.6,
+          margin: "0 0 6px",
+          color: "#0a0a0a",
+        }}
+      >
+        Preparar{" "}
+        <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic" }}>
+          entrevista.
+        </em>
+      </h3>
+      <div style={{ fontSize: 12.5, color: GRAY, marginBottom: 14 }}>
+        Cientista de Dados Pleno · iFood
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+        {["Vaga + JD", "Análise", "CV adaptado (score 64%)", "Gaps (4)"].map(
+          (t) => (
+            <Tag key={t}>{t}</Tag>
+          ),
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 22 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+            }}
+          >
+            <span
               style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "#c6ff3a",
-                marginBottom: 6,
+                fontFamily: MONO,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#fff",
+                background: "#0a0a0a",
+                borderRadius: 5,
+                padding: "2px 6px",
               }}
             >
-              {it.label}
+              01
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#0a0a0a" }}>
+              Estratégia
+            </span>
+          </div>
+          <p
+            style={{
+              fontSize: 12.5,
+              lineHeight: 1.6,
+              color: "#3a3a36",
+              margin: "0 0 20px",
+              border: `1px solid ${BORDER}`,
+              borderRadius: 10,
+              padding: "12px 14px",
+            }}
+          >
+            Esta entrevista será um teste de alinhamento entre o que você
+            declarou no CV e as exigências práticas da vaga, especialmente em ML
+            e cloud. Mostre evolução: reconheça as lacunas e demonstre
+            disposição para aprender e aplicar em cenários reais.
+          </p>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#fff",
+                background: "#0a0a0a",
+                borderRadius: 5,
+                padding: "2px 6px",
+              }}
+            >
+              02
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#0a0a0a" }}>
+              Pontos de atenção
+            </span>
+          </div>
+          {[
+            "Não minimize a importância dos requisitos de ML; reconheça e mostre plano de desenvolvimento",
+            "Evite respostas genéricas sobre cloud; detalhe o que conhece e como aprende novos serviços",
+          ].map((t) => (
+            <div
+              key={t}
+              style={{
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "#3a3a36",
+                background: "rgba(245,158,11,0.08)",
+                border: "1px solid rgba(245,158,11,0.2)",
+                borderRadius: 9,
+                padding: "9px 12px",
+                marginBottom: 8,
+              }}
+            >
+              <span style={{ color: AMBER, fontWeight: 600 }}>Atenção — </span>
+              {t}
             </div>
-            <div style={{ fontSize: 13, color: "#e4e4e0", lineHeight: 1.5 }}>
-              {it.example}
+          ))}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#fff",
+                background: "#0a0a0a",
+                borderRadius: 5,
+                padding: "2px 6px",
+              }}
+            >
+              03
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#0a0a0a" }}>
+              Pontos fortes para destacar
+            </span>
+          </div>
+          {[
+            "Experiência sólida com Python e SQL, com exemplos práticos de consultas complexas",
+            "Uso de BigQuery e dbt, demonstrando familiaridade com ferramentas de dados modernas",
+            "Construção de pipelines com Airflow, mostrando entendimento de orquestração",
+          ].map((t) => (
+            <div
+              key={t}
+              style={{
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "#3a3a36",
+                background: "rgba(198,255,58,0.1)",
+                border: "1px solid rgba(198,255,58,0.3)",
+                borderRadius: 9,
+                padding: "9px 12px",
+                marginBottom: 8,
+              }}
+            >
+              <span style={{ color: LIME_DEEP, fontWeight: 600 }}>
+                Ponto —{" "}
+              </span>
+              {t}
             </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact mockup for the carta de apresentação output — a finished, personalized letter. */
+export function CartaMock() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        fontFamily: GEIST,
+        textAlign: "left",
+        background: "#fff",
+      }}
+    >
+      <div
+        style={{
+          width: 240,
+          flexShrink: 0,
+          background: "#0a0a0a",
+          padding: "24px 20px",
+          color: "#fff",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            letterSpacing: 0.6,
+            color: "rgba(255,255,255,0.45)",
+            marginBottom: 16,
+          }}
+        >
+          CARTA DE APRESENTAÇÃO
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+          Engenheira de Dados Sênior
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "rgba(255,255,255,0.5)",
+            marginBottom: 20,
+          }}
+        >
+          Baseada no seu CV real + a vaga
+        </div>
+        {[
+          "Puxa experiências reais do seu CV",
+          "Conecta com o que a vaga pede",
+          "Nunca inventa cargo ou resultado",
+        ].map((t) => (
+          <div
+            key={t}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              fontSize: 11.5,
+              color: "#e4e4e0",
+              lineHeight: 1.5,
+              marginBottom: 10,
+            }}
+          >
+            <span style={{ color: LIME, flexShrink: 0 }}>✓</span>
+            {t}
           </div>
         ))}
+      </div>
+
+      <div style={{ flex: 1, padding: "30px 36px", minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+            color: GRAY,
+            marginBottom: 14,
+          }}
+        >
+          Prévia da carta
+        </div>
+        <p
+          style={{
+            fontSize: 13,
+            lineHeight: 1.75,
+            color: "#3a3a36",
+            margin: 0,
+          }}
+        >
+          Prezado(a) recrutador(a),
+          <br />
+          <br />
+          Nos últimos três anos, liderei a migração de pipelines de dados que{" "}
+          <span
+            style={{ background: "rgba(198,255,58,0.55)", fontWeight: 600 }}
+          >
+            reduziu o tempo de processamento em 30%
+          </span>{" "}
+          — exatamente o tipo de ganho de eficiência que vejo destacado na vaga
+          de Engenheira de Dados Sênior na [Empresa]. Tenho experiência prática
+          com{" "}
+          <span
+            style={{ background: "rgba(198,255,58,0.55)", fontWeight: 600 }}
+          >
+            Python, Airflow e AWS
+          </span>
+          , as mesmas tecnologias citadas na descrição, e gostaria de conversar
+          sobre como posso contribuir com o time...
+        </p>
       </div>
     </div>
   );
@@ -216,15 +2026,6 @@ const FEATURES: {
     ),
   },
 ];
-
-const IMAGE_BY_KEY: Record<
-  Exclude<FeatureKey, "gestao" | "preparacao">,
-  { src: string; alt: string }
-> = {
-  analise: { src: "/landing/f-resultado.jpg", alt: "Score ATS earlyCV" },
-  otimizacao: { src: "/landing/f-adaptar.jpg", alt: "Adaptação de CV earlyCV" },
-  radar: { src: "/landing/f-radar.jpg", alt: "Radar de vagas earlyCV" },
-};
 
 /** Interactive pill row + matching visual — clicking a pill swaps the frame content. */
 export function FeatureShowcase() {
@@ -295,22 +2096,19 @@ export function FeatureShowcase() {
 
       <div
         className="reveal-card"
-        style={{ ...browserFrame, maxWidth: 900, width: "100%" }}
+        style={{ ...browserFrame, maxWidth: 1080, width: "100%" }}
       >
         <BrowserChrome />
-        {active === "gestao" ? (
+        {active === "analise" ? (
+          <AnaliseMock />
+        ) : active === "otimizacao" ? (
+          <OtimizacaoMock />
+        ) : active === "radar" ? (
+          <RadarMock />
+        ) : active === "gestao" ? (
           <GestaoMock />
-        ) : active === "preparacao" ? (
-          <PreparacaoMock />
         ) : (
-          // biome-ignore lint/performance/noImgElement: marketing screenshot, not an optimizable asset pipeline
-          <img
-            src={IMAGE_BY_KEY[active].src}
-            alt={IMAGE_BY_KEY[active].alt}
-            width={950}
-            height={660}
-            style={{ display: "block", width: "100%", height: "auto" }}
-          />
+          <PreparacaoMock />
         )}
       </div>
     </>

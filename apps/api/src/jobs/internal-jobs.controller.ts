@@ -4,6 +4,7 @@ import { JobsService } from "./jobs.service";
 import { toPublicJobView } from "./public-job-view";
 
 const DEFAULT_TECH_MIN_COUNT = 10;
+const DEFAULT_TOP_COMPANIES_LIMIT = 24;
 
 // Sem autenticação de propósito: os dados aqui (slug/lastSeenAt de vagas
 // ativas, listagem por empresa, listagem por tecnologia) são os mesmos que
@@ -66,5 +67,17 @@ export class InternalJobsController {
       total: result.total,
       jobs: result.jobs.map(toPublicJobView),
     };
+  }
+
+  // Usado pela landing page (marquee de empresas). Só devolve empresas com
+  // pelo menos 1 vaga pública ativa agora — nunca uma lista estática.
+  @Get("top-companies")
+  async getTopCompanies(@Query("limit") limitRaw?: string) {
+    const limit = Math.max(
+      1,
+      Number.parseInt(limitRaw ?? "", 10) || DEFAULT_TOP_COMPANIES_LIMIT,
+    );
+
+    return this.jobsService.listTopCompaniesWithActiveJobs(limit);
   }
 }

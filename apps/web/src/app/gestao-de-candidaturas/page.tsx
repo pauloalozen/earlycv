@@ -4,15 +4,19 @@ import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
 import { GestaoMock } from "../_landing/_feature-showcase";
 import {
+  GEIST_V2 as GEIST,
+  LandingNavV2,
+  MONO_V2 as MONO,
+  SERIF_ITALIC_V2 as SERIF_ITALIC,
+} from "../_landing/_nav-v2";
+import {
   BrowserChrome,
   browserFrame,
   btnPrimary,
   container,
   FlowDiagram,
-  GEIST,
+  JourneyStrip,
   LandingSharedStyles,
-  PublicNav,
-  SERIF_ITALIC,
   SectionLabel,
 } from "../_landing/_shared";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
@@ -57,10 +61,10 @@ export default function GestaoDeCandidaturasPage() {
       style={{ fontFamily: GEIST, color: "#0a0a0a", background: "#ffffff" }}
     >
       <LandingScrollAnimations />
-      <PublicNav />
+      <LandingNavV2 />
 
       {/* HERO */}
-      <section style={{ padding: "76px 32px 0" }}>
+      <section style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -71,7 +75,7 @@ export default function GestaoDeCandidaturasPage() {
             alignItems: "center",
           }}
         >
-          <div className="lp-kicker" style={{ marginBottom: 26 }}>
+          <div className="lp-fv2-kicker" style={{ marginBottom: 26 }}>
             <span
               style={{
                 width: 6,
@@ -155,7 +159,7 @@ export default function GestaoDeCandidaturasPage() {
             <div style={{ marginBottom: 20 }}>
               <span
                 style={{
-                  fontFamily: "var(--font-geist-mono), monospace",
+                  fontFamily: MONO,
                   fontSize: 10.5,
                   letterSpacing: 1,
                   textTransform: "uppercase",
@@ -181,7 +185,7 @@ export default function GestaoDeCandidaturasPage() {
 
       {/* É ASSIM QUE FICA */}
       <section style={{ padding: "70px 32px 0" }}>
-        <div style={{ ...container, maxWidth: 900 }}>
+        <div style={{ ...container, maxWidth: 1080 }}>
           <div
             className="reveal-card"
             style={{ textAlign: "center", marginBottom: 24 }}
@@ -256,14 +260,62 @@ export default function GestaoDeCandidaturasPage() {
         </div>
       </section>
 
-      {/* DIFERENCIAL: TUDO CONECTADO */}
+      {/* CICLO DE APRENDIZADO */}
+      <section style={{ padding: "0 32px 100px" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center", maxWidth: 680 }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>NADA SE PERDE, NEM O APRENDIZADO</SectionLabel>
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.4vw, 34px)",
+              fontWeight: 500,
+              letterSpacing: -1,
+              margin: "0 0 16px",
+            }}
+          >
+            Cada candidatura também ensina algo{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              para a próxima
+            </em>
+            .
+          </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 28px",
+              maxWidth: 560,
+            }}
+          >
+            Registre o que aconteceu em cada processo — avanços, entrevistas,
+            feedback e resultado. Esse histórico ajuda o EarlyCV a te preparar
+            melhor pra próxima entrevista.
+          </p>
+          <FlowDiagram
+            steps={["Entrevista", "Feedback", "Próxima preparação"]}
+          />
+        </div>
+      </section>
+
+      {/* DIFERENCIAL + JORNADA: TUDO CONECTADO */}
       <section style={{ background: "#0a0a0a", padding: "90px 32px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 720 }}
         >
           <div style={{ marginBottom: 14 }}>
-            <SectionLabel>O DIFERENCIAL NÃO É UM KANBAN</SectionLabel>
+            <SectionLabel>DA VAGA À ENTREVISTA</SectionLabel>
           </div>
           <h2
             style={{
@@ -273,11 +325,20 @@ export default function GestaoDeCandidaturasPage() {
               fontWeight: 400,
               color: "#fafaf6",
               letterSpacing: -0.4,
-              margin: "0 0 20px",
+              margin: "0 0 12px",
             }}
           >
-            É tudo estar conectado.
+            Cada candidatura precisa manter seu contexto.
           </h2>
+          <p
+            style={{
+              fontSize: 13,
+              color: "#8a8a85",
+              margin: "0 0 24px",
+            }}
+          >
+            Não é outro Kanban. É tudo estar conectado.
+          </p>
           <p
             style={{
               fontSize: 15,
@@ -288,14 +349,28 @@ export default function GestaoDeCandidaturasPage() {
               marginRight: "auto",
             }}
           >
-            Um quadro de status qualquer organiza cartões. O EarlyCV conecta
-            cada candidatura à análise que a gerou, ao CV que foi usado e à
-            preparação de entrevista — sem você ter que copiar e colar nada
-            entre ferramentas.
+            Um quadro de status organiza cartões. O EarlyCV acompanha aquela
+            candidatura: qual era a vaga, qual análise você fez, qual currículo
+            enviou, em que etapa está e como se preparar quando a entrevista
+            chegar.
           </p>
-          <FlowDiagram
+          <JourneyStrip
             variant="dark"
-            steps={["Vaga", "Análise", "CV", "Candidatura", "Preparação"]}
+            steps={[
+              "Radar",
+              "Análise",
+              "CV adaptado",
+              "Candidatura",
+              "Preparação",
+            ]}
+            activeIndex={3}
+            hrefs={[
+              "/radar-de-vagas",
+              "/analise-de-curriculo",
+              undefined,
+              undefined,
+              "/preparacao-para-entrevista",
+            ]}
           />
         </div>
       </section>

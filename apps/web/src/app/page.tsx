@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { fetchGuestAnalysisAuthGateEnabledServer } from "@/lib/guest-analysis-auth-gate.server";
+import { getTopCompaniesWithActiveJobs } from "@/lib/internal-jobs-api";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { resolveLandingVariant } from "./_landing/variant";
 import { LandingVariantA } from "./_landing/variant-a";
@@ -9,6 +10,7 @@ import { LandingVariantC } from "./_landing/variant-c";
 import { LandingVariantD } from "./_landing/variant-d";
 import { LandingVariantE } from "./_landing/variant-e";
 import { LandingVariantF } from "./_landing/variant-f";
+import { LandingVariantF2 } from "./_landing/variant-f-v2";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
@@ -69,6 +71,22 @@ export default async function Home() {
       <LandingVariantF
         guestAnalysisAuthGateEnabled={guestAnalysisAuthGateEnabled}
         isAuthenticated={!!user}
+      />
+    );
+  }
+
+  if (variant === "F2") {
+    const [guestAnalysisAuthGateEnabled, user, topCompanies] =
+      await Promise.all([
+        fetchGuestAnalysisAuthGateEnabledServer(),
+        getCurrentAppUserFromCookies(),
+        getTopCompaniesWithActiveJobs(24),
+      ]);
+    return (
+      <LandingVariantF2
+        guestAnalysisAuthGateEnabled={guestAnalysisAuthGateEnabled}
+        isAuthenticated={!!user}
+        topCompanies={topCompanies}
       />
     );
   }
