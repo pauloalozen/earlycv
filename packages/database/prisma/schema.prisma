@@ -964,6 +964,7 @@ model AnalysisJob {
   lastError               String?
   convertedAt             DateTime?
   convertedCvAdaptationId String?              @unique
+  guestPossessionTokenHash String?             @unique
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
   startedAt               DateTime?
@@ -972,12 +973,38 @@ model AnalysisJob {
   user                  User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   analysisCvSnapshot    AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
   convertedCvAdaptation CvAdaptation?       @relation(fields: [convertedCvAdaptationId], references: [id], onDelete: SetNull)
+  oauthAttempts         OAuthAttempt[]
 
   @@index([userId])
   @@index([guestSessionHash])
   @@index([status])
   @@index([createdAt])
   @@index([convertedAt])
+}
+
+// Correlação por tentativa de OAuth (Fase 3 do gate de autenticação guest —
+// specs/no-guest-analysis-preview-auth-gate-diagnostic-plan-ADENDO-hardening.md
+// seção 4.1). `state` é gerado exclusivamente pelo backend (nunca pelo
+// navegador) e devolvido pelo Google atrelado à requisição de autorização
+// específica que o originou — imune a sobrescrita por outra aba, ao
+// contrário de um cookie global. Não é segredo (só chave de correlação
+// opaca); quem prova posse da análise é o guestPossessionToken, verificado
+// ANTES da criação desta linha (em POST /auth/oauth-attempts), nunca aqui.
+model OAuthAttempt {
+  id                       String    @id @default(cuid())
+  state                    String    @unique
+  analysisJobId            String
+  conversionContext        String?
+  journeySessionInternalId String?
+  visitorId                String?
+  expiresAt                DateTime
+  consumedAt               DateTime?
+  createdAt                DateTime  @default(now())
+
+  analysisJob AnalysisJob @relation(fields: [analysisJobId], references: [id], onDelete: Cascade)
+
+  @@index([analysisJobId])
+  @@index([expiresAt])
 }
 
 model JobSource {

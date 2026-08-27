@@ -2,15 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
+import { CartaMock } from "../_landing/_feature-showcase";
 import {
+  GEIST_V2 as GEIST,
+  LandingNavV2,
+  MONO_V2 as MONO,
+  SERIF_ITALIC_V2 as SERIF_ITALIC,
+} from "../_landing/_nav-v2";
+import {
+  BrowserChrome,
+  browserFrame,
   btnPrimary,
   container,
   FlowDiagram,
-  GEIST,
+  JourneyStrip,
   LandingSharedStyles,
-  MONO,
-  PublicNav,
-  SERIF_ITALIC,
   SectionLabel,
 } from "../_landing/_shared";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
@@ -42,10 +48,10 @@ export default function CartaDeApresentacaoPage() {
       style={{ fontFamily: GEIST, color: "#0a0a0a", background: "#ffffff" }}
     >
       <LandingScrollAnimations />
-      <PublicNav />
+      <LandingNavV2 />
 
       {/* HERO */}
-      <section style={{ padding: "76px 32px 0" }}>
+      <section style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -56,7 +62,7 @@ export default function CartaDeApresentacaoPage() {
             alignItems: "center",
           }}
         >
-          <div className="lp-kicker" style={{ marginBottom: 26 }}>
+          <div className="lp-fv2-kicker" style={{ marginBottom: 26 }}>
             <span
               style={{
                 width: 6,
@@ -122,6 +128,14 @@ export default function CartaDeApresentacaoPage() {
             </svg>
             Criar minha carta <span>→</span>
           </Link>
+
+          <div
+            className="reveal-card"
+            style={{ ...browserFrame, maxWidth: 1080, width: "100%" }}
+          >
+            <BrowserChrome />
+            <CartaMock />
+          </div>
         </div>
       </section>
 
@@ -268,10 +282,65 @@ export default function CartaDeApresentacaoPage() {
             Sem inventar experiências.
           </h2>
           <p style={{ fontSize: 15, color: "#a0a098", margin: 0 }}>
-            A carta usa só o que está no seu currículo — a mesma regra vale pra
-            adaptação de CV, preparação de entrevista e qualquer outro texto que
-            o EarlyCV gera pra você.
+            O currículo destaca as experiências mais relevantes para a vaga. A
+            carta explica por que essas experiências importam. Como os dois
+            partem do mesmo contexto, sua candidatura permanece coerente — sem
+            inventar informações.
           </p>
+        </div>
+      </section>
+
+      {/* JORNADA: DA VAGA À ENTREVISTA */}
+      <section style={{ padding: "100px 32px" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center", maxWidth: 720 }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>DA VAGA À ENTREVISTA</SectionLabel>
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.4vw, 34px)",
+              fontWeight: 500,
+              letterSpacing: -1,
+              margin: "0 0 16px",
+            }}
+          >
+            Uma candidatura funciona melhor quando tudo{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              conta a mesma história
+            </em>
+            .
+          </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 32px",
+              maxWidth: 560,
+            }}
+          >
+            A vaga, o currículo adaptado e a carta de apresentação compartilham
+            o mesmo objetivo: apresentar as experiências mais relevantes para
+            aquela oportunidade, sem inventar informações.
+          </p>
+          <JourneyStrip
+            steps={["Análise", "CV adaptado + Carta", "Candidatura"]}
+            activeIndex={1}
+            hrefs={[
+              "/analise-de-curriculo",
+              undefined,
+              "/gestao-de-candidaturas",
+            ]}
+          />
         </div>
       </section>
 

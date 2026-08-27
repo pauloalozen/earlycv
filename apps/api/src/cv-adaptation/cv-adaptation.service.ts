@@ -1,6 +1,7 @@
 import {
   createHash,
   createHmac,
+  randomBytes,
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
@@ -14,6 +15,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type {
+  AnalysisJobStatus as AnalysisJobStatusValue,
   JobApplicationOrigin,
   JobApplicationStatus,
 } from "@prisma/client";
@@ -28,6 +30,10 @@ import {
   extractTextFromCvFile,
   validateCvFileEnvelope,
 } from "../common/cv-text-extractor";
+import {
+  hashGuestPossessionToken,
+  possessionTokenMatchesHash,
+} from "../common/guest-possession-token";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
@@ -950,6 +956,7 @@ export class CvAdaptationService {
     jobId: string;
     status: "pending";
     guestSessionPublicToken: string | null;
+    guestPossessionToken: string;
   }> {
     const turnstilePrecheck =
       await this.protectedAnalyzeService.precheckTurnstile(
@@ -968,11 +975,20 @@ export class CvAdaptationService {
       analysisContext?.sessionPublicToken,
     );
 
+    // Token de posse real da análise guest (não confundir com o cuid do
+    // job, que identifica mas não autentica posse). Mesmo padrão de
+    // PasswordResetToken em auth.service.ts: randomBytes(32) cru devolvido
+    // uma única vez ao cliente, só o hash SHA-256 é persistido.
+    const guestPossessionToken = randomBytes(32).toString("hex");
+    const guestPossessionTokenHash =
+      hashGuestPossessionToken(guestPossessionToken);
+
     const job = await this.database.analysisJob.create({
       data: {
         ownerKind: "guest",
         status: "pending",
         guestSessionHash,
+        guestPossessionTokenHash,
         jobDescriptionText,
         masterCvText: masterCvText?.trim() || null,
       },
@@ -1008,6 +1024,7 @@ export class CvAdaptationService {
       jobId: job.id,
       status: "pending",
       guestSessionPublicToken: analysisContext?.sessionPublicToken ?? null,
+      guestPossessionToken,
     };
   }
 
@@ -1388,6 +1405,148 @@ export class CvAdaptationService {
       jobTitle: job.status === "succeeded" ? job.jobTitle : null,
       companyName: job.status === "succeeded" ? job.companyName : null,
     };
+  }
+
+  // DTO deliberadamente estreito (nunca reaproveitar o shape autenticado
+  // com campos "a mais" que o cliente ignora — isso é exatamente o tipo de
+  // acidente de serialização que vaza dado, ver ADENDO-hardening.md seção
+  // 2). Usado só quando guest_analysis_auth_gate_enabled está ligado e a
+  // requisição não está autenticada — nunca contém conteúdo derivado da
+  // análise, só o status.
+  async getGuestAnalysisJobStatusOnly(
+    jobId: string,
+    possessionToken: string | null,
+  ): Promise<{ status: AnalysisJobStatusValue }> {
+    if (!possessionToken) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    // jobId (cuid) identifica a análise, mas nunca autentica posse dela —
+    // sem o token de posse correto, nem o status é revelado.
+    const owns = await this.verifyGuestPossessionToken(jobId, possessionToken);
+
+    if (!owns) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    return { status: job.status };
+  }
+
+  // Fase 4 do gate de autenticação guest — claim server-side, sem
+  // reprocessar IA. Diferente de getGuestAnalysisJobStatusOnly, este
+  // método é chamado só depois de autenticado: ownership do AnalysisJob
+  // já foi transferida em transferAnalysisJobOwnership
+  // (OAuthAttemptService, disparada a partir da correlação provada por
+  // possession token + state no callback OAuth) — aqui a checagem é
+  // simplesmente job.userId === userId, o mesmo padrão de
+  // getAnalysisJobStatus para autenticado. Não aceita jobId "solto" de
+  // outro usuário, nunca.
+  //
+  // O conteúdo (adaptedContentJson/previewText/masterCvText/jobTitle/
+  // companyName/jobDescriptionText) vem estritamente do que
+  // processAnalysisJob já gravou no AnalysisJob — nunca do corpo da
+  // requisição. Delega para saveGuestPreview (já testado, já usado hoje)
+  // só trocando a FONTE dos dados de entrada; toda a lógica de resolução
+  // de master CV, dedupe por (userId, analysisCvSnapshotId), hook de
+  // candidatura e markAnalysisJobConverted é reaproveitada sem alteração
+  // — o que garante, pelas mesmas garantias já existentes, que a
+  // CvAdaptation criada aqui continua vinculada ao analysisCvSnapshotId
+  // (crítico: é essa vinculação que exclui o snapshot do cleanup de 30
+  // dias em cleanupExpiredGuestSnapshots).
+  async claimGuestAnalysisJob(
+    userId: string,
+    jobId: string,
+    guestPossessionToken?: string,
+  ): Promise<
+    | { status: "pending" | "processing" | "failed" }
+    | { status: "succeeded"; cvAdaptationId: string }
+  > {
+    let job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    if (job.userId !== userId) {
+      // Único caminho de transferência de ownership fora do OAuth: prova
+      // de posse via guestPossessionToken (mesma garantia criptográfica de
+      // OAuthAttemptService.transferAnalysisJobOwnership — job ainda sem
+      // dono + token bate com o hash). Job de outro usuário, ou sem token
+      // válido, nunca é aceito.
+      const canTransfer =
+        job.userId === null &&
+        !!guestPossessionToken &&
+        (await this.verifyGuestPossessionToken(jobId, guestPossessionToken));
+
+      if (!canTransfer) {
+        throw new NotFoundException("analysis job not found");
+      }
+
+      await this.database.analysisJob.updateMany({
+        where: {
+          id: jobId,
+          ownerKind: "guest",
+          OR: [{ userId: null }, { userId }],
+        },
+        data: { userId },
+      });
+
+      job = await this.database.analysisJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job || job.userId !== userId) {
+        throw new NotFoundException("analysis job not found");
+      }
+    }
+
+    // Idempotente: se já convertida (claim repetido, callback duplicado,
+    // tentativa concorrente que já terminou antes), devolve o resultado
+    // existente sem tocar em nada de novo.
+    if (job.convertedAt && job.convertedCvAdaptationId) {
+      return {
+        status: "succeeded",
+        cvAdaptationId: job.convertedCvAdaptationId,
+      };
+    }
+
+    if (job.status !== "succeeded") {
+      return { status: job.status };
+    }
+
+    if (!job.analysisCvSnapshotId) {
+      throw new BadRequestException(
+        "Succeeded analysis job is missing its snapshot reference.",
+      );
+    }
+
+    const dto: SaveGuestPreviewDto = {
+      adaptedContentJson: (job.adaptedContentJson ?? {}) as Record<
+        string,
+        unknown
+      >,
+      previewText: job.previewText ?? undefined,
+      jobDescriptionText: job.jobDescriptionText,
+      masterCvText: job.masterCvText ?? "",
+      analysisCvSnapshotId: job.analysisCvSnapshotId,
+      jobTitle: job.jobTitle ?? undefined,
+      companyName: job.companyName ?? undefined,
+    };
+
+    const adaptation = await this.saveGuestPreview(userId, dto);
+
+    return { status: "succeeded", cvAdaptationId: adaptation.id };
   }
 
   async analyzeAuthenticated(
@@ -4978,6 +5137,42 @@ export class CvAdaptationService {
     const token = sessionPublicToken?.trim();
     if (!token) return null;
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  // Prova de posse real de uma AnalysisJob guest — jobId (cuid) sozinho
+  // identifica a análise, mas nunca autentica posse dela; só quem recebeu
+  // o guestPossessionToken cru na resposta de analyze-guest consegue
+  // passar aqui. Comparação em tempo constante via possessionTokenMatchesHash
+  // (mesmo padrão já usado para assinatura de webhook em
+  // verifyWebhookSignature) para não vazar o hash por diferença de timing.
+  // Job já convertido (claimed) também falha aqui deliberadamente — uma vez
+  // vinculado a um usuário, o token de posse guest deixa de valer como
+  // credencial (o dono passa a ser o userId, não mais o token).
+  async verifyGuestPossessionToken(
+    jobId: string,
+    rawToken: string,
+  ): Promise<boolean> {
+    if (!jobId || !rawToken) return false;
+
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+      select: {
+        ownerKind: true,
+        guestPossessionTokenHash: true,
+        convertedAt: true,
+      },
+    });
+
+    if (
+      !job ||
+      job.ownerKind !== "guest" ||
+      !job.guestPossessionTokenHash ||
+      job.convertedAt
+    ) {
+      return false;
+    }
+
+    return possessionTokenMatchesHash(rawToken, job.guestPossessionTokenHash);
   }
 
   private getSnapshotEnforcementReleaseDate() {

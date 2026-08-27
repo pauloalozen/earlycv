@@ -43,7 +43,7 @@ vi.mock("@/lib/cv-adaptation-api", () => ({
   saveGuestPreview: vi.fn(),
 }));
 
-import AdaptarPage from "./page";
+import { AdaptarPageClient as AdaptarPage } from "./adaptar-client";
 
 const makeRadarJob = () => ({
   canonicalKey: "job-abc",

@@ -370,7 +370,18 @@ test("social auth controller callbacks delegate the OAuth user to AuthService", 
       return expectedSession;
     },
   } as unknown as AuthService;
-  const controller = new AuthController(authService) as SocialAuthController;
+  // Nenhum destes callbacks manda `state` na query — o caminho de
+  // resolução de OAuthAttempt (Fase 3) nunca é acionado aqui, então um
+  // mock vazio é suficiente só para satisfazer o construtor.
+  const oauthAttemptService = {
+    resolveAndConsume: async () => {
+      throw new Error("resolveAndConsume should not be called without state");
+    },
+  } as unknown as import("./oauth-attempt.service").OAuthAttemptService;
+  const controller = new AuthController(
+    authService,
+    oauthAttemptService,
+  ) as SocialAuthController;
   const googleProfile: SocialProfileInput = {
     provider: "google",
     providerAccountId: "google-123",

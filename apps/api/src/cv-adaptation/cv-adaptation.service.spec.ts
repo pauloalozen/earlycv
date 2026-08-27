@@ -5149,3 +5149,619 @@ test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId i
   const started = calls.find((c) => c.eventName === "analysis_started");
   assert.equal(started?.metadata?.product_origin, "radar");
 });
+
+// Fase 1 do gate de autenticação (guestPossessionToken): jobId (cuid)
+// identifica a análise, mas nunca deve autenticar posse dela sozinho — só
+// quem recebeu o token cru na resposta de analyze-guest consegue provar
+// posse depois. Ver specs/no-guest-analysis-preview-auth-gate-diagnostic-plan-ADENDO-hardening.md.
+
+test("startGuestAnalysisJob generates a guestPossessionToken and persists only its SHA-256 hash", async () => {
+  let createdData: Record<string, unknown> | null = null;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-tok-1" }) },
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          createdData = data;
+          return { id: "job-tok-1", ...data };
+        },
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+    },
+    { analyzeAndAdapt: async () => {} },
+    {},
+    {},
+    {},
+    { precheckTurnstile: async () => ({ ok: true }) },
+  );
+
+  const started = await service.startGuestAnalysisJob(
+    "Vaga com descricao suficientemente longa para passar na validacao interna.",
+    undefined,
+    validMasterCvText,
+    "token",
+    undefined,
+  );
+
+  assert.equal(typeof started.guestPossessionToken, "string");
+  // randomBytes(32).toString("hex") => 64 caracteres hex.
+  assert.match(started.guestPossessionToken, /^[0-9a-f]{64}$/);
+
+  const persistedHash = (createdData as Record<string, unknown> | null)
+    ?.guestPossessionTokenHash as string;
+  assert.equal(typeof persistedHash, "string");
+  assert.notEqual(persistedHash, started.guestPossessionToken);
+  assert.equal(
+    persistedHash,
+    createHash("sha256").update(started.guestPossessionToken).digest("hex"),
+  );
+});
+
+test("verifyGuestPossessionToken succeeds when the raw token matches the stored hash", async () => {
+  const rawToken = "a".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async ({ where }: { where: { id: string } }) =>
+          where.id === "job-ok"
+            ? { ownerKind: "guest", guestPossessionTokenHash: hash }
+            : null,
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken("job-ok", rawToken);
+  assert.equal(ok, true);
+});
+
+test("verifyGuestPossessionToken fails when the raw token does not match the stored hash", async () => {
+  const hash = createHash("sha256").update("correct-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken("job-1", "wrong-token");
+  assert.equal(ok, false);
+});
+
+test("verifyGuestPossessionToken fails when only jobId is known and no token is presented — jobId alone is not ownership", async () => {
+  const hash = createHash("sha256").update("real-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  // Sem token nenhum (string vazia) — só o jobId não é suficiente.
+  const ok = await service.verifyGuestPossessionToken("job-1", "");
+  assert.equal(ok, false);
+});
+
+test("verifyGuestPossessionToken fails for a job that never had a possession token issued (e.g. authenticated job)", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "authenticated",
+          guestPossessionTokenHash: null,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken(
+    "job-authenticated-1",
+    "any-token",
+  );
+  assert.equal(ok, false);
+});
+
+test("verifyGuestPossessionToken fails when the job does not exist", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const ok = await service.verifyGuestPossessionToken(
+    "job-does-not-exist",
+    "any-token",
+  );
+  assert.equal(ok, false);
+});
+
+// Fase 2: getGuestAnalysisJobStatusOnly — o único método que a rota pública
+// de polling deve chamar quando guest_analysis_auth_gate_enabled está ligado
+// e a requisição não está autenticada. Nunca deve devolver conteúdo, e
+// nunca deve depender só do jobId para "provar" posse.
+
+test("getGuestAnalysisJobStatusOnly returns only { status } for a valid possession token, never content", async () => {
+  const rawToken = "b".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+  let callCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        // Primeira chamada (dentro de verifyGuestPossessionToken) só
+        // precisa do hash; a segunda (leitura do status em si) simula um
+        // select real, que nunca traria adaptedContentJson/previewText/etc.
+        findUnique: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return { ownerKind: "guest", guestPossessionTokenHash: hash };
+          }
+          return { status: "succeeded" };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getGuestAnalysisJobStatusOnly(
+    "job-guest-1",
+    rawToken,
+  );
+
+  assert.deepEqual(result, { status: "succeeded" });
+  assert.equal(
+    (result as Record<string, unknown>).adaptedContentJson,
+    undefined,
+  );
+  assert.equal((result as Record<string, unknown>).previewText, undefined);
+  assert.equal((result as Record<string, unknown>).masterCvText, undefined);
+  assert.equal(
+    (result as Record<string, unknown>).analysisCvSnapshotId,
+    undefined,
+  );
+  assert.equal((result as Record<string, unknown>).jobTitle, undefined);
+  assert.equal((result as Record<string, unknown>).companyName, undefined);
+});
+
+test("getGuestAnalysisJobStatusOnly throws NotFoundException when no possession token is presented", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisJobStatusOnly("job-guest-1", null),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisJobStatusOnly throws NotFoundException for a wrong possession token — jobId alone never grants access", async () => {
+  const hash = createHash("sha256").update("correct-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisJobStatusOnly("job-guest-1", "wrong-token"),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisJobStatusOnly throws NotFoundException when the token belongs to a different job (cross-job ownership must never work)", async () => {
+  const rawToken = "c".repeat(64);
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async ({ where }: { where: { id?: string } }) => {
+          if (where.id === "job-b") {
+            // job-b tem um hash diferente — o token do guest é válido só
+            // para job-a, nunca para job-b.
+            return {
+              ownerKind: "guest",
+              guestPossessionTokenHash: createHash("sha256")
+                .update("token-for-job-b")
+                .digest("hex"),
+            };
+          }
+          return null;
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisJobStatusOnly("job-b", rawToken),
+    /analysis job not found/,
+  );
+});
+
+// Fase 4: claimGuestAnalysisJob — claim server-side sem reprocessar IA. O
+// conteúdo vem estritamente do AnalysisJob já processado, nunca de um
+// payload externo; ownership é job.userId === userId (já transferida em
+// transferAnalysisJobOwnership); idempotente para callback repetido, claim
+// repetido e tentativa concorrente.
+
+const baseSucceededJob = () => ({
+  id: "job-succeeded-1",
+  userId: "user-1",
+  ownerKind: "guest",
+  status: "succeeded",
+  convertedAt: null,
+  convertedCvAdaptationId: null,
+  analysisCvSnapshotId: "snapshot-1",
+  adaptedContentJson: { fit: { score: 88 }, vaga: { cargo: "Analista" } },
+  previewText: "preview do backend",
+  masterCvText: "CV completo extraído pelo backend",
+  jobDescriptionText:
+    "Vaga com descricao suficientemente longa para passar na validacao interna.",
+  jobTitle: "Analista de Dados",
+  companyName: "EarlyCV",
+});
+
+function makeClaimServiceMocks(job: ReturnType<typeof baseSucceededJob>) {
+  const capturedCvAdaptationCreateData: Array<Record<string, unknown>> = [];
+
+  const database = {
+    resumeTemplate: { findFirst: async () => null },
+    resume: {
+      findFirst: async ({ where }: { where: { kind?: string } }) => {
+        if (where.kind === "master") return null;
+        return { id: "adapted-resume-1" };
+      },
+      create: async () => ({ id: "new-master-1" }),
+    },
+    cvAdaptation: {
+      findFirst: async () => null,
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        capturedCvAdaptationCreateData.push(data);
+        return {
+          id: "cv-adaptation-claimed-1",
+          isUnlocked: false,
+          paidAt: null,
+          paymentStatus: "none",
+          unlockedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...data,
+        };
+      },
+    },
+    analysisCvSnapshot: {
+      findUnique: async () => ({
+        id: job.analysisCvSnapshotId,
+        userId: null,
+        guestSessionHash: null,
+        expiresAt: null,
+        claimedAt: null,
+        claimedByUserId: null,
+      }),
+      update: async () => ({
+        id: job.analysisCvSnapshotId,
+        originalFileName: null,
+      }),
+    },
+    analysisJob: {
+      findUnique: async () => ({ ...job }),
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: {
+          analysisCvSnapshotId?: string;
+          convertedAt?: null;
+          id?: string;
+          ownerKind?: string;
+          OR?: Array<{ userId: string | null }>;
+        };
+        data: Record<string, unknown>;
+      }) => {
+        if (where.id !== undefined) {
+          // Formato da transferência de ownership por possession token
+          // (claimGuestAnalysisJob) — job.id + guard de dono atual.
+          const currentUserId = (job as { userId?: string | null }).userId;
+          const matches =
+            where.id === job.id &&
+            where.ownerKind === job.ownerKind &&
+            (where.OR ?? []).some((clause) => clause.userId === currentUserId);
+          if (matches) {
+            Object.assign(job, data);
+            return { count: 1 };
+          }
+          return { count: 0 };
+        }
+
+        if (
+          where.analysisCvSnapshotId === job.analysisCvSnapshotId &&
+          job.convertedAt === null
+        ) {
+          Object.assign(job, data);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      },
+    },
+  };
+
+  const aiService = {
+    analyzeAndAdapt: async () => {},
+    analyzeAndAdaptDirect: async () => {
+      throw new Error("claimGuestAnalysisJob must never call AI");
+    },
+    buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+  };
+
+  const protectedAnalyzeService = {
+    executeProtectedAnalyze: async () => {
+      throw new Error(
+        "claimGuestAnalysisJob must never call the AI provider gateway",
+      );
+    },
+  };
+
+  const service = new CvAdaptationServiceCtor(
+    database,
+    aiService,
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    protectedAnalyzeService,
+  );
+
+  return { service, capturedCvAdaptationCreateData, database };
+}
+
+test("claimGuestAnalysisJob rejects when the job does not belong to the caller — jobId alone never grants access", async () => {
+  const job = baseSucceededJob();
+  const { service } = makeClaimServiceMocks(job);
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("someone-else", job.id),
+    /analysis job not found/,
+  );
+});
+
+test("claimGuestAnalysisJob rejects when the job does not exist", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("user-1", "job-missing"),
+    /analysis job not found/,
+  );
+});
+
+test("claimGuestAnalysisJob returns { status } without materializing anything while the job is still processing", async () => {
+  const job = { ...baseSucceededJob(), status: "processing" };
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const result = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.deepEqual(result, { status: "processing" });
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob returns { status: 'failed' } for a failed job, no materialization", async () => {
+  const job = { ...baseSucceededJob(), status: "failed" };
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const result = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.deepEqual(result, { status: "failed" });
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob materializes CvAdaptation strictly from AnalysisJob content — never from an external payload — and never calls AI", async () => {
+  const job = baseSucceededJob();
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const result = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(
+    (result as { cvAdaptationId: string }).cvAdaptationId,
+    "cv-adaptation-claimed-1",
+  );
+
+  assert.equal(capturedCvAdaptationCreateData.length, 1);
+  const created = capturedCvAdaptationCreateData[0];
+  assert.deepEqual(created.adaptedContentJson, job.adaptedContentJson);
+  assert.equal(created.previewText, job.previewText);
+  assert.equal(created.jobDescriptionText, job.jobDescriptionText);
+  assert.equal(created.jobTitle, job.jobTitle);
+  assert.equal(created.companyName, job.companyName);
+  // Critério crítico: continua vinculada ao analysisCvSnapshotId — é essa
+  // vinculação que exclui o snapshot do cleanup de 30 dias.
+  assert.equal(created.analysisCvSnapshotId, job.analysisCvSnapshotId);
+});
+
+test("claimGuestAnalysisJob throws when a succeeded job is missing its snapshot reference", async () => {
+  const job = { ...baseSucceededJob(), analysisCvSnapshotId: null };
+  const { service } = makeClaimServiceMocks(job as never);
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("user-1", job.id),
+    /missing its snapshot reference/,
+  );
+});
+
+test("claimGuestAnalysisJob is idempotent — a repeated call after conversion returns the cached result without creating a second CvAdaptation (callback duplicado / claim repetido)", async () => {
+  const job = baseSucceededJob();
+  const { service, capturedCvAdaptationCreateData } =
+    makeClaimServiceMocks(job);
+
+  const first = await service.claimGuestAnalysisJob("user-1", job.id);
+  const second = await service.claimGuestAnalysisJob("user-1", job.id);
+
+  assert.deepEqual(first, second);
+  assert.equal(capturedCvAdaptationCreateData.length, 1);
+});
+
+// Caminho de login/cadastro por email (ao contrário do Google OAuth, que
+// já transfere ownership via transferAnalysisJobOwnership antes de chegar
+// aqui): o job guest ainda está com userId null quando claimAnalysisJob é
+// chamado — só o guestPossessionToken prova a posse e libera a
+// transferência. Sem essa prova, jobId sozinho nunca basta (mesmo
+// princípio do teste "jobId alone never grants access" acima).
+const GUEST_POSSESSION_RAW_TOKEN = "d".repeat(64);
+
+function baseUnclaimedGuestJob() {
+  return {
+    ...baseSucceededJob(),
+    userId: null,
+    guestPossessionTokenHash: createHash("sha256")
+      .update(GUEST_POSSESSION_RAW_TOKEN)
+      .digest("hex"),
+  };
+}
+
+test("claimGuestAnalysisJob transfers ownership via guestPossessionToken when the job is still guest-owned (email login/register)", async () => {
+  const job = baseUnclaimedGuestJob();
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  const result = await service.claimGuestAnalysisJob(
+    "user-1",
+    job.id,
+    GUEST_POSSESSION_RAW_TOKEN,
+  );
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(job.userId, "user-1");
+  assert.equal(capturedCvAdaptationCreateData.length, 1);
+});
+
+test("claimGuestAnalysisJob rejects an unclaimed guest job when no guestPossessionToken is sent", async () => {
+  const job = baseUnclaimedGuestJob();
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob("user-1", job.id),
+    /analysis job not found/,
+  );
+  assert.equal(job.userId, null);
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob rejects an unclaimed guest job when guestPossessionToken doesn't match", async () => {
+  const job = baseUnclaimedGuestJob();
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.claimGuestAnalysisJob("user-1", job.id, "wrong-token".repeat(8)),
+    /analysis job not found/,
+  );
+  assert.equal(job.userId, null);
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+test("claimGuestAnalysisJob never lets guestPossessionToken override a job already owned by someone else", async () => {
+  const job = { ...baseSucceededJob(), userId: "someone-else" };
+  const { service, capturedCvAdaptationCreateData } = makeClaimServiceMocks(
+    job as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.claimGuestAnalysisJob(
+        "user-1",
+        job.id,
+        GUEST_POSSESSION_RAW_TOKEN,
+      ),
+    /analysis job not found/,
+  );
+  assert.equal(job.userId, "someone-else");
+  assert.equal(capturedCvAdaptationCreateData.length, 0);
+});
+
+// Nota sobre concorrência real: um teste unitário com mocks síncronos não
+// prova nada sobre duas requisições HTTP verdadeiramente concorrentes —
+// mocks resolvem de forma determinística no event loop, sem a latência
+// real de I/O que cria a janela de corrida. A proteção estrutural real
+// contra duas CvAdaptation duplicadas para o mesmo snapshot é a constraint
+// `@unique` em `CvAdaptation.analysisCvSnapshotId` (schema.prisma, já
+// existente, não alterada por esta fase) — o Postgres rejeita a segunda
+// inserção concorrente com um erro de constraint, não duplica
+// silenciosamente. Um teste e2e com duas requisições HTTP reais em paralelo
+// contra o Postgres de teste cobre isso em cv-adaptation.e2e-spec.ts.

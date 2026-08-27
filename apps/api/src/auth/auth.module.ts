@@ -14,6 +14,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { EMAIL_DELIVERY_PORT } from "./email-delivery.port";
 import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
+import { OAuthAttemptService } from "./oauth-attempt.service";
 import { captureOAuthSignupContextMiddleware } from "./oauth-signup-context";
 import { ResendEmailDeliveryService } from "./resend-email-delivery.service";
 import { GoogleStrategy } from "./strategies/google.strategy";
@@ -45,6 +46,7 @@ const useResend =
     JwtStrategy,
     LocalStrategy,
     GoogleStrategy,
+    OAuthAttemptService,
   ],
   exports: [AuthService, FakeEmailDeliveryService, EMAIL_DELIVERY_PORT],
 })

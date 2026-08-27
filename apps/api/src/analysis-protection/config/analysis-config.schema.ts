@@ -156,6 +156,18 @@ export const ANALYSIS_CONFIG_SCHEMA = {
     risk: "medium",
     type: "unit",
   },
+  // Gate de autenticação para consumo do resultado da análise guest (não
+  // confundir com auth_emergency_enabled, que bloqueia a execução — este
+  // flag nunca impede a análise de rodar, só restringe exposição do
+  // resultado a não autenticado). Reaproveita o mesmo mecanismo já
+  // comprovado de config runtime (tabela + audit trail + cache) em vez de
+  // criar infraestrutura nova — ver
+  // specs/no-guest-analysis-preview-auth-gate-diagnostic-plan-ADENDO-hardening.md.
+  guest_analysis_auth_gate_enabled: {
+    default: false,
+    risk: "medium",
+    type: "boolean",
+  },
 } as const satisfies Record<string, AnalysisConfigDefinition>;
 
 export type AnalysisConfigSchema = typeof ANALYSIS_CONFIG_SCHEMA;

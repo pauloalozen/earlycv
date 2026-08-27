@@ -42,6 +42,8 @@ const IMPACT_BY_CONFIG_KEY: ImpactByConfigKey = {
     "Define politica ativa entre observe-only, soft-block e hard-block.",
   dedupe_lock_ttl:
     "Define validade do lock de deduplicacao para requests concorrentes.",
+  guest_analysis_auth_gate_enabled:
+    "Restringe consulta de conteudo de analise guest a usuarios autenticados (nunca bloqueia a execucao da analise).",
 };
 
 export type AnalysisConfigBackofficeEntry = {

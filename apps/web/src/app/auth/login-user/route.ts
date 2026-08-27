@@ -1,6 +1,10 @@
 import { getDefaultAppRedirectPath } from "@/lib/app-session";
 import { persistAppSession } from "@/lib/app-session.server";
 import { loginWithPassword, parseAuthApiError } from "@/lib/auth-api";
+import {
+  buildClaimResultDestination,
+  claimGuestAnalysisJobServerSide,
+} from "@/lib/guest-analysis-claim.server";
 import { createPostRedirectResponse } from "@/lib/route-response";
 
 function sanitizeNext(next: string | undefined): string {
@@ -33,6 +37,10 @@ export async function POST(request: Request) {
   const sessionInternalId =
     String(formData.get("sessionInternalId") ?? "").trim() || undefined;
   const visitorId = String(formData.get("visitorId") ?? "").trim() || undefined;
+  const guestAnalysisJobId =
+    String(formData.get("guestAnalysisJobId") ?? "").trim() || undefined;
+  const guestPossessionToken =
+    String(formData.get("guestPossessionToken") ?? "").trim() || undefined;
 
   try {
     const session = await loginWithPassword(
@@ -43,9 +51,24 @@ export async function POST(request: Request) {
     );
     await persistAppSession(session);
 
-    const destination = next
+    const fallbackDestination = next
       ? sanitizeNext(next)
       : getDefaultAppRedirectPath(session.user);
+
+    // Fase 5 do gate de autenticação guest: se havia uma análise guest
+    // pendente nesta aba, tenta reivindicá-la agora, sem reprocessar IA —
+    // nunca bloqueia o login se isso falhar.
+    const destination = guestAnalysisJobId
+      ? buildClaimResultDestination(
+          await claimGuestAnalysisJobServerSide(
+            session.accessToken,
+            guestAnalysisJobId,
+            guestPossessionToken,
+          ),
+          guestAnalysisJobId,
+          fallbackDestination,
+        )
+      : fallbackDestination;
 
     return createPostRedirectResponse(request.url, destination);
   } catch (error) {

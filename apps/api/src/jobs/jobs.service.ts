@@ -403,6 +403,47 @@ export class JobsService {
     return { companyName: match.company.name, jobs };
   }
 
+  // Usado pela landing page (marquee de empresas) — mesma lógica de
+  // "empresa com pelo menos 1 vaga pública" de getPublicByCompanySlug, mas
+  // devolvendo as N empresas com mais vagas ativas em vez de resolver uma
+  // única empresa por slug. Nunca mostra empresa sem vaga ativa/pública.
+  async listTopCompaniesWithActiveJobs(limit: number) {
+    const activeJobs = await this.database.job.findMany({
+      where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
+      select: {
+        companyId: true,
+        company: { select: { name: true, logoUrl: true } },
+      },
+    });
+
+    const byCompany = new Map<
+      string,
+      { name: string; logoUrl: string | null; jobCount: number }
+    >();
+    for (const job of activeJobs) {
+      const existing = byCompany.get(job.companyId);
+      if (existing) {
+        existing.jobCount += 1;
+      } else {
+        byCompany.set(job.companyId, {
+          name: job.company.name,
+          logoUrl: job.company.logoUrl,
+          jobCount: 1,
+        });
+      }
+    }
+
+    return [...byCompany.values()]
+      .sort((a, b) => b.jobCount - a.jobCount)
+      .slice(0, limit)
+      .map((company) => ({
+        name: company.name,
+        slug: toCompanySlug(company.name),
+        logoUrl: company.logoUrl,
+        jobCount: company.jobCount,
+      }));
+  }
+
   // Usado por /radar/tecnologia/[tech]. Threshold de volume: só existe
   // conteúdo publicável na landing page se houver pelo menos `minCount`
   // vagas ativas com essa tecnologia — abaixo disso o chamador (route)

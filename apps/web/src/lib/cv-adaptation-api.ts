@@ -368,7 +368,12 @@ export type CvAnalysisData = {
 };
 
 export type AnalysisJobStartResult =
-  | { ok: true; jobId: string; guestSessionPublicToken: string | null }
+  | {
+      ok: true;
+      jobId: string;
+      guestSessionPublicToken: string | null;
+      guestPossessionToken?: string;
+    }
   | { ok: false; error: string };
 
 export type BusinessFunnelEventPayload = {
@@ -434,11 +439,13 @@ export async function analyzeGuestCv(
   const body = (await response.json()) as {
     jobId: string;
     guestSessionPublicToken: string | null;
+    guestPossessionToken?: string;
   };
   return {
     ok: true,
     jobId: body.jobId,
     guestSessionPublicToken: body.guestSessionPublicToken,
+    guestPossessionToken: body.guestPossessionToken,
   };
 }
 

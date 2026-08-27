@@ -103,6 +103,29 @@ export class CvAdaptationController {
     );
   }
 
+  // Fase 4 do gate de autenticação guest (specs/no-guest-analysis-preview-auth-gate-diagnostic-plan-ADENDO-hardening.md
+  // seção 6): claim server-side por jobId, sem reprocessar IA e sem
+  // aceitar conteúdo do corpo da requisição — todo o conteúdo vem do
+  // AnalysisJob já processado no backend. Se o job ainda não tem dono
+  // (fluxo de login/cadastro por email — o único que não transfere
+  // ownership antes de chegar aqui, ao contrário do Google OAuth via
+  // transferAnalysisJobOwnership), guestPossessionToken prova a posse e
+  // libera a transferência dentro do service; job de outro dono nunca é
+  // aceito. Idempotente: chamável repetidamente (ex.: polling autenticado
+  // enquanto job.status ainda é "processing").
+  @Post("analysis-jobs/:jobId/claim")
+  claimAnalysisJob(
+    @AuthenticatedUser() user: { id: string },
+    @Param("jobId") jobId: string,
+    @Body("guestPossessionToken") guestPossessionToken?: string,
+  ) {
+    return this.cvAdaptationService.claimGuestAnalysisJob(
+      user.id,
+      jobId,
+      guestPossessionToken,
+    );
+  }
+
   @Post("analyze")
   @UseInterceptors(
     FileInterceptor("file", {

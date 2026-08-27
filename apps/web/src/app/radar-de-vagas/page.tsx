@@ -2,16 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
+import { RadarMock } from "../_landing/_feature-showcase";
+import {
+  GEIST_V2 as GEIST,
+  LandingNavV2,
+  SERIF_ITALIC_V2 as SERIF_ITALIC,
+} from "../_landing/_nav-v2";
 import {
   BrowserChrome,
   browserFrame,
   btnGhost,
   btnPrimary,
   container,
-  GEIST,
+  JourneyStrip,
   LandingSharedStyles,
-  PublicNav,
-  SERIF_ITALIC,
   SectionLabel,
 } from "../_landing/_shared";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
@@ -60,10 +64,10 @@ export default function RadarDeVagasPage() {
       style={{ fontFamily: GEIST, color: "#0a0a0a", background: "#ffffff" }}
     >
       <LandingScrollAnimations />
-      <PublicNav />
+      <LandingNavV2 />
 
       {/* HERO */}
-      <section style={{ padding: "76px 32px 0" }}>
+      <section style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -74,7 +78,7 @@ export default function RadarDeVagasPage() {
             alignItems: "center",
           }}
         >
-          <div className="lp-kicker" style={{ marginBottom: 26 }}>
+          <div className="lp-fv2-kicker" style={{ marginBottom: 26 }}>
             <span
               style={{
                 width: 6,
@@ -144,17 +148,10 @@ export default function RadarDeVagasPage() {
 
           <div
             className="reveal-card"
-            style={{ ...browserFrame, maxWidth: 900, width: "100%" }}
+            style={{ ...browserFrame, maxWidth: 1080, width: "100%" }}
           >
             <BrowserChrome />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/landing/f-radar.jpg"
-              alt="Radar de vagas earlyCV"
-              width={1100}
-              height={764}
-              style={{ display: "block", width: "100%", height: "auto" }}
-            />
+            <RadarMock />
           </div>
         </div>
       </section>
@@ -338,7 +335,7 @@ export default function RadarDeVagasPage() {
                 margin: "0 0 16px",
               }}
             >
-              Cada vaga vem com o seu score de compatibilidade.
+              Cada vaga vem com o seu nível de aderência.
             </h2>
             <p
               style={{
@@ -350,13 +347,75 @@ export default function RadarDeVagasPage() {
               }}
             >
               Área, senioridade, skills e tecnologias — calculados a partir do
-              seu currículo assim que você cria conta. As vagas com maior
-              aderência aparecem primeiro, não as mais recentes.
+              seu currículo assim que você cria conta. As vagas mais aderentes
+              aparecem primeiro, não as mais recentes.
             </p>
             <Link href="/radar" style={{ ...btnGhost, paddingLeft: 0 }}>
               Ver minha aderência →
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* JORNADA: DA VAGA À ENTREVISTA */}
+      <section style={{ padding: "0 32px 110px" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center", maxWidth: 720 }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>DA VAGA À ENTREVISTA</SectionLabel>
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.4vw, 34px)",
+              fontWeight: 500,
+              letterSpacing: -1,
+              margin: "0 0 16px",
+            }}
+          >
+            Encontrar a vaga é{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              só o começo
+            </em>
+            .
+          </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 32px",
+              maxWidth: 560,
+            }}
+          >
+            Quando uma oportunidade fizer sentido, continue no EarlyCV: entenda
+            sua aderência, ajuste seu currículo, acompanhe a candidatura e
+            prepare-se caso a entrevista chegue.
+          </p>
+          <JourneyStrip
+            steps={[
+              "Radar",
+              "Análise",
+              "CV adaptado",
+              "Candidatura",
+              "Preparação",
+            ]}
+            activeIndex={0}
+            hrefs={[
+              undefined,
+              "/analise-de-curriculo",
+              undefined,
+              "/gestao-de-candidaturas",
+              "/preparacao-para-entrevista",
+            ]}
+          />
         </div>
       </section>
 
@@ -393,6 +452,7 @@ export default function RadarDeVagasPage() {
 
       <PublicFooter />
       <LandingSharedStyles />
+      <style>{`.lp-company-badge span { font-family: ${GEIST}; }`}</style>
     </main>
   );
 }

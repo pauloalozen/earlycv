@@ -4,6 +4,10 @@ import {
   fetchCurrentAppUser,
   persistAppSession,
 } from "@/lib/app-session.server";
+import {
+  buildClaimResultDestination,
+  claimGuestAnalysisJobServerSide,
+} from "@/lib/guest-analysis-claim.server";
 
 function sanitizeCookieNext(raw: string | undefined): string | null {
   if (!raw) return null;
@@ -39,8 +43,22 @@ export async function GET(request: NextRequest) {
   await persistAppSession({ accessToken, refreshToken, user });
 
   const nextCookie = request.cookies.get("post_auth_next")?.value;
-  const destination =
+  const fallbackDestination =
     sanitizeCookieNext(nextCookie) ?? getDefaultAppRedirectPath(user);
+
+  // Fase 5: analysisJobId (Fase 3/4) só chega aqui depois de já ter sido
+  // resolvido/consumido por state — ownership do AnalysisJob já foi
+  // transferida no callback da API (transferAnalysisJobOwnership), então
+  // não precisamos (nem devemos) reenviar guestPossessionToken aqui — ele
+  // já foi gasto em POST /auth/oauth-attempts.
+  const analysisJobId = searchParams.get("analysisJobId");
+  const destination = analysisJobId
+    ? buildClaimResultDestination(
+        await claimGuestAnalysisJobServerSide(accessToken, analysisJobId),
+        analysisJobId,
+        fallbackDestination,
+      )
+    : fallbackDestination;
 
   const response = NextResponse.redirect(new URL(destination, request.url));
   response.cookies.set("post_auth_next", "", { maxAge: 0, path: "/" });

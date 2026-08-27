@@ -5,11 +5,36 @@ export const MONO = "var(--font-geist-mono), monospace";
 export const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 export const FEATURE_PAGES = [
-  { href: "/analise-de-curriculo", label: "Análise de Currículo" },
-  { href: "/radar-de-vagas", label: "Radar de Vagas" },
-  { href: "/gestao-de-candidaturas", label: "Gestão de Candidaturas" },
-  { href: "/carta-de-apresentacao", label: "Carta de Apresentação" },
-  { href: "/preparacao-para-entrevista", label: "Preparação para Entrevista" },
+  {
+    href: "/analise-de-curriculo",
+    label: "Análise de Currículo",
+    description: "Veja o que trava seu CV no ATS e como corrigir.",
+    icon: "M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    href: "/radar-de-vagas",
+    label: "Radar de Vagas",
+    description: "Vagas compatíveis com seu perfil, todos os dias.",
+    icon: "M12 2a10 10 0 100 20 10 10 0 000-20zM12 6a6 6 0 100 12 6 6 0 000-12zM12 10a2 2 0 100 4 2 2 0 000-4z",
+  },
+  {
+    href: "/gestao-de-candidaturas",
+    label: "Gestão de Candidaturas",
+    description: "Acompanhe cada etapa das suas candidaturas.",
+    icon: "M9 3h6v4H9zM4 7h16v14H4zM8 12h8M8 16h5",
+  },
+  {
+    href: "/carta-de-apresentacao",
+    label: "Carta de Apresentação",
+    description: "Carta personalizada pra cada vaga, em segundos.",
+    icon: "M4 4h16v16H4zM4 6l8 7 8-7",
+  },
+  {
+    href: "/preparacao-para-entrevista",
+    label: "Preparação para Entrevista",
+    description: "Treine respostas com feedback de IA antes da entrevista.",
+    icon: "M12 2a4 4 0 014 4v4a4 4 0 01-8 0V6a4 4 0 014-4zM6 11a6 6 0 0012 0M12 17v4M8 21h8",
+  },
 ] as const;
 
 export const container: React.CSSProperties = {
@@ -169,6 +194,101 @@ export function FlowDiagram({
   );
 }
 
+/**
+ * "Da vaga à entrevista" journey strip — same flow across every landing,
+ * with the step for the current page highlighted (black bg + lime text,
+ * matching the site's other step-badge treatments).
+ */
+export function JourneyStrip({
+  steps,
+  activeIndex,
+  variant = "light",
+  hrefs,
+}: {
+  steps: string[];
+  activeIndex: number;
+  variant?: "light" | "dark";
+  /** Optional internal link per step (same index as `steps`); omit an entry
+   * (or leave the array shorter) for a step with no matching public page. */
+  hrefs?: (string | undefined)[];
+}) {
+  const dark = variant === "dark";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 10,
+        justifyContent: "center",
+      }}
+    >
+      {steps.map((step, i) => {
+        const active = i === activeIndex;
+        const href = active ? undefined : hrefs?.[i];
+        const chipStyle: React.CSSProperties = {
+          background: active
+            ? dark
+              ? "#c6ff3a"
+              : "#0a0a0a"
+            : dark
+              ? "rgba(250,250,246,0.06)"
+              : "#fafaf6",
+          border: active
+            ? "none"
+            : dark
+              ? "1px solid rgba(250,250,246,0.12)"
+              : "1px solid rgba(10,10,10,0.1)",
+          borderRadius: 12,
+          padding: "12px 18px",
+          fontSize: 13.5,
+          fontWeight: 500,
+          color: active
+            ? dark
+              ? "#0a0a0a"
+              : "#c6ff3a"
+            : dark
+              ? "#fafaf6"
+              : "#0a0a0a",
+          whiteSpace: "nowrap",
+          boxShadow: active ? "0 10px 24px -8px rgba(10,10,10,0.35)" : "none",
+          textDecoration: "none",
+          display: "inline-block",
+        };
+        return (
+          <div
+            key={step}
+            style={{ display: "flex", alignItems: "center", gap: 10 }}
+          >
+            {i > 0 && (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={dark ? "#6a6a66" : "#c4c3bd"}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <title>então</title>
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            )}
+            {href ? (
+              <Link href={href} style={chipStyle}>
+                {step}
+              </Link>
+            ) : (
+              <div style={chipStyle}>{step}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Nav shared by the landing pages (default + per-feature). CSS-only "Produtos" dropdown. */
 export function PublicNav() {
   return (
@@ -248,7 +368,10 @@ export function PublicNav() {
         </Link>
 
         <div className="lp-nav-dropdown">
-          <span style={{ fontSize: 13, color: "#3a3a38", cursor: "default" }}>
+          <span
+            className="lp-nav-dropdown-trigger"
+            style={{ fontSize: 13, color: "#3a3a38" }}
+          >
             Produtos
             <svg
               width="10"
@@ -259,18 +382,48 @@ export function PublicNav() {
               strokeWidth="2.4"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginLeft: 5, verticalAlign: "middle" }}
             >
               <title>abrir menu</title>
               <path d="M6 9l6 6 6-6" />
             </svg>
           </span>
           <div className="lp-nav-dropdown-panel">
-            {FEATURE_PAGES.map((p) => (
-              <Link key={p.href} href={p.href} className="lp-nav-dropdown-item">
-                {p.label}
+            <div className="lp-nav-dropdown-grid">
+              {FEATURE_PAGES.map((p) => (
+                <Link
+                  key={p.href}
+                  href={p.href}
+                  className="lp-nav-dropdown-item"
+                >
+                  <span className="lp-nav-dropdown-icon">
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#0a0a0a"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <title>{p.label}</title>
+                      <path d={p.icon} />
+                    </svg>
+                  </span>
+                  <span>
+                    <span className="lp-nav-dropdown-label">{p.label}</span>
+                    <span className="lp-nav-dropdown-desc">
+                      {p.description}
+                    </span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <div className="lp-nav-dropdown-cta-row">
+              <Link href="/adaptar" className="lp-nav-dropdown-cta">
+                Analisar meu CV grátis
               </Link>
-            ))}
+            </div>
           </div>
         </div>
 
@@ -295,22 +448,40 @@ export function PublicNav() {
       </div>
 
       <style>{`
-        .lp-nav-dropdown { position: relative; padding: 4px 0; }
+        .lp-nav-dropdown { position: relative; display: flex; align-items: center; }
+        .lp-nav-dropdown-trigger { display: inline-flex; align-items: center; gap: 5px; line-height: 1; cursor: default; }
         .lp-nav-dropdown-panel {
-          position: absolute; top: 100%; left: 50%; transform: translateX(-50%) translateY(4px);
-          background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 12px;
-          box-shadow: 0 20px 40px -12px rgba(10,10,10,0.18);
-          padding: 8px; display: flex; flex-direction: column; min-width: 220px;
-          opacity: 0; pointer-events: none; transition: opacity 160ms ease, transform 160ms ease;
+          position: fixed; top: 72px; left: 50%; transform: translateX(-50%) scale(0.98);
+          transform-origin: top center;
+          background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 16px;
+          box-shadow: 0 24px 48px -12px rgba(10,10,10,0.2);
+          padding: 22px; display: flex; flex-direction: column; gap: 6px; min-width: 620px;
+          opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease;
+        }
+        .lp-nav-dropdown-panel::before {
+          content: ""; position: absolute; left: 0; right: 0; top: -32px; height: 32px;
         }
         .lp-nav-dropdown:hover .lp-nav-dropdown-panel,
         .lp-nav-dropdown:focus-within .lp-nav-dropdown-panel {
-          opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(8px);
+          opacity: 1; pointer-events: auto; transform: translateX(-50%) scale(1);
         }
+        .lp-nav-dropdown-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 18px; }
         .lp-nav-dropdown-item {
-          font-size: 13.5px; color: #3a3a38; padding: 9px 12px; border-radius: 8px; white-space: nowrap;
+          display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 12px;
         }
-        .lp-nav-dropdown-item:hover { background: #f7f7f4; opacity: 1; }
+        .lp-nav-dropdown-item:hover { background: #f7f7f4; }
+        .lp-nav-dropdown-icon {
+          flex-shrink: 0; width: 32px; height: 32px; border-radius: 9px;
+          background: rgba(198,255,58,0.24); display: flex; align-items: center; justify-content: center;
+        }
+        .lp-nav-dropdown-label { display: block; font-size: 13.5px; font-weight: 500; color: #0a0a0a; white-space: nowrap; }
+        .lp-nav-dropdown-desc { display: block; font-size: 12px; color: #8a8a85; margin-top: 3px; line-height: 1.4; }
+        .lp-nav-dropdown-cta-row { display: flex; justify-content: center; border-top: 1px solid rgba(10,10,10,0.06); padding-top: 16px; }
+        .lp-nav-dropdown-cta {
+          display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+          background: #0a0a0a; color: #fff; font-size: 13.5px; font-weight: 500;
+          border-radius: 10px; padding: 11px 22px;
+        }
         @media (max-width: 900px) {
           .lp-nav-shared > div:last-child > a:not(:last-child),
           .lp-nav-shared .lp-nav-dropdown { display: none; }

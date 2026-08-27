@@ -4,15 +4,18 @@ import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
 import { PreparacaoMock } from "../_landing/_feature-showcase";
 import {
+  GEIST_V2 as GEIST,
+  LandingNavV2,
+  SERIF_ITALIC_V2 as SERIF_ITALIC,
+} from "../_landing/_nav-v2";
+import {
   BrowserChrome,
   browserFrame,
   btnPrimary,
   container,
   FlowDiagram,
-  GEIST,
+  JourneyStrip,
   LandingSharedStyles,
-  PublicNav,
-  SERIF_ITALIC,
   SectionLabel,
 } from "../_landing/_shared";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
@@ -118,10 +121,10 @@ export default function PreparacaoParaEntrevistaPage() {
       style={{ fontFamily: GEIST, color: "#0a0a0a", background: "#ffffff" }}
     >
       <LandingScrollAnimations />
-      <PublicNav />
+      <LandingNavV2 />
 
       {/* HERO */}
-      <section style={{ padding: "76px 32px 0" }}>
+      <section style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -132,7 +135,7 @@ export default function PreparacaoParaEntrevistaPage() {
             alignItems: "center",
           }}
         >
-          <div className="lp-kicker" style={{ marginBottom: 26 }}>
+          <div className="lp-fv2-kicker" style={{ marginBottom: 26 }}>
             <span
               style={{
                 width: 6,
@@ -202,7 +205,7 @@ export default function PreparacaoParaEntrevistaPage() {
 
           <div
             className="reveal-card"
-            style={{ ...browserFrame, maxWidth: 640, width: "100%" }}
+            style={{ ...browserFrame, maxWidth: 1000, width: "100%" }}
           >
             <BrowserChrome />
             <PreparacaoMock />
@@ -224,15 +227,29 @@ export default function PreparacaoParaEntrevistaPage() {
               fontSize: "clamp(24px, 3.4vw, 34px)",
               fontWeight: 500,
               letterSpacing: -1,
-              margin: "0 0 32px",
+              margin: "0 0 16px",
             }}
           >
-            Currículo + vaga + empresa = preparação sob medida.
+            Você não começa a preparação do zero.
           </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 32px",
+              maxWidth: 560,
+            }}
+          >
+            O EarlyCV já conhece a vaga, seu currículo e os pontos de aderência
+            encontrados na análise. Esse contexto vira estratégia de entrevista
+            — currículo, vaga e empresa juntos, não uma lista genérica de
+            perguntas.
+          </p>
           <FlowDiagram
             steps={[
-              "Seu currículo",
-              "A vaga",
+              "Vaga + CV",
+              "Análise",
               "A empresa",
               "Roteiro personalizado",
             ]}
@@ -314,6 +331,116 @@ export default function PreparacaoParaEntrevistaPage() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* PRÓXIMA PREPARAÇÃO: HISTÓRICO DE ENTREVISTAS ANTERIORES */}
+      <section style={{ padding: "0 32px 110px" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center", maxWidth: 680 }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>NADA SE PERDE, NEM O APRENDIZADO</SectionLabel>
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.4vw, 34px)",
+              fontWeight: 500,
+              letterSpacing: -1,
+              margin: "0 0 16px",
+            }}
+          >
+            Sua próxima preparação{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              não começa do zero
+            </em>
+            .
+          </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 28px",
+              maxWidth: 560,
+            }}
+          >
+            Se um ponto apareceu como dificuldade ou feedback em uma entrevista
+            anterior, esse histórico pode ser considerado nas próximas
+            preparações.
+          </p>
+          <FlowDiagram
+            steps={["Entrevista", "Feedback", "Próxima preparação"]}
+          />
+        </div>
+      </section>
+
+      {/* JORNADA: DA VAGA À ENTREVISTA */}
+      <section style={{ padding: "0 32px 110px" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center", maxWidth: 720 }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>DA VAGA À ENTREVISTA</SectionLabel>
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.4vw, 34px)",
+              fontWeight: 500,
+              letterSpacing: -1,
+              margin: "0 0 16px",
+            }}
+          >
+            Da vaga à entrevista,{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              sem recomeçar a cada etapa
+            </em>
+            .
+          </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 32px",
+              maxWidth: 560,
+            }}
+          >
+            Encontrar a oportunidade, entender sua aderência, preparar o
+            currículo e acompanhar a candidatura constroem o contexto que chega
+            com você até a preparação da entrevista.
+          </p>
+          <JourneyStrip
+            steps={[
+              "Radar",
+              "Análise",
+              "CV adaptado",
+              "Candidatura",
+              "Preparação",
+            ]}
+            activeIndex={4}
+            hrefs={[
+              "/radar-de-vagas",
+              "/analise-de-curriculo",
+              undefined,
+              "/gestao-de-candidaturas",
+              undefined,
+            ]}
+          />
         </div>
       </section>
 

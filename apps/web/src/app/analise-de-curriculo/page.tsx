@@ -2,17 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
+import { AnaliseMock, OtimizacaoMock } from "../_landing/_feature-showcase";
+import {
+  GEIST_V2 as GEIST,
+  LandingNavV2,
+  MONO_V2 as MONO,
+  SERIF_ITALIC_V2 as SERIF_ITALIC,
+} from "../_landing/_nav-v2";
 import {
   BrowserChrome,
   browserFrame,
   btnGhost,
   btnPrimary,
   container,
-  GEIST,
+  JourneyStrip,
   LandingSharedStyles,
-  MONO,
-  PublicNav,
-  SERIF_ITALIC,
   SectionLabel,
 } from "../_landing/_shared";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
@@ -44,10 +48,10 @@ export default function AnaliseDeCurriculoPage() {
       style={{ fontFamily: GEIST, color: "#0a0a0a", background: "#ffffff" }}
     >
       <LandingScrollAnimations />
-      <PublicNav />
+      <LandingNavV2 />
 
       {/* HERO */}
-      <section style={{ padding: "76px 32px 0" }}>
+      <section style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -58,7 +62,7 @@ export default function AnaliseDeCurriculoPage() {
             alignItems: "center",
           }}
         >
-          <div className="lp-kicker" style={{ marginBottom: 26 }}>
+          <div className="lp-fv2-kicker" style={{ marginBottom: 26 }}>
             <span
               style={{
                 width: 6,
@@ -129,17 +133,10 @@ export default function AnaliseDeCurriculoPage() {
 
           <div
             className="reveal-card"
-            style={{ ...browserFrame, maxWidth: 900, width: "100%" }}
+            style={{ ...browserFrame, maxWidth: 1080, width: "100%" }}
           >
             <BrowserChrome />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/landing/f-resultado.jpg"
-              alt="Score ATS earlyCV"
-              width={950}
-              height={660}
-              style={{ display: "block", width: "100%", height: "auto" }}
-            />
+            <AnaliseMock />
           </div>
 
           <div
@@ -288,14 +285,7 @@ export default function AnaliseDeCurriculoPage() {
         >
           <div className="reveal-card lp-order-1" style={browserFrame}>
             <BrowserChrome />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/landing/f-adaptar.jpg"
-              alt="Otimização de CV earlyCV"
-              width={1100}
-              height={764}
-              style={{ display: "block", width: "100%", height: "auto" }}
-            />
+            <OtimizacaoMock />
           </div>
           <div className="reveal-card lp-order-2">
             <div style={{ marginBottom: 12 }}>
@@ -335,6 +325,68 @@ export default function AnaliseDeCurriculoPage() {
               reformulada, nunca inventada.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* JORNADA: DA VAGA À ENTREVISTA */}
+      <section style={{ padding: "100px 32px 0" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center", maxWidth: 720 }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>DA VAGA À ENTREVISTA</SectionLabel>
+          </div>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.4vw, 34px)",
+              fontWeight: 500,
+              letterSpacing: -1,
+              margin: "0 0 16px",
+            }}
+          >
+            Seu diagnóstico pode virar{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              ação
+            </em>
+            .
+          </h2>
+          <p
+            style={{
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              color: "#45443e",
+              margin: "0 auto 32px",
+              maxWidth: 560,
+            }}
+          >
+            Depois de entender onde seu currículo ganha ou perde aderência, use
+            esse contexto para preparar uma versão direcionada à vaga e
+            continuar a candidatura.
+          </p>
+          <JourneyStrip
+            steps={[
+              "Radar",
+              "Análise",
+              "CV adaptado",
+              "Candidatura",
+              "Preparação",
+            ]}
+            activeIndex={1}
+            hrefs={[
+              "/radar-de-vagas",
+              undefined,
+              undefined,
+              "/gestao-de-candidaturas",
+              "/preparacao-para-entrevista",
+            ]}
+          />
         </div>
       </section>
 
