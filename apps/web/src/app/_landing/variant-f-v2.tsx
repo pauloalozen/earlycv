@@ -148,6 +148,229 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div style={sectionLabel}>{children}</div>;
 }
 
+const PREP_QUESTIONS = [
+  "Por que você quer trabalhar na Nubank?",
+  "Como você aborda problemas de escala em React?",
+  "Relate uma situação de conflito no time e como resolveu.",
+];
+
+const PREP_STRENGTHS = [
+  "React · Node.js em produção",
+  "Experiência com fintech",
+];
+
+const PREP_ALERTS = ["AWS pouco detalhado no CV", "CI/CD não mencionado"];
+
+/** Mockup compacto do widget de preparação de entrevista, para usar dentro de um browserFrame. */
+function InterviewPrepMock() {
+  return (
+    <div style={{ padding: "18px 18px 20px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 14,
+        }}
+      >
+        <span
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: "#c6ff3a",
+            boxShadow: "0 0 5px #c6ff3a",
+            display: "inline-block",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            letterSpacing: 0.8,
+            color: "#3a3a38",
+            fontWeight: 500,
+          }}
+        >
+          PREP · NUBANK – SENIOR DEV
+        </span>
+      </div>
+
+      <div
+        style={{
+          background: "#fafaf6",
+          border: "1px solid rgba(10,10,10,0.07)",
+          borderRadius: 9,
+          padding: "10px 12px",
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 9,
+            letterSpacing: 1,
+            color: "#8a8a85",
+            marginBottom: 5,
+          }}
+        >
+          EMPRESA
+        </div>
+        <p
+          style={{
+            fontSize: 12.5,
+            color: "#45443e",
+            lineHeight: 1.5,
+            margin: 0,
+          }}
+        >
+          Nubank tende a focar em cultura de dono e escalabilidade técnica em
+          processos para eng. sênior.
+        </p>
+      </div>
+
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          letterSpacing: 0.8,
+          color: "#6a6a66",
+          marginBottom: 8,
+        }}
+      >
+        Perguntas prováveis
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          marginBottom: 14,
+        }}
+      >
+        {PREP_QUESTIONS.map((q, i) => (
+          <div
+            key={q}
+            style={{
+              background: "#fafaf6",
+              border: "1px solid rgba(10,10,10,0.07)",
+              borderRadius: 8,
+              padding: "8px 10px",
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-start",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: "#b0aea8",
+                flexShrink: 0,
+                marginTop: 1,
+              }}
+            >
+              0{i + 1}
+            </span>
+            <span
+              style={{ fontSize: 12.5, color: "#2a2a28", lineHeight: 1.4 }}
+            >
+              {q}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <div
+          style={{
+            background: "rgba(198,255,58,0.12)",
+            border: "1px solid rgba(110,150,20,0.2)",
+            borderRadius: 8,
+            padding: "8px 10px",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 8.5,
+              letterSpacing: 0.8,
+              color: "#4a7008",
+              marginBottom: 5,
+              fontWeight: 600,
+            }}
+          >
+            ↑ PONTOS FORTES
+          </div>
+          {PREP_STRENGTHS.map((s) => (
+            <div
+              key={s}
+              style={{ fontSize: 11, color: "#2a4a08", lineHeight: 1.5 }}
+            >
+              · {s}
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            background: "rgba(255,200,80,0.1)",
+            border: "1px solid rgba(180,130,20,0.2)",
+            borderRadius: 8,
+            padding: "8px 10px",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 8.5,
+              letterSpacing: 0.8,
+              color: "#7a5008",
+              marginBottom: 5,
+              fontWeight: 600,
+            }}
+          >
+            △ ATENÇÃO
+          </div>
+          {PREP_ALERTS.map((a) => (
+            <div
+              key={a}
+              style={{ fontSize: 11, color: "#5a3a08", lineHeight: 1.5 }}
+            >
+              · {a}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        style={{
+          width: "100%",
+          background: "#0a0a0a",
+          color: "#fff",
+          border: "none",
+          borderRadius: 9,
+          padding: "11px",
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          letterSpacing: -0.1,
+        }}
+      >
+        Praticar perguntas →
+      </button>
+    </div>
+  );
+}
+
 /** Graphic link between narrative blocks — numbered badge + connecting ticks. */
 function JourneyDivider({
   step,
@@ -766,84 +989,8 @@ export function LandingVariantF2({
         </div>
       </section>
 
-      {/* DEEP FEATURE 1 — Diagnóstico */}
-      <section style={{ padding: "56px 32px 72px" }}>
-        <div
-          className="lp-fv2-grid-2"
-          style={{
-            ...container,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 64,
-            alignItems: "center",
-          }}
-        >
-          <div className="reveal-card">
-            <div style={{ marginBottom: 12 }}>
-              <SectionLabel>DIAGNÓSTICO DE CV</SectionLabel>
-            </div>
-            <h3
-              style={{
-                fontSize: "clamp(24px, 3.2vw, 32px)",
-                fontWeight: 400,
-                letterSpacing: -0.8,
-                margin: "0 0 16px",
-              }}
-            >
-              Veja exatamente{" "}
-              <em
-                style={{
-                  fontFamily: SERIF_ITALIC,
-                  fontStyle: "italic",
-                  fontWeight: 400,
-                }}
-              >
-                por que
-              </em>{" "}
-              seu CV está sendo eliminado.
-            </h3>
-            <p
-              style={{
-                fontSize: 15.6,
-                lineHeight: 1.65,
-                fontWeight: 300,
-                color: "#5c5a52",
-                margin: "0 0 24px",
-                maxWidth: 420,
-              }}
-            >
-              A gente compara seu CV com a vaga ponto a ponto — experiência,
-              competências, palavras-chave e estrutura — e mostra onde você está
-              perdendo aderência e o que ajustar em cada seção. É o primeiro
-              passo: entender o que precisa mudar antes de se candidatar.
-            </p>
-            <Link
-              href="/demo-resultado"
-              style={{ ...btnGhost, paddingLeft: 0 }}
-            >
-              Ver uma análise completa →
-            </Link>
-          </div>
-          <div className="reveal-card" style={browserFrame}>
-            <BrowserChrome />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/landing/f-resultado.jpg"
-              alt="Score ATS earlyCV"
-              width={950}
-              height={660}
-              style={{ display: "block", width: "100%", height: "auto" }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <JourneyDivider step="01">
-        Agora você sabe o que precisa ajustar. Falta encontrar a vaga certa.
-      </JourneyDivider>
-
-      {/* DEEP FEATURE 2 — Radar */}
-      <section id="radar" style={{ padding: "0 32px 72px" }}>
+      {/* DEEP FEATURE 1 — Radar */}
+      <section id="radar" style={{ padding: "56px 32px 0" }}>
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -867,7 +1014,7 @@ export function LandingVariantF2({
           </div>
           <div className="reveal-card lp-fv2-order-2">
             <div style={{ marginBottom: 12 }}>
-              <SectionLabel>RADAR DE OPORTUNIDADES</SectionLabel>
+              <SectionLabel>ENCONTRE ANTES</SectionLabel>
             </div>
             <h3
               style={{
@@ -877,7 +1024,7 @@ export function LandingVariantF2({
                 margin: "0 0 16px",
               }}
             >
-              Encontre vagas{" "}
+              Encontre a vaga certa{" "}
               <em
                 style={{
                   fontFamily: SERIF_ITALIC,
@@ -899,9 +1046,10 @@ export function LandingVariantF2({
                 maxWidth: 420,
               }}
             >
-              A gente acompanha direto as páginas de carreira das empresas — não
-              só agregadores — e te avisa assim que uma vaga compatível aparece.
-              Sua aderência já sai calculada, usando o CV que você já analisou.
+              O Radar acompanha direto as páginas de carreira das empresas e
+              encontra oportunidades compatíveis com o seu perfil. Quando uma
+              vaga relevante aparece, você pode descobrir antes de ela ganhar
+              dezenas ou centenas de candidatos nos grandes portais.
             </p>
             <div
               style={{
@@ -939,12 +1087,8 @@ export function LandingVariantF2({
         </div>
       </section>
 
-      <JourneyDivider step="02">
-        Encontrar a vaga certa é importante. Encontrar cedo também.
-      </JourneyDivider>
-
-      {/* DEEP FEATURE 2b — Fila de candidatos */}
-      <section style={{ padding: "0 32px 72px" }}>
+      {/* PROVA DE VALOR DO RADAR — mesma etapa, não um passo novo */}
+      <section style={{ padding: "40px 32px 72px" }}>
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -956,9 +1100,6 @@ export function LandingVariantF2({
           }}
         >
           <div className="reveal-card">
-            <div style={{ marginBottom: 12 }}>
-              <SectionLabel>CHEGUE ANTES DA FILA</SectionLabel>
-            </div>
             <h3
               style={{
                 fontSize: "clamp(22px, 3vw, 30px)",
@@ -968,7 +1109,7 @@ export function LandingVariantF2({
                 margin: "0 0 16px",
               }}
             >
-              Quando ela aparece no LinkedIn, você{" "}
+              Quando ela aparece nos grandes portais, você{" "}
               <em
                 style={{
                   fontFamily: SERIF_ITALIC,
@@ -991,9 +1132,9 @@ export function LandingVariantF2({
               }}
             >
               A mesma vaga, dois momentos: publicada direto na fonte e
-              encontrada pelo Radar — ou já com centenas de candidatos, quando
-              chega aos grandes portais. Chegar cedo significa entrar na fila
-              antes de centenas de outros candidatos.
+              encontrada pelo Radar — ou chegando depois aos grandes
+              agregadores. Chegar cedo significa entrar na fila antes de
+              dezenas de outros candidatos.
             </p>
             <Link href="/radar" style={{ ...btnGhost, paddingLeft: 0 }}>
               Ver como o Radar te coloca na frente →
@@ -1045,11 +1186,119 @@ export function LandingVariantF2({
         </div>
       </section>
 
-      <JourneyDivider step="03">
-        Encontrou a vaga certa? Agora é hora de chegar preparado.
+      <JourneyDivider step="01">
+        Encontrou uma oportunidade? Agora descubra o quanto ela realmente
+        combina com você.
       </JourneyDivider>
 
-      {/* DEEP FEATURE 3 — Kit de Candidatura */}
+      {/* DEEP FEATURE 2 — Análise + CV adaptado */}
+      <section style={{ padding: "0 32px 72px" }}>
+        <div
+          className="lp-fv2-grid-2"
+          style={{
+            ...container,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 64,
+            alignItems: "center",
+          }}
+        >
+          <div className="reveal-card">
+            <div style={{ marginBottom: 12 }}>
+              <SectionLabel>ENTENDA E AJUSTE</SectionLabel>
+            </div>
+            <h3
+              style={{
+                fontSize: "clamp(24px, 3.2vw, 32px)",
+                fontWeight: 400,
+                letterSpacing: -0.8,
+                margin: "0 0 16px",
+              }}
+            >
+              Veja onde seu CV{" "}
+              <em
+                style={{
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                }}
+              >
+                encaixa
+              </em>
+              . E ajuste o que realmente importa.
+            </h3>
+            <p
+              style={{
+                fontSize: 15.6,
+                lineHeight: 1.65,
+                fontWeight: 300,
+                color: "#5c5a52",
+                margin: "0 0 24px",
+                maxWidth: 420,
+              }}
+            >
+              Compare seu currículo com aquela vaga ponto a ponto. O EarlyCV
+              mostra onde você tem aderência, o que está pouco evidente e o
+              que vale destacar antes de se candidatar. Depois, transforma
+              esse diagnóstico em uma versão direcionada à oportunidade, sem
+              inventar experiências.
+            </p>
+            <Link
+              href="/demo-resultado"
+              style={{ ...btnGhost, paddingLeft: 0, marginBottom: 24 }}
+            >
+              Ver uma análise completa →
+            </Link>
+            <div
+              style={{
+                borderTop: "1px solid rgba(10,10,10,0.08)",
+                paddingTop: 20,
+                maxWidth: 420,
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                  color: "#0a0a0a",
+                  margin: "0 0 4px",
+                }}
+              >
+                Já encontrou uma vaga por conta própria? Comece daqui.
+              </p>
+              <p
+                style={{
+                  fontSize: 13.5,
+                  lineHeight: 1.6,
+                  fontWeight: 300,
+                  color: "#8a8a85",
+                  margin: 0,
+                }}
+              >
+                Cole a descrição da vaga e analise seu currículo diretamente.
+              </p>
+            </div>
+          </div>
+          <div className="reveal-card" style={browserFrame}>
+            <BrowserChrome />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/landing/f-resultado.jpg"
+              alt="Score ATS earlyCV"
+              width={950}
+              height={660}
+              style={{ display: "block", width: "100%", height: "auto" }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <JourneyDivider step="02">
+        Entendeu a oportunidade e preparou seu currículo. Agora é hora de se
+        candidatar.
+      </JourneyDivider>
+
+      {/* DEEP FEATURE 3 — Candidatura */}
       <section style={{ padding: "0 32px 110px" }}>
         <div
           className="lp-fv2-grid-2"
@@ -1063,7 +1312,7 @@ export function LandingVariantF2({
         >
           <div className="reveal-card">
             <div style={{ marginBottom: 12 }}>
-              <SectionLabel>KIT DE CANDIDATURA</SectionLabel>
+              <SectionLabel>CANDIDATURA</SectionLabel>
             </div>
             <h3
               style={{
@@ -1073,7 +1322,7 @@ export function LandingVariantF2({
                 margin: "0 0 16px",
               }}
             >
-              Encontrou a vaga certa? Chegue{" "}
+              Encontrou a vaga certa?{" "}
               <em
                 style={{
                   fontFamily: SERIF_ITALIC,
@@ -1081,9 +1330,9 @@ export function LandingVariantF2({
                   fontWeight: 400,
                 }}
               >
-                com tudo pronto
-              </em>
-              .
+                Candidate-se
+              </em>{" "}
+              com tudo preparado.
             </h3>
             <p
               style={{
@@ -1095,9 +1344,9 @@ export function LandingVariantF2({
                 maxWidth: 420,
               }}
             >
-              Ao adaptar seu CV pra essa vaga, o EarlyCV prepara o resto: carta
-              de apresentação, roteiro de preparação para entrevista e
-              acompanhamento da candidatura — tudo pronto pra você aplicar.
+              Com a vaga e o currículo já trabalhados, o EarlyCV mantém o
+              restante da candidatura no mesmo contexto: CV adaptado, carta de
+              apresentação quando necessária e acompanhamento do processo.
             </p>
             <a href="#como-funciona" style={{ ...btnGhost, paddingLeft: 0 }}>
               Ver como funciona →
@@ -1126,16 +1375,6 @@ export function LandingVariantF2({
                     <>
                       <path d="M4 4h16v16H4z" />
                       <path d="M4 4l8 8 8-8" />
-                    </>
-                  ),
-                },
-                {
-                  title: "Preparação de entrevista",
-                  sub: "perguntas prováveis + roteiro",
-                  icon: (
-                    <>
-                      <path d="M12 2a5 5 0 015 5v3a5 5 0 01-10 0V7a5 5 0 015-5z" />
-                      <path d="M19 10v1a7 7 0 01-14 0v-1M12 21v-4" />
                     </>
                   ),
                 },
@@ -1227,6 +1466,196 @@ export function LandingVariantF2({
                 grátis após desbloquear a vaga
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <JourneyDivider step="03">
+        A candidatura foi enviada. Se a entrevista vier, você já chega
+        pronto.
+      </JourneyDivider>
+
+      {/* DEEP FEATURE 4 — Preparação para Entrevista */}
+      <section style={{ padding: "0 32px 72px" }}>
+        <div
+          className="lp-fv2-grid-2"
+          style={{
+            ...container,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 64,
+            alignItems: "center",
+          }}
+        >
+          <div className="reveal-card">
+            <div style={{ marginBottom: 12 }}>
+              <SectionLabel>DA CANDIDATURA À ENTREVISTA</SectionLabel>
+            </div>
+            <h3
+              style={{
+                fontSize: "clamp(24px, 3.2vw, 32px)",
+                fontWeight: 400,
+                letterSpacing: -0.8,
+                margin: "0 0 16px",
+              }}
+            >
+              Se a entrevista vier, você não começa{" "}
+              <em
+                style={{
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                }}
+              >
+                do zero
+              </em>
+              .
+            </h3>
+            <p
+              style={{
+                fontSize: 15.6,
+                lineHeight: 1.65,
+                fontWeight: 300,
+                color: "#5c5a52",
+                margin: "0 0 24px",
+                maxWidth: 420,
+              }}
+            >
+              A vaga, o currículo enviado e os pontos de aderência já fazem
+              parte daquela candidatura. O EarlyCV usa esse contexto para
+              preparar perguntas prováveis, pontos da sua experiência para
+              explorar e uma estratégia específica para aquela entrevista.
+            </p>
+            <div
+              className="lp-fv2-mini-timeline"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 6,
+                fontFamily: MONO,
+                fontSize: 13,
+                letterSpacing: 0.3,
+                color: "#8a8a85",
+                textTransform: "uppercase",
+                maxWidth: 420,
+              }}
+            >
+              {[
+                "Candidatura",
+                "Entrevista marcada",
+                "Preparação personalizada",
+              ].map((step, i, arr) => (
+                <span
+                  key={step}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {step}
+                  {i < arr.length - 1 && (
+                    <span style={{ color: "#c4c3bd" }}>→</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="reveal-card" style={browserFrame}>
+            <BrowserChrome />
+            <InterviewPrepMock />
+          </div>
+        </div>
+      </section>
+
+      <JourneyDivider step="04">
+        E cada processo, com resposta positiva ou não, vira contexto pro
+        próximo.
+      </JourneyDivider>
+
+      {/* DEEP FEATURE 5 — Aprendizado entre candidaturas */}
+      <section style={{ padding: "0 32px 72px" }}>
+        <div
+          className="reveal-card"
+          style={{ ...container, textAlign: "center" }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>A PRÓXIMA COMEÇA MELHOR</SectionLabel>
+          </div>
+          <h3
+            style={{
+              fontSize: "clamp(24px, 3.2vw, 32px)",
+              fontWeight: 400,
+              letterSpacing: -0.8,
+              margin: "0 0 16px",
+            }}
+          >
+            Cada candidatura deixa{" "}
+            <em
+              style={{
+                fontFamily: SERIF_ITALIC,
+                fontStyle: "italic",
+                fontWeight: 400,
+              }}
+            >
+              aprendizado
+            </em>{" "}
+            para a próxima.
+          </h3>
+          <p
+            style={{
+              fontSize: 15.6,
+              lineHeight: 1.65,
+              fontWeight: 300,
+              color: "#5c5a52",
+              margin: "0 auto 28px",
+              maxWidth: 520,
+            }}
+          >
+            Registre resultados e feedbacks dos processos. Esse histórico
+            adiciona contexto às próximas candidaturas e preparações, para
+            que você não recomece do zero a cada nova oportunidade.
+          </p>
+          <div
+            className="lp-fv2-mini-timeline"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexWrap: "wrap",
+              gap: 6,
+              fontFamily: MONO,
+              fontSize: 13,
+              letterSpacing: 0.3,
+              color: "#8a8a85",
+              textTransform: "uppercase",
+              maxWidth: 520,
+              marginLeft: "auto",
+              marginRight: "auto",
+            }}
+          >
+            {["Candidatura", "Resultado / feedback", "Próxima oportunidade"].map(
+              (step, i, arr) => (
+                <span
+                  key={step}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {step}
+                  {i < arr.length - 1 && (
+                    <span style={{ color: "#c4c3bd" }}>→</span>
+                  )}
+                </span>
+              ),
+            )}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ color: "#c4c3bd" }}>→</span>
+              <span title="volta pro início da jornada">↺ Radar</span>
+            </span>
           </div>
         </div>
       </section>
