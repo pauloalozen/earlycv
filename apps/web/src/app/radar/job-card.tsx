@@ -72,7 +72,7 @@ const SENIORITY_LABELS: Record<string, string> = {
   principal: "Principal",
 };
 
-function formatRelativeTime(isoDate: string): string {
+export function formatRelativeTime(isoDate: string): string {
   const diffMs = Date.now() - new Date(isoDate).getTime();
   const diffH = Math.floor(diffMs / 3_600_000);
   if (diffH < 1) return "< 1h";
@@ -513,6 +513,10 @@ export type JobCardProps = {
   showScore: boolean;
   isLoggedIn: boolean;
   masterResumeId?: string | null;
+  // Superfície do produto de onde este card é renderizado — só afeta o
+  // origin gravado em SavedJob quando o usuário clica em salvar (ver
+  // SaveJobsService.save). Default RADAR preserva todo caller existente.
+  saveOrigin?: "RADAR" | "MONITOR";
 };
 
 // Card full-width: ring de score dominante à direita + breakdown inline +
@@ -526,6 +530,7 @@ export function JobCard({
   showScore,
   isLoggedIn,
   masterResumeId = null,
+  saveOrigin = "RADAR",
 }: JobCardProps) {
   const bestAnalysisScore = job.existingApplication?.bestScore;
   const hasAnalysis = typeof bestAnalysisScore === "number";
@@ -597,6 +602,7 @@ export function JobCard({
               jobId={job.id}
               initialSaved={!!job.isSaved}
               isLoggedIn={isLoggedIn}
+              origin={saveOrigin}
             />
             {hasAnalysis && job.existingApplication ? (
               <AdaptBtn
