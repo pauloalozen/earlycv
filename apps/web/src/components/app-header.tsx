@@ -243,6 +243,27 @@ export function AppHeader({
           color: #c0392b;
           background: rgba(192,57,43,0.1);
         }
+        .app-hdr-analyze-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          margin-right: 12px;
+          border-radius: 999px;
+          background: #c6ff3a;
+          color: #0a0a0a;
+          font-family: ${GEIST};
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+          flex-shrink: 0;
+          transition: opacity 120ms ease;
+        }
+        .app-hdr-analyze-btn:hover { opacity: 0.88; }
+        .app-hdr-mob-nav-item--analyze {
+          background: rgba(198,255,58,0.22);
+          font-weight: 700;
+        }
         .app-hdr-burger {
           display: none;
           align-items: center;
@@ -367,6 +388,24 @@ export function AppHeader({
 
           {/* Desktop right */}
           <div className="app-hdr-desktop" style={{ alignItems: "center" }}>
+            {userName && (
+              <a href="/adaptar" className="app-hdr-analyze-btn">
+                <svg
+                  aria-hidden="true"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 11L11 3M11 3H6M11 3v5" />
+                </svg>
+                Analisar CV
+              </a>
+            )}
             {userName && visibleInterviews.length > 0 && (
               <div style={{ position: "relative" }} ref={bellRef}>
                 <button
@@ -609,6 +648,26 @@ export function AppHeader({
       >
         {userName ? (
           <>
+            <a
+              href="/adaptar"
+              className="app-hdr-mob-nav-item app-hdr-mob-nav-item--analyze"
+              onClick={() => setMobileOpen(false)}
+            >
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 11L11 3M11 3H6M11 3v5" />
+              </svg>
+              Analisar CV
+            </a>
             {menuItems.map((item) => (
               <a
                 key={item.href}
