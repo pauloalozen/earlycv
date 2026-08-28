@@ -46,7 +46,15 @@ export const metadata: Metadata = {
   title: "Meu Perfil | EarlyCV",
 };
 
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const SERIF = "var(--font-instrument-serif)";
+
+function matchQualityLabel(score: number): string {
+  if (score >= 90) return "Excelente";
+  if (score >= 75) return "Ótimo";
+  if (score >= 60) return "Bom";
+  return "Regular";
+}
 
 function toNum(value: unknown): number | null {
   const n = Number(value);
@@ -121,6 +129,45 @@ function EmptyColumnState({ label }: { label: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-1 py-6 text-center">
       <p className="text-[13px] text-[#8a8a85]">{label}</p>
+    </div>
+  );
+}
+
+function CompanyAvatar({ name }: { name: string }) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      className="flex size-8 shrink-0 items-center justify-center rounded-full font-mono text-[12px] font-semibold text-[#5a5a55]"
+      style={{ background: "rgba(10,10,10,0.06)" }}
+    >
+      {initial}
+    </span>
+  );
+}
+
+function JobPreviewRow({
+  title,
+  subtitle,
+  tag,
+}: {
+  title: string;
+  subtitle: string;
+  tag?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <CompanyAvatar name={subtitle} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium leading-tight text-[#0a0a0a]">
+          {title}
+        </p>
+        <p className="truncate text-[11px] text-[#8a8a85]">{subtitle}</p>
+      </div>
+      {tag && (
+        <span className="shrink-0 text-[11px] font-medium text-[#3a5008]">
+          {tag}
+        </span>
+      )}
     </div>
   );
 }
@@ -280,6 +327,31 @@ export default async function MeuPerfilPage() {
       ? Math.round(scoreDeltaSource.scoreAfter - scoreDeltaSource.scoreBefore)
       : null;
 
+  // Seu CV — "última adaptação" é a candidatura mais recentemente tocada
+  // que já tem um CV vinculado (applications já vem ordenado por
+  // updatedAt desc); "carta gerada recente" varre o histórico de eventos
+  // por COVER_LETTER_GENERATED, já incluído em cada candidatura.
+  const lastAdaptationApp =
+    applications.find((a) => a.bestCvAdaptationId || a.currentCvAdaptationId) ??
+    null;
+
+  const lastCoverLetter =
+    applications
+      .flatMap((a) =>
+        a.events
+          .filter((ev) => ev.eventType === "COVER_LETTER_GENERATED")
+          .map((ev) => ({
+            jobTitle: a.jobTitle,
+            companyName: a.companyName,
+            applicationId: a.id,
+            createdAt: ev.createdAt,
+          })),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0] ?? null;
+
   const candidaturasColumn = (
     <ColumnCard
       title="Candidaturas"
@@ -344,23 +416,39 @@ export default async function MeuPerfilPage() {
         <EmptyColumnState label="Em breve por aqui." />
       ) : (
         <>
-          <Link
-            href="/radar"
-            className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
-          >
-            <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8a8a85]">
-              Radar
-            </p>
-            <p className="mt-1 text-[13.5px] font-medium text-[#0a0a0a]">
-              {savedJobs && savedJobs.total > 0
-                ? `${savedJobs.total} vaga${savedJobs.total === 1 ? "" : "s"} salva${savedJobs.total === 1 ? "" : "s"}`
-                : "Explorar vagas abertas"}
-            </p>
-          </Link>
+          <div className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8a8a85]">
+                Radar
+              </p>
+              {savedJobs && savedJobs.total > 0 && (
+                <span className="rounded-full bg-[rgba(10,10,10,0.06)] px-2 py-[2px] font-mono text-[9.5px] font-medium text-[#5a5a55]">
+                  {savedJobs.total} salva{savedJobs.total === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+            {savedJobs && savedJobs.items.length > 0 ? (
+              <div className="flex flex-col gap-2.5">
+                {savedJobs.items.slice(0, 2).map((item) => (
+                  <JobPreviewRow
+                    key={item.savedJobId}
+                    title={item.job.title}
+                    subtitle={item.job.company}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Link
+                href="/radar"
+                className="text-[13.5px] font-medium text-[#0a0a0a] hover:underline"
+              >
+                Explorar vagas abertas
+              </Link>
+            )}
+          </div>
 
-          <Link
-            href="/monitor"
-            className="relative rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
+          <div
+            className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3"
             style={
               monitorCount && monitorCount.count > 0
                 ? {
@@ -370,22 +458,40 @@ export default async function MeuPerfilPage() {
                 : undefined
             }
           >
-            <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8a8a85]">
-              Meu Monitor
-            </p>
-            <p className="mt-1 text-[13.5px] font-medium text-[#0a0a0a]">
-              {monitorCount && monitorCount.count > 0
-                ? monitorCount.count === 1
-                  ? "1 recomendação nova"
-                  : `${monitorCount.count} recomendações novas`
-                : "Nenhuma recomendação nova"}
-            </p>
-            {topRecommendation && (
-              <p className="mt-1 truncate text-[11.5px] text-[#5a5a55]">
-                {topRecommendation.jobTitle} · {topRecommendation.companyName}
+            <div className="mb-2 flex items-center justify-between">
+              <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8a8a85]">
+                Meu Monitor
+              </p>
+              {monitorCount && monitorCount.count > 0 && (
+                <span className="rounded-full bg-[rgba(110,150,20,0.18)] px-2 py-[2px] font-mono text-[9.5px] font-medium text-[#3a5008]">
+                  {monitorCount.count} pendente
+                  {monitorCount.count === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+            {monitorFeed && monitorFeed.items.length > 0 ? (
+              <div className="flex flex-col gap-2.5">
+                {monitorFeed.items.slice(0, 2).map((item) => (
+                  <JobPreviewRow
+                    key={item.recommendationId}
+                    title={item.job.title}
+                    subtitle={item.job.company}
+                    tag={matchQualityLabel(item.score)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-[#8a8a85]">
+                Nenhuma recomendação nova
               </p>
             )}
-          </Link>
+            <Link
+              href="/monitor"
+              className="mt-2.5 inline-block text-[11.5px] font-medium text-[#5a5a55] hover:text-[#0a0a0a]"
+            >
+              Abrir Meu Monitor →
+            </Link>
+          </div>
         </>
       )}
     </ColumnCard>
@@ -395,38 +501,62 @@ export default async function MeuPerfilPage() {
     <ColumnCard title="Seu CV" icon={<FileCheckIcon />} href="/analises">
       <Link
         href="/meu-cv-master"
+        className="group flex items-center gap-3 rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
+      >
+        <ProgressRing value={profileCompletion} size={64} stroke={5} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13.5px] font-medium text-[#0a0a0a]">
+            {masterResume ? masterResume.title : "Nenhum CV cadastrado ainda"}
+          </p>
+          <span className="flex items-center gap-1 text-[11px] text-[#8a8a85] transition-colors group-hover:text-[#0a0a0a]">
+            Abrir Meu CV Master
+            <Chevron />
+          </span>
+        </div>
+      </Link>
+
+      {lastAdaptationApp && (
+        <Link
+          href={`/candidaturas/${lastAdaptationApp.id}`}
+          className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
+        >
+          <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8a8a85]">
+            Última adaptação
+          </p>
+          <p className="mt-1 truncate text-[13px] font-medium text-[#0a0a0a]">
+            {lastAdaptationApp.jobTitle}
+          </p>
+          <p className="truncate text-[11px] text-[#8a8a85]">
+            {lastAdaptationApp.companyName}
+          </p>
+        </Link>
+      )}
+
+      <Link
+        href={
+          lastCoverLetter
+            ? `/candidaturas/${lastCoverLetter.applicationId}`
+            : "/carta-de-apresentacao"
+        }
         className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
       >
         <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8a8a85]">
-          CV base
+          {lastCoverLetter ? "Carta gerada recente" : "Carta de apresentação"}
         </p>
-        <p className="mt-1 truncate text-[13.5px] font-medium text-[#0a0a0a]">
-          {masterResume ? masterResume.title : "Nenhum CV cadastrado ainda"}
-        </p>
-      </Link>
-
-      <Link
-        href="/carta-de-apresentacao"
-        className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
-      >
-        <p className="text-[13px] font-medium text-[#0a0a0a]">
-          Carta de apresentação
-        </p>
-        <p className="mt-0.5 text-[11.5px] text-[#8a8a85]">
-          Gerar pra uma candidatura
-        </p>
-      </Link>
-
-      <Link
-        href="/preparacao-para-entrevista"
-        className="rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
-      >
-        <p className="text-[13px] font-medium text-[#0a0a0a]">
-          Preparação para entrevista
-        </p>
-        <p className="mt-0.5 text-[11.5px] text-[#8a8a85]">
-          Revisar antes da próxima
-        </p>
+        {lastCoverLetter ? (
+          <>
+            <p className="mt-1 truncate text-[13px] font-medium text-[#0a0a0a]">
+              {lastCoverLetter.jobTitle}
+            </p>
+            <p className="truncate text-[11px] text-[#8a8a85]">
+              {lastCoverLetter.companyName}
+            </p>
+          </>
+        ) : (
+          <p className="mt-1 text-[13px] font-medium text-[#0a0a0a]">
+            Gerar pra uma candidatura
+          </p>
+        )}
       </Link>
     </ColumnCard>
   );
@@ -438,6 +568,7 @@ export default async function MeuPerfilPage() {
         style={{
           background:
             "radial-gradient(ellipse 80% 40% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          fontFamily: GEIST,
         }}
       >
         <AppHeader
@@ -446,7 +577,7 @@ export default async function MeuPerfilPage() {
           availableCredits={availableCredits}
         />
 
-        <div className="mx-auto max-w-[1100px] px-6 pb-20 pt-[88px] md:px-8 lg:px-10">
+        <div className="mx-auto max-w-[1320px] px-6 pb-20 pt-[88px] md:px-8 lg:px-12">
           <GuestAnalysisClaimer />
 
           <div className="space-y-4">
@@ -461,58 +592,25 @@ export default async function MeuPerfilPage() {
               </em>
             </h1>
 
-            {/* 2 · Status do perfil + Próxima ação (waterfall) */}
-            <div className="grid gap-4 lg:grid-cols-[1fr_0.62fr]">
-              <Link href="/meu-cv-master" className="group block">
-                <div className="flex h-full flex-col gap-5 rounded-[14px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] p-6 transition-[border-color,box-shadow,transform] duration-150 group-hover:-translate-y-px group-hover:border-[rgba(10,10,10,0.16)] group-hover:shadow-[0_12px_32px_-14px_rgba(10,10,10,0.22)]">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8a8a85]">
-                      Status do perfil
-                    </p>
-                    <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#8a8a85] transition-[gap,color] duration-150 group-hover:gap-2.5 group-hover:text-[#0a0a0a]">
-                      Abrir Meu CV Master
-                      <Chevron />
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <ProgressRing value={profileCompletion} />
-                    <div className="flex-1">
-                      <p className="text-[23px] font-medium leading-tight tracking-[-0.03em]">
-                        Perfil {profileCompletion}%{" "}
-                        <em
-                          className="not-italic font-normal"
-                          style={{ fontFamily: SERIF }}
-                        >
-                          completo.
-                        </em>
-                      </p>
-                      <p className="mt-1.5 max-w-[440px] text-[13px] leading-relaxed text-[#5a5a55]">
-                        {masterResume
-                          ? "Você confere e corrige o que a IA extraiu do seu PDF. Quanto mais completo, melhores as adaptações."
-                          : "Cadastre o CV base para liberar o fluxo completo de adaptação."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-
-              {/* Card dinâmico — conteúdo varia pela waterfall de hero-state.ts */}
-              <Link
-                href={heroState.ctaHref}
-                className="group flex flex-col justify-center rounded-[14px] p-6"
-                style={{
-                  background:
-                    "radial-gradient(120% 140% at 100% 0%, rgba(198,255,58,0.10) 0%, rgba(198,255,58,0) 45%), #0a0a0a",
-                  color: "#fafaf6",
-                  boxShadow: "0 20px 50px -18px rgba(10,10,10,0.4)",
-                }}
-              >
-                <p className="flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7a7a74]">
-                  <span className="size-1.5 rounded-full bg-[#c6ff3a]" />
+            {/* 2 · Próxima ação (waterfall) — card único, largura total */}
+            <Link
+              href={heroState.ctaHref}
+              className="group flex flex-col gap-5 rounded-[14px] p-6 md:flex-row md:items-center md:justify-between md:gap-8"
+              style={{
+                background:
+                  "radial-gradient(120% 140% at 100% 0%, rgba(198,255,58,0.10) 0%, rgba(198,255,58,0) 45%), #0a0a0a",
+                color: "#fafaf6",
+                boxShadow: "0 20px 50px -18px rgba(10,10,10,0.4)",
+              }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7a7a74]">
+                  <span className="size-1.5 shrink-0 rounded-full bg-[#c6ff3a]" />
                   {heroState.eyebrow}
+                  <span className="text-[#4a4a45]">·</span>
+                  {heroState.eyebrowQualifier}
                 </p>
-                <p className="mt-4 text-[28px] font-medium leading-tight tracking-[-0.05em]">
+                <p className="mt-4 text-[28px] font-medium leading-tight tracking-[-0.05em] md:text-[32px]">
                   {heroState.titlePlain}{" "}
                   <em
                     className="not-italic text-[#c6ff3a]"
@@ -521,24 +619,30 @@ export default async function MeuPerfilPage() {
                     {heroState.titleEmphasis}
                   </em>
                 </p>
-                <p className="mt-2 text-[13.5px] leading-relaxed text-[#a0a098]">
+                <p className="mt-2 max-w-[520px] text-[13.5px] leading-relaxed text-[#a0a098]">
                   {heroState.description}
                 </p>
-                <span
-                  className="mt-5 inline-flex w-fit items-center gap-2 rounded-[10px] px-[18px] py-3 text-[14px] font-semibold transition-opacity group-hover:opacity-90"
-                  style={{
-                    background: "#c6ff3a",
-                    color: "#0a0a0a",
-                    boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
-                  }}
-                >
-                  {heroState.ctaLabel}
-                </span>
-              </Link>
-            </div>
+              </div>
+              <span
+                className="inline-flex w-fit shrink-0 items-center gap-2 rounded-[10px] px-[18px] py-3 text-[14px] font-semibold transition-opacity group-hover:opacity-90"
+                style={{
+                  background: "#c6ff3a",
+                  color: "#0a0a0a",
+                  boxShadow: "0 6px 14px rgba(198,255,58,0.2)",
+                }}
+              >
+                {heroState.ctaLabel}
+              </span>
+            </Link>
 
             {/* 3 · KPIs */}
-            <div className="grid gap-3 md:grid-cols-3">
+            <div
+              className={
+                hasJobsAccess
+                  ? "grid grid-cols-2 gap-3 lg:grid-cols-4"
+                  : "grid gap-3 md:grid-cols-3"
+              }
+            >
               <Link
                 href="/candidaturas"
                 className="group rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-[rgba(10,10,10,0.16)] hover:shadow-[0_8px_20px_-10px_rgba(10,10,10,0.18)] block"
@@ -608,6 +712,28 @@ export default async function MeuPerfilPage() {
                   )}
                 </div>
               </div>
+
+              {hasJobsAccess && (
+                <Link
+                  href="/monitor"
+                  className="group rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-[rgba(10,10,10,0.16)] hover:shadow-[0_8px_20px_-10px_rgba(10,10,10,0.18)] block"
+                >
+                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#8a8a85]">
+                    Recomendações novas
+                  </p>
+                  <p
+                    className="mt-1.5 text-[32px] font-medium leading-none tracking-[-0.05em] tabular-nums"
+                    style={{
+                      color:
+                        monitorCount && monitorCount.count > 0
+                          ? "#2a6a10"
+                          : "#0a0a0a",
+                    }}
+                  >
+                    {monitorCount ? String(monitorCount.count) : "—"}
+                  </p>
+                </Link>
+              )}
             </div>
 
             {/* 4 · Grid operacional — Candidaturas / Descoberta / Seu CV */}

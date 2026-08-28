@@ -38,6 +38,7 @@ export type HeroStateInput = {
 export type HeroState = {
   kind: HeroStateKind;
   eyebrow: string;
+  eyebrowQualifier: string;
   titlePlain: string;
   titleEmphasis: string;
   description: string;
@@ -71,7 +72,8 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
             : `em ${Math.ceil(daysUntil)} dias`;
       return {
         kind: "interview_soon",
-        eyebrow: "Próxima ação",
+        eyebrow: "Próxima ação recomendada",
+        eyebrowQualifier: "Entrevista em breve",
         titlePlain: "Sua entrevista com",
         titleEmphasis: `${input.nearestInterview.companyName} é ${daysLabel}.`,
         description: `${input.nearestInterview.jobTitle} — prepare-se com o EarlyCV.`,
@@ -85,7 +87,8 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
   if (input.cvReadyUnsubmitted) {
     return {
       kind: "cv_ready_unsent",
-      eyebrow: "Próxima ação",
+      eyebrow: "Próxima ação recomendada",
+      eyebrowQualifier: "CV liberado",
       titlePlain: "Finalize sua candidatura",
       titleEmphasis: `pra ${input.cvReadyUnsubmitted.companyName}.`,
       description: `Seu CV pra ${input.cvReadyUnsubmitted.jobTitle} já está pronto — falta só enviar.`,
@@ -98,7 +101,8 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
   if (!input.hasAvailableCredits) {
     return {
       kind: "credits_empty",
-      eyebrow: "Próxima ação",
+      eyebrow: "Próxima ação recomendada",
+      eyebrowQualifier: "Créditos zerados",
       titlePlain: "Seus créditos",
       titleEmphasis: "acabaram.",
       description: "Compre mais créditos pra continuar adaptando seu CV.",
@@ -114,7 +118,8 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
   ) {
     return {
       kind: "high_match_recommendation",
-      eyebrow: "Próxima ação",
+      eyebrow: "Próxima ação recomendada",
+      eyebrowQualifier: "Alta aderência encontrada",
       titlePlain: "Vaga muito aderente:",
       titleEmphasis: `${input.topRecommendation.jobTitle}.`,
       description: `${input.topRecommendation.companyName} — ${input.topRecommendation.score}% de match com seu perfil.`,
@@ -128,6 +133,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
     return {
       kind: "new_user",
       eyebrow: "Próximo passo",
+      eyebrowQualifier: "Primeiro acesso",
       titlePlain: "Comece sua",
       titleEmphasis: "primeira análise.",
       description:
@@ -144,6 +150,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
       return {
         kind: "inactive",
         eyebrow: "Que tal voltar?",
+        eyebrowQualifier: "Sem atividade recente",
         titlePlain: "Faz um tempo que você",
         titleEmphasis: "não aparece por aqui.",
         description:
@@ -158,6 +165,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
   return {
     kind: "default",
     eyebrow: "Próximo passo",
+    eyebrowQualifier: "Sugestão",
     titlePlain: "Analisar",
     titleEmphasis: "nova vaga.",
     description: "Leva menos de 2 minutos",
