@@ -1202,6 +1202,595 @@ export function RadarMock() {
   );
 }
 
+/** Compact mockup of Meu Monitor — destaca a configuração (área/senioridade + frequência) e simula o e-mail recebido com o digest. */
+export function MonitorMock() {
+  const skills = ["arquitetura", "cloud", "integração", "aws"];
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        padding: "32px 34px 30px",
+        fontFamily: GEIST,
+        textAlign: "left",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          marginBottom: 10,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#2fa84c",
+            boxShadow: "0 0 0 3px rgba(47,168,76,0.18)",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: GRAY,
+          }}
+        >
+          Seu Monitor está procurando
+        </span>
+      </div>
+      <h3
+        style={{
+          fontSize: 27,
+          fontWeight: 500,
+          letterSpacing: -0.6,
+          margin: "0 0 22px",
+          color: "#0a0a0a",
+          lineHeight: 1.15,
+        }}
+      >
+        Vagas novas, todo dia, direto na{" "}
+        <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic" }}>
+          sua caixa de entrada
+        </em>
+      </h3>
+
+      {/* Configuração — o que dá pra ajustar em segundos */}
+      <div
+        style={{
+          border: `1px solid ${BORDER}`,
+          borderRadius: 12,
+          padding: "18px 20px",
+          marginBottom: 20,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: 0.8,
+            textTransform: "uppercase",
+            color: GRAY,
+            marginBottom: 12,
+          }}
+        >
+          Você configura em segundos
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 500,
+                color: "#0a0a0a",
+                marginBottom: 8,
+              }}
+            >
+              Dados &amp; IA · Engenharia de Software · lead
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {skills.map((s) => (
+                <Tag key={s}>{s}</Tag>
+              ))}
+            </div>
+          </div>
+          <div style={{ flexShrink: 0 }}>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 8.5,
+                color: GRAY,
+                marginBottom: 6,
+                textAlign: "right",
+              }}
+            >
+              FREQUÊNCIA DO ALERTA
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["Diariamente", "Semanalmente", "Desativado"].map((freq, i) => (
+                <span
+                  key={freq}
+                  style={{
+                    fontFamily: GEIST,
+                    fontSize: 10.5,
+                    fontWeight: 500,
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: i === 0 ? "#0a0a0a" : "#fff",
+                    color: i === 0 ? "#fff" : "#3a3a38",
+                    border: i === 0 ? "none" : `1px solid ${BORDER}`,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {freq}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Simulação do e-mail recebido — layout inspirado numa caixa de entrada (sem reproduzir marca/logo de terceiros), em modo claro. Título grande e explícito pra deixar claro que isso acontece fora do EarlyCV, no e-mail da pessoa. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 4,
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#0a0a0a"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <title>E-mail</title>
+          <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+          <path d="M3.5 6l8.5 7 8.5-7" />
+        </svg>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            fontWeight: 700,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: GRAY,
+          }}
+        >
+          Fora do EarlyCV · direto no seu e-mail
+        </span>
+      </div>
+      <h4
+        style={{
+          fontSize: 21,
+          fontWeight: 600,
+          letterSpacing: -0.4,
+          margin: "0 0 14px",
+          color: "#0a0a0a",
+          lineHeight: 1.25,
+        }}
+      >
+        As oportunidades chegam{" "}
+        <em style={{ fontFamily: SERIF_ITALIC, fontStyle: "italic" }}>
+          primeiro no seu e-mail
+        </em>
+        .
+      </h4>
+      <div
+        style={{
+          border: `1px solid ${BORDER}`,
+          borderRadius: 12,
+          overflow: "hidden",
+          background: "#fff",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+        }}
+      >
+        {/* Barra superior */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            padding: "10px 16px",
+            borderBottom: `1px solid ${BORDER}`,
+          }}
+        >
+          <svg
+            width="16"
+            height="12"
+            viewBox="0 0 24 18"
+            fill="none"
+            stroke="#5a5a56"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <title>Menu</title>
+            <path d="M1 1h22M1 9h22M1 17h22" />
+          </svg>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#0a0a0a"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <title>Correio</title>
+              <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+              <path d="M3.5 6l8.5 7 8.5-7" />
+            </svg>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: "#0a0a0a" }}>
+              Correio
+            </span>
+          </div>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "#f1f1ef",
+              borderRadius: 20,
+              padding: "7px 14px",
+              maxWidth: 340,
+              margin: "0 8px",
+            }}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={GRAY}
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <title>Pesquisar</title>
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+            <span style={{ fontSize: 12, color: GRAY }}>Pesquisar e-mail</span>
+          </div>
+          <div
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              gap: 14,
+              color: GRAY,
+            }}
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <title>Ajuda</title>
+              <circle cx="12" cy="12" r="9" />
+              <path
+                d="M9.5 9a2.5 2.5 0 114 2c-.7.6-1.5 1-1.5 2.2"
+                strokeLinecap="round"
+              />
+              <circle
+                cx="12"
+                cy="17"
+                r="0.6"
+                fill="currentColor"
+                stroke="none"
+              />
+            </svg>
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <title>Configurações</title>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.14.31.22.65.22 1H21a2 2 0 010 4h-.09c-.35 0-.69.08-1 .22z" />
+            </svg>
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <title>Aplicativos</title>
+              <circle cx="6" cy="6" r="1.4" />
+              <circle cx="12" cy="6" r="1.4" />
+              <circle cx="18" cy="6" r="1.4" />
+              <circle cx="6" cy="12" r="1.4" />
+              <circle cx="12" cy="12" r="1.4" />
+              <circle cx="18" cy="12" r="1.4" />
+              <circle cx="6" cy="18" r="1.4" />
+              <circle cx="12" cy="18" r="1.4" />
+              <circle cx="18" cy="18" r="1.4" />
+            </svg>
+          </div>
+        </div>
+
+        <div style={{ display: "flex" }}>
+          {/* Barra lateral */}
+          <div
+            style={{
+              width: 148,
+              flexShrink: 0,
+              borderRight: `1px solid ${BORDER}`,
+              padding: "14px 10px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                border: `1px solid ${BORDER}`,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                borderRadius: 20,
+                padding: "9px 14px",
+                marginBottom: 16,
+                fontSize: 12,
+                fontWeight: 500,
+                color: "#3a3a38",
+              }}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <title>Escrever</title>
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+              Escrever
+            </div>
+            {[
+              { label: "Caixa de entrada", count: "1", active: true },
+              { label: "Com estrela" },
+              { label: "Enviados" },
+              { label: "Importante" },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "7px 8px",
+                  borderRadius: 0,
+                  background: item.active
+                    ? "rgba(198,255,58,0.28)"
+                    : "transparent",
+                  fontWeight: item.active ? 700 : 400,
+                  fontSize: 12.5,
+                  color: "#0a0a0a",
+                  marginBottom: 2,
+                }}
+              >
+                <span>{item.label}</span>
+                {item.count ? (
+                  <span style={{ fontWeight: 700, fontSize: 11.5 }}>
+                    {item.count}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {/* Lista de e-mails */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                borderBottom: `1px solid ${BORDER}`,
+                padding: "0 16px",
+              }}
+            >
+              {[
+                { label: "Principal", active: true },
+                { label: "Social" },
+                { label: "Atualizações", badge: "1 novo" },
+              ].map((tab) => (
+                <div
+                  key={tab.label}
+                  style={{
+                    padding: "10px 14px",
+                    fontSize: 12,
+                    fontWeight: tab.active ? 600 : 500,
+                    color: tab.active ? "#0a0a0a" : GRAY,
+                    borderBottom: tab.active
+                      ? "2px solid #0a0a0a"
+                      : "2px solid transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {tab.label}
+                  {tab.badge ? (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: "#3a5008",
+                        background: "rgba(198,255,58,0.4)",
+                        borderRadius: 999,
+                        padding: "1px 6px",
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            {[
+              {
+                sender: "Meu Monitor",
+                subject: "3 vagas novas com alta aderência ao seu perfil",
+                snippet:
+                  "Cresol, Nubank e CI&T têm vagas que batem muito com você — dá uma olhada antes que...",
+                time: "09:02",
+                unread: true,
+              },
+              {
+                sender: "LinkedIn",
+                subject: "Vagas recomendadas para você esta semana",
+                snippet: "Confira as 12 novas oportunidades na sua área...",
+                time: "ontem",
+                unread: false,
+              },
+              {
+                sender: "GitHub",
+                subject: "Weekly digest",
+                snippet: "Atividade dos repositórios que você segue...",
+                time: "ontem",
+                unread: false,
+              },
+            ].map((mail) => (
+              <div
+                key={mail.sender + mail.subject}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "11px 16px",
+                  borderBottom: `1px solid ${BORDER}`,
+                  background: mail.unread ? "rgba(198,255,58,0.06)" : "#fff",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 3,
+                    border: `1.5px solid ${mail.unread ? "#0a0a0a" : "#c8c6bf"}`,
+                    flexShrink: 0,
+                  }}
+                />
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={mail.unread ? "#f5c518" : "#d8d6ce"}
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                  style={{ flexShrink: 0 }}
+                >
+                  <title>Com estrela</title>
+                  <path d="M12 2.5l2.9 6 6.6.7-4.9 4.6 1.3 6.5L12 17l-5.9 3.3 1.3-6.5-4.9-4.6 6.6-.7z" />
+                </svg>
+                <span
+                  style={{
+                    width: 110,
+                    flexShrink: 0,
+                    fontSize: 12.5,
+                    fontWeight: mail.unread ? 700 : 400,
+                    color: "#0a0a0a",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {mail.sender}
+                </span>
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 12.5,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontWeight: mail.unread ? 700 : 400,
+                      color: "#0a0a0a",
+                    }}
+                  >
+                    {mail.subject}
+                  </span>
+                  <span style={{ color: GRAY }}> — {mail.snippet}</span>
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: mail.unread ? "#0a0a0a" : GRAY,
+                    fontWeight: mail.unread ? 600 : 400,
+                    flexShrink: 0,
+                  }}
+                >
+                  {mail.time}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Link
+        href="/monitor"
+        style={{
+          display: "inline-block",
+          marginTop: 18,
+          fontSize: 13,
+          fontWeight: 500,
+          color: "#0a0a0a",
+          textDecoration: "underline",
+          textDecorationColor: "rgba(10,10,10,0.25)",
+          textUnderlineOffset: 4,
+        }}
+      >
+        Ativar meu Monitor de vagas →
+      </Link>
+    </div>
+  );
+}
+
 /** Compact mockup based on a candidatura detail page — status journey + interview + side panel. */
 export function GestaoMock() {
   const steps = [
@@ -1970,7 +2559,13 @@ export function CartaMock() {
   );
 }
 
-type FeatureKey = "analise" | "otimizacao" | "radar" | "gestao" | "preparacao";
+type FeatureKey =
+  | "analise"
+  | "otimizacao"
+  | "radar"
+  | "monitor"
+  | "gestao"
+  | "preparacao";
 
 const FEATURES: {
   key: FeatureKey;
@@ -2006,6 +2601,16 @@ const FEATURES: {
     ),
   },
   {
+    key: "monitor",
+    label: "Alerta de Vagas",
+    icon: (
+      <>
+        <path d="M10 21a2 2 0 003.46 0" />
+        <path d="M4 17h16l-1.6-2.4A6 6 0 0117 11V9a5 5 0 00-10 0v2a6 6 0 01-1.4 3.6L4 17z" />
+      </>
+    ),
+  },
+  {
     key: "gestao",
     label: "Gestão de Candidaturas",
     icon: (
@@ -2031,6 +2636,22 @@ const FEATURES: {
 export function FeatureShowcase() {
   const [active, setActive] = useState<FeatureKey>("analise");
 
+  // Clicar numa pill troca o mockup exibido — como o conteúdo muda de
+  // altura, rolamos até o topo da seção (título "Tudo que você precisa" +
+  // a fileira de pills) em vez de centralizar só o frame — assim as pills
+  // continuam visíveis pro usuário poder trocar de novo sem procurar. O
+  // offset compensa a nav fixa no topo (_nav-v2.tsx), que senão cobriria
+  // o título logo depois do scroll.
+  function handleSelect(key: FeatureKey) {
+    setActive(key);
+    const anchor = document.getElementById("tudo-que-voce-precisa");
+    if (!anchor) return;
+    const NAV_OFFSET = 88;
+    const top =
+      anchor.getBoundingClientRect().top + window.scrollY - NAV_OFFSET;
+    window.scrollTo({ top, behavior: "smooth" });
+  }
+
   return (
     <>
       <div
@@ -2041,7 +2662,7 @@ export function FeatureShowcase() {
           <button
             key={f.key}
             type="button"
-            onClick={() => setActive(f.key)}
+            onClick={() => handleSelect(f.key)}
             className={`lp-f-pill${active === f.key ? " is-active" : ""}`}
             style={{ border: undefined, cursor: "pointer" }}
           >
@@ -2061,37 +2682,6 @@ export function FeatureShowcase() {
             {f.label}
           </button>
         ))}
-        <span
-          className="lp-f-pill"
-          style={{ opacity: 0.55, cursor: "default" }}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#6a6a66"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <title>Alerta de Vagas</title>
-            <path d="M10 21a2 2 0 003.46 0" />
-            <path d="M4 17h16l-1.6-2.4A6 6 0 0117 11V9a5 5 0 00-10 0v2a6 6 0 01-1.4 3.6L4 17z" />
-          </svg>
-          Alerta de Vagas
-          <span
-            style={{
-              fontFamily: MONO,
-              fontSize: 9,
-              letterSpacing: 0.5,
-              color: "#8a8a85",
-              marginLeft: 2,
-            }}
-          >
-            em breve
-          </span>
-        </span>
       </div>
 
       <div
@@ -2105,6 +2695,8 @@ export function FeatureShowcase() {
           <OtimizacaoMock />
         ) : active === "radar" ? (
           <RadarMock />
+        ) : active === "monitor" ? (
+          <MonitorMock />
         ) : active === "gestao" ? (
           <GestaoMock />
         ) : (

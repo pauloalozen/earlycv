@@ -272,9 +272,7 @@ function InterviewPrepMock() {
             >
               0{i + 1}
             </span>
-            <span
-              style={{ fontSize: 12.5, color: "#2a2a28", lineHeight: 1.4 }}
-            >
+            <span style={{ fontSize: 12.5, color: "#2a2a28", lineHeight: 1.4 }}>
               {q}
             </span>
           </div>
@@ -705,7 +703,9 @@ export function LandingVariantF2({
             Analisar meu CV grátis <span>→</span>
           </Link>
 
-          <SectionLabel>TUDO QUE VOCÊ PRECISA PRA SER CHAMADO</SectionLabel>
+          <div id="tudo-que-voce-precisa">
+            <SectionLabel>TUDO QUE VOCÊ PRECISA PRA SER CHAMADO</SectionLabel>
+          </div>
 
           <FeatureShowcase />
         </div>
@@ -1133,8 +1133,8 @@ export function LandingVariantF2({
             >
               A mesma vaga, dois momentos: publicada direto na fonte e
               encontrada pelo Radar — ou chegando depois aos grandes
-              agregadores. Chegar cedo significa entrar na fila antes de
-              dezenas de outros candidatos.
+              agregadores. Chegar cedo significa entrar na fila antes de dezenas
+              de outros candidatos.
             </p>
             <Link href="/radar" style={{ ...btnGhost, paddingLeft: 0 }}>
               Ver como o Radar te coloca na frente →
@@ -1238,10 +1238,10 @@ export function LandingVariantF2({
               }}
             >
               Compare seu currículo com aquela vaga ponto a ponto. O EarlyCV
-              mostra onde você tem aderência, o que está pouco evidente e o
-              que vale destacar antes de se candidatar. Depois, transforma
-              esse diagnóstico em uma versão direcionada à oportunidade, sem
-              inventar experiências.
+              mostra onde você tem aderência, o que está pouco evidente e o que
+              vale destacar antes de se candidatar. Depois, transforma esse
+              diagnóstico em uma versão direcionada à oportunidade, sem inventar
+              experiências.
             </p>
             <Link
               href="/demo-resultado"
@@ -1471,8 +1471,7 @@ export function LandingVariantF2({
       </section>
 
       <JourneyDivider step="03">
-        A candidatura foi enviada. Se a entrevista vier, você já chega
-        pronto.
+        A candidatura foi enviada. Se a entrevista vier, você já chega pronto.
       </JourneyDivider>
 
       {/* DEEP FEATURE 4 — Preparação para Entrevista */}
@@ -1614,8 +1613,8 @@ export function LandingVariantF2({
             }}
           >
             Registre resultados e feedbacks dos processos. Esse histórico
-            adiciona contexto às próximas candidaturas e preparações, para
-            que você não recomece do zero a cada nova oportunidade.
+            adiciona contexto às próximas candidaturas e preparações, para que
+            você não recomece do zero a cada nova oportunidade.
           </p>
           <div
             className="lp-fv2-mini-timeline"
@@ -1635,24 +1634,28 @@ export function LandingVariantF2({
               marginRight: "auto",
             }}
           >
-            {["Candidatura", "Resultado / feedback", "Próxima oportunidade"].map(
-              (step, i, arr) => (
-                <span
-                  key={step}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  {step}
-                  {i < arr.length - 1 && (
-                    <span style={{ color: "#c4c3bd" }}>→</span>
-                  )}
-                </span>
-              ),
-            )}
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {[
+              "Candidatura",
+              "Resultado / feedback",
+              "Próxima oportunidade",
+            ].map((step, i, arr) => (
+              <span
+                key={step}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                {step}
+                {i < arr.length - 1 && (
+                  <span style={{ color: "#c4c3bd" }}>→</span>
+                )}
+              </span>
+            ))}
+            <span
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
               <span style={{ color: "#c4c3bd" }}>→</span>
               <span title="volta pro início da jornada">↺ Radar</span>
             </span>

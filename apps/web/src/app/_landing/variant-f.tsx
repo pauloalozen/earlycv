@@ -351,7 +351,9 @@ export function LandingVariantF({
             Analisar meu CV grátis <span>→</span>
           </Link>
 
-          <SectionLabel>TUDO QUE VOCÊ PRECISA PRA SER CHAMADO</SectionLabel>
+          <div id="tudo-que-voce-precisa">
+            <SectionLabel>TUDO QUE VOCÊ PRECISA PRA SER CHAMADO</SectionLabel>
+          </div>
 
           <FeatureShowcase />
         </div>
