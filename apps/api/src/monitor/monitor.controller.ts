@@ -10,6 +10,7 @@ import {
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import {
@@ -36,6 +37,14 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
 // DEPOIS de JwtAuthGuard (ordem importa) — único ponto de enforcement de
 // acesso ao Monitor nos endpoints HTTP; hoje libera todo mundo (política
 // de lançamento), ver MonitorEntitlementService.
+// Limite global do ThrottlerGuard (60 req/min/IP, ver app.module.ts) é
+// baixo demais pra esta tela: cada seção do Meu Monitor pagina de forma
+// independente (ver MonitorLevelSection) e paginar até o fim de uma lista
+// grande (ex.: 165 vagas) facilmente passa de 60 requisições dentro de um
+// minuto, o que fazia GET /monitor devolver 429 no meio da navegação —
+// indistinguível pro frontend de um erro real (ver listMonitorRecommendations
+// em monitor-api.ts, que trata !response.ok como feed vazio).
+@Throttle({ default: { ttl: 60_000, limit: 300 } })
 @UseGuards(JwtAuthGuard, MonitorEntitlementGuard)
 @Controller("monitor")
 export class MonitorController {
