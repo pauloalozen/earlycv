@@ -41,6 +41,10 @@ type Props = {
   backgroundColor?: string;
   variant?: "dark" | "light";
   availableCredits?: number | "∞" | "—";
+  // Algumas rotas são o próprio fluxo de análise (ex.: /adaptar) — o botão
+  // "Analisar CV" no header não faz sentido linkando pra página em que a
+  // pessoa já está.
+  hideAnalyzeButton?: boolean;
 };
 
 const CREDIT_REDEEMED_EVENT = "dashboard:credit-redeemed";
@@ -52,6 +56,7 @@ export function AppHeader({
   backgroundColor = "rgba(243,242,237,0.95)",
   variant = "dark",
   availableCredits,
+  hideAnalyzeButton = false,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuCredits, setMenuCredits] = useState<
@@ -388,7 +393,7 @@ export function AppHeader({
 
           {/* Desktop right */}
           <div className="app-hdr-desktop" style={{ alignItems: "center" }}>
-            {userName && (
+            {userName && !hideAnalyzeButton && (
               <a href="/adaptar" className="app-hdr-analyze-btn">
                 <svg
                   aria-hidden="true"
@@ -648,26 +653,28 @@ export function AppHeader({
       >
         {userName ? (
           <>
-            <a
-              href="/adaptar"
-              className="app-hdr-mob-nav-item app-hdr-mob-nav-item--analyze"
-              onClick={() => setMobileOpen(false)}
-            >
-              <svg
-                aria-hidden="true"
-                width="16"
-                height="16"
-                viewBox="0 0 14 14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            {!hideAnalyzeButton && (
+              <a
+                href="/adaptar"
+                className="app-hdr-mob-nav-item app-hdr-mob-nav-item--analyze"
+                onClick={() => setMobileOpen(false)}
               >
-                <path d="M3 11L11 3M11 3H6M11 3v5" />
-              </svg>
-              Analisar CV
-            </a>
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 11L11 3M11 3H6M11 3v5" />
+                </svg>
+                Analisar CV
+              </a>
+            )}
             {menuItems.map((item) => (
               <a
                 key={item.href}

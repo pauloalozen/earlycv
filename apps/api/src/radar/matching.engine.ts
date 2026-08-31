@@ -1,7 +1,19 @@
+import {
+  OPPORTUNITY_LEVEL_THRESHOLDS,
+  type OpportunityLevel,
+  scoreToOpportunityLevel,
+} from "@earlycv/config/opportunity-level";
 import { Inject, Injectable } from "@nestjs/common";
 import { type ContractType, JobArea, SeniorityLevel } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+
+export type { OpportunityLevel };
+// Re-exportado por compatibilidade — todo o resto do backend (public-jobs,
+// saved-jobs, monitor) importa scoreToOpportunityLevel/OPPORTUNITY_LEVEL_THRESHOLDS
+// daqui. A fonte real agora é @earlycv/config/opportunity-level, compartilhada
+// com o frontend (radar-ui.tsx) para eliminar a duplicação de thresholds.
+export { OPPORTUNITY_LEVEL_THRESHOLDS, scoreToOpportunityLevel };
 
 export type MatchFilter = {
   userId: string;
@@ -18,27 +30,6 @@ export type ScoreBreakdown = {
   language: number;
   workModel: number;
 };
-
-// Faixas de categoria de aderência (filtro "ADERÊNCIA" do /radar) —
-// espelha exatamente OPPORTUNITY_LEVELS/opportunityLevel em radar-ui.tsx no
-// front (0=Não recomendada .. 5=Excelente oportunidade). Precisa existir
-// aqui também porque o filtro por categoria roda no backend, sobre o score
-// já calculado por calculateScore.
-export const OPPORTUNITY_LEVEL_THRESHOLDS = [
-  [90, 5],
-  [75, 4],
-  [55, 3],
-  [35, 2],
-  [15, 1],
-  [0, 0],
-] as const;
-
-export function scoreToOpportunityLevel(score: number): 0 | 1 | 2 | 3 | 4 | 5 {
-  for (const [minScore, level] of OPPORTUNITY_LEVEL_THRESHOLDS) {
-    if (score >= minScore) return level;
-  }
-  return 0;
-}
 
 export type MatchDetailItem = { label: string; ok: boolean };
 
@@ -89,7 +80,10 @@ export type ScorableProfile = {
 // Ordem de senioridade usada para calcular "distância" entre o nível do
 // usuário e o da vaga. UNKNOWN fica de fora — tratado à parte (sem dado
 // suficiente pra comparar, não elimina e não pontua para baixo).
-const SENIORITY_LADDER: SeniorityLevel[] = [
+// Exportado para o pré-filtro de MonitorMatchingWorker (vaga -> perfis
+// potencialmente compatíveis) — só a ORDEM da escala, sem os pesos/thresholds
+// de calculateScore, que continuam privados a este arquivo.
+export const SENIORITY_LADDER: SeniorityLevel[] = [
   SeniorityLevel.INTERN,
   SeniorityLevel.JUNIOR,
   SeniorityLevel.MID,

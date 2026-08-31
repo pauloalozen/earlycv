@@ -500,12 +500,15 @@ function AdaptarPageContent() {
         } else {
           formData.append("file", file);
         }
+        // inputMode aqui é sempre "file_upload", mesmo quando este envio
+        // também vira o CV master (saveMasterDecisionRef) — "profile" exige
+        // profileReadinessStatus "ready" no backend (resolveProfileMasterCvText),
+        // e a extração canônica do upload que acabou de rolar é assíncrona
+        // (enqueueFromMasterResumeUpload), nunca "ready" a tempo. O backend já
+        // resolve o texto certo via masterResumeId nesse modo — não precisa
+        // do modo perfil pra isso.
         const started = await startAndPoll(
-          analyzeAuthenticatedCv(
-            formData,
-            saveMasterDecisionRef.current ? "profile" : "file_upload",
-            journeyContext,
-          ),
+          analyzeAuthenticatedCv(formData, "file_upload", journeyContext),
         );
         analyzeResult = started.result;
       } else if (isAuthenticated && cvMode === "text") {
@@ -519,12 +522,11 @@ function AdaptarPageContent() {
           formData.append("masterResumeId", savedResume.id);
           formData.append("saveAsMaster", "true");
         }
+        // Mesmo raciocínio do branch "upload" acima: "profile" exigiria
+        // profileReadinessStatus "ready", que a extração assíncrona do
+        // uploadMasterResume que acabou de rodar não teve tempo de atingir.
         const started = await startAndPoll(
-          analyzeAuthenticatedCv(
-            formData,
-            saveMasterDecisionRef.current ? "profile" : "text_paste",
-            journeyContext,
-          ),
+          analyzeAuthenticatedCv(formData, "text_paste", journeyContext),
         );
         analyzeResult = started.result;
       } else if (guestAuthGateEnabled) {
@@ -719,6 +721,7 @@ function AdaptarPageContent() {
           userName={userName}
           userRole={userRole}
           availableCredits={availableCredits}
+          hideAnalyzeButton
         />
         <div
           ref={turnstileContainerRef}

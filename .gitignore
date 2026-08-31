@@ -45,6 +45,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local-only scripts
+scripts/restore-homolog-dump.sh
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

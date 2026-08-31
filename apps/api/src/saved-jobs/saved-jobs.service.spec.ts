@@ -8,10 +8,14 @@ const SavedJobsServiceCtor = SavedJobsService as unknown as new (
   matchingEngine?: unknown,
   userRadarProfileService?: unknown,
   jobApplicationsService?: unknown,
+  funnelEvents?: unknown,
 ) => SavedJobsService;
 
 const NO_RADAR_PROFILE = { getProfile: async () => null };
 const NO_BEST_SCORES = { getBestScoresByJobIds: async () => new Map() };
+const NOOP_FUNNEL_EVENTS = {
+  record: async () => ({ event: null, ingested: true }),
+};
 
 function buildJobRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,25 +39,94 @@ function buildJobRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("save is idempotent via upsert on userId_jobId", async () => {
+test("save is idempotent via upsert on userId_jobId, defaulting origin to RADAR", async () => {
   let capturedArgs: unknown;
   const db = {
     savedJob: {
+      findUnique: async () => null,
       upsert: async (args: unknown) => {
         capturedArgs = args;
         return { id: "saved-1" };
       },
     },
   };
-  const service = new SavedJobsServiceCtor(db);
+  const service = new SavedJobsServiceCtor(
+    db,
+    undefined,
+    undefined,
+    undefined,
+    NOOP_FUNNEL_EVENTS,
+  );
 
   await service.save("user-1", "job-1");
 
   assert.deepEqual(capturedArgs, {
     where: { userId_jobId: { userId: "user-1", jobId: "job-1" } },
     update: {},
-    create: { userId: "user-1", jobId: "job-1" },
+    create: { userId: "user-1", jobId: "job-1", origin: "RADAR" },
   });
+});
+
+test("save records monitor_recommendation_saved only when origin=MONITOR and the row is actually created (never on a repeat save)", async () => {
+  let existingRow: { id: string } | null = null;
+  const recordedEvents: string[] = [];
+  const db = {
+    savedJob: {
+      findUnique: async () => existingRow,
+      upsert: async () => {
+        existingRow = { id: "saved-1" };
+        return existingRow;
+      },
+    },
+  };
+  const funnelEvents = {
+    record: async (input: { eventName: string }) => {
+      recordedEvents.push(input.eventName);
+      return { event: null, ingested: true };
+    },
+  };
+  const service = new SavedJobsServiceCtor(
+    db,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await service.save("user-1", "job-1", "MONITOR" as never);
+  assert.deepEqual(recordedEvents, ["monitor_recommendation_saved"]);
+
+  // Segunda chamada: já existe (findUnique não é mais null) — não deve
+  // emitir de novo.
+  await service.save("user-1", "job-1", "MONITOR" as never);
+  assert.deepEqual(recordedEvents, ["monitor_recommendation_saved"]);
+});
+
+test("save never records monitor_recommendation_saved for origin=RADAR (Radar has no canonical 'saved' event)", async () => {
+  const recordedEvents: string[] = [];
+  const db = {
+    savedJob: {
+      findUnique: async () => null,
+      upsert: async () => ({ id: "saved-1" }),
+    },
+  };
+  const funnelEvents = {
+    record: async (input: { eventName: string }) => {
+      recordedEvents.push(input.eventName);
+      return { event: null, ingested: true };
+    },
+  };
+  const service = new SavedJobsServiceCtor(
+    db,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await service.save("user-1", "job-1");
+
+  assert.deepEqual(recordedEvents, []);
 });
 
 test("unsave deletes by userId+jobId", async () => {

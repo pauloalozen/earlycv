@@ -209,6 +209,38 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.savedJob;
   }
 
+  get userJobRecommendation() {
+    return this.prisma.userJobRecommendation;
+  }
+
+  get monitorProfileMatchJob() {
+    return this.prisma.monitorProfileMatchJob;
+  }
+
+  get monitorAlertPreference() {
+    return this.prisma.monitorAlertPreference;
+  }
+
+  get monitorDigest() {
+    return this.prisma.monitorDigest;
+  }
+
+  get monitorDigestRecommendation() {
+    return this.prisma.monitorDigestRecommendation;
+  }
+
+  get monitorDigestEvent() {
+    return this.prisma.monitorDigestEvent;
+  }
+
+  get monitorAdminActionLog() {
+    return this.prisma.monitorAdminActionLog;
+  }
+
+  get monitorMatchJob() {
+    return this.prisma.monitorMatchJob;
+  }
+
   get googleIndexingLog() {
     return this.prisma.googleIndexingLog;
   }

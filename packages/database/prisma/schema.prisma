@@ -355,6 +355,50 @@ enum EnrichmentStatus {
   SKIPPED
 }
 
+// Estado de feedback explícito do usuário sobre uma recomendação do Meu
+// Monitor — coletado nesta fase apenas para análise futura, não alimenta o
+// algoritmo de matching automaticamente (ver Fase 1 do Monitor).
+enum RecommendationFeedback {
+  POSITIVE
+  NEGATIVE
+}
+
+// Motivo opcional do feedback negativo — enum fechado desde já (em vez de
+// string livre) para permitir agregação/relatório sem depender de
+// normalização de texto.
+enum RecommendationFeedbackReason {
+  TITLE_MISMATCH
+  AREA_MISMATCH
+  SENIORITY_MISMATCH
+  LOCATION_MISMATCH
+  COMPANY_MISMATCH
+  OTHER
+}
+
+// Estado do trabalho de matching em background disparado por
+// JobEnrichment.enrichmentStatus -> COMPLETED (ver MonitorMatchingWorker).
+// Mesma forma de PENDING/PROCESSING/COMPLETED/FAILED usada por
+// JobEnrichment, para reaproveitar o padrão de recuperação de PROCESSING
+// travado (recoverStaleProcessing em job-enrichment.worker.ts). Reaproveitado
+// também por MonitorProfileMatchJob (mesmo shape de estado, outro sentido de
+// fan-out: 1 perfil x N vagas em vez de 1 vaga x N perfis).
+enum MonitorMatchJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Estado operacional do Monitor de um usuário — existe só para o frontend
+// distinguir "ainda estamos preparando seu Monitor" (INITIALIZING/REFRESHING)
+// de "nenhuma vaga encontrada" (ACTIVE + feed vazio). Não é um estado de
+// produto novo, é a superfície mínima necessária pra essa distinção.
+enum MonitorProfileStatus {
+  INITIALIZING
+  ACTIVE
+  REFRESHING
+}
+
 enum SemanticFilterResult {
   PENDING
   ENRICH
@@ -412,6 +456,10 @@ model User {
   radarProfile                 UserRadarProfile?
   savedJobs                    SavedJob[]
   talentProfile                TalentProfile?
+  jobRecommendations           UserJobRecommendation[]
+  monitorProfileMatchJob       MonitorProfileMatchJob?
+  monitorAlertPreference       MonitorAlertPreference?
+  monitorDigests               MonitorDigest[]
 }
 
 model UserDailyAnalysisUsage {
@@ -631,7 +679,26 @@ model UserRadarProfile {
   generatedAt    DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Estado do backfill/rematching do Monitor (MonitorProfileMatchingWorker).
+  // matchFingerprint é a versão do perfil realmente usada no último matching
+  // completo — hash determinístico só dos campos que MatchingEngine.
+  // calculateScore consome de fato (areas/skills/technologies/seniority/
+  // languages/preferredWorkModels; ver monitor-profile-fingerprint.ts).
+  // Deliberadamente NÃO usa careerFingerprint (sem fonte durável fora de uma
+  // extração recente, ver refresh() acima) nem updatedAt (bumpa em qualquer
+  // escrita, inclusive reconciliações irrelevantes ao matching).
+  monitorStatus    MonitorProfileStatus @default(INITIALIZING)
+  matchFingerprint String?
+  lastMatchedAt    DateTime?
+
   @@index([userId])
+  // Suporta o pré-filtro "vaga -> perfis potencialmente compatíveis" do
+  // Meu Monitor (MonitorMatchingWorker): GIN acelera `areas: { hasSome }`,
+  // que sem índice faria sequential scan em toda a tabela a cada vaga nova
+  // enriquecida. seniority (btree) cobre o segundo filtro barato do
+  // pré-filtro (distância de senioridade).
+  @@index([areas], type: Gin)
+  @@index([seniority])
 }
 
 model AuthAccount {
@@ -799,7 +866,7 @@ model Company {
   country             String?
   isActive            Boolean              @default(true)
   logoUrl             String?
-  logoFetchedAt        DateTime?
+  logoFetchedAt       DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   jobSources          JobSource[]
@@ -947,28 +1014,28 @@ model AnalysisCvSnapshot {
 // (sessionStorage do navegador → saveGuestPreview/claimGuest →
 // validateAndClaimSnapshot).
 model AnalysisJob {
-  id                      String               @id @default(cuid())
-  ownerKind               AnalysisJobOwnerKind
-  status                  AnalysisJobStatus    @default(pending)
-  userId                  String?
-  guestSessionHash        String?
-  jobDescriptionText      String
-  masterCvText            String?
-  jobTitle                String?
-  companyName             String?
-  adaptedContentJson      Json?
-  previewText             String?
-  scoreBefore             Int?
-  scoreAfter              Int?
-  analysisCvSnapshotId    String?              @unique
-  lastError               String?
-  convertedAt             DateTime?
-  convertedCvAdaptationId String?              @unique
-  guestPossessionTokenHash String?             @unique
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  startedAt               DateTime?
-  finishedAt              DateTime?
+  id                       String               @id @default(cuid())
+  ownerKind                AnalysisJobOwnerKind
+  status                   AnalysisJobStatus    @default(pending)
+  userId                   String?
+  guestSessionHash         String?
+  jobDescriptionText       String
+  masterCvText             String?
+  jobTitle                 String?
+  companyName              String?
+  adaptedContentJson       Json?
+  previewText              String?
+  scoreBefore              Int?
+  scoreAfter               Int?
+  analysisCvSnapshotId     String?              @unique
+  lastError                String?
+  convertedAt              DateTime?
+  convertedCvAdaptationId  String?              @unique
+  guestPossessionTokenHash String?              @unique
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  startedAt                DateTime?
+  finishedAt               DateTime?
 
   user                  User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   analysisCvSnapshot    AnalysisCvSnapshot? @relation(fields: [analysisCvSnapshotId], references: [id], onDelete: SetNull)
@@ -1008,29 +1075,29 @@ model OAuthAttempt {
 }
 
 model JobSource {
-  id                   String               @id @default(cuid())
+  id                   String                  @id @default(cuid())
   companyId            String
   sourceName           String
   sourceType           JobSourceType
   sourceUrl            String
   parserKey            String
   crawlStrategy        CrawlStrategy
-  isActive             Boolean              @default(true)
-  scheduleEnabled      Boolean              @default(false)
+  isActive             Boolean                 @default(true)
+  scheduleEnabled      Boolean                 @default(false)
   scheduleCron         String?
-  scheduleTimezone     String               @default("America/Sao_Paulo")
-  isFallbackAdapter    Boolean              @default(false)
+  scheduleTimezone     String                  @default("America/Sao_Paulo")
+  isFallbackAdapter    Boolean                 @default(false)
   checkIntervalMinutes Int
   lastCheckedAt        DateTime?
   lastSuccessAt        DateTime?
   lastErrorAt          DateTime?
   lastErrorMessage     String?
-  consecutive403Count  Int                  @default(0)
+  consecutive403Count  Int                     @default(0)
   pausedUntil          DateTime?
   pauseReason          String?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   jobs                 Job[]
   ingestionRuns        IngestionRun[]
   ingestionBatchItems  IngestionBatchItem[]
@@ -1075,9 +1142,9 @@ model JobSourceAudit {
   reviewedAt         DateTime?
   appliedAt          DateTime?
 
-  company         Company    @relation("JobSourceAuditCompany", fields: [companyId], references: [id], onDelete: Cascade)
-  jobSource       JobSource? @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
-  suspectedOwner  Company?   @relation("JobSourceAuditSuspectedOwner", fields: [suspectedOwnerId], references: [id], onDelete: SetNull)
+  company        Company    @relation("JobSourceAuditCompany", fields: [companyId], references: [id], onDelete: Cascade)
+  jobSource      JobSource? @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  suspectedOwner Company?   @relation("JobSourceAuditSuspectedOwner", fields: [suspectedOwnerId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, field, currentUrl])
   @@index([status])
@@ -1085,27 +1152,27 @@ model JobSourceAudit {
 }
 
 model CrawlerDiscardedTitle {
-  id              String        @id @default(cuid())
-  jobSourceId     String
-  jobSource       JobSource     @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  jobSourceId String
+  jobSource   JobSource @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
 
   title           String
   normalizedTitle String
   externalJobId   String?
   canonicalKey    String
 
-  filterReason    String
-  filterVersion   String
+  filterReason  String
+  filterVersion String
 
   // Run em que o titulo foi descartado (ou re-descartado, no re-crawl) —
   // canonicalKey e @unique, entao upsert atualiza esse campo a cada
   // ocorrencia, permitindo contar "descartados por essa run" sem depender
   // de janela de tempo.
   ingestionRunId String?
-  ingestionRun    IngestionRun? @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+  ingestionRun   IngestionRun? @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
 
-  discardedAt     DateTime  @default(now())
-  whitelistedAt   DateTime?
+  discardedAt   DateTime  @default(now())
+  whitelistedAt DateTime?
 
   @@unique([canonicalKey])
   @@index([jobSourceId])
@@ -1120,35 +1187,35 @@ model CrawlerDiscardedTitle {
 // DiscoveredCompaniesService. Linhas nunca sao apagadas (so mudam de
 // status) pra nunca reprocessar algo ja tentado/descartado.
 model DiscoveredCompany {
-  id              String                  @id @default(cuid())
-  name            String
-  normalizedName  String                  @unique
-  industry        String?
-  websiteUrl      String?
+  id               String                  @id @default(cuid())
+  name             String
+  normalizedName   String                  @unique
+  industry         String?
+  websiteUrl       String?
   // Conhecida de inicio (linha completa da planilha) ou preenchida quando
   // a validacao acha um match chutando slug — por isso opcional.
-  careersUrl      String?
-  adapterType     JobSourceType?
-  status          DiscoveredCompanyStatus @default(PENDING)
-  jobCount        Int                     @default(0)
+  careersUrl       String?
+  adapterType      JobSourceType?
+  status           DiscoveredCompanyStatus @default(PENDING)
+  jobCount         Int                     @default(0)
   // Vagas no board antes do filtro semantico de tech — so difere de
   // jobCount quando status = NO_TECH_JOBS (board nao vazio, sem match).
-  rawJobCount     Int                     @default(0)
+  rawJobCount      Int                     @default(0)
   // Como a careersUrl/adapterType foi descoberta: "known" (ja veio na
   // planilha), "web_search" (achou via busca "{nome} vagas") ou
   // "slug_guess" (chute de slug x adapter) — so pra debug/auditoria.
   resolutionMethod String?
   // Ex: lista dos adapters/slugs tentados sem sucesso, ou o motivo do erro
   // estrutural — util pra nao repetir o mesmo chute numa proxima rodada.
-  errorMessage    String?
-  checkedAt       DateTime?
-  linkedCompanyId String?
-  linkedCompany   Company?                @relation(fields: [linkedCompanyId], references: [id], onDelete: SetNull)
+  errorMessage     String?
+  checkedAt        DateTime?
+  linkedCompanyId  String?
+  linkedCompany    Company?                @relation(fields: [linkedCompanyId], references: [id], onDelete: SetNull)
   // Rótulo livre de origem (ex: nome do arquivo importado), só pra rastreio.
-  batchLabel      String?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  batchItems      IngestionBatchItem[]
+  batchLabel       String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  batchItems       IngestionBatchItem[]
 
   @@index([status])
   @@index([linkedCompanyId])
@@ -1183,21 +1250,21 @@ model IngestionSchedulerLock {
 }
 
 model IngestionRun {
-  id                  String               @id @default(cuid())
-  jobSourceId         String
-  status              IngestionRunStatus   @default(running)
-  startedAt           DateTime             @default(now())
-  finishedAt          DateTime?
-  newCount            Int                  @default(0)
-  updatedCount        Int                  @default(0)
-  skippedCount        Int                  @default(0)
-  failedCount         Int                  @default(0)
-  errorSummary        String?
-  previewJson         Json?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  jobSource           JobSource            @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
-  ingestionBatchItems IngestionBatchItem[]
+  id                     String                  @id @default(cuid())
+  jobSourceId            String
+  status                 IngestionRunStatus      @default(running)
+  startedAt              DateTime                @default(now())
+  finishedAt             DateTime?
+  newCount               Int                     @default(0)
+  updatedCount           Int                     @default(0)
+  skippedCount           Int                     @default(0)
+  failedCount            Int                     @default(0)
+  errorSummary           String?
+  previewJson            Json?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  jobSource              JobSource               @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  ingestionBatchItems    IngestionBatchItem[]
   crawlerDiscardedTitles CrawlerDiscardedTitle[]
 
   @@index([jobSourceId, createdAt])
@@ -1229,31 +1296,31 @@ model IngestionBatchRun {
 }
 
 model IngestionBatchItem {
-  id             String                   @id @default(cuid())
-  batchRunId     String
+  id                  String                   @id @default(cuid())
+  batchRunId          String
   // Nulos pra itens de runKind DISCOVERY_VALIDATE (candidato ainda nao tem
   // JobSource/Company de verdade — so depois de promovido). Pra
   // CRAWL/LOGO_FETCH continuam sempre preenchidos.
-  jobSourceId    String?
-  companyId      String?
-  companyName    String
-  sourceName     String?
-  sourceType     JobSourceType?
+  jobSourceId         String?
+  companyId           String?
+  companyName         String
+  sourceName          String?
+  sourceType          JobSourceType?
   // So preenchido pra runKind DISCOVERY_VALIDATE — candidato sendo
   // validado (ver DiscoveredCompaniesService.validateOne).
   discoveredCompanyId String?
-  status         IngestionBatchItemStatus @default(queued)
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  errorMessage   String?
-  ingestionRunId String?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
-  batchRun          IngestionBatchRun @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
-  jobSource         JobSource?        @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
-  company           Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  discoveredCompany DiscoveredCompany? @relation(fields: [discoveredCompanyId], references: [id], onDelete: Cascade)
-  ingestionRun      IngestionRun?     @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+  status              IngestionBatchItemStatus @default(queued)
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  errorMessage        String?
+  ingestionRunId      String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  batchRun            IngestionBatchRun        @relation(fields: [batchRunId], references: [id], onDelete: Cascade)
+  jobSource           JobSource?               @relation(fields: [jobSourceId], references: [id], onDelete: Cascade)
+  company             Company?                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  discoveredCompany   DiscoveredCompany?       @relation(fields: [discoveredCompanyId], references: [id], onDelete: Cascade)
+  ingestionRun        IngestionRun?            @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
 
   @@unique([batchRunId, jobSourceId])
   @@unique([batchRunId, discoveredCompanyId])
@@ -1641,7 +1708,7 @@ model BusinessFunnelStageMetric {
 }
 
 model Job {
-  id                String           @id @default(cuid())
+  id                String                  @id @default(cuid())
   companyId         String
   // Nullable de propósito: excluir uma JobSource não pode arrastar junto
   // firstSeenAt/histórico/URL pública indexada da vaga (ver decisão em
@@ -1651,8 +1718,8 @@ model Job {
   jobSourceId       String?
   externalJobId     String?
   sourceJobUrl      String
-  canonicalKey      String           @unique
-  slug              String?          @unique
+  canonicalKey      String                  @unique
+  slug              String?                 @unique
   title             String
   normalizedTitle   String
   descriptionRaw    String
@@ -1674,17 +1741,19 @@ model Job {
   // observação de crawler e outra — diferente de lastSeenAt/updatedAt, que
   // são bumped em toda visita do crawler mesmo sem mudança real de
   // conteúdo. Usado como lastModified do sitemap (ver ingestion.service.ts).
-  contentUpdatedAt DateTime?
-  status            JobStatus        @default(active)
+  contentUpdatedAt  DateTime?
+  status            JobStatus               @default(active)
   metadataJson      Json?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobSource         JobSource?       @relation(fields: [jobSourceId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobSource         JobSource?              @relation(fields: [jobSourceId], references: [id], onDelete: SetNull)
   targetResumes     Resume[]
   enrichment        JobEnrichment?
   applications      JobApplication[]
   savedBy           SavedJob[]
+  recommendations   UserJobRecommendation[]
+  monitorMatchJob   MonitorMatchJob?
 
   @@index([companyId])
   @@index([jobSourceId])
@@ -1716,11 +1785,269 @@ model SavedJob {
   jobId     String
   createdAt DateTime @default(now())
 
+  // Superfície do produto que originou o save — default RADAR preserva o
+  // comportamento de todo caller existente (SaveJobDto.origin é opcional).
+  // Só grava a origem do PRIMEIRO save (upsert nunca atualiza este campo);
+  // usado por SavedJobsService.save() pra decidir se emite
+  // monitor_recommendation_saved, sem criar um sistema de bookmark
+  // paralelo — SavedJob continua sendo a única fonte de "vaga salva".
+  origin SavedJobOrigin @default(RADAR)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@unique([userId, jobId])
   @@index([userId, createdAt])
+}
+
+enum SavedJobOrigin {
+  RADAR
+  MONITOR
+}
+
+// Feed pessoal do Meu Monitor — recomendação persistida de "vaga nova
+// realmente aderente" (nível de aderência 3+, ver
+// matching.engine.ts::scoreToOpportunityLevel), gerada em background pelo
+// MonitorMatchingWorker quando um JobEnrichment transiciona para COMPLETED.
+// Deliberadamente separado de SavedJob (bookmark manual do usuário) e de
+// JobApplication (candidatura) — ver decisão arquitetural na spec do
+// Monitor: nenhuma dessas entidades deve carregar o estado
+// recommended/viewed/dismissed/feedback do feed.
+model UserJobRecommendation {
+  id     String @id @default(cuid())
+  userId String
+  jobId  String
+
+  score            Int
+  opportunityLevel Int
+
+  recommendedAt DateTime  @default(now())
+  viewedAt      DateTime?
+  dismissedAt   DateTime?
+  // Marca "deixou de atender ao Monitor configurado atualmente" —
+  // system-driven (MonitorProfileMatchingWorker, na reconciliação após
+  // mudança de perfil), distinto de dismissedAt (ação do usuário). Nunca
+  // apaga a linha: histórico de score/opportunityLevel/feedback preservado.
+  // Uma recomendação supersededAt pode voltar a ficar ativa (supersededAt
+  // volta a null) se o perfil mudar de novo e ela voltar a pontuar >=3 — mas
+  // só quando dismissedAt for null; dismissed nunca é reativada.
+  supersededAt  DateTime?
+
+  feedback       RecommendationFeedback?
+  feedbackReason RecommendationFeedbackReason?
+  feedbackAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  digestInclusions MonitorDigestRecommendation[]
+
+  @@unique([userId, jobId])
+  @@index([userId, recommendedAt])
+  @@index([userId, viewedAt])
+  @@index([userId, dismissedAt])
+  @@index([userId, supersededAt])
+  @@index([jobId])
+}
+
+// Fila de trabalho do MonitorMatchingWorker — um registro por Job cujo
+// enrichment acabou de ficar COMPLETED. Desacopla o gatilho (dentro de
+// JobEnrichmentWorker::processItem) do processamento em si (batch/lock/retry
+// próprios do worker do Monitor), seguindo o mesmo padrão de estado usado
+// por JobEnrichment (PENDING/PROCESSING/COMPLETED/FAILED + attempts) —
+// nunca faz "nova vaga × todos os UserRadarProfile" de forma síncrona.
+model MonitorMatchJob {
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  status       MonitorMatchJobStatus @default(PENDING)
+  attempts     Int                   @default(0)
+  lastError    String?
+  matchedCount Int?
+  processedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+// Fila de trabalho do MonitorProfileMatchingWorker — sentido inverso de
+// MonitorMatchJob: 1 perfil (usuário) x N vagas recentes/ativas. Um único
+// mecanismo cobre os dois gatilhos da Fase 1.5: backfill (primeira vez que o
+// usuário entra no Monitor, UserRadarProfile.lastMatchedAt ainda null) e
+// rematch (PUT /monitor/profile alterou algo relevante ao matching, ver
+// monitor-profile-fingerprint.ts). userId único: múltiplos gatilhos
+// enquanto um job ainda está PENDING coalescem numa única execução; o
+// worker sempre lê o UserRadarProfile mais recente no momento em que
+// processa, nunca um snapshot antigo.
+model MonitorProfileMatchJob {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status       MonitorMatchJobStatus @default(PENDING)
+  attempts     Int                   @default(0)
+  lastError    String?
+  matchedCount Int?
+  processedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+enum MonitorDigestFrequency {
+  DAILY
+  WEEKLY
+  OFF
+}
+
+// Preferência de comunicação do Monitor — deliberadamente separada de
+// UserRadarProfile (que é sobre O QUE monitorar, não SOBRE COMO avisar).
+// Default DAILY+enabled: alerta é o próprio valor do produto (o usuário já
+// configurou o Monitor de propósito), não é e-mail de marketing/aquisição
+// — unsubscribe sempre funcional, um clique, sem exigir login (ver
+// MonitorDigestUnsubscribeToken em monitor-unsubscribe-token.service.ts).
+model MonitorAlertPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  emailEnabled Boolean                @default(true)
+  frequency    MonitorDigestFrequency @default(DAILY)
+
+  unsubscribedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MonitorDigestStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// Um registro por (usuário, frequência, período) — @@unique é o mecanismo
+// de idempotência: o scheduler faz upsert nessa chave antes de montar o
+// conteúdo, então um worker reiniciado no meio do processamento nunca
+// produz um segundo e-mail pro mesmo período (ver
+// monitor-digest.scheduler.ts). scheduledFor é o início do período em UTC
+// (meia-noite do dia, pra DAILY; início da semana ISO, pra WEEKLY) — não é
+// "quando o cron rodou", é "qual período este digest representa".
+model MonitorDigest {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  frequency    MonitorDigestFrequency
+  status       MonitorDigestStatus    @default(PENDING)
+  scheduledFor DateTime
+
+  attempts  Int       @default(0)
+  lastError String?
+  sentAt    DateTime?
+
+  // Correlaciona com os webhooks do Resend (data.email_id). null até o
+  // envio de fato acontecer (ou pra digests SKIPPED, que nunca chegam a
+  // enviar).
+  providerMessageId String?
+
+  recommendations MonitorDigestRecommendation[]
+  events          MonitorDigestEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, frequency, scheduledFor])
+  @@index([status, scheduledFor])
+  @@index([userId, createdAt])
+  @@index([providerMessageId])
+}
+
+// Quais UserJobRecommendation entraram em qual digest — join simples, sem
+// duplicar dado (score/opportunityLevel continuam só em
+// UserJobRecommendation). Usado pra (a) montar o corpo do e-mail e (b)
+// nunca reincluir a mesma recomendação num digest futuro (ver
+// monitor-digest-content.service.ts).
+model MonitorDigestRecommendation {
+  id String @id @default(cuid())
+
+  digestId String
+  digest   MonitorDigest @relation(fields: [digestId], references: [id], onDelete: Cascade)
+
+  recommendationId String
+  recommendation   UserJobRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([digestId, recommendationId])
+  @@index([recommendationId])
+}
+
+enum MonitorDigestEventType {
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+}
+
+// Eventos de webhook do Resend (Svix) — providerEventId é o header
+// svix-id, único por tentativa de entrega de webhook; é essa unicidade
+// (não algo inventado por nós) que torna o processamento idempotente:
+// Resend/Svix reenviam o mesmo svix-id em retry, então um segundo POST do
+// mesmo evento vira no-op (ver monitor-digest-webhook.controller.ts).
+// digestId fica null só na falha defensiva de não conseguir resolver
+// providerMessageId -> MonitorDigest (nunca deveria acontecer em operação
+// normal; registrado mesmo assim pra não perder o evento).
+model MonitorDigestEvent {
+  id String @id @default(cuid())
+
+  digestId String?
+  digest   MonitorDigest? @relation(fields: [digestId], references: [id], onDelete: Cascade)
+
+  providerMessageId String
+  providerEventId   String                 @unique
+  type              MonitorDigestEventType
+  metadataJson      Json?
+  occurredAt        DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([digestId])
+  @@index([providerMessageId])
+}
+
+// Auditoria das ações administrativas do painel de diagnóstico do Meu
+// Monitor (requeue de job, força-rematch, reenvio de digest) — não há
+// infraestrutura de audit log genérica reutilizável no projeto hoje (o mais
+// próximo é PaymentAuditLog, mas é específico de webhook de pagamento).
+// entityType/entityId são genéricos de propósito (ex.: "MonitorMatchJob"/
+// jobId, "UserRadarProfile"/userId, "MonitorDigest"/digestId) — sem FK, já
+// que aponta pra entidades de tipos diferentes.
+model MonitorAdminActionLog {
+  id      String @id @default(cuid())
+  adminId String
+
+  action       String
+  entityType   String
+  entityId     String
+  result       String
+  metadataJson Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([adminId, createdAt])
 }
 
 model JobEnrichment {
@@ -1996,7 +2323,7 @@ model TalentProfile {
   currentTitle    String?
   seniority       SeniorityLevel?
   yearsExperience Int?
-  primaryAreas    JobArea[] @default([])
+  primaryAreas    JobArea[]       @default([])
 
   completenessScore Int @default(0)
 
@@ -2099,7 +2426,7 @@ model TalentIdentityConflict {
 // (category, valorNormalizado) pra consultas B2B eficientes ("vaga -> quem
 // tem Java+Spring+AWS").
 model TalentCompetency {
-  id               String                    @id @default(cuid())
+  id               String                   @id @default(cuid())
   talentProfileId  String
   category         TalentCompetencyCategory
   valueNormalized  String
@@ -2108,9 +2435,9 @@ model TalentCompetency {
   provenance       TalentDataProvenance
   sourceRecordType String
   sourceRecordId   String
-  confidence       Float                     @default(1.0)
-  firstObservedAt  DateTime                  @default(now())
-  lastObservedAt   DateTime                  @default(now())
+  confidence       Float                    @default(1.0)
+  firstObservedAt  DateTime                 @default(now())
+  lastObservedAt   DateTime                 @default(now())
 
   talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
 
@@ -2120,14 +2447,14 @@ model TalentCompetency {
 }
 
 model TalentLanguageSkill {
-  id               String   @id @default(cuid())
+  id               String               @id @default(cuid())
   talentProfileId  String
   language         String
   proficiencyLevel String?
   provenance       TalentDataProvenance
   sourceRecordType String
   sourceRecordId   String
-  observedAt       DateTime @default(now())
+  observedAt       DateTime             @default(now())
 
   talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
 
@@ -2136,7 +2463,7 @@ model TalentLanguageSkill {
 }
 
 model TalentCertification {
-  id               String   @id @default(cuid())
+  id               String               @id @default(cuid())
   talentProfileId  String
   name             String
   nameNormalized   String
@@ -2145,7 +2472,7 @@ model TalentCertification {
   provenance       TalentDataProvenance
   sourceRecordType String
   sourceRecordId   String
-  observedAt       DateTime @default(now())
+  observedAt       DateTime             @default(now())
 
   talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
 
@@ -2153,7 +2480,7 @@ model TalentCertification {
 }
 
 model TalentExperience {
-  id                String          @id @default(cuid())
+  id                String               @id @default(cuid())
   talentProfileId   String
   company           String
   companyNormalized String
@@ -2162,14 +2489,14 @@ model TalentExperience {
   location          String?
   startDate         DateTime?
   endDate           DateTime?
-  isCurrent         Boolean         @default(false)
+  isCurrent         Boolean              @default(false)
   seniorityAtRole   SeniorityLevel?
   technologiesUsed  String[]
   bulletsJson       Json?
   provenance        TalentDataProvenance
   sourceRecordType  String
   sourceRecordId    String
-  observedAt        DateTime        @default(now())
+  observedAt        DateTime             @default(now())
 
   talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
 
@@ -2179,7 +2506,7 @@ model TalentExperience {
 }
 
 model TalentEducation {
-  id               String    @id @default(cuid())
+  id               String               @id @default(cuid())
   talentProfileId  String
   institution      String
   degree           String?
@@ -2189,7 +2516,7 @@ model TalentEducation {
   provenance       TalentDataProvenance
   sourceRecordType String
   sourceRecordId   String
-  observedAt       DateTime  @default(now())
+  observedAt       DateTime             @default(now())
 
   talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
 

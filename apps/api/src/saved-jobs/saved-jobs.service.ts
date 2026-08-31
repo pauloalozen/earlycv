@@ -1,4 +1,6 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import type { SavedJobOrigin } from "@prisma/client";
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { toPublicJobView } from "../jobs/public-job-view";
@@ -7,6 +9,8 @@ import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 
 @Injectable()
 export class SavedJobsService {
+  private readonly logger = new Logger(SavedJobsService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(MatchingEngine) private readonly matchingEngine: MatchingEngine,
@@ -14,16 +18,57 @@ export class SavedJobsService {
     private readonly userRadarProfileService: UserRadarProfileService,
     @Inject(JobApplicationsService)
     private readonly jobApplicationsService: JobApplicationsService,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
 
   // Idempotente: clicar "salvar" de novo numa vaga já salva não deve
-  // quebrar nem duplicar — só devolve o registro existente.
-  async save(userId: string, jobId: string) {
-    return this.database.savedJob.upsert({
+  // quebrar nem duplicar — só devolve o registro existente. origin só é
+  // gravado na criação (upsert.update fica vazio) — resalvar uma vaga não
+  // reatribui a origem original. monitor_recommendation_saved só é emitido
+  // quando a linha é criada de fato com origin=MONITOR — nunca em
+  // re-save/no-op, e nunca para origin=RADAR (Radar não tem evento
+  // canônico de "salvou vaga" e este método não introduz um).
+  async save(userId: string, jobId: string, origin: SavedJobOrigin = "RADAR") {
+    const existing = await this.database.savedJob.findUnique({
+      where: { userId_jobId: { userId, jobId } },
+    });
+
+    const saved = await this.database.savedJob.upsert({
       where: { userId_jobId: { userId, jobId } },
       update: {},
-      create: { userId, jobId },
+      create: { userId, jobId, origin },
     });
+
+    if (!existing && origin === "MONITOR") {
+      await this.funnelEvents
+        .record(
+          {
+            eventName: "monitor_recommendation_saved",
+            eventVersion: 1,
+            idempotencyKey: `monitor_recommendation_saved:${saved.id}`,
+            metadata: { jobId, product_origin: "monitor" },
+          },
+          {
+            correlationId: `monitor-saved-job:${saved.id}`,
+            ip: null,
+            requestId: `monitor-saved-job:${saved.id}`,
+            routePath: "/api/saved-jobs",
+            sessionInternalId: null,
+            sessionPublicToken: null,
+            userAgentHash: null,
+            userId,
+          },
+          "backend",
+        )
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `[saved-jobs] failed to record monitor_recommendation_saved: ${err}`,
+          );
+        });
+    }
+
+    return saved;
   }
 
   async unsave(userId: string, jobId: string) {

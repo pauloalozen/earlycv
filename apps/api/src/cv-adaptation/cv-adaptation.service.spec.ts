@@ -4533,9 +4533,10 @@ test("startAuthenticatedAnalysisJob throws BadRequestException when descriptionC
   );
 });
 
-test("startAuthenticatedAnalysisJob prefers jobDescriptionText over radarJobId when both are present", async () => {
+test("startAuthenticatedAnalysisJob prefers jobDescriptionText for the analysis TEXT, but still resolves jobTitle/companyName from radarJobId — regression: the 1-click radar flow always sends both together (jobId auto-fills the textarea, see jobIdParam in adaptar-client.tsx), so ignoring radarJobId here meant every radar-originated candidatura was saved with companyName 'Não informado' even though the Job had a real company", async () => {
   let createdJob: Record<string, unknown> | null = null;
   let jobLookupCalled = false;
+  let processAnalysisJobRadarFallback: unknown;
 
   const service = new CvAdaptationServiceCtor(
     {
@@ -4550,7 +4551,13 @@ test("startAuthenticatedAnalysisJob prefers jobDescriptionText over radarJobId w
       job: {
         findUnique: async () => {
           jobLookupCalled = true;
-          return null;
+          return {
+            id: "job-should-still-be-looked-up",
+            status: "active",
+            title: "Analista de Dados Sênior",
+            descriptionClean: "descricao antiga da vaga, nao deve ser usada",
+            company: { name: "Empresa Real Ltda" },
+          };
         },
       },
     },
@@ -4575,17 +4582,37 @@ test("startAuthenticatedAnalysisJob prefers jobDescriptionText over radarJobId w
     },
   );
 
+  // Intercepta processAnalysisJob (fire-and-forget) só pra capturar o
+  // radarFallback com que startAuthenticatedAnalysisJob o chama — sem
+  // isso não daria pra observar jobTitle/companyName resolvidos daqui.
+  (
+    service as unknown as {
+      processAnalysisJob: (
+        jobId: string,
+        run: unknown,
+        meta: unknown,
+        radarFallback: unknown,
+      ) => Promise<void>;
+    }
+  ).processAnalysisJob = async (_jobId, _run, _meta, radarFallback) => {
+    processAnalysisJobRadarFallback = radarFallback;
+  };
+
   const started = await service.startAuthenticatedAnalysisJob("user-1", {
     ...makeAnalyzeDto(),
-    radarJobId: "job-should-be-ignored",
+    radarJobId: "job-should-still-be-looked-up",
   });
 
   assert.equal(started.status, "pending");
-  assert.equal(jobLookupCalled, false);
+  assert.equal(jobLookupCalled, true);
   assert.equal(
     (createdJob as Record<string, unknown> | null)?.jobDescriptionText,
     makeAnalyzeDto().jobDescriptionText,
   );
+  assert.deepEqual(processAnalysisJobRadarFallback, {
+    jobTitle: "Analista de Dados Sênior",
+    companyName: "Empresa Real Ltda",
+  });
 });
 
 test("startAuthenticatedAnalysisJob throws BadRequestException when neither jobDescriptionText nor radarJobId are provided", async () => {

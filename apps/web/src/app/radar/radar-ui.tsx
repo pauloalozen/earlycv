@@ -1,3 +1,5 @@
+import { scoreToOpportunityLevel } from "@earlycv/config/opportunity-level";
+
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
@@ -160,12 +162,7 @@ export const OPPORTUNITY_LEVELS: OpportunityLevelInfo[] = [
 ];
 
 export function opportunityLevel(score: number): OpportunityLevelInfo {
-  if (score >= 90) return OPPORTUNITY_LEVELS[5];
-  if (score >= 75) return OPPORTUNITY_LEVELS[4];
-  if (score >= 55) return OPPORTUNITY_LEVELS[3];
-  if (score >= 35) return OPPORTUNITY_LEVELS[2];
-  if (score >= 15) return OPPORTUNITY_LEVELS[1];
-  return OPPORTUNITY_LEVELS[0];
+  return OPPORTUNITY_LEVELS[scoreToOpportunityLevel(score)];
 }
 
 const OPPORTUNITY_RING_SEGMENTS = [0, 1, 2, 3, 4] as const;

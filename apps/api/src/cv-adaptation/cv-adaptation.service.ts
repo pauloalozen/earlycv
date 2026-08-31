@@ -1032,64 +1032,80 @@ export class CvAdaptationService {
   // rodar aqui (não dentro de analyzeAuthenticated) porque
   // AnalysisJob.jobDescriptionText é obrigatório no schema e é gravado
   // logo abaixo, de forma síncrona, antes do processamento assíncrono via
-  // processAnalysisJob. Se jobDescriptionText já veio preenchido, radarJobId
-  // é ignorado (texto colado manualmente sempre tem precedência).
-  // jobTitle/companyName do retorno vêm do Job do radar (fonte confiável,
-  // curada na ingestão) — nunca da IA. Achado investigando análises via
-  // radar salvas com "Não informado": a IA reextrai cargo/empresa do
-  // texto colado (job.descriptionClean), que raramente repete o nome da
-  // empresa no corpo da descrição, então falha silenciosamente mesmo
-  // com o dado real disponível ali no Job. Ver processAnalysisJob, que
-  // agora prioriza esses valores sobre o que a IA extrair.
+  // processAnalysisJob. jobDescriptionText já preenchido tem precedência
+  // só como TEXTO (cobre tanto colar manual quanto o auto-preenchimento
+  // do fluxo de 1 clique do radar — ver jobIdParam em adaptar-client.tsx,
+  // que sempre manda os dois juntos: jobDescriptionText E radarJobId).
+  // jobTitle/companyName SEMPRE vêm do Job do radar quando radarJobId
+  // existe, mesmo com jobDescriptionText presente — nunca da IA. Achado
+  // investigando análises via radar salvas com "Não informado": a IA
+  // reextrai cargo/empresa do texto da vaga, que raramente repete o nome
+  // da empresa no corpo da descrição, então falha silenciosamente mesmo
+  // com o dado real disponível ali no Job. A versão anterior descartava
+  // radarJobId inteiro sempre que jobDescriptionText vinha preenchido,
+  // que é sempre o caso nesse fluxo — nunca chegava a buscar o Job. Ver
+  // processAnalysisJob, que prioriza esses valores sobre o que a IA
+  // extrair.
   private async resolveAnalysisJobDescription(dto: AnalyzeCvDto): Promise<{
     text: string;
     radarJobTitle: string | null;
     radarCompanyName: string | null;
   }> {
+    let radarJobTitle: string | null = null;
+    let radarCompanyName: string | null = null;
+
+    if (dto.radarJobId) {
+      const job = await this.database.job.findUnique({
+        where: { id: dto.radarJobId },
+        select: {
+          id: true,
+          title: true,
+          descriptionClean: true,
+          status: true,
+          company: { select: { name: true } },
+        },
+      });
+
+      // Sem jobDescriptionText, o Job é a ÚNICA fonte de texto — estado
+      // inválido (não encontrado/inativo/sem descrição) bloqueia a
+      // análise. Com jobDescriptionText já em mãos, o texto continua
+      // válido independente do estado atual do Job — só deixa de
+      // enriquecer jobTitle/companyName, nunca bloqueia por causa disso.
+      if (!dto.jobDescriptionText) {
+        if (!job) {
+          throw new NotFoundException(`Vaga não encontrada: ${dto.radarJobId}`);
+        }
+        if (job.status !== "active") {
+          throw new BadRequestException("Esta vaga não está mais disponível.");
+        }
+        if (!job.descriptionClean || job.descriptionClean.length < 50) {
+          throw new BadRequestException(
+            "Esta vaga não tem descrição suficiente para análise.",
+          );
+        }
+      }
+
+      if (job) {
+        radarJobTitle = job.title || null;
+        radarCompanyName = job.company?.name || null;
+      }
+
+      if (!dto.jobDescriptionText && job) {
+        return {
+          text: job.descriptionClean as string,
+          radarJobTitle,
+          radarCompanyName,
+        };
+      }
+    }
+
     if (dto.jobDescriptionText) {
-      return {
-        text: dto.jobDescriptionText,
-        radarJobTitle: null,
-        radarCompanyName: null,
-      };
+      return { text: dto.jobDescriptionText, radarJobTitle, radarCompanyName };
     }
 
-    if (!dto.radarJobId) {
-      throw new BadRequestException(
-        "É necessário fornecer a descrição da vaga ou um radarJobId válido.",
-      );
-    }
-
-    const job = await this.database.job.findUnique({
-      where: { id: dto.radarJobId },
-      select: {
-        id: true,
-        title: true,
-        descriptionClean: true,
-        status: true,
-        company: { select: { name: true } },
-      },
-    });
-
-    if (!job) {
-      throw new NotFoundException(`Vaga não encontrada: ${dto.radarJobId}`);
-    }
-
-    if (job.status !== "active") {
-      throw new BadRequestException("Esta vaga não está mais disponível.");
-    }
-
-    if (!job.descriptionClean || job.descriptionClean.length < 50) {
-      throw new BadRequestException(
-        "Esta vaga não tem descrição suficiente para análise.",
-      );
-    }
-
-    return {
-      text: job.descriptionClean,
-      radarJobTitle: job.title || null,
-      radarCompanyName: job.company?.name || null,
-    };
+    throw new BadRequestException(
+      "É necessário fornecer a descrição da vaga ou um radarJobId válido.",
+    );
   }
 
   async startAuthenticatedAnalysisJob(

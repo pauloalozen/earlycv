@@ -16,21 +16,6 @@ function navDropdownLabel(p: (typeof FEATURE_PAGES)[number]) {
   return p.href === "/radar-de-vagas" ? "Radar de Oportunidades" : p.label;
 }
 
-/** Nomes de empresa vindos do crawler chegam com maiúsculas inconsistentes
- * (ex: "MAGAZINE LUIZA"). Deixa cada palavra com só a inicial maiúscula —
- * exceto siglas curtas (≤3 letras, ex: "XP", "BTG", "AB"), que ficam como
- * estão. Nomes que já têm caixa mista (ex: "iFood") não são tocados. */
-function formatCompanyName(name: string): string {
-  return name
-    .split(" ")
-    .map((word) => {
-      const isAllCaps = word.length > 0 && word === word.toUpperCase();
-      if (!isAllCaps || word.length <= 3) return word;
-      return word.charAt(0) + word.slice(1).toLowerCase();
-    })
-    .join(" ");
-}
-
 const GEIST =
   'var(--font-ubuntu), -apple-system, "Segoe UI", system-ui, sans-serif';
 const MONO =
@@ -454,16 +439,12 @@ export function LandingVariantF2({
 }) {
   // Fallback ilustrativo só pra nunca deixar o marquee vazio (ex: ambiente
   // sem vagas ainda seedadas) — sem link, já que não representa vaga real.
+  // Nomes reais já vêm formatados (Title Case) do backend, ver
+  // formatCompanyDisplayName em apps/api/src/jobs/company-display-name.ts.
   const marqueeCompanies: { name: string; slug: string | null }[] =
     topCompanies.length > 0
-      ? topCompanies.map((c) => ({
-          name: formatCompanyName(c.name),
-          slug: c.slug,
-        }))
-      : COMPANIES.map((name) => ({
-          name: formatCompanyName(name),
-          slug: null,
-        }));
+      ? topCompanies.map((c) => ({ name: c.name, slug: c.slug }))
+      : COMPANIES.map((name) => ({ name, slug: null }));
 
   return (
     <main
@@ -793,7 +774,7 @@ export function LandingVariantF2({
                 margin: "0 0 10px",
               }}
             >
-              Receba seu score ATS{" "}
+              Seu currículo está mostrando o melhor da sua{" "}
               <em
                 style={{
                   fontFamily: SERIF_ITALIC,
@@ -801,16 +782,50 @@ export function LandingVariantF2({
                   fontWeight: 400,
                 }}
               >
-                grátis
+                experiência
               </em>
+              ?
             </h2>
             <p
               className="reveal-card"
-              style={{ fontSize: 15.1, color: "#45443e", margin: "0 0 28px" }}
+              style={{ fontSize: 15.1, color: "#45443e", margin: "0 0 22px" }}
             >
-              <strong style={{ color: "#0a0a0a" }}>32% de ganho médio</strong>{" "}
-              de aderência à vaga já no primeiro ajuste.
+              Cole seu CV e a vaga que você quer e descubra pontos fortes,
+              lacunas e o que ajustar pra aumentar sua aderência.
             </p>
+          </div>
+
+          <div
+            className="reveal-card"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 9,
+              background: "#0a0a0a",
+              color: "#c6ff3a",
+              borderRadius: 999,
+              padding: "10px 20px 10px 16px",
+              fontFamily: MONO,
+              fontSize: 13,
+              letterSpacing: 0.2,
+              margin: "0 0 22px",
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#c6ff3a"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <title>Aumento médio</title>
+              <path d="M3 17l6-6 4 4 7-8" />
+              <path d="M15 6h5v5" />
+            </svg>
+            +32% de aumento em média já no primeiro ajuste
           </div>
 
           {!isAuthenticated && guestAnalysisAuthGateEnabled && (
@@ -824,8 +839,7 @@ export function LandingVariantF2({
                 margin: "0 0 16px",
               }}
             >
-              Envie sem cadastro. Crie sua conta grátis pra ver o resultado
-              completo.
+              Crie sua conta grátis para ver o resultado completo.
             </p>
           )}
 
@@ -862,11 +876,11 @@ export function LandingVariantF2({
               stroke="currentColor"
               strokeWidth="1.8"
             >
-              <title>Ver exemplo</title>
+              <title>Como funciona</title>
               <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-            Ver um exemplo de análise
+            Veja como funciona a análise
           </Link>
         </div>
       </section>

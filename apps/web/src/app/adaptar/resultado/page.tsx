@@ -2380,6 +2380,7 @@ export default function ResultadoPage() {
           userName={userName}
           userRole={internalRole}
           availableCredits={availableCreditsDisplay}
+          hideAnalyzeButton
         />
 
         <div

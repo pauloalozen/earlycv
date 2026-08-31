@@ -10,10 +10,12 @@ function useSaveJobToggle({
   jobId,
   initialSaved,
   isLoggedIn,
+  origin = "RADAR",
 }: {
   jobId: string;
   initialSaved: boolean;
   isLoggedIn: boolean;
+  origin?: "RADAR" | "MONITOR";
 }) {
   const router = useRouter();
   const [saved, setSaved] = useState(initialSaved);
@@ -28,7 +30,7 @@ function useSaveJobToggle({
     const next = !saved;
     setSaved(next);
     startTransition(async () => {
-      const ok = next ? await saveJob(jobId) : await unsaveJob(jobId);
+      const ok = next ? await saveJob(jobId, origin) : await unsaveJob(jobId);
       if (!ok) {
         // Reverte estado otimista se a chamada falhar — não deixa o botão
         // "mentir" pro usuário sobre o que está salvo de verdade.
@@ -45,15 +47,18 @@ export function SaveJobBtn({
   jobId,
   initialSaved = false,
   isLoggedIn = true,
+  origin = "RADAR",
 }: {
   jobId: string;
   initialSaved?: boolean;
   isLoggedIn?: boolean;
+  origin?: "RADAR" | "MONITOR";
 }) {
   const { saved, pending, toggle } = useSaveJobToggle({
     jobId,
     initialSaved,
     isLoggedIn,
+    origin,
   });
 
   return (

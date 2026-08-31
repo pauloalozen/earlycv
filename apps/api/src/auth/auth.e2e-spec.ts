@@ -10,7 +10,7 @@ import request from "supertest";
 
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
-import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
+import { FakeEmailDeliveryService } from "../email/fake-email-delivery.service";
 import { InternalTestModule } from "./internal-test.module";
 
 type DeleteManyDelegate = {

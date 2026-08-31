@@ -31,7 +31,7 @@ type Step = 1 | 2;
 const JOB_EXAMPLES: { title: string; description: string }[] = [
   {
     title: "Analista de Dados Sênior",
-    description: `Analista de Dados Sênior — Nubank
+    description: `Analista de Dados Sênior — ACME S/A
 
 Somos um dos maiores bancos digitais do mundo e buscamos um Analista de Dados Sênior para integrar nosso time de Growth Analytics.
 
@@ -49,7 +49,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Analytics`,
   },
   {
     title: "Desenvolvedor(a) Full Stack",
-    description: `Desenvolvedor(a) Full Stack Pleno — Stone
+    description: `Desenvolvedor(a) Full Stack Pleno — EARLYCV
 
 Buscamos um(a) desenvolvedor(a) full stack para atuar em produtos de pagamento de alta escala.
 
@@ -67,7 +67,7 @@ Local: Híbrido (São Paulo) | Regime: CLT | Área: Engenharia`,
   },
   {
     title: "Analista de Business Intelligence",
-    description: `Analista de Business Intelligence — Riachuelo
+    description: `Analista de Business Intelligence — ACME S/A
 
 Procuramos um(a) Analista de BI para apoiar decisões estratégicas do time comercial.
 
@@ -85,7 +85,7 @@ Local: São Paulo | Regime: CLT | Área: Dados`,
   },
   {
     title: "Analista de Marketing",
-    description: `Analista de Marketing Digital — Unimed
+    description: `Analista de Marketing Digital — EARLYCV
 
 Buscamos um(a) Analista de Marketing para performance em canais digitais.
 
@@ -103,7 +103,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Marketing`,
   },
   {
     title: "Product Manager",
-    description: `Product Manager Pleno — Braze
+    description: `Product Manager Pleno — ACME S/A
 
 Buscamos um(a) PM para liderar a evolução de um produto de engajamento de clientes.
 
@@ -121,7 +121,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Produto`,
   },
   {
     title: "Engenheiro(a) de Dados",
-    description: `Engenheiro(a) de Dados Pleno — Iugu
+    description: `Engenheiro(a) de Dados Pleno — EARLYCV
 
 Buscamos um(a) Engenheiro(a) de Dados para escalar nossa infraestrutura de dados de pagamentos.
 
@@ -139,7 +139,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Engenharia`,
   },
   {
     title: "Analista de Customer Success",
-    description: `Analista de Customer Success — Twilio
+    description: `Analista de Customer Success — ACME S/A
 
 Buscamos um(a) CS para garantir a satisfação e retenção de contas estratégicas.
 
@@ -157,7 +157,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Customer Success`,
   },
   {
     title: "Analista de Vendas (SDR)",
-    description: `SDR - Sales Development Representative — Dress To
+    description: `SDR - Sales Development Representative — EARLYCV
 
 Buscamos um(a) SDR para gerar e qualificar oportunidades para o time comercial.
 
@@ -175,7 +175,7 @@ Local: Híbrido (São Paulo) | Regime: CLT | Área: Comercial`,
   },
   {
     title: "UX/Product Designer",
-    description: `UX/Product Designer Pleno — SAS Educação
+    description: `UX/Product Designer Pleno — ACME S/A
 
 Buscamos um(a) designer para elevar a experiência de uso de nossa plataforma educacional.
 
@@ -193,7 +193,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Design`,
   },
   {
     title: "Analista Financeiro",
-    description: `Analista Financeiro Pleno — Porto Seguro
+    description: `Analista Financeiro Pleno — EARLYCV
 
 Buscamos um(a) Analista Financeiro para apoiar o planejamento orçamentário da área.
 
@@ -211,7 +211,7 @@ Local: São Paulo | Regime: CLT | Área: Financeiro`,
   },
   {
     title: "Analista de RH / People",
-    description: `Analista de People — AB InBev
+    description: `Analista de People — ACME S/A
 
 Buscamos um(a) Analista de People para apoiar processos de atração e desenvolvimento de talentos.
 
@@ -229,7 +229,7 @@ Local: Híbrido (São Paulo) | Regime: CLT | Área: Gente & Gestão`,
   },
   {
     title: "Engenheiro(a) DevOps/SRE",
-    description: `Engenheiro(a) DevOps/SRE Sênior — Stefanini
+    description: `Engenheiro(a) DevOps/SRE Sênior — EARLYCV
 
 Buscamos um(a) Engenheiro(a) DevOps para garantir a confiabilidade e escalabilidade da infraestrutura.
 
@@ -247,7 +247,7 @@ Local: Remoto (Brasil) | Regime: CLT | Área: Infraestrutura`,
   },
   {
     title: "Assistente Administrativo",
-    description: `Assistente Administrativo — Riachuelo
+    description: `Assistente Administrativo — ACME S/A
 
 Buscamos um(a) Assistente Administrativo para dar suporte às operações da loja/escritório.
 
@@ -693,10 +693,10 @@ export function GuestAnalysisWidget({
                         color: "#0a0a0a",
                       }}
                     >
-                      {file ? file.name : "Arraste ou clique para enviar"}
+                      {file ? file.name : "Envie seu currículo para começar"}
                     </div>
                     <div style={{ fontSize: 12.5, color: "#8a8a85" }}>
-                      PDF, DOCX ou ODT · até 5 MB
+                      PDF, DOCX ou ODT · até 5 MB · grátis
                     </div>
                   </button>
                 )}

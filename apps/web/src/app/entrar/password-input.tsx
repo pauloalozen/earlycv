@@ -51,6 +51,11 @@ export function PasswordInput({
       />
       <button
         type="button"
+        // Sem isso, o mousedown no botão tira o foco do input antes do
+        // clique completar — dispara o onBlur (e a validação que reage a
+        // ele) no meio da interação, então o toggle de mostrar senha só
+        // parecia funcionar no segundo clique.
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => setVisible((v) => !v)}
         style={{
           position: "absolute",

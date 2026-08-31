@@ -7,6 +7,7 @@ import {
   canAccessJobsInGhostMode,
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
+import { MonitorNavBadge } from "./monitor-nav-badge";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -82,6 +83,20 @@ export function buildUserMenuItems({
         </>
       ),
     },
+    // Ícone deliberadamente diferente do Radar (retângulos/prateleira) —
+    // alvo/pulso reforça "algo trabalhando por você", não "explorar uma
+    // lista" (ver distinção de produto Radar x Monitor).
+    {
+      href: "/monitor",
+      label: "Meu Monitor",
+      icon: (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+        </>
+      ),
+    },
     {
       href: "/compras",
       label: "Minhas compras",
@@ -132,7 +147,9 @@ export function buildUserMenuItems({
           },
         ]
       : []),
-  ].filter((item) => (item.href === "/radar" ? canSeeJobsLink : true));
+  ].filter((item) =>
+    item.href === "/radar" || item.href === "/monitor" ? canSeeJobsLink : true,
+  );
 }
 
 export const LEARN_MENU_ITEMS: UserMenuItem[] = [
@@ -423,6 +440,11 @@ export function AppHeaderUserMenu({
             >
               <MenuIcon>{item.icon}</MenuIcon>
               {item.label}
+              {item.href === "/monitor" ? (
+                <span style={{ marginLeft: "auto" }}>
+                  <MonitorNavBadge enabled />
+                </span>
+              ) : null}
             </a>
           ))}
           <a

@@ -16,8 +16,14 @@ export type SavedJobsPage = {
   limit: number;
 };
 
-export async function saveJob(jobId: string): Promise<boolean> {
-  const response = await apiRequest("POST", "/saved-jobs", { jobId });
+export async function saveJob(
+  jobId: string,
+  origin?: "RADAR" | "MONITOR",
+): Promise<boolean> {
+  const response = await apiRequest("POST", "/saved-jobs", {
+    jobId,
+    ...(origin ? { origin } : {}),
+  });
   return response.ok;
 }
 

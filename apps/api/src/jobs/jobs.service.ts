@@ -15,6 +15,7 @@ import {
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
+import { formatCompanyDisplayName } from "./company-display-name";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import { normalizeState } from "./geo-normalizer";
@@ -437,7 +438,7 @@ export class JobsService {
       .sort((a, b) => b.jobCount - a.jobCount)
       .slice(0, limit)
       .map((company) => ({
-        name: company.name,
+        name: formatCompanyDisplayName(company.name),
         slug: toCompanySlug(company.name),
         logoUrl: company.logoUrl,
         jobCount: company.jobCount,

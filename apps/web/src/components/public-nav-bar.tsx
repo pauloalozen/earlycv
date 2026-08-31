@@ -10,6 +10,7 @@ import {
 import type { AppInternalRole } from "@/lib/app-session";
 import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { Logo } from "./logo";
+import { MonitorNavBadge } from "./monitor-nav-badge";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -164,6 +165,23 @@ export function PublicNavBar({
               Radar de Oportunidades
             </Link>
           )}
+          {IS_JOBS_GHOST_MODE || hideJobsLink || !userName ? null : (
+            <Link
+              href="/monitor"
+              style={{
+                fontSize: 13,
+                color: linkColor,
+                fontWeight: 400,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              Meu Monitor
+              <MonitorNavBadge enabled />
+            </Link>
+          )}
           <Link
             href="/blog"
             style={{
@@ -266,6 +284,21 @@ export function PublicNavBar({
             className="public-mob-nav-item"
           >
             Radar de Oportunidades
+          </Link>
+        )}
+        {IS_JOBS_GHOST_MODE || hideJobsLink || !userName ? null : (
+          <Link
+            href="/monitor"
+            onClick={() => setIsMenuOpen(false)}
+            className="public-mob-nav-item"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            Meu Monitor
+            <MonitorNavBadge enabled />
           </Link>
         )}
         <Link
