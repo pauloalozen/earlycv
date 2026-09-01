@@ -320,7 +320,13 @@ export default function PrivacyPage() {
             consentimento.
           </p>
           <div style={{ overflowX: "auto" }}>
+            <style>{`
+              @media (max-width: 640px) {
+                .privacy-cookie-table { min-width: 640px; }
+              }
+            `}</style>
             <table
+              className="privacy-cookie-table"
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
