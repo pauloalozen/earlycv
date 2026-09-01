@@ -33,8 +33,10 @@ export function DashboardColumnTabs({ tabs, columns }: Props) {
             gap: 6px;
             margin-bottom: 12px;
             overflow-x: auto;
+            scrollbar-width: none;
           }
-          .dpt-grid { grid-template-columns: 1fr; }
+          .dpt-tabs::-webkit-scrollbar { display: none; }
+          .dpt-grid { grid-template-columns: minmax(0, 1fr); }
           .dpt-col[data-active="false"] { display: none; }
         }
         .dpt-tab {

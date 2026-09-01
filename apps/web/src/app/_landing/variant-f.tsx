@@ -255,6 +255,7 @@ export function LandingVariantF({
           )}
           <Link
             href={isAuthenticated ? "/meu-perfil" : "/entrar?tab=cadastro"}
+            className="lp-f-nav-profile"
             style={{
               ...btnPrimary,
               padding: "0 16px",
@@ -292,7 +293,7 @@ export function LandingVariantF({
                 flexShrink: 0,
               }}
             />
-            ANÁLISE GRÁTIS · SEM CARTÃO · RESULTADO IMEDIATO
+            ANÁLISE GRÁTIS · RESULTADO IMEDIATO
           </div>
 
           <h1
@@ -1328,6 +1329,9 @@ export function LandingVariantF({
           .reveal-card { transform: translateX(24px); }
           .reveal-card.reveal-visible { transform: translateX(0); }
           .lp-f-step-name { display: none; }
+        }
+        @media (max-width: 768px) {
+          .lp-f-nav-profile { display: none !important; }
         }
       `}</style>
 

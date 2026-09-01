@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
-import { CartaMock } from "../_landing/_feature-showcase";
+import { CartaMock, MockMobileStyles } from "../_landing/_feature-showcase";
 import {
   GEIST_V2 as GEIST,
   LandingNavV2,
@@ -49,9 +49,10 @@ export default function CartaDeApresentacaoPage() {
     >
       <LandingScrollAnimations />
       <LandingNavV2 />
+      <MockMobileStyles />
 
       {/* HERO */}
-      <section style={{ padding: "144px 32px 0" }}>
+      <section className="lp-mkt-section" style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -140,7 +141,7 @@ export default function CartaDeApresentacaoPage() {
       </section>
 
       {/* COMO FUNCIONA */}
-      <section style={{ padding: "0 32px 100px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 100px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 720 }}
@@ -170,7 +171,7 @@ export default function CartaDeApresentacaoPage() {
       </section>
 
       {/* EXEMPLO */}
-      <section style={{ padding: "0 32px 110px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 110px" }}>
         <div
           className="lp-grid-2"
           style={{
@@ -260,7 +261,10 @@ export default function CartaDeApresentacaoPage() {
       </section>
 
       {/* SEM INVENTAR EXPERIÊNCIAS */}
-      <section style={{ background: "#0a0a0a", padding: "80px 32px" }}>
+      <section
+        className="lp-mkt-section"
+        style={{ background: "#0a0a0a", padding: "80px 32px" }}
+      >
         <div
           className="reveal-card"
           style={{ ...container, maxWidth: 640, textAlign: "center" }}
@@ -291,7 +295,7 @@ export default function CartaDeApresentacaoPage() {
       </section>
 
       {/* JORNADA: DA VAGA À ENTREVISTA */}
-      <section style={{ padding: "100px 32px" }}>
+      <section className="lp-mkt-section" style={{ padding: "100px 32px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 720 }}
@@ -345,7 +349,7 @@ export default function CartaDeApresentacaoPage() {
       </section>
 
       {/* CTA FINAL */}
-      <section style={{ padding: "90px 32px" }}>
+      <section className="lp-mkt-section" style={{ padding: "90px 32px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 640 }}

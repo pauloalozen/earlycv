@@ -5,16 +5,66 @@ import { createPortal } from "react-dom";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
+type NavLink = { href: string; label: string };
+
 type Props = {
   authState: "loading" | "authenticated" | "unauthenticated";
+  /** Links shown in the panel above the auth CTA. Defaults to the original
+   * variant E set (Como funciona / Preços / Blog) so existing callers are
+   * unaffected. */
+  links?: NavLink[];
+  /** Override the auth-aware CTA at the bottom of the panel — same
+   * loading/authenticated/unauthenticated states as the default. */
+  ctaAuthenticated?: NavLink;
+  ctaUnauthenticated?: NavLink;
+  /** Panel background — defaults to the original variant E cream so that
+   * caller is unaffected. */
+  panelBackground?: string;
 };
 
-export function LandingMobileMenu({ authState }: Props) {
+const DEFAULT_LINKS: NavLink[] = [
+  { href: "#como-funciona", label: "Como funciona" },
+  { href: "#precos", label: "Preços" },
+  { href: "/blog", label: "Blog" },
+];
+
+const DEFAULT_CTA_AUTHENTICATED: NavLink = {
+  href: "/meu-perfil",
+  label: "Ir para o painel →",
+};
+
+const DEFAULT_CTA_UNAUTHENTICATED: NavLink = {
+  href: "/entrar?tab=entrar",
+  label: "Entrar",
+};
+
+export function LandingMobileMenu({
+  authState,
+  links = DEFAULT_LINKS,
+  ctaAuthenticated = DEFAULT_CTA_AUTHENTICATED,
+  ctaUnauthenticated = DEFAULT_CTA_UNAUTHENTICATED,
+  panelBackground = "#f3f2ed",
+}: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // Measured from the page's own <nav>, not hardcoded — the fixed header's
+  // real height varies per landing (logo+badge line-height, padding), so a
+  // magic-number top offset here left the panel's top sliver hidden behind
+  // the header on pages taller than the original guess.
+  const [navHeight, setNavHeight] = useState(57);
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const nav = document.querySelector("nav");
+    if (!nav) return;
+    const measure = () => setNavHeight(nav.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -40,7 +90,6 @@ export function LandingMobileMenu({ authState }: Props) {
         }
         .lp-mob-nav {
           position: fixed;
-          top: 57px;
           left: 0;
           right: 0;
           bottom: 0;
@@ -132,30 +181,21 @@ export function LandingMobileMenu({ authState }: Props) {
       {/* Mobile nav overlay — rendered via portal to escape backdropFilter containing block */}
       {mounted &&
         createPortal(
-          <div className={`lp-mob-nav${open ? " lp-mob-nav--open" : ""}`}>
-            {/* biome-ignore lint/a11y/useValidAnchor: anchor link to page section with close-menu side effect */}
-            <a
-              href="#como-funciona"
-              className="lp-mob-nav-item"
-              onClick={() => setOpen(false)}
-            >
-              Como funciona
-            </a>
-            {/* biome-ignore lint/a11y/useValidAnchor: anchor link to page section with close-menu side effect */}
-            <a
-              href="#precos"
-              className="lp-mob-nav-item"
-              onClick={() => setOpen(false)}
-            >
-              Preços
-            </a>
-            <a
-              href="/blog"
-              className="lp-mob-nav-item"
-              onClick={() => setOpen(false)}
-            >
-              Blog
-            </a>
+          <div
+            className={`lp-mob-nav${open ? " lp-mob-nav--open" : ""}`}
+            style={{ top: navHeight, background: panelBackground }}
+          >
+            {links.map((l) => (
+              // biome-ignore lint/a11y/useValidAnchor: anchor link to page section (or route) with close-menu side effect
+              <a
+                key={l.href}
+                href={l.href}
+                className="lp-mob-nav-item"
+                onClick={() => setOpen(false)}
+              >
+                {l.label}
+              </a>
+            ))}
             {authState === "loading" ? (
               <div
                 aria-hidden="true"
@@ -166,19 +206,19 @@ export function LandingMobileMenu({ authState }: Props) {
               </div>
             ) : authState === "authenticated" ? (
               <a
-                href="/meu-perfil"
+                href={ctaAuthenticated.href}
                 className="lp-mob-nav-item lp-mob-nav-item--cta"
                 onClick={() => setOpen(false)}
               >
-                Ir para o painel →
+                {ctaAuthenticated.label}
               </a>
             ) : (
               <a
-                href="/entrar?tab=entrar"
+                href={ctaUnauthenticated.href}
                 className="lp-mob-nav-item lp-mob-nav-item--cta"
                 onClick={() => setOpen(false)}
               >
-                Entrar
+                {ctaUnauthenticated.label}
               </a>
             )}
           </div>,

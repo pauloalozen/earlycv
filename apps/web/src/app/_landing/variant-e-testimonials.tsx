@@ -94,6 +94,7 @@ export function DepoimentosSection({
       }}
     >
       <div
+        className="e-depoimentos-container"
         style={{
           maxWidth: 1200,
           margin: "0 auto",
@@ -200,6 +201,7 @@ export function DepoimentosSection({
         >
           {/* Spotlight escuro rotativo */}
           <article
+            className="e-depoimentos-spotlight"
             style={{
               background: "#0a0a0a",
               borderRadius: 18,
@@ -364,6 +366,7 @@ export function DepoimentosSection({
 
           {/* Roster */}
           <div
+            className="e-depoimentos-roster"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
@@ -505,6 +508,9 @@ export function DepoimentosSection({
         @keyframes dpFill {
           from { transform: scaleX(0); }
           to   { transform: scaleX(1); }
+        }
+        @media (max-width: 900px) {
+          .e-depoimentos-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>

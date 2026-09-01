@@ -294,12 +294,14 @@ function ScoreIndicator({
   displayScore,
   hasAnalysis,
   showScore,
+  isLoggedIn,
 }: {
   mobile: boolean;
   hasScore: boolean;
   displayScore: number | null | undefined;
   hasAnalysis: boolean;
   showScore: boolean;
+  isLoggedIn: boolean;
 }) {
   const ringSize = mobile ? 56 : 64;
 
@@ -436,6 +438,12 @@ function ScoreIndicator({
       </div>
     );
   }
+
+  // Convite pra enviar o CV só faz sentido pra quem já tem conta — pra um
+  // visitante deslogado (sem CV, sem conta) o círculo tracejado + "envie
+  // seu CV" nos cards vira ruído repetido em cada vaga da lista; o convite
+  // pra criar conta já está no restante da página.
+  if (!isLoggedIn) return null;
 
   const uploadIcon = (
     <div
@@ -581,6 +589,7 @@ export function JobCard({
               displayScore={displayScore}
               hasAnalysis={hasAnalysis}
               showScore={showScore}
+              isLoggedIn={isLoggedIn}
             />
           </div>
 
@@ -594,6 +603,7 @@ export function JobCard({
               displayScore={displayScore}
               hasAnalysis={hasAnalysis}
               showScore={showScore}
+              isLoggedIn={isLoggedIn}
             />
           </div>
 

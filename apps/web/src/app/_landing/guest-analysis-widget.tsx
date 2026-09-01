@@ -1001,7 +1001,16 @@ export function GuestAnalysisWidget({
 
       <style>{`
         @media (max-width: 640px) {
-          .lp-f-job-grid { grid-template-columns: 1fr !important; height: 420px !important; }
+          /* Stacked single column with no explicit row heights let the grid
+           * size each row off its own content — the examples list (7-8
+           * buttons) demanded far more room than the textarea, which ended
+           * up a cramped 2-3 visible lines. Split the same total height
+           * explicitly instead: textarea gets the bigger half now. */
+          .lp-f-job-grid {
+            grid-template-columns: 1fr !important;
+            grid-template-rows: 260px 200px !important;
+            height: 460px !important;
+          }
         }
       `}</style>
     </>

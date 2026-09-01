@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
-import { PreparacaoMock } from "../_landing/_feature-showcase";
+import {
+  MockMobileStyles,
+  PreparacaoMock,
+} from "../_landing/_feature-showcase";
 import {
   GEIST_V2 as GEIST,
   LandingNavV2,
@@ -122,9 +125,10 @@ export default function PreparacaoParaEntrevistaPage() {
     >
       <LandingScrollAnimations />
       <LandingNavV2 />
+      <MockMobileStyles />
 
       {/* HERO */}
-      <section style={{ padding: "144px 32px 0" }}>
+      <section className="lp-mkt-section" style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -214,7 +218,7 @@ export default function PreparacaoParaEntrevistaPage() {
       </section>
 
       {/* FÓRMULA DE PERSONALIZAÇÃO */}
-      <section style={{ padding: "0 32px 100px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 100px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 760 }}
@@ -258,7 +262,7 @@ export default function PreparacaoParaEntrevistaPage() {
       </section>
 
       {/* CATEGORIAS */}
-      <section style={{ padding: "0 32px 110px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 110px" }}>
         <div style={{ ...container, marginBottom: 32 }}>
           <div className="reveal-card" style={{ marginBottom: 10 }}>
             <SectionLabel>O QUE VEM NO ROTEIRO</SectionLabel>
@@ -335,7 +339,7 @@ export default function PreparacaoParaEntrevistaPage() {
       </section>
 
       {/* PRÓXIMA PREPARAÇÃO: HISTÓRICO DE ENTREVISTAS ANTERIORES */}
-      <section style={{ padding: "0 32px 110px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 110px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 680 }}
@@ -383,7 +387,7 @@ export default function PreparacaoParaEntrevistaPage() {
       </section>
 
       {/* JORNADA: DA VAGA À ENTREVISTA */}
-      <section style={{ padding: "0 32px 110px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 110px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 720 }}
@@ -445,7 +449,11 @@ export default function PreparacaoParaEntrevistaPage() {
       </section>
 
       {/* FAQ — cluster SEO */}
-      <section id="faq" style={{ padding: "0 32px 110px" }}>
+      <section
+        id="faq"
+        className="lp-mkt-section"
+        style={{ padding: "0 32px 110px" }}
+      >
         <div style={{ ...container, maxWidth: 820 }}>
           <div className="reveal-card">
             <div style={{ marginBottom: 10 }}>
@@ -501,7 +509,10 @@ export default function PreparacaoParaEntrevistaPage() {
       </section>
 
       {/* CTA FINAL */}
-      <section style={{ background: "#0a0a0a", padding: "90px 32px" }}>
+      <section
+        className="lp-mkt-section"
+        style={{ background: "#0a0a0a", padding: "90px 32px" }}
+      >
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 640 }}

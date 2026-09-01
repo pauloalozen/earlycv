@@ -534,6 +534,15 @@ export function LandingSharedStyles() {
         .reveal-card { transform: translateX(24px); }
         .reveal-card.reveal-visible { transform: translateX(0); }
       }
+      /* Opt-in section wrapper for the feature marketing pages (analise-de-
+       * curriculo, radar-de-vagas, ...): each section carries its own 32px
+       * horizontal padding AND wraps a container div with another 32px —
+       * fine on desktop, but on a phone that's 64px eaten from both sides.
+       * Zeroing just the section's half here leaves container's 32px as the
+       * only margin, matching what already shipped on the main landing. */
+      @media (max-width: 768px) {
+        .lp-mkt-section { padding-left: 0 !important; padding-right: 0 !important; }
+      }
     `}</style>
   );
 }

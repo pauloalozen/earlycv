@@ -1009,6 +1009,20 @@ function toSchemaEmploymentType(value: string | null): string | undefined {
   return SCHEMA_EMPLOYMENT_TYPE[value];
 }
 
+// Rótulo pra exibir no badge/card — mesmo valor normalizado acima (snake_
+// case), só formatado pra leitura ("full_time" -> "Full time"). "pj" fica
+// em caixa alta (sigla), o resto vira frase com só a primeira letra maiúscula.
+const EMPLOYMENT_TYPE_DISPLAY_OVERRIDES: Record<string, string> = {
+  pj: "PJ",
+};
+
+function formatEmploymentType(value: string): string {
+  const override = EMPLOYMENT_TYPE_DISPLAY_OVERRIDES[value];
+  if (override) return override;
+  const spaced = value.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
@@ -1361,6 +1375,7 @@ export default async function JobPage({ params }: JobPageProps) {
         {/* Breadcrumb */}
         <nav
           aria-label="Breadcrumb"
+          className="job-breadcrumb"
           style={{
             fontFamily: MONO,
             fontSize: 11,
@@ -1375,12 +1390,14 @@ export default async function JobPage({ params }: JobPageProps) {
         >
           <Link
             href="/radar"
-            style={{ color: "#5a5a55", textDecoration: "none" }}
+            style={{ color: "#5a5a55", textDecoration: "none", flexShrink: 0 }}
           >
             Vagas
           </Link>
-          <span style={{ color: "#c8c6bf" }}>›</span>
-          <span style={{ color: "#0a0a0a" }}>{job.title}</span>
+          <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
+          <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
+            {job.title}
+          </span>
         </nav>
 
         {/* Internal linking — discreto, contextual às landing pages de SEO
@@ -1391,6 +1408,7 @@ export default async function JobPage({ params }: JobPageProps) {
         aparece pra toda vaga. */}
         {internalLinks.length > 0 ? (
           <div
+            className="job-internal-links"
             style={{
               display: "flex",
               alignItems: "center",
@@ -1404,7 +1422,14 @@ export default async function JobPage({ params }: JobPageProps) {
           >
             {internalLinks.map((link, index) => (
               <Fragment key={link.href}>
-                {index > 0 ? <span style={{ color: "#c8c6bf" }}>|</span> : null}
+                {index > 0 ? (
+                  <span
+                    className="job-internal-links-sep"
+                    style={{ color: "#c8c6bf" }}
+                  >
+                    |
+                  </span>
+                ) : null}
                 <Link
                   href={link.href}
                   style={{ color: "#6a6560", textDecoration: "none" }}
@@ -1415,6 +1440,33 @@ export default async function JobPage({ params }: JobPageProps) {
             ))}
           </div>
         ) : null}
+
+        <style>{`
+          @media (max-width: 640px) {
+            /* Long job titles ("Product Owner | Scrum Master - Pleno")
+             * wrapped across 2-3 lines right under "Vagas ›", and the
+             * internal-links row below it wrapped mid-sentence leaving a
+             * "|" separator dangling at the end of a line — both read as
+             * disorganized clutter before the reader even reaches the job
+             * header. Truncate the breadcrumb title to one line and stack
+             * the internal links vertically (no separators needed once
+             * each is on its own line). */
+            .job-breadcrumb-title {
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              min-width: 0;
+            }
+            .job-internal-links {
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              gap: 6px !important;
+            }
+            .job-internal-links-sep {
+              display: none !important;
+            }
+          }
+        `}</style>
 
         {/* Job header */}
         <header style={{ marginBottom: 32 }}>
@@ -1538,7 +1590,7 @@ export default async function JobPage({ params }: JobPageProps) {
                   borderRadius: 5,
                 }}
               >
-                {job.employmentType}
+                {formatEmploymentType(job.employmentType)}
               </span>
             ) : null}
           </div>
@@ -1854,7 +1906,10 @@ export default async function JobPage({ params }: JobPageProps) {
                       ? { label: "Modelo", value: workModelLabel }
                       : null,
                     job.employmentType
-                      ? { label: "Contrato", value: job.employmentType }
+                      ? {
+                          label: "Contrato",
+                          value: formatEmploymentType(job.employmentType),
+                        }
                       : null,
                     {
                       label: "Fonte",

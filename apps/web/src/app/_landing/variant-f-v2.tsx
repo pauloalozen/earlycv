@@ -3,6 +3,7 @@ import { Logo } from "@/components/logo";
 import { PublicFooter } from "@/components/public-footer";
 import type { TopCompany } from "@/lib/internal-jobs-api";
 import { siteConfig } from "@/lib/site";
+import { LandingMobileMenu } from "../_landing-mobile-menu";
 import { LandingScrollAnimations } from "../_landing-scroll-animations";
 import { FeatureShowcase } from "./_feature-showcase";
 import { LinkedInVsRadarMock } from "./_linkedin-radar-mock";
@@ -15,6 +16,14 @@ import { DepoimentosSection } from "./variant-e-testimonials";
 function navDropdownLabel(p: (typeof FEATURE_PAGES)[number]) {
   return p.href === "/radar-de-vagas" ? "Radar de Oportunidades" : p.label;
 }
+
+/** Mobile menu panel content — same LandingMobileMenu used on variant E,
+ * just pointed at F2's own product pages + in-page anchors. */
+const MOBILE_MENU_LINKS = [
+  ...FEATURE_PAGES.map((p) => ({ href: p.href, label: navDropdownLabel(p) })),
+  { href: "#como-funciona", label: "Como funciona" },
+  { href: "#faq", label: "Perguntas" },
+];
 
 const GEIST =
   'var(--font-ubuntu), -apple-system, "Segoe UI", system-ui, sans-serif';
@@ -454,6 +463,7 @@ export function LandingVariantF2({
 
       {/* NAV */}
       <nav
+        className="lp-fv2-nav"
         style={{
           display: "grid",
           gridTemplateColumns: "1fr auto 1fr",
@@ -477,6 +487,7 @@ export function LandingVariantF2({
             gap: 8,
             textDecoration: "none",
             justifySelf: "start",
+            gridColumn: 1,
           }}
         >
           <Logo />
@@ -496,11 +507,13 @@ export function LandingVariantF2({
         </Link>
 
         <div
+          className="lp-fv2-nav-links"
           style={{
             display: "flex",
             alignItems: "center",
             gap: 26,
             justifySelf: "center",
+            gridColumn: 2,
           }}
         >
           <div className="lp-fv2-nav-dropdown">
@@ -573,20 +586,27 @@ export function LandingVariantF2({
         </div>
 
         <div
+          className="lp-fv2-nav-right"
           style={{
             display: "flex",
             alignItems: "center",
             gap: 26,
             justifySelf: "end",
+            gridColumn: 3,
           }}
         >
           {!isAuthenticated && (
-            <Link href="/entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
+            <Link
+              href="/entrar"
+              className="lp-fv2-nav-entrar"
+              style={{ fontSize: 13, color: "#3a3a38" }}
+            >
               Entrar
             </Link>
           )}
           <Link
             href={isAuthenticated ? "/meu-perfil" : "/entrar?tab=cadastro"}
+            className="lp-fv2-nav-profile"
             style={{
               ...btnPrimary,
               padding: "0 16px",
@@ -597,11 +617,25 @@ export function LandingVariantF2({
           >
             {isAuthenticated ? "Meu Perfil" : "Criar conta"}
           </Link>
+          <LandingMobileMenu
+            authState={isAuthenticated ? "authenticated" : "unauthenticated"}
+            links={
+              isAuthenticated
+                ? MOBILE_MENU_LINKS
+                : [...MOBILE_MENU_LINKS, { href: "/entrar", label: "Entrar" }]
+            }
+            ctaAuthenticated={{ href: "/meu-perfil", label: "Meu Perfil" }}
+            ctaUnauthenticated={{
+              href: "/entrar?tab=cadastro",
+              label: "Analisar meu CV grátis",
+            }}
+            panelBackground="#fff"
+          />
         </div>
       </nav>
 
       {/* HERO */}
-      <section style={{ padding: "144px 32px 0" }}>
+      <section className="lp-fv2-section" style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -624,7 +658,7 @@ export function LandingVariantF2({
                 flexShrink: 0,
               }}
             />
-            ANÁLISE GRÁTIS · SEM CARTÃO · RESULTADO IMEDIATO
+            ANÁLISE GRÁTIS · RESULTADO IMEDIATO
           </div>
 
           <h1
@@ -693,7 +727,7 @@ export function LandingVariantF2({
       </section>
 
       {/* LOGO WALL — continuous marquee */}
-      <section style={{ padding: "72px 0 88px" }}>
+      <section className="lp-fv2-section" style={{ padding: "72px 0 88px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", marginBottom: 28 }}
@@ -754,6 +788,7 @@ export function LandingVariantF2({
       {/* UPLOAD MODULE */}
       <section
         id="analise"
+        className="lp-fv2-section"
         style={{
           padding: "72px 32px",
           minHeight: "100dvh",
@@ -886,9 +921,12 @@ export function LandingVariantF2({
       </section>
 
       {/* PROOF / METRICS BAND */}
-      <section style={{ background: "#0a0a0a", padding: "56px 32px" }}>
+      <section
+        className="lp-fv2-section"
+        style={{ background: "#0a0a0a", padding: "56px 32px" }}
+      >
         <div
-          className="reveal-card"
+          className="reveal-card lp-fv2-metrics-outer"
           style={{
             ...container,
             display: "flex",
@@ -915,7 +953,10 @@ export function LandingVariantF2({
               O ATS decide antes de um humano ler.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 44, flexWrap: "wrap" }}>
+          <div
+            className="lp-fv2-metrics"
+            style={{ display: "flex", gap: 44, flexWrap: "wrap" }}
+          >
             {[
               {
                 num: "70",
@@ -936,8 +977,9 @@ export function LandingVariantF2({
                 color: "#fafaf6",
               },
             ].map((s) => (
-              <div key={s.label}>
+              <div key={s.label} className="lp-fv2-metric">
                 <div
+                  className="lp-fv2-metric-num"
                   style={{
                     fontSize: 32,
                     fontWeight: 400,
@@ -972,7 +1014,7 @@ export function LandingVariantF2({
       </section>
 
       {/* JORNADA — abertura editorial */}
-      <section style={{ padding: "72px 32px 40px" }}>
+      <section className="lp-fv2-section" style={{ padding: "72px 32px 40px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center" }}
@@ -1004,7 +1046,11 @@ export function LandingVariantF2({
       </section>
 
       {/* DEEP FEATURE 1 — Radar */}
-      <section id="radar" style={{ padding: "56px 32px 0" }}>
+      <section
+        id="radar"
+        className="lp-fv2-section"
+        style={{ padding: "56px 32px 0" }}
+      >
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -1102,7 +1148,7 @@ export function LandingVariantF2({
       </section>
 
       {/* PROVA DE VALOR DO RADAR — mesma etapa, não um passo novo */}
-      <section style={{ padding: "40px 32px 72px" }}>
+      <section className="lp-fv2-section" style={{ padding: "40px 32px 72px" }}>
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -1206,7 +1252,7 @@ export function LandingVariantF2({
       </JourneyDivider>
 
       {/* DEEP FEATURE 2 — Análise + CV adaptado */}
-      <section style={{ padding: "0 32px 72px" }}>
+      <section className="lp-fv2-section" style={{ padding: "0 32px 72px" }}>
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -1313,7 +1359,7 @@ export function LandingVariantF2({
       </JourneyDivider>
 
       {/* DEEP FEATURE 3 — Candidatura */}
-      <section style={{ padding: "0 32px 110px" }}>
+      <section className="lp-fv2-section" style={{ padding: "0 32px 110px" }}>
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -1489,7 +1535,7 @@ export function LandingVariantF2({
       </JourneyDivider>
 
       {/* DEEP FEATURE 4 — Preparação para Entrevista */}
-      <section style={{ padding: "0 32px 72px" }}>
+      <section className="lp-fv2-section" style={{ padding: "0 32px 72px" }}>
         <div
           className="lp-fv2-grid-2"
           style={{
@@ -1588,7 +1634,7 @@ export function LandingVariantF2({
       </JourneyDivider>
 
       {/* DEEP FEATURE 5 — Aprendizado entre candidaturas */}
-      <section style={{ padding: "0 32px 72px" }}>
+      <section className="lp-fv2-section" style={{ padding: "0 32px 72px" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center" }}
@@ -1682,7 +1728,11 @@ export function LandingVariantF2({
       </JourneyDivider>
 
       {/* COMO FUNCIONA */}
-      <section id="como-funciona" style={{ padding: "0 32px 110px" }}>
+      <section
+        id="como-funciona"
+        className="lp-fv2-section"
+        style={{ padding: "0 32px 110px" }}
+      >
         <div style={container}>
           <div
             className="reveal-card"
@@ -1848,7 +1898,11 @@ export function LandingVariantF2({
       <DepoimentosSection background="#ffffff" />
 
       {/* FAQ */}
-      <section id="faq" style={{ padding: "0 32px 110px" }}>
+      <section
+        id="faq"
+        className="lp-fv2-section"
+        style={{ padding: "0 32px 110px" }}
+      >
         <div style={{ ...container, maxWidth: 820 }}>
           <div className="reveal-card">
             <div style={{ marginBottom: 10 }}>
@@ -1926,7 +1980,10 @@ export function LandingVariantF2({
       </section>
 
       {/* FINAL CTA */}
-      <section style={{ background: "#0a0a0a", padding: "90px 32px" }}>
+      <section
+        className="lp-fv2-section"
+        style={{ background: "#0a0a0a", padding: "90px 32px" }}
+      >
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 640 }}
@@ -2059,6 +2116,45 @@ export function LandingVariantF2({
           .reveal-card { transform: translateX(24px); }
           .reveal-card.reveal-visible { transform: translateX(0); }
           .lp-fv2-step-name { display: none; }
+        }
+        /* MOBILE NAV — hides the desktop links/CTA row and hands off to the
+         * shared LandingMobileMenu (same hamburger + slide-down panel used
+         * on variant E) rendered right after it in the nav markup. Every
+         * section below also gets its own horizontal padding zeroed out so
+         * the ...container spread (32px each side, baked in for desktop) is
+         * the ONLY margin left — one consistent layer instead of section +
+         * container stacking and squeezing the content down to almost
+         * nothing on a phone. */
+        @media (max-width: 768px) {
+          .lp-fv2-nav-links { display: none !important; }
+          .lp-fv2-nav-entrar { display: none !important; }
+          .lp-fv2-nav-profile { display: none !important; }
+          .lp-fv2-section { padding-left: 0 !important; padding-right: 0 !important; }
+          /* Feature pills — a wrapped stack of 6 large buttons ate the whole
+           * screen before the mockup ever showed up. One compact scrollable
+           * row keeps the tabs reachable without burying the preview. */
+          .lp-f-pill-row {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            flex-wrap: nowrap !important;
+            justify-content: flex-start !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            margin-left: -32px !important;
+            margin-right: -32px !important;
+            margin-bottom: 32px !important;
+            padding: 0 32px !important;
+            scrollbar-width: none;
+          }
+          .lp-f-pill-row::-webkit-scrollbar { display: none; }
+          .lp-f-pill { flex-shrink: 0 !important; white-space: nowrap !important; }
+
+          /* Metrics band — 3 stats wrapping to 2 lines made the black band
+           * balloon in height. Force one row, shrink the numbers to fit. */
+          .lp-fv2-metrics-outer { flex-direction: column !important; align-items: flex-start !important; }
+          .lp-fv2-metrics { flex-wrap: nowrap !important; gap: 14px !important; width: 100% !important; }
+          .lp-fv2-metric { flex: 1 1 0 !important; min-width: 0 !important; }
+          .lp-fv2-metric-num { font-size: 22px !important; }
         }
       `}</style>
 

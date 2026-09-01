@@ -148,15 +148,20 @@ function FadeCta({
   href,
   label,
   children,
+  className,
 }: {
   maxHeight: number;
   href: string;
   label: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <div>
-      <div style={{ position: "relative", maxHeight, overflow: "hidden" }}>
+      <div
+        className={className}
+        style={{ position: "relative", maxHeight, overflow: "hidden" }}
+      >
         {children}
         <div
           style={{
@@ -197,11 +202,13 @@ export function AnaliseMock() {
     <div style={{ background: "#fff", fontFamily: GEIST, textAlign: "left" }}>
       <FadeCta
         maxHeight={620}
+        className="am-fade"
         href="/adaptar"
         label="Clique aqui e veja uma análise completa real →"
       >
-        <div style={{ padding: "32px 34px 0" }}>
+        <div className="am-wrap" style={{ padding: "32px 34px 0" }}>
           <div
+            className="am-header"
             style={{
               display: "flex",
               alignItems: "center",
@@ -299,6 +306,7 @@ export function AnaliseMock() {
             </div>
 
             <div
+              className="am-score-panel"
               style={{
                 background: "#0a0a0a",
                 borderRadius: 14,
@@ -351,6 +359,7 @@ export function AnaliseMock() {
             <div style={{ flex: 55, background: "rgba(10,10,10,0.06)" }} />
           </div>
           <div
+            className="am-legend"
             style={{
               display: "flex",
               gap: 18,
@@ -405,7 +414,7 @@ export function AnaliseMock() {
                 22 / 50 pts
               </span>
             </div>
-            <div style={{ display: "flex", gap: 26 }}>
+            <div className="am-cols" style={{ display: "flex", gap: 26 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
@@ -535,6 +544,7 @@ export function OtimizacaoMock() {
   return (
     <div style={{ fontFamily: GEIST, textAlign: "left", background: "#fff" }}>
       <div
+        className="om-topbar"
         style={{
           display: "flex",
           alignItems: "center",
@@ -544,7 +554,10 @@ export function OtimizacaoMock() {
         }}
       >
         <LogoMark />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          className="om-actions"
+          style={{ display: "flex", alignItems: "center", gap: 8 }}
+        >
           <span style={{ fontSize: 11, color: GRAY, marginRight: 6 }}>
             Ver candidatura ↗
           </span>
@@ -579,11 +592,13 @@ export function OtimizacaoMock() {
 
       <FadeCta
         maxHeight={520}
+        className="om-fade"
         href="/adaptar"
         label="Clique aqui e veja a otimização completa real →"
       >
-        <div style={{ display: "flex" }}>
+        <div className="om-body" style={{ display: "flex" }}>
           <div
+            className="om-sidebar"
             style={{
               width: 260,
               flexShrink: 0,
@@ -735,7 +750,10 @@ export function OtimizacaoMock() {
             ))}
           </div>
 
-          <div style={{ flex: 1, padding: "30px 36px", minWidth: 0 }}>
+          <div
+            className="om-cv"
+            style={{ flex: 1, padding: "30px 36px", minWidth: 0 }}
+          >
             <div style={{ fontSize: 17, fontWeight: 700, color: "#0a0a0a" }}>
               PAULO CESAR ALOZEN
             </div>
@@ -831,32 +849,33 @@ export function OtimizacaoMock() {
 export function RadarMock() {
   const jobs = [
     {
-      company: "GRUPO ZELO",
+      company: "ACME S/A",
       title: "Analista Desenvolvedor SR – Full Stack",
       location: "Belo Horizonte, MG",
       tags: ["typescript", "nodejs", "nestjs"],
     },
     {
-      company: "CRESOL",
+      company: "NORTHWIND LTDA",
       title: "Analista de Processos | Serviços de IA",
       location: "Francisco Beltrão, PR",
       tags: ["machine learning", "deep learning", "automação"],
     },
     {
-      company: "NUCLEA",
+      company: "VÉRTICE SISTEMAS",
       title: "Engenheiro de Dados (Tech Lead)",
       location: "São Paulo, SP",
       tags: ["engenharia de dados", "databricks", "aws"],
     },
     {
-      company: "PRIVY",
+      company: "ORION TECH",
       title: "Fullstack Engineer",
-      location: "NYC-Privy, US-Remote",
+      location: "Remoto, Brasil",
       tags: ["react", "typescript", "next.js"],
     },
   ];
   return (
     <div
+      className="rm-wrap"
       style={{
         background: "#fff",
         padding: "32px 34px 30px",
@@ -939,10 +958,11 @@ export function RadarMock() {
         </span>
       </div>
 
-      <div style={{ display: "flex", gap: 14 }}>
+      <div className="rm-jobs" style={{ display: "flex", gap: 14 }}>
         {jobs.map((j) => (
           <div
             key={j.title}
+            className="rm-job-card"
             style={{
               flex: 1,
               minWidth: 0,
@@ -1033,7 +1053,10 @@ export function RadarMock() {
           marginTop: 14,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div
+          className="rm-full-row"
+          style={{ display: "flex", alignItems: "center", gap: 14 }}
+        >
           <div
             style={{
               width: 38,
@@ -1041,17 +1064,98 @@ export function RadarMock() {
               borderRadius: 8,
               background: "#0a0a0a",
               flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          >
+            <svg
+              width={20}
+              height={20}
+              viewBox="0 0 40 40"
+              fill="none"
+              aria-hidden="true"
+            >
+              <rect x="0" y="0" width="12" height="6.5" rx="2" fill="#fafaf6" />
+              <rect
+                x="16"
+                y="0"
+                width="12"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect x="32" y="0" width="8" height="6.5" rx="2" fill="#c6ff3a" />
+              <rect
+                x="0"
+                y="11.2"
+                width="16"
+                height="6.5"
+                rx="2"
+                fill="#c6ff3a"
+              />
+              <rect
+                x="20"
+                y="11.2"
+                width="18"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="0"
+                y="22.4"
+                width="7"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="11"
+                y="22.4"
+                width="16"
+                height="6.5"
+                rx="2"
+                fill="#c6ff3a"
+              />
+              <rect
+                x="30"
+                y="22.4"
+                width="8"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="0"
+                y="33.5"
+                width="22"
+                height="6.5"
+                rx="2"
+                fill="#fafaf6"
+              />
+              <rect
+                x="26"
+                y="33.5"
+                width="9"
+                height="6.5"
+                rx="2"
+                fill="rgba(250,250,246,0.14)"
+              />
+            </svg>
+          </div>
+          <div className="rm-full-text" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "#0a0a0a" }}>
               Analista Desenvolvedor SR – Full Stack
             </div>
             <div style={{ fontSize: 10.5, color: GRAY, marginTop: 2 }}>
-              GRUPO ZELO · Belo Horizonte, MG · há 19 semanas
+              earlyCV · Belo Horizonte, MG · há 19 semanas
             </div>
           </div>
-          <div style={{ textAlign: "center", flexShrink: 0 }}>
+          <div
+            className="rm-full-ring"
+            style={{ textAlign: "center", flexShrink: 0 }}
+          >
             <div
               style={{
                 width: 44,
@@ -1103,6 +1207,7 @@ export function RadarMock() {
             </div>
           </div>
           <span
+            className="rm-full-cta"
             style={{
               background: "#0a0a0a",
               color: "#fff",
@@ -1136,14 +1241,18 @@ export function RadarMock() {
           >
             COMPOSIÇÃO DO SCORE
           </div>
-          <div style={{ display: "flex", gap: 22 }}>
+          <div className="rm-score-grid" style={{ display: "flex", gap: 22 }}>
             {[
               { k: "ÁREA", pct: 100, frac: "1 de 1" },
               { k: "SKILLS", pct: 80, frac: "4 de 5" },
               { k: "SENIORIDADE", pct: 0, frac: "0 de 1" },
               { k: "TECNOLOGIAS", pct: 80, frac: "7 de 9" },
             ].map((d) => (
-              <div key={d.k} style={{ flex: 1, minWidth: 0 }}>
+              <div
+                key={d.k}
+                className="rm-score-item"
+                style={{ flex: 1, minWidth: 0 }}
+              >
                 <div
                   style={{
                     display: "flex",
@@ -1208,6 +1317,7 @@ export function MonitorMock() {
 
   return (
     <div
+      className="mm-wrap"
       style={{
         background: "#fff",
         padding: "32px 34px 30px",
@@ -1308,8 +1418,9 @@ export function MonitorMock() {
               ))}
             </div>
           </div>
-          <div style={{ flexShrink: 0 }}>
+          <div className="mm-config-freq" style={{ flexShrink: 0 }}>
             <div
+              className="mm-freq-label"
               style={{
                 fontFamily: MONO,
                 fontSize: 8.5,
@@ -1320,7 +1431,7 @@ export function MonitorMock() {
             >
               FREQUÊNCIA DO ALERTA
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div className="mm-freq-pills" style={{ display: "flex", gap: 6 }}>
               {["Diariamente", "Semanalmente", "Desativado"].map((freq, i) => (
                 <span
                   key={freq}
@@ -1447,6 +1558,7 @@ export function MonitorMock() {
             </span>
           </div>
           <div
+            className="mm-inbox-search"
             style={{
               flex: 1,
               display: "flex",
@@ -1545,6 +1657,7 @@ export function MonitorMock() {
         <div style={{ display: "flex" }}>
           {/* Barra lateral */}
           <div
+            className="mm-inbox-sidebar"
             style={{
               width: 148,
               flexShrink: 0,
@@ -1619,6 +1732,7 @@ export function MonitorMock() {
           {/* Lista de e-mails */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
+              className="mm-inbox-tabs"
               style={{
                 display: "flex",
                 borderBottom: `1px solid ${BORDER}`,
@@ -1690,6 +1804,7 @@ export function MonitorMock() {
             ].map((mail) => (
               <div
                 key={mail.sender + mail.subject}
+                className="mm-mail-row"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1701,6 +1816,7 @@ export function MonitorMock() {
               >
                 <span
                   aria-hidden
+                  className="mm-mail-check"
                   style={{
                     width: 14,
                     height: 14,
@@ -1717,12 +1833,14 @@ export function MonitorMock() {
                   stroke={mail.unread ? "#f5c518" : "#d8d6ce"}
                   strokeWidth="1.6"
                   strokeLinejoin="round"
+                  className="mm-mail-star"
                   style={{ flexShrink: 0 }}
                 >
                   <title>Com estrela</title>
                   <path d="M12 2.5l2.9 6 6.6.7-4.9 4.6 1.3 6.5L12 17l-5.9 3.3 1.3-6.5-4.9-4.6 6.6-.7z" />
                 </svg>
                 <span
+                  className="mm-mail-sender"
                   style={{
                     width: 110,
                     flexShrink: 0,
@@ -1807,6 +1925,7 @@ export function GestaoMock() {
   ];
   return (
     <div
+      className="gm-wrap"
       style={{
         background: "#fff",
         padding: "30px 34px 28px",
@@ -1865,7 +1984,10 @@ export function GestaoMock() {
             <strong style={{ color: LIME_DEEP }}>71%</strong>
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+        <div
+          className="gm-actions"
+          style={{ display: "flex", gap: 8, flexShrink: 0 }}
+        >
           {["Status ▾", "+ Link da vaga"].map((b) => (
             <span
               key={b}
@@ -1897,8 +2019,8 @@ export function GestaoMock() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 22 }}>
-        <div style={{ flex: "0 0 66%", minWidth: 0 }}>
+      <div className="gm-body" style={{ display: "flex", gap: 22 }}>
+        <div className="gm-main-col" style={{ flex: "0 0 66%", minWidth: 0 }}>
           <div
             style={{
               border: `1px solid ${BORDER}`,
@@ -1907,7 +2029,10 @@ export function GestaoMock() {
               marginBottom: 16,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center" }}>
+            <div
+              className="gm-steps"
+              style={{ display: "flex", alignItems: "center" }}
+            >
               {steps.map((s, i) => (
                 <div
                   key={s.l}
@@ -1954,6 +2079,7 @@ export function GestaoMock() {
                       )}
                     </div>
                     <div
+                      className="gm-step-name"
                       style={{
                         fontSize: 10,
                         color: s.state === "pending" ? "#c4c3bd" : "#3a3a36",
@@ -2128,7 +2254,7 @@ export function GestaoMock() {
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="gm-side-col" style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
               border: `1px solid ${BORDER}`,
@@ -2226,6 +2352,7 @@ export function GestaoMock() {
 export function PreparacaoMock() {
   return (
     <div
+      className="pm-wrap"
       style={{
         background: "#fff",
         padding: "30px 34px 28px",
@@ -2234,6 +2361,7 @@ export function PreparacaoMock() {
       }}
     >
       <div
+        className="pm-header"
         style={{
           display: "flex",
           alignItems: "center",
@@ -2291,7 +2419,10 @@ export function PreparacaoMock() {
       <div style={{ fontSize: 12.5, color: GRAY, marginBottom: 14 }}>
         Cientista de Dados Pleno · iFood
       </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+      <div
+        className="pm-tags"
+        style={{ display: "flex", gap: 8, marginBottom: 22 }}
+      >
         {["Vaga + JD", "Análise", "CV adaptado (score 64%)", "Gaps (4)"].map(
           (t) => (
             <Tag key={t}>{t}</Tag>
@@ -2299,7 +2430,7 @@ export function PreparacaoMock() {
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 22 }}>
+      <div className="pm-cols" style={{ display: "flex", gap: 22 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
@@ -2451,6 +2582,7 @@ export function PreparacaoMock() {
 export function CartaMock() {
   return (
     <div
+      className="cm-wrap"
       style={{
         display: "flex",
         fontFamily: GEIST,
@@ -2459,6 +2591,7 @@ export function CartaMock() {
       }}
     >
       <div
+        className="cm-sidebar"
         style={{
           width: 240,
           flexShrink: 0,
@@ -2513,7 +2646,10 @@ export function CartaMock() {
         ))}
       </div>
 
-      <div style={{ flex: 1, padding: "30px 36px", minWidth: 0 }}>
+      <div
+        className="cm-content"
+        style={{ flex: 1, padding: "30px 36px", minWidth: 0 }}
+      >
         <div
           style={{
             fontFamily: MONO,
@@ -2703,6 +2839,83 @@ export function FeatureShowcase() {
           <PreparacaoMock />
         )}
       </div>
+
+      {/* Mobile-only overrides for the mockups above — desktop layout stays
+       * untouched; these just stack the columns/rows that were designed for
+       * a wide browserFrame so they fit a phone screen. */}
+      <MockMobileStyles />
     </>
+  );
+}
+
+/** Mobile-only CSS for every Mock component below (AnaliseMock, OtimizacaoMock,
+ * RadarMock, MonitorMock, GestaoMock, PreparacaoMock, CartaMock) — desktop
+ * layout is untouched. Render this once per page: FeatureShowcase already
+ * does, but any page rendering a Mock component directly (the feature
+ * marketing pages: analise-de-curriculo, radar-de-vagas, ...) needs it too,
+ * since these classes have no effect unless this stylesheet is present. */
+export function MockMobileStyles() {
+  return (
+    <style>{`
+      @media (max-width: 640px) {
+        /* AnaliseMock */
+        .am-fade { max-height: 1400px !important; }
+        .am-wrap { padding: 22px 18px 0 !important; }
+        .am-header { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
+        .am-score-panel { width: 100% !important; box-sizing: border-box !important; }
+        .am-legend { flex-wrap: wrap !important; gap: 6px 14px !important; }
+        .am-cols { flex-direction: column !important; gap: 20px !important; }
+
+        /* OtimizacaoMock */
+        .om-fade { max-height: 1500px !important; }
+        .om-actions { flex-wrap: wrap !important; row-gap: 6px !important; justify-content: flex-end !important; }
+        .om-body { flex-direction: column !important; }
+        .om-sidebar { width: 100% !important; box-sizing: border-box !important; }
+        .om-cv { padding: 22px 18px 26px !important; }
+
+        /* RadarMock */
+        .rm-wrap { padding: 22px 18px 24px !important; }
+        .rm-jobs { overflow-x: auto !important; margin: 0 -18px !important; padding: 0 18px 6px !important; }
+        .rm-job-card { flex: 0 0 220px !important; }
+        .rm-full-row { flex-wrap: wrap !important; row-gap: 10px !important; }
+        .rm-full-text { flex: 1 1 100% !important; order: 1 !important; }
+        .rm-full-ring { order: 2 !important; display: flex !important; align-items: center !important; gap: 10px !important; text-align: left !important; }
+        .rm-full-cta { order: 3 !important; display: block !important; width: 100% !important; box-sizing: border-box !important; text-align: center !important; }
+        .rm-score-grid { flex-wrap: wrap !important; gap: 14px 12px !important; }
+        .rm-score-item { flex: 1 1 40% !important; min-width: 100px !important; }
+
+        /* MonitorMock */
+        .mm-wrap { padding: 22px 18px 24px !important; }
+        .mm-inbox-search { display: none !important; }
+        .mm-inbox-sidebar { display: none !important; }
+        .mm-inbox-tabs { overflow-x: auto !important; }
+        .mm-inbox-tabs > div { flex-shrink: 0 !important; white-space: nowrap !important; }
+        .mm-config-freq { width: 100% !important; flex-shrink: 1 !important; }
+        .mm-freq-label { text-align: left !important; }
+        .mm-freq-pills { flex-wrap: wrap !important; }
+        .mm-mail-check, .mm-mail-star { display: none !important; }
+        .mm-mail-row { gap: 8px !important; padding: 11px 12px !important; }
+        .mm-mail-sender { width: 68px !important; font-size: 11px !important; }
+
+        /* GestaoMock */
+        .gm-wrap { padding: 20px 18px 22px !important; }
+        .gm-step-name { display: none !important; }
+        .gm-actions { flex-wrap: wrap !important; flex-shrink: 1 !important; width: 100% !important; }
+        .gm-body { flex-direction: column !important; gap: 16px !important; }
+        .gm-main-col { flex: 1 1 auto !important; width: 100% !important; }
+        .gm-side-col { width: 100% !important; }
+
+        /* PreparacaoMock */
+        .pm-wrap { padding: 20px 18px 22px !important; }
+        .pm-header { flex-wrap: wrap !important; gap: 10px !important; }
+        .pm-tags { flex-wrap: wrap !important; }
+        .pm-cols { flex-direction: column !important; gap: 24px !important; }
+
+        /* CartaMock */
+        .cm-wrap { flex-direction: column !important; }
+        .cm-sidebar { width: 100% !important; box-sizing: border-box !important; }
+        .cm-content { padding: 22px 18px 26px !important; }
+      }
+    `}</style>
   );
 }

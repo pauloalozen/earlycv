@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { LandingMobileMenu } from "../_landing-mobile-menu";
 import { btnPrimary, FEATURE_PAGES } from "./_shared";
 
 /** Ubuntu-based tokens — matches the main landing (variant-f-v2) exactly. */
@@ -14,6 +15,15 @@ export const SERIF_ITALIC_V2 = "var(--font-instrument-serif), serif";
 function navDropdownLabel(p: (typeof FEATURE_PAGES)[number]) {
   return p.href === "/radar-de-vagas" ? "Radar de Oportunidades" : p.label;
 }
+
+/** Mobile menu panel content — same links as the "Produtos" dropdown plus
+ * the in-page anchors, which point back at the home page since these
+ * marketing pages don't have their own "como funciona"/"faq" sections. */
+const MOBILE_MENU_LINKS = [
+  ...FEATURE_PAGES.map((p) => ({ href: p.href, label: navDropdownLabel(p) })),
+  { href: "/#como-funciona", label: "Como funciona" },
+  { href: "/#faq", label: "Perguntas" },
+];
 
 /**
  * Fixed nav used by the main landing (variant-f-v2) — copied here so the
@@ -51,6 +61,7 @@ export function LandingNavV2({
             gap: 8,
             textDecoration: "none",
             justifySelf: "start",
+            gridColumn: 1,
           }}
         >
           <Logo />
@@ -70,11 +81,13 @@ export function LandingNavV2({
         </Link>
 
         <div
+          className="lp-fv2-nav-links"
           style={{
             display: "flex",
             alignItems: "center",
             gap: 26,
             justifySelf: "center",
+            gridColumn: 2,
           }}
         >
           <div className="lp-fv2-nav-dropdown">
@@ -150,20 +163,27 @@ export function LandingNavV2({
         </div>
 
         <div
+          className="lp-fv2-nav-right"
           style={{
             display: "flex",
             alignItems: "center",
             gap: 26,
             justifySelf: "end",
+            gridColumn: 3,
           }}
         >
           {!isAuthenticated && (
-            <Link href="/entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
+            <Link
+              href="/entrar"
+              className="lp-fv2-nav-entrar"
+              style={{ fontSize: 13, color: "#3a3a38" }}
+            >
               Entrar
             </Link>
           )}
           <Link
             href={isAuthenticated ? "/meu-perfil" : "/entrar?tab=cadastro"}
+            className="lp-fv2-nav-profile"
             style={{
               ...btnPrimary,
               padding: "0 16px",
@@ -174,6 +194,20 @@ export function LandingNavV2({
           >
             {isAuthenticated ? "Meu Perfil" : "Criar conta"}
           </Link>
+          <LandingMobileMenu
+            authState={isAuthenticated ? "authenticated" : "unauthenticated"}
+            links={
+              isAuthenticated
+                ? MOBILE_MENU_LINKS
+                : [...MOBILE_MENU_LINKS, { href: "/entrar", label: "Entrar" }]
+            }
+            ctaAuthenticated={{ href: "/meu-perfil", label: "Meu Perfil" }}
+            ctaUnauthenticated={{
+              href: "/entrar?tab=cadastro",
+              label: "Analisar meu CV grátis",
+            }}
+            panelBackground="#fff"
+          />
         </div>
       </nav>
 
@@ -217,6 +251,11 @@ export function LandingNavV2({
           font-family: ${MONO_V2}; font-size: 10.5px; letter-spacing: 1.2px; font-weight: 500;
           color: #555; background: rgba(10,10,10,0.04); border: 1px solid rgba(10,10,10,0.06);
           padding: 6px 10px; border-radius: 999px;
+        }
+        @media (max-width: 768px) {
+          .lp-fv2-nav-links { display: none !important; }
+          .lp-fv2-nav-entrar { display: none !important; }
+          .lp-fv2-nav-profile { display: none !important; }
         }
       `}</style>
     </>

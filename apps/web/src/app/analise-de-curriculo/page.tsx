@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { getAbsoluteUrl } from "@/lib/site";
-import { AnaliseMock, OtimizacaoMock } from "../_landing/_feature-showcase";
+import {
+  AnaliseMock,
+  MockMobileStyles,
+  OtimizacaoMock,
+} from "../_landing/_feature-showcase";
 import {
   GEIST_V2 as GEIST,
   LandingNavV2,
@@ -49,9 +53,10 @@ export default function AnaliseDeCurriculoPage() {
     >
       <LandingScrollAnimations />
       <LandingNavV2 />
+      <MockMobileStyles />
 
       {/* HERO */}
-      <section style={{ padding: "144px 32px 0" }}>
+      <section className="lp-mkt-section" style={{ padding: "144px 32px 0" }}>
         <div
           style={{
             ...container,
@@ -74,7 +79,7 @@ export default function AnaliseDeCurriculoPage() {
                 flexShrink: 0,
               }}
             />
-            ANÁLISE GRÁTIS · SEM CARTÃO · RESULTADO IMEDIATO
+            ANÁLISE GRÁTIS · RESULTADO IMEDIATO
           </div>
 
           <h1
@@ -197,7 +202,7 @@ export default function AnaliseDeCurriculoPage() {
       </section>
 
       {/* DIAGNÓSTICO DETALHADO */}
-      <section style={{ padding: "100px 32px" }}>
+      <section className="lp-mkt-section" style={{ padding: "100px 32px" }}>
         <div
           className="lp-grid-2"
           style={{
@@ -272,7 +277,7 @@ export default function AnaliseDeCurriculoPage() {
       </section>
 
       {/* OTIMIZAÇÃO DE CV */}
-      <section style={{ padding: "0 32px 100px" }}>
+      <section className="lp-mkt-section" style={{ padding: "0 32px 100px" }}>
         <div
           className="lp-grid-2"
           style={{
@@ -329,7 +334,7 @@ export default function AnaliseDeCurriculoPage() {
       </section>
 
       {/* JORNADA: DA VAGA À ENTREVISTA */}
-      <section style={{ padding: "100px 32px 0" }}>
+      <section className="lp-mkt-section" style={{ padding: "100px 32px 0" }}>
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 720 }}
@@ -391,7 +396,10 @@ export default function AnaliseDeCurriculoPage() {
       </section>
 
       {/* SEM INVENTAR FATOS */}
-      <section style={{ background: "#0a0a0a", padding: "80px 32px" }}>
+      <section
+        className="lp-mkt-section"
+        style={{ background: "#0a0a0a", padding: "80px 32px" }}
+      >
         <div
           className="reveal-card"
           style={{ ...container, maxWidth: 640, textAlign: "center" }}
@@ -421,7 +429,11 @@ export default function AnaliseDeCurriculoPage() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" style={{ padding: "110px 32px" }}>
+      <section
+        id="faq"
+        className="lp-mkt-section"
+        style={{ padding: "110px 32px" }}
+      >
         <div style={{ ...container, maxWidth: 820 }}>
           <div className="reveal-card">
             <div style={{ marginBottom: 10 }}>
@@ -490,7 +502,10 @@ export default function AnaliseDeCurriculoPage() {
       </section>
 
       {/* CTA FINAL */}
-      <section style={{ background: "#0a0a0a", padding: "90px 32px" }}>
+      <section
+        className="lp-mkt-section"
+        style={{ background: "#0a0a0a", padding: "90px 32px" }}
+      >
         <div
           className="reveal-card"
           style={{ ...container, textAlign: "center", maxWidth: 640 }}

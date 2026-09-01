@@ -142,18 +142,49 @@ function DropdownMenu({
   children: React.ReactNode;
   minWidth?: number;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Anchored to the trigger's left edge by default — fine when there's
+  // room, but on narrow screens a trigger sitting in the right half (ex:
+  // SENIORIDADE next to ÁREA in the 2-column mobile row) pushes the menu
+  // past the viewport edge. Flip to right-anchored whenever opening
+  // left-anchored would overflow, measured against the real trigger
+  // position each time it opens (works at any width, not just mobile).
+  const [align, setAlign] = useState<"left" | "right">("left");
+
+  useEffect(() => {
+    const menu = ref.current;
+    const details = menu?.closest("details");
+    const trigger = details?.querySelector("summary");
+    if (!details || !trigger) return;
+    const detailsEl = details;
+    const triggerEl = trigger;
+    function measure() {
+      if (!detailsEl.open) return;
+      const rect = triggerEl.getBoundingClientRect();
+      const overflowsRight = rect.left + minWidth > window.innerWidth - 12;
+      const overflowsLeft = rect.right - minWidth < 12;
+      setAlign(overflowsRight && !overflowsLeft ? "right" : "left");
+    }
+    details.addEventListener("toggle", measure);
+    return () => details.removeEventListener("toggle", measure);
+  }, [minWidth]);
+
   return (
     <div
+      ref={ref}
+      className="vagas-filter-dropdown-menu"
       style={{
         position: "absolute",
         top: "calc(100% + 6px)",
-        left: 0,
+        left: align === "left" ? 0 : "auto",
+        right: align === "right" ? 0 : "auto",
         background: "#fff",
         border: "1px solid rgba(10,10,10,0.1)",
         borderRadius: 10,
         padding: 6,
         zIndex: 20,
         minWidth,
+        maxWidth: "calc(100vw - 24px)",
         maxHeight: 280,
         overflowY: "auto",
         boxShadow: "0 8px 28px rgba(0,0,0,0.1)",
@@ -934,10 +965,27 @@ export function FiltersBar({
       <style>{`
         .vagas-filter-dropdown > summary::-webkit-details-marker { display: none; }
         .vagas-filter-dropdown > summary { -webkit-tap-highlight-color: transparent; }
+        /* A visible (non-overlay) scrollbar on this list isn't just ugly —
+         * WebKit/Blink never clip native scrollbars to border-radius, so it
+         * pokes out past the menu's rounded corner. Hiding it fixes both:
+         * no more scrollbar chrome, no more square corner breaking out of
+         * the rounded box. Scrolling itself (overflow-y: auto) still works. */
+        .vagas-filter-dropdown-menu { scrollbar-width: none; }
+        .vagas-filter-dropdown-menu::-webkit-scrollbar { display: none; }
         .radar-filters-primary { flex-wrap: wrap; }
         .radar-filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         @media (max-width: 640px) {
           .radar-filters-grid { grid-template-columns: repeat(2, 1fr); }
+          /* Row wraps at this width already (pills stack one per line via
+           * .radar-filters-primary) — the row itself needs to wrap too,
+           * otherwise clear/apply stay pinned beside the whole stacked
+           * block, vertically centered and visually disconnected from any
+           * single row. Forcing the actions block to its own full-width
+           * line keeps it directly under "mais filtros" instead. */
+          .radar-filters-row { flex-wrap: wrap !important; row-gap: 8px !important; }
+          .radar-filters-actions { width: 100% !important; justify-content: flex-end !important; }
+          .radar-filters-search { min-width: 100% !important; flex-basis: 100% !important; }
+          .radar-filters-kbd { display: none !important; }
         }
       `}</style>
       {/* Sem overflow:hidden aqui — clipava os menus dos dropdowns (área/
@@ -958,6 +1006,7 @@ export function FiltersBar({
         pra uma segunda linha; quem cede espaço em telas estreitas é o bloco
         de pills (via .radar-filters-primary, que tem seu próprio wrap). */}
         <div
+          className="radar-filters-row"
           style={{
             display: "flex",
             alignItems: "center",
@@ -971,12 +1020,14 @@ export function FiltersBar({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              columnGap: 6,
+              rowGap: 12,
               flex: "1 1 auto",
               minWidth: 0,
             }}
           >
             <div
+              className="radar-filters-search"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1027,6 +1078,7 @@ export function FiltersBar({
                 }}
               />
               <span
+                className="radar-filters-kbd"
                 style={{
                   fontFamily: MONO,
                   fontSize: 10,
@@ -1040,16 +1092,6 @@ export function FiltersBar({
                 ⌘K
               </span>
             </div>
-
-            <div
-              aria-hidden
-              style={{
-                width: 1,
-                alignSelf: "stretch",
-                background: "rgba(10,10,10,0.08)",
-                flexShrink: 0,
-              }}
-            />
 
             {hiddenFilters.includes("area") ? null : (
               <MultiFilterDropdown
@@ -1160,6 +1202,7 @@ export function FiltersBar({
           </div>
 
           <div
+            className="radar-filters-actions"
             style={{
               display: "flex",
               alignItems: "center",
