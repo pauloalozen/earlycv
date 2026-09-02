@@ -66,7 +66,7 @@ function createFixture() {
   };
 
   const entitlementService = {
-    canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+    canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
   };
 
   const worker = new MonitorDigestWorker(
@@ -121,7 +121,7 @@ test("a PENDING digest that sends successfully is marked SENT with providerMessa
   );
   assert.equal(
     fixture.recordedEvents[0]?.metadata.monitor_access_type,
-    "launch_access",
+    "internal_access",
   );
 });
 

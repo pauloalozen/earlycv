@@ -74,3 +74,48 @@ describe("PublicNavBar", () => {
     );
   });
 });
+
+describe("PublicNavBar — Alerta de Vaga Certa link under JOBS_GHOST_MODE", () => {
+  // IS_JOBS_GHOST_MODE é uma constante de módulo (calculada uma vez no
+  // import) — cada cenário precisa de um módulo fresco via
+  // resetModules()/import() dinâmico pra refletir o env var do cenário.
+  const originalWeb = process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
+
+  afterEach(() => {
+    cleanup();
+    if (originalWeb === undefined) {
+      delete process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
+    } else {
+      process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = originalWeb;
+    }
+    vi.resetModules();
+  });
+
+  it("hides the Alerta link from a regular user while ghost mode is on", async () => {
+    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
+    vi.resetModules();
+    const { PublicNavBar: FreshPublicNavBar } = await import(
+      "./public-nav-bar"
+    );
+
+    render(<FreshPublicNavBar userName="Paulo" userRole="none" />);
+
+    expect(
+      screen.queryByRole("link", { name: /Alerta de Vaga Certa/ }),
+    ).toBeNull();
+  });
+
+  it("keeps the Alerta link visible for admin/superadmin while ghost mode is on", async () => {
+    process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
+    vi.resetModules();
+    const { PublicNavBar: FreshPublicNavBar } = await import(
+      "./public-nav-bar"
+    );
+
+    render(<FreshPublicNavBar userName="Paulo" userRole="admin" />);
+
+    expect(
+      screen.getAllByRole("link", { name: /Alerta de Vaga Certa/ }).length,
+    ).toBeGreaterThan(0);
+  });
+});

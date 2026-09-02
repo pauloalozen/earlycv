@@ -6,6 +6,7 @@ import { formatRelativeTime } from "@/app/radar/job-card";
 import { OPPORTUNITY_LEVELS } from "@/app/radar/radar-ui";
 import { trackEvent } from "@/lib/analytics-tracking";
 import { getStatusConfig } from "@/lib/job-application-status";
+import { writeJobNavigationContext } from "@/lib/journey-session";
 import type {
   MonitorRecommendationFeedback,
   MonitorRecommendationFeedbackReason,
@@ -168,6 +169,11 @@ export function MonitorRecommendationCard({
       engagedRef.current = true;
       onViewed(item.recommendationId);
     }
+    const productOrigin = getMonitorProductOrigin();
+    // Sem isso, job_detail_viewed (na página de destino) nunca sabe que a
+    // navegação começou aqui — cai no fallback de previousRoute, que só
+    // reconhece "/radar". Mesmo mecanismo que RadarOpportunityLink já usa.
+    writeJobNavigationContext(item.job.id, productOrigin);
     void trackEvent({
       eventName: "monitor_recommendation_clicked",
       eventVersion: 1,
@@ -177,7 +183,7 @@ export function MonitorRecommendationCard({
         opportunityLevel: item.opportunityLevel,
         digestId: digestId ?? null,
         notificationStatus: notificationStatus ?? null,
-        product_origin: getMonitorProductOrigin(),
+        product_origin: productOrigin,
       },
     });
   }

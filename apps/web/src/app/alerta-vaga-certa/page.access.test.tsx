@@ -4,6 +4,7 @@ import type { AppSessionUser } from "@/lib/app-session";
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn<(path: string) => never>(),
+  notFound: vi.fn<() => never>(),
   getCurrentAppUserFromCookies: vi.fn<() => Promise<AppSessionUser | null>>(),
   getMonitorAccess: vi.fn(),
   listMonitorNotifications: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
+  notFound: mocks.notFound,
 }));
 vi.mock("@/lib/app-session.server", () => ({
   getCurrentAppUserFromCookies: mocks.getCurrentAppUserFromCookies,
@@ -65,6 +67,7 @@ const EMPTY_FEED = {
 describe("/alerta-vaga-certa access — authenticated-only, no guest fallback", () => {
   beforeEach(() => {
     mocks.redirect.mockReset();
+    mocks.notFound.mockReset();
     mocks.getCurrentAppUserFromCookies.mockReset();
     mocks.getMonitorAccess.mockReset();
     mocks.listMonitorNotifications.mockReset();
@@ -75,9 +78,12 @@ describe("/alerta-vaga-certa access — authenticated-only, no guest fallback", 
     mocks.redirect.mockImplementation((path: string) => {
       throw new Error(`REDIRECT:${path}`);
     });
+    mocks.notFound.mockImplementation(() => {
+      throw new Error("NOT_FOUND");
+    });
     mocks.getMonitorAccess.mockResolvedValue({
       allowed: true,
-      reason: "launch_access",
+      reason: "internal_access",
     });
     mocks.listMonitorNotifications.mockResolvedValue(EMPTY_FEED);
     mocks.getMonitorProfile.mockResolvedValue(null);
@@ -91,13 +97,30 @@ describe("/alerta-vaga-certa access — authenticated-only, no guest fallback", 
     await expect(MonitorPage()).rejects.toThrow("REDIRECT:/entrar");
   });
 
-  it("allows a regular authenticated user", async () => {
+  it("allows a regular authenticated user (entitlement already resolved allowed=true upstream)", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
 
     const result = await MonitorPage();
 
     expect(result).toBeDefined();
     expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.notFound).not.toHaveBeenCalled();
+  });
+
+  it("allows an admin during ghost mode (allowed=true, reason=internal_access)", async () => {
+    mocks.getCurrentAppUserFromCookies.mockResolvedValue(
+      buildUser({ internalRole: "admin", isStaff: true }),
+    );
+    mocks.getMonitorAccess.mockResolvedValue({
+      allowed: true,
+      reason: "internal_access",
+    });
+
+    const result = await MonitorPage();
+
+    expect(result).toBeDefined();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
   it("fetches the notifications feed with the default page/limit", async () => {
@@ -109,15 +132,16 @@ describe("/alerta-vaga-certa access — authenticated-only, no guest fallback", 
     expect(mocks.listMonitorNotifications).toHaveBeenCalledWith(1, 10);
   });
 
-  it("redirects an authenticated user without entitlement, without ever fetching notifications", async () => {
+  it("renders a real 404 (never a redirect) for an authenticated user without entitlement, without ever fetching notifications", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
     mocks.getMonitorAccess.mockResolvedValue({
       allowed: false,
       reason: "none",
     });
 
-    await expect(MonitorPage()).rejects.toThrow(/^REDIRECT:/);
+    await expect(MonitorPage()).rejects.toThrow("NOT_FOUND");
 
+    expect(mocks.redirect).not.toHaveBeenCalled();
     expect(mocks.listMonitorNotifications).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,10 @@ import {
   LEARN_MENU_ITEMS,
 } from "@/components/app-header-user-menu";
 import type { AppInternalRole } from "@/lib/app-session";
-import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
+import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
 import { Logo } from "./logo";
 import { MonitorNavBadge } from "./monitor-nav-badge";
 
@@ -35,6 +38,14 @@ export function PublicNavBar({
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuItems = buildUserMenuItems({ userRole });
+  // Diferente do link do Radar (sempre some com ghost mode, sem exceção —
+  // Radar não tem bloqueio real de rota, é só cosmético): o Alerta tem
+  // bloqueio real via MonitorEntitlementService, e admin/superadmin
+  // precisam continuar vendo o link pra validar o fluxo em produção
+  // durante o ghost mode.
+  const hideAlertaLink =
+    (IS_JOBS_GHOST_MODE && !canAccessJobsInGhostMode(userRole)) ||
+    hideJobsLink;
   const bg = dark ? "#0a0a0a" : "transparent";
   const borderColor = dark ? "rgba(250,250,246,0.06)" : "rgba(0,0,0,0.04)";
   const linkColor = dark ? "#a0a098" : "#3a3a38";
@@ -165,7 +176,7 @@ export function PublicNavBar({
               Radar de Oportunidades
             </Link>
           )}
-          {IS_JOBS_GHOST_MODE || hideJobsLink || !userName ? null : (
+          {hideAlertaLink || !userName ? null : (
             <Link
               href="/alerta-vaga-certa"
               style={{
@@ -286,7 +297,7 @@ export function PublicNavBar({
             Radar de Oportunidades
           </Link>
         )}
-        {IS_JOBS_GHOST_MODE || hideJobsLink || !userName ? null : (
+        {hideAlertaLink || !userName ? null : (
           <Link
             href="/alerta-vaga-certa"
             onClick={() => setIsMenuOpen(false)}

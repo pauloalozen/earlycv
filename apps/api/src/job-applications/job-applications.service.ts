@@ -28,6 +28,11 @@ type UpsertFromAdaptationInput = {
   targetStatus: JobApplicationStatus;
   origin: JobApplicationOrigin;
   radarJobId?: string | null;
+  // product_origin real da navegação até a vaga (radar/monitor/
+  // monitor_email) — ver CvAdaptationService.JobApplicationHookInput.
+  // undefined quando o caller não tem esse contexto; nesse caso o fallback
+  // é "radar" se houver radarJobId, senão "direct".
+  radarJobOrigin?: "radar" | "monitor" | "monitor_email" | null;
   // Contexto de jornada da análise que originou esta candidatura automática
   // (ver CvAdaptationService.triggerJobApplicationHook) — undefined quando
   // o caller não tinha o contexto disponível, nunca inventado.
@@ -1059,6 +1064,7 @@ export class JobApplicationsService {
       targetStatus,
       origin,
       radarJobId,
+      radarJobOrigin,
       visitorId,
       journeySessionInternalId,
     } = input;
@@ -1255,7 +1261,12 @@ export class JobApplicationsService {
             origin,
             has_job_description: Boolean(jobDescriptionText),
             has_cv_adaptation: true,
-            product_origin: radarJobId ? "radar" : "analysis",
+            // Mesmo valor resolvido em analysis_started/completed (via
+            // radarJobOrigin) — antes este campo usava "analysis" pro caso
+            // sem radarJobId, enquanto analysis_started/completed usava
+            // "direct" pro mesmo caso, quebrando funis que filtram por um
+            // valor só. Unificado em "direct" nos dois.
+            product_origin: radarJobOrigin ?? (radarJobId ? "radar" : "direct"),
           },
           {
             idempotencyKey: `candidatura_created:${created.id}`,

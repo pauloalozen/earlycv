@@ -99,12 +99,13 @@ const EMPTY_FEED: MonitorFeed = {
 
 // Único ponto que o frontend deve consultar pra saber se o usuário tem
 // acesso ao Meu Monitor — NENHUM outro componente deve inspecionar
-// plano/assinatura diretamente. Hoje a política de lançamento sempre
-// libera (allowed=true); "reason" existe desde já pra permitir, no
-// futuro, diferenciar gratuito/trial/assinante/promocional/bloqueado sem
-// mudar o contrato — ver MonitorEntitlementService no backend.
+// plano/assinatura diretamente. Fase de ghost mode: allowed=true só para
+// internalRole admin/superadmin enquanto JOBS_GHOST_MODE está ligado no
+// backend; "reason" existe desde já pra permitir, no futuro, diferenciar
+// gratuito/trial/assinante/promocional/bloqueado sem mudar o contrato —
+// ver MonitorEntitlementService no backend.
 export type MonitorAccessReason =
-  | "launch_access"
+  | "internal_access"
   | "manual_override"
   | "trial"
   | "active_subscription"

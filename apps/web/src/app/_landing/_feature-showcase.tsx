@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import {
   BrowserChrome,
   browserFrame,
@@ -1890,21 +1891,23 @@ export function MonitorMock() {
         </div>
       </div>
 
-      <Link
-        href="/alerta-vaga-certa"
-        style={{
-          display: "inline-block",
-          marginTop: 18,
-          fontSize: 13,
-          fontWeight: 500,
-          color: "#0a0a0a",
-          textDecoration: "underline",
-          textDecorationColor: "rgba(10,10,10,0.25)",
-          textUnderlineOffset: 4,
-        }}
-      >
-        Ativar meu Alerta de Vaga Certa →
-      </Link>
+      {isJobsGhostModeEnabled() ? null : (
+        <Link
+          href="/alerta-vaga-certa"
+          style={{
+            display: "inline-block",
+            marginTop: 18,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#0a0a0a",
+            textDecoration: "underline",
+            textDecorationColor: "rgba(10,10,10,0.25)",
+            textUnderlineOffset: 4,
+          }}
+        >
+          Ativar meu Alerta de Vaga Certa →
+        </Link>
+      )}
     </div>
   );
 }

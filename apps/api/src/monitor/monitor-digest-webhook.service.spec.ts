@@ -76,7 +76,7 @@ function createFixture() {
   };
 
   const entitlementService = {
-    canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+    canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
   };
 
   const service = new MonitorDigestWebhookService(

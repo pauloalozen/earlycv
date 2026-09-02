@@ -6,10 +6,20 @@ import type { MonitorRecommendationItem } from "@/lib/monitor-api";
 
 const mocks = vi.hoisted(() => ({
   trackEvent: vi.fn(),
+  writeJobNavigationContext: vi.fn(),
+  getMonitorProductOrigin: vi.fn(
+    (): "monitor" | "monitor_email" => "monitor",
+  ),
 }));
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: mocks.trackEvent,
+}));
+vi.mock("@/lib/journey-session", () => ({
+  writeJobNavigationContext: mocks.writeJobNavigationContext,
+}));
+vi.mock("./monitor-attribution", () => ({
+  getMonitorProductOrigin: mocks.getMonitorProductOrigin,
 }));
 
 import { MonitorRecommendationCard } from "./monitor-recommendation-card";
@@ -64,6 +74,9 @@ describe("MonitorRecommendationCard", () => {
   beforeEach(() => {
     mocks.trackEvent.mockReset();
     mocks.trackEvent.mockResolvedValue(undefined);
+    mocks.writeJobNavigationContext.mockReset();
+    mocks.getMonitorProductOrigin.mockReset();
+    mocks.getMonitorProductOrigin.mockReturnValue("monitor");
   });
 
   afterEach(() => cleanup());
@@ -139,6 +152,25 @@ describe("MonitorRecommendationCard", () => {
     expect(mocks.trackEvent).toHaveBeenCalledTimes(1);
     expect(mocks.trackEvent.mock.calls[0][0].eventName).toBe(
       "monitor_recommendation_clicked",
+    );
+  });
+
+  it("writes the job navigation context marker (with the resolved product_origin) before the destination page mounts", () => {
+    mocks.getMonitorProductOrigin.mockReturnValue("monitor_email");
+    render(
+      <MonitorRecommendationCard
+        item={buildItem()}
+        onViewed={vi.fn()}
+        onDismiss={vi.fn()}
+        onFeedback={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Engenheiro de Dados"));
+
+    expect(mocks.writeJobNavigationContext).toHaveBeenCalledWith(
+      "job-1",
+      "monitor_email",
     );
   });
 

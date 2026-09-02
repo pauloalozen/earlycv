@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { resolveJobProductOrigin } from "@/lib/journey-session";
 import { saveJob, unsaveJob } from "@/lib/saved-jobs-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -99,7 +100,12 @@ export function SaveJobBtn({
   );
 }
 
-// Botão texto+ícone, usado no card de candidatura em /radar/[slug].
+// Botão texto+ícone, usado no card de candidatura em /radar/[slug]. Único
+// lugar que resolve origin=MONITOR de verdade — a página de detalhe é o
+// destino tanto de um clique no Radar quanto de um clique numa
+// recomendação do Alerta, então a origem real precisa vir da mesma
+// resolução usada por JobDetailViewTracker (resolveJobProductOrigin),
+// nunca assumir "RADAR" incondicionalmente.
 export function SaveJobTextBtn({
   jobId,
   initialSaved = false,
@@ -109,10 +115,17 @@ export function SaveJobTextBtn({
   initialSaved?: boolean;
   isLoggedIn?: boolean;
 }) {
+  const [origin] = useState<"RADAR" | "MONITOR">(() => {
+    const productOrigin = resolveJobProductOrigin(jobId);
+    return productOrigin === "monitor" || productOrigin === "monitor_email"
+      ? "MONITOR"
+      : "RADAR";
+  });
   const { saved, pending, toggle } = useSaveJobToggle({
     jobId,
     initialSaved,
     isLoggedIn,
+    origin,
   });
 
   return (

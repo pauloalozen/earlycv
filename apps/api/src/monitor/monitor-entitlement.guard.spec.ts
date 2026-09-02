@@ -14,7 +14,7 @@ function buildContext(user: { id: string } | undefined) {
 
 test("allows the request through when the entitlement service allows access", async () => {
   const entitlementService = {
-    canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+    canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
   };
   const guard = new MonitorEntitlementGuard(entitlementService as never);
 
@@ -37,7 +37,7 @@ test("throws ForbiddenException when the entitlement service denies access", asy
 
 test("throws ForbiddenException when there is no authenticated user on the request (defensive — JwtAuthGuard should have already blocked this)", async () => {
   const entitlementService = {
-    canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+    canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
   };
   const guard = new MonitorEntitlementGuard(entitlementService as never);
 
@@ -52,7 +52,7 @@ test("checks entitlement using the authenticated user's id, never a value from t
   const entitlementService = {
     canUseMonitor: async (userId: string) => {
       checkedUserId = userId;
-      return { allowed: true, reason: "launch_access" };
+      return { allowed: true, reason: "internal_access" };
     },
   };
   const guard = new MonitorEntitlementGuard(entitlementService as never);

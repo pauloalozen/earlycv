@@ -62,6 +62,11 @@ export function AnalyzeCardBtn({
       const result = await analyzeMasterCvForJob({
         masterResumeId: masterResumeId as string,
         radarJobId,
+        // Este botão só existe na listagem do Radar (/radar, /vagas-salvas)
+        // — nunca no card de recomendação do Alerta, que tem seu próprio
+        // link (monitor-recommendation-card.tsx) direto pro detalhe da
+        // vaga, sem análise inline.
+        radarJobOrigin: "radar",
         jobDescriptionText,
         turnstileToken,
       });

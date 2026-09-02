@@ -80,6 +80,12 @@ type JobApplicationHookInput = {
   origin: JobApplicationOrigin;
   callerMethod: string;
   radarJobId?: string | null;
+  // product_origin real da navegação até a vaga (radar/monitor/
+  // monitor_email), quando disponível — ver AnalyzeCvDto.radarJobOrigin /
+  // SaveGuestPreviewDto.radarJobOrigin. undefined quando o caller não tem
+  // esse contexto (ex.: claimGuest, unlockCv — não vêm de uma vaga do
+  // Radar/Alerta).
+  radarJobOrigin?: "radar" | "monitor" | "monitor_email" | null;
   // Contexto de jornada da análise que originou esta candidatura automática
   // (quando disponível no caller — ex.: claimGuest/saveGuestPreview rodam
   // dentro do request original e têm analysisContext em mãos). Nunca
@@ -265,6 +271,7 @@ export class CvAdaptationService {
         targetStatus: input.targetStatus,
         origin: input.origin,
         radarJobId: input.radarJobId,
+        radarJobOrigin: input.radarJobOrigin,
         visitorId: input.visitorId,
         journeySessionInternalId: input.journeySessionInternalId,
       });
@@ -1173,7 +1180,12 @@ export class CvAdaptationService {
         ),
         mode: "authenticated",
         cvSource: file ? "upload" : "master_cv",
-        productOrigin: dto.radarJobId ? "radar" : "direct",
+        // dto.radarJobOrigin (resolveJobProductOrigin no client) é a
+        // origem real quando a análise veio do fluxo de 1 clique em
+        // /radar/[slug] — pode ser "monitor"/"monitor_email" quando a vaga
+        // foi descoberta pelo Alerta, não só "radar". Sem o campo
+        // (chamadas antigas, ou fora desse fluxo), cai no fallback anterior.
+        productOrigin: dto.radarJobOrigin ?? (dto.radarJobId ? "radar" : "direct"),
       },
       {
         jobTitle: resolved.radarJobTitle,
@@ -2466,6 +2478,7 @@ export class CvAdaptationService {
         origin: "analysis_auto",
         callerMethod: "saveGuestPreview(existing)",
         radarJobId: dto.radarJobId,
+        radarJobOrigin: dto.radarJobOrigin,
         visitorId: analysisContext?.visitorId,
         journeySessionInternalId: analysisContext?.journeySessionInternalId,
       });
@@ -2532,6 +2545,7 @@ export class CvAdaptationService {
       origin: "analysis_auto",
       callerMethod: "saveGuestPreview",
       radarJobId: dto.radarJobId,
+      radarJobOrigin: dto.radarJobOrigin,
       visitorId: analysisContext?.visitorId,
       journeySessionInternalId: analysisContext?.journeySessionInternalId,
     });

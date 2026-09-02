@@ -16,7 +16,7 @@ const MonitorRecommendationsServiceCtor =
   ) => MonitorRecommendationsService;
 
 const ALLOW_ENTITLEMENT = {
-  canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+  canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
 };
 
 const NO_SAVED_JOBS = { listSavedJobIds: async () => new Set<string>() };

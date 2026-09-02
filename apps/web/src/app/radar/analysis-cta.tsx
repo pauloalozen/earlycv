@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useState } from "react";
 import { analyzeMasterCvForJob } from "@/lib/analyze-master-cv-flow";
+import { resolveJobProductOrigin } from "@/lib/journey-session";
 import { useTurnstileToken } from "@/lib/use-turnstile-token";
 import { AnalyzingOverlay } from "./analyzing-overlay";
 import { scoreTier } from "./radar-ui";
@@ -108,9 +109,18 @@ export function AnalysisCtaButtons({
     setError(null);
     try {
       const turnstileToken = await requestTurnstileToken();
+      const resolvedOrigin = resolveJobProductOrigin(radarJobId);
       const result = await analyzeMasterCvForJob({
         masterResumeId,
         radarJobId,
+        // Mesma resolução usada por JobDetailViewTracker/SaveJobTextBtn
+        // nesta mesma página — "seo_job"/"direct" (sem marcador de clique
+        // nem previousRoute reconhecido) cai pra "radar", que já era o
+        // comportamento assumido antes desta origem existir.
+        radarJobOrigin:
+          resolvedOrigin === "monitor" || resolvedOrigin === "monitor_email"
+            ? resolvedOrigin
+            : "radar",
         jobDescriptionText,
         turnstileToken,
       });

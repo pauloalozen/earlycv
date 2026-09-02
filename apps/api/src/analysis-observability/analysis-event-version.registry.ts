@@ -100,6 +100,7 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   monitor_recommendation_dismissed: 1,
   monitor_recommendation_feedback: 1,
   monitor_application_started: 1,
+  monitor_alert_frequency_changed: 1,
   // Meu Monitor — digest por e-mail (Fase 3)
   monitor_digest_sent: 1,
   monitor_digest_delivered: 1,

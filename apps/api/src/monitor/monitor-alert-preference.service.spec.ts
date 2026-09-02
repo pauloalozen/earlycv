@@ -27,7 +27,7 @@ const NOOP_FUNNEL_EVENTS = {
 };
 
 const ALLOW_ENTITLEMENT = {
-  canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+  canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
 };
 
 function createFixture() {
@@ -132,6 +132,96 @@ test("update only touches the fields provided", async () => {
   assert.equal(updated.emailEnabled, true);
 });
 
+function createFunnelEventsCapture() {
+  const recordedEvents: string[] = [];
+  const recordedMetadata: Record<string, unknown>[] = [];
+  const funnelEvents = {
+    record: async (input: {
+      eventName: string;
+      metadata?: Record<string, unknown>;
+    }) => {
+      recordedEvents.push(input.eventName);
+      recordedMetadata.push(input.metadata ?? {});
+      return { event: null, ingested: true };
+    },
+  };
+  return { funnelEvents, recordedEvents, recordedMetadata };
+}
+
+test("update records monitor_alert_frequency_changed with previous/new frequency when frequency actually changes", async () => {
+  const { db } = createFixture();
+  const { funnelEvents, recordedEvents, recordedMetadata } =
+    createFunnelEventsCapture();
+  const service = new MonitorAlertPreferenceServiceCtor(
+    db,
+    funnelEvents,
+    ALLOW_ENTITLEMENT,
+  );
+  await service.getOrCreate("user-1");
+
+  await service.update("user-1", { frequency: "WEEKLY" as never });
+
+  assert.deepEqual(recordedEvents, ["monitor_alert_frequency_changed"]);
+  assert.equal(recordedMetadata[0]?.previous_frequency, "DAILY");
+  assert.equal(recordedMetadata[0]?.new_frequency, "WEEKLY");
+  assert.equal(recordedMetadata[0]?.product_origin, "monitor");
+  assert.equal(recordedMetadata[0]?.monitor_access_type, "internal_access");
+});
+
+test("update covers every transition direction, including into and out of OFF", async () => {
+  const { db } = createFixture();
+  const { funnelEvents, recordedMetadata } = createFunnelEventsCapture();
+  const service = new MonitorAlertPreferenceServiceCtor(
+    db,
+    funnelEvents,
+    ALLOW_ENTITLEMENT,
+  );
+  await service.getOrCreate("user-1");
+
+  await service.update("user-1", { frequency: "OFF" as never });
+  await service.update("user-1", { frequency: "DAILY" as never });
+  await service.update("user-1", { frequency: "WEEKLY" as never });
+
+  assert.deepEqual(
+    recordedMetadata.map((m) => [m.previous_frequency, m.new_frequency]),
+    [
+      ["DAILY", "OFF"],
+      ["OFF", "DAILY"],
+      ["DAILY", "WEEKLY"],
+    ],
+  );
+});
+
+test("update does not record monitor_alert_frequency_changed when only emailEnabled changes, without frequency", async () => {
+  const { db } = createFixture();
+  const { funnelEvents, recordedEvents } = createFunnelEventsCapture();
+  const service = new MonitorAlertPreferenceServiceCtor(
+    db,
+    funnelEvents,
+    ALLOW_ENTITLEMENT,
+  );
+  await service.getOrCreate("user-1");
+
+  await service.update("user-1", { emailEnabled: false });
+
+  assert.deepEqual(recordedEvents, []);
+});
+
+test("update does not record monitor_alert_frequency_changed when frequency is sent but unchanged", async () => {
+  const { db } = createFixture();
+  const { funnelEvents, recordedEvents } = createFunnelEventsCapture();
+  const service = new MonitorAlertPreferenceServiceCtor(
+    db,
+    funnelEvents,
+    ALLOW_ENTITLEMENT,
+  );
+  await service.getOrCreate("user-1");
+
+  await service.update("user-1", { frequency: "DAILY" as never });
+
+  assert.deepEqual(recordedEvents, []);
+});
+
 test("unsubscribeByToken disables email, sets unsubscribedAt, and records monitor_digest_unsubscribed", async () => {
   const { db } = createFixture();
   const recordedEvents: string[] = [];
@@ -159,7 +249,7 @@ test("unsubscribeByToken disables email, sets unsubscribedAt, and records monito
   assert.equal(updated?.emailEnabled, false);
   assert.ok(updated?.unsubscribedAt instanceof Date);
   assert.deepEqual(recordedEvents, ["monitor_digest_unsubscribed"]);
-  assert.equal(recordedMetadata[0]?.monitor_access_type, "launch_access");
+  assert.equal(recordedMetadata[0]?.monitor_access_type, "internal_access");
 });
 
 test("unsubscribeByToken never touches frequency, only the emailEnabled switch", async () => {

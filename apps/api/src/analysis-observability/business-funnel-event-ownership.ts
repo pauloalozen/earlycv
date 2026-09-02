@@ -85,6 +85,11 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   monitor_recommendation_dismissed: "backend",
   monitor_recommendation_feedback: "backend",
   monitor_application_started: "frontend",
+  // Alteração de frequência (DAILY/WEEKLY/OFF, em qualquer direção) —
+  // backend-owned porque a mutação real acontece no endpoint (ver
+  // MonitorAlertPreferenceService.update); nunca confundir com
+  // monitor_digest_unsubscribed, que é exclusivo do fluxo de e-mail/token.
+  monitor_alert_frequency_changed: "backend",
   // Digest por e-mail (Fase 3) — sent/unsubscribed são ações que só o
   // backend consegue afirmar de verdade (o e-mail foi de fato mandado /
   // o unsubscribe foi processado). delivered/opened/clicked/bounced/

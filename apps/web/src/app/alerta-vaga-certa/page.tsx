@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import {
   getDefaultAppRedirectPath,
@@ -35,13 +35,13 @@ export default async function MonitorPage() {
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
   // Único lugar do frontend que lê entitlement do Alerta de Vaga Certa —
-  // hoje a política de lançamento sempre libera, então isso nunca
-  // redireciona na prática. Quando virar feature de assinatura, o bloqueio
-  // passa a acontecer só aqui (ex.: renderizar uma tela de upgrade em vez
-  // de redirecionar), sem precisar espalhar checks de plano por
-  // MonitorView/componentes filhos.
+  // fase de ghost mode: sem acesso, a rota precisa se comportar como se
+  // não existisse (404 real, nunca redirect pra login/home nem tela de
+  // "em breve" — ver MonitorEntitlementService no backend, fonte única
+  // desta decisão). Nunca espalhar este check por MonitorView/componentes
+  // filhos.
   const access = await getMonitorAccess();
-  if (!access.allowed) redirect(getDefaultAppRedirectPath(user));
+  if (!access.allowed) notFound();
 
   const [profile, alertPreference, plan, notifications] = await Promise.all([
     getMonitorProfile(),

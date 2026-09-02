@@ -67,6 +67,7 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   monitor_recommendation_dismissed: "monitor_recommendation_dismissed",
   monitor_recommendation_feedback: "monitor_recommendation_feedback",
   monitor_application_started: "monitor_application_started",
+  monitor_alert_frequency_changed: "monitor_alert_frequency_changed",
   monitor_digest_sent: "monitor_digest_sent",
   monitor_digest_delivered: "monitor_digest_delivered",
   monitor_digest_opened: "monitor_digest_opened",

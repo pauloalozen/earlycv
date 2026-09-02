@@ -39,9 +39,9 @@ export class MonitorAlertPreferenceService {
     userId: string,
     input: { emailEnabled?: boolean; frequency?: MonitorDigestFrequency },
   ) {
-    await this.getOrCreate(userId);
+    const previous = await this.getOrCreate(userId);
 
-    return this.database.monitorAlertPreference.update({
+    const updated = await this.database.monitorAlertPreference.update({
       where: { userId },
       data: {
         ...(input.emailEnabled !== undefined
@@ -52,6 +52,61 @@ export class MonitorAlertPreferenceService {
           : {}),
       },
     });
+
+    // Cobre DAILY<->WEEKLY<->OFF nas duas direções — é a mesma comparação
+    // de enum pra qualquer transição. Nunca dispara se só emailEnabled
+    // mudou sem frequency junto (ex.: unsubscribe por token não passa por
+    // aqui — ver recordUnsubscribed — e não deve ser confundido com isto).
+    if (
+      input.frequency !== undefined &&
+      input.frequency !== previous.frequency
+    ) {
+      await this.recordFrequencyChanged(
+        userId,
+        previous.frequency,
+        updated.frequency,
+      );
+    }
+
+    return updated;
+  }
+
+  private async recordFrequencyChanged(
+    userId: string,
+    previousFrequency: MonitorDigestFrequency,
+    newFrequency: MonitorDigestFrequency,
+  ) {
+    const { reason: accessType } =
+      await this.entitlementService.canUseMonitor(userId);
+    await this.funnelEvents
+      .record(
+        {
+          eventName: "monitor_alert_frequency_changed",
+          eventVersion: 1,
+          metadata: {
+            previous_frequency: previousFrequency,
+            new_frequency: newFrequency,
+            product_origin: "monitor",
+            monitor_access_type: accessType,
+          },
+        },
+        {
+          correlationId: `monitor-frequency:${userId}:${Date.now()}`,
+          ip: null,
+          requestId: `monitor-frequency:${userId}:${Date.now()}`,
+          routePath: "/api/monitor/alert-preferences",
+          sessionInternalId: null,
+          sessionPublicToken: null,
+          userAgentHash: null,
+          userId,
+        },
+        "backend",
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `[monitor] failed to record monitor_alert_frequency_changed: ${err}`,
+        );
+      });
   }
 
   // SÓ verifica — nunca muta nada. Usado pelo GET /monitor/unsubscribe

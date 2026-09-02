@@ -33,6 +33,16 @@ export class AnalyzeCvDto {
   @IsString()
   radarJobId?: string;
 
+  // product_origin real da navegação que levou até este job (resolvido no
+  // client por resolveJobProductOrigin — journey-session.ts), enviado só
+  // no fluxo de 1 clique a partir de /radar/[slug]. Quando ausente, o
+  // service cai no fallback antigo (radarJobId presente -> "radar", senão
+  // "direct") — nunca assumir "radar" incondicionalmente quando radarJobId
+  // existe, já que a vaga pode ter sido descoberta pelo Alerta.
+  @IsOptional()
+  @IsIn(["radar", "monitor", "monitor_email"])
+  radarJobOrigin?: "radar" | "monitor" | "monitor_email";
+
   @IsOptional()
   @IsString()
   @MaxLength(20000)

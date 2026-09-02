@@ -11,7 +11,7 @@ const MonitorProfileMatchServiceCtor =
   ) => MonitorProfileMatchService;
 
 const ALLOW_ENTITLEMENT = {
-  canUseMonitor: async () => ({ allowed: true, reason: "launch_access" }),
+  canUseMonitor: async () => ({ allowed: true, reason: "internal_access" }),
 };
 const DENY_ENTITLEMENT = {
   canUseMonitor: async () => ({ allowed: false, reason: "none" }),

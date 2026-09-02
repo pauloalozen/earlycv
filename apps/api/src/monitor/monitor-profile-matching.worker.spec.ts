@@ -249,7 +249,7 @@ function createFixture() {
   const entitlementService = {
     canUseMonitor: async () => ({
       allowed: entitled,
-      reason: entitled ? "launch_access" : "none",
+      reason: entitled ? "internal_access" : "none",
     }),
   };
 

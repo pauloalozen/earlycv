@@ -5276,6 +5276,149 @@ test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId i
   assert.equal(started?.metadata?.product_origin, "radar");
 });
 
+test("startAuthenticatedAnalysisJob resolves product_origin from dto.radarJobOrigin (monitor/monitor_email) instead of always assuming radar when radarJobId is present", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => ({ rawText: "CV base do usuario" }) },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-monitor-1" }) },
+      analysisJob: {
+        create: async () => ({ id: "job-monitor-1" }),
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+      job: {
+        findUnique: async () => ({
+          id: "job-radar-monitor-1",
+          status: "active",
+          title: "Analista de Dados",
+          descriptionClean: "descricao antiga, nao usada aqui",
+          company: { name: "Empresa Real" },
+        }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-monitor-1",
+        result: {
+          adaptedContentJson: { vaga: {} },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+    undefined, // storage
+    undefined, // analysisTelemetry
+    undefined, // jobApplicationsService
+    undefined, // profileMergeService
+    undefined, // profileReadinessService
+    undefined, // jobCanonicalizationService
+    undefined, // jobRequirementSetsService
+    undefined, // talentProfileCapture
+    undefined, // masterCvCanonicalExtractionService
+    funnelEvents,
+  );
+
+  await service.startAuthenticatedAnalysisJob("user-monitor-1", {
+    ...makeAnalyzeDto(),
+    radarJobId: "job-radar-monitor-1",
+    radarJobOrigin: "monitor_email",
+  });
+
+  await sleep(20);
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  const completed = calls.find((c) => c.eventName === "analysis_completed");
+  assert.equal(started?.metadata?.product_origin, "monitor_email");
+  assert.equal(completed?.metadata?.product_origin, "monitor_email");
+});
+
+test("startAuthenticatedAnalysisJob falls back to radar when radarJobId is present but dto.radarJobOrigin is not sent (older/non-radar callers)", async () => {
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => ({ rawText: "CV base do usuario" }) },
+      analysisCvSnapshot: { create: async () => ({ id: "snapshot-monitor-2" }) },
+      analysisJob: {
+        create: async () => ({ id: "job-monitor-2" }),
+        update: async (args: { data: Record<string, unknown> }) => args,
+      },
+      job: {
+        findUnique: async () => ({
+          id: "job-radar-monitor-2",
+          status: "active",
+          title: "Analista de Dados",
+          descriptionClean: "descricao antiga, nao usada aqui",
+          company: { name: "Empresa Real" },
+        }),
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-monitor-2",
+        result: {
+          adaptedContentJson: { vaga: {} },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    funnelEvents,
+  );
+
+  await service.startAuthenticatedAnalysisJob("user-monitor-2", {
+    ...makeAnalyzeDto(),
+    radarJobId: "job-radar-monitor-2",
+  });
+
+  await sleep(20);
+
+  const started = calls.find((c) => c.eventName === "analysis_started");
+  assert.equal(started?.metadata?.product_origin, "radar");
+});
+
 // Fase 1 do gate de autenticação (guestPossessionToken): jobId (cuid)
 // identifica a análise, mas nunca deve autenticar posse dela sozinho — só
 // quem recebeu o token cru na resposta de analyze-guest consegue provar

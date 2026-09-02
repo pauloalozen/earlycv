@@ -82,7 +82,7 @@ async function main() {
     const emailService = new MonitorDigestEmailService(
       database,
       new FakeEmailDeliveryService(),
-      new MonitorEntitlementService(),
+      new MonitorEntitlementService(database),
     );
     const result = await emailService.sendDigest(digest.id);
     console.log("[trigger-monitor-digest] resultado do envio:", result);

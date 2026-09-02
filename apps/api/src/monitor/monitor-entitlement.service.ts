@@ -1,14 +1,24 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
+
+import { DatabaseService } from "../database/database.service";
+import { isJobsGhostModeEnabled } from "../common/jobs-ghost-mode";
 
 // Ponto único de decisão "este usuário pode usar o Meu Monitor" — todo
 // endpoint/worker do Monitor consulta ESTE serviço, nunca inspeciona
-// User.planType/PlanPurchase/etc diretamente (isso seria espalhar checks
-// de plano pelo código, o que a spec da Fase 3.1 pede explicitamente pra
-// evitar). Hoje a política é "liberado pra todo usuário autenticado"
-// (lançamento) — quando existir monetização de verdade, a troca acontece
-// SÓ aqui dentro (ex.: checar User.planType, uma tabela de assinatura, um
-// trial, ou uma tabela de override manual), sem tocar nenhum call site,
-// que só olha `.allowed`.
+// User.planType/PlanPurchase/internalRole/etc diretamente (isso seria
+// espalhar checks de acesso pelo código, o que a spec da Fase 3.1 pede
+// explicitamente pra evitar).
+//
+// Fase de lançamento ghost mode: enquanto JOBS_GHOST_MODE=true (env do
+// serviço @earlycv/api no Railway — fonte de verdade do gate real, a
+// cópia do mesmo nome na Vercel só controla visibilidade de menu), só
+// internalRole admin/superadmin passam — é como o time valida o fluxo
+// completo (matching, digest, e-mail, clique, análise, candidatura) em
+// produção sem expor a feature à base. Com JOBS_GHOST_MODE=false, resolve
+// fechado (allowed:false) pra quem não é staff — ainda NÃO existe regra
+// comercial real (trial/plano/concessão administrativa); quando existir,
+// a troca acontece SÓ aqui dentro, sem tocar nenhum call site, que só olha
+// `.allowed`.
 //
 // Perder entitlement no futuro NUNCA apaga UserJobRecommendation,
 // MonitorDigest ou qualquer histórico — os call sites só usam isto pra
@@ -17,7 +27,7 @@ import { Injectable } from "@nestjs/common";
 // (ex.: GET /monitor com o guard aplicado deixaria de responder, mas as
 // linhas no banco não são tocadas).
 export type MonitorEntitlementReason =
-  | "launch_access"
+  | "internal_access"
   | "manual_override"
   | "trial"
   | "active_subscription"
@@ -28,25 +38,45 @@ export type MonitorEntitlementResult = {
   reason: MonitorEntitlementReason;
 };
 
+const INTERNAL_ROLES = new Set(["admin", "superadmin"]);
+
 @Injectable()
 export class MonitorEntitlementService {
-  async canUseMonitor(_userId: string): Promise<MonitorEntitlementResult> {
-    // Política do lançamento: sem cobrança, sem trial, sem override —
-    // todo usuário autenticado tem acesso. `_userId` já está na
-    // assinatura do método (não usado hoje) para que a implementação
-    // futura (ex.: `this.database.user.findUnique(...)`,
-    // `this.database.planPurchase.findFirst(...)`) não precise mudar a
-    // assinatura nem os call sites.
-    return { allowed: true, reason: "launch_access" };
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+  ) {}
+
+  async canUseMonitor(userId: string): Promise<MonitorEntitlementResult> {
+    if (!isJobsGhostModeEnabled()) {
+      // Sem regra comercial real ainda — default fechado, de propósito
+      // (nunca "liberado enquanto não decidimos", ver comentário acima).
+      return { allowed: false, reason: "none" };
+    }
+
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { internalRole: true },
+    });
+
+    const allowed = Boolean(user && INTERNAL_ROLES.has(user.internalRole));
+    return { allowed, reason: allowed ? "internal_access" : "none" };
   }
 
   // Variante em lote — usada onde N usuários precisam ser filtrados de
   // uma vez (ex.: MonitorMatchingWorker decidindo quais
   // UserRadarProfile candidatos a uma vaga nova são elegíveis;
   // MonitorDigestScheduler filtrando as preferências do dia) — evita
-  // N chamadas individuais quando a implementação real vier a bater em
-  // banco/provider externo.
+  // N chamadas individuais.
   async filterEntitledUserIds(userIds: string[]): Promise<Set<string>> {
-    return new Set(userIds);
+    if (!isJobsGhostModeEnabled() || userIds.length === 0) {
+      return new Set();
+    }
+
+    const internal = await this.database.user.findMany({
+      where: { id: { in: userIds }, internalRole: { in: ["admin", "superadmin"] } },
+      select: { id: true },
+    });
+
+    return new Set(internal.map((user) => user.id));
   }
 }

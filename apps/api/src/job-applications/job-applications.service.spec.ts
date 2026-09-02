@@ -532,7 +532,7 @@ test("upsertFromCvAdaptation propagates visitorId/journeySessionInternalId into 
   assert.equal(created?.metadata?.sessionInternalId, "journey-hook-1");
 });
 
-test("upsertFromCvAdaptation records candidatura_created with product_origin=analysis when radarJobId is absent", async () => {
+test("upsertFromCvAdaptation records candidatura_created with product_origin=direct when radarJobId is absent — unified with analysis_started/completed, which already used 'direct' for this same case", async () => {
   const db = makeDb();
   const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
   adaptations.set("adapt-analysis-origin", {
@@ -554,7 +554,34 @@ test("upsertFromCvAdaptation records candidatura_created with product_origin=ana
   });
 
   const created = calls.find((c) => c.eventName === "candidatura_created");
-  assert.equal(created?.metadata?.product_origin, "analysis");
+  assert.equal(created?.metadata?.product_origin, "direct");
+});
+
+test("upsertFromCvAdaptation records candidatura_created with product_origin from radarJobOrigin (monitor/monitor_email) instead of always 'radar' when radarJobId is present", async () => {
+  const db = makeDb();
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-monitor-origin", {
+    id: "adapt-monitor-origin",
+    jobApplicationId: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-monitor-origin",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+    radarJobId: "job-radar-monitor",
+    radarJobOrigin: "monitor_email",
+  });
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal(created?.metadata?.product_origin, "monitor_email");
 });
 
 test("createManual records candidatura_created with product_origin=candidatura, sessionInternalId when provided, and a stable idempotencyKey", async () => {

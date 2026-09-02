@@ -16,12 +16,14 @@ export type AnalyzeMasterCvForJobResult =
 export async function analyzeMasterCvForJob(params: {
   masterResumeId: string;
   radarJobId: string;
+  radarJobOrigin: "radar" | "monitor" | "monitor_email";
   jobDescriptionText: string;
   turnstileToken: string | null;
 }): Promise<AnalyzeMasterCvForJobResult> {
   const formData = new FormData();
   formData.append("masterResumeId", params.masterResumeId);
   formData.append("radarJobId", params.radarJobId);
+  formData.append("radarJobOrigin", params.radarJobOrigin);
   appendTurnstileTokenToAnalyzeFormData(formData, params.turnstileToken);
 
   // analyzeAuthenticatedCv/saveGuestPreview são Server Actions — rodam no
@@ -65,6 +67,7 @@ export async function analyzeMasterCvForJob(params: {
       analysisCvSnapshotId: result.analysisCvSnapshotId,
       previewText: result.previewText,
       radarJobId: params.radarJobId,
+      radarJobOrigin: params.radarJobOrigin,
       sessionInternalId: journeyContext.sessionInternalId,
       visitorId: journeyContext.visitorId,
     });

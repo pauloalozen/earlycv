@@ -3,7 +3,7 @@ import "server-only";
 import { getBackofficeSessionToken } from "./backoffice-session.server";
 
 export type MonitorEntitlementReason =
-  | "launch_access"
+  | "internal_access"
   | "manual_override"
   | "trial"
   | "active_subscription"

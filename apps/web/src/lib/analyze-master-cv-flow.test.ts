@@ -58,6 +58,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     await analyzeMasterCvForJob({
       masterResumeId: "resume-1",
       radarJobId: "job-abc",
+      radarJobOrigin: "radar" as const,
       jobDescriptionText: "Descricao da vaga",
       turnstileToken: "token-1",
     });
@@ -72,6 +73,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     await analyzeMasterCvForJob({
       masterResumeId: "resume-1",
       radarJobId: "job-abc",
+      radarJobOrigin: "radar" as const,
       jobDescriptionText: "Descricao da vaga",
       turnstileToken: "token-1",
     });
@@ -92,6 +94,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     await analyzeMasterCvForJob({
       masterResumeId: "resume-9",
       radarJobId: "job-xyz",
+      radarJobOrigin: "radar" as const,
       jobDescriptionText: "Descricao",
       turnstileToken: "token-9",
     });
@@ -116,6 +119,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     await analyzeMasterCvForJob({
       masterResumeId: "resume-1",
       radarJobId: "job-abc",
+      radarJobOrigin: "radar" as const,
       jobDescriptionText: "Descricao da vaga",
       turnstileToken: "token-1",
     });
@@ -140,6 +144,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     await analyzeMasterCvForJob({
       masterResumeId: "resume-1",
       radarJobId: "job-abc",
+      radarJobOrigin: "radar" as const,
       jobDescriptionText: "Descricao da vaga",
       turnstileToken: "token-1",
     });
@@ -147,6 +152,22 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     expect(saveGuestPreviewMock.mock.calls[0]?.[0]).toMatchObject({
       jobTitle: "Analista",
       companyName: "Acme",
+    });
+  });
+
+  it("forwards radarJobOrigin in the FormData sent to analyzeAuthenticatedCv, and to saveGuestPreview", async () => {
+    await analyzeMasterCvForJob({
+      masterResumeId: "resume-1",
+      radarJobId: "job-abc",
+      radarJobOrigin: "monitor_email",
+      jobDescriptionText: "Descricao da vaga",
+      turnstileToken: "token-1",
+    });
+
+    const formData = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as FormData;
+    expect(formData.get("radarJobOrigin")).toBe("monitor_email");
+    expect(saveGuestPreviewMock.mock.calls[0]?.[0]).toMatchObject({
+      radarJobOrigin: "monitor_email",
     });
   });
 
@@ -159,6 +180,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     const result = await analyzeMasterCvForJob({
       masterResumeId: "resume-1",
       radarJobId: "job-abc",
+      radarJobOrigin: "radar" as const,
       jobDescriptionText: "Descricao",
       turnstileToken: "token-1",
     });

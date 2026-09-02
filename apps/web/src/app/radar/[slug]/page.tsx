@@ -8,6 +8,7 @@ import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toCompanySlug } from "@/lib/company-slug";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { getMyPlan } from "@/lib/plans-api";
 import {
   getPublicJobBySlug,
@@ -553,6 +554,7 @@ function FeatureShowcaseStrip() {
 // "outras oportunidades" — reforça o papel central do Monitor antes do
 // visitante sair da página.
 function MonitorHighlightBand() {
+  if (isJobsGhostModeEnabled()) return null;
   return (
     <div
       style={{
@@ -703,6 +705,7 @@ function CompatCardCta({
 // sem prova de valor). Fica acima do card de Candidatura, que continua
 // intacto (AnalysisCtaButtons, aplicação externa, salvar) logo abaixo.
 function MonitorPrimaryCard() {
+  if (isJobsGhostModeEnabled()) return null;
   const benefits = [
     "Novas vagas parecidas assim que entram no ar",
     "Compatibilidade calculada em cada uma",

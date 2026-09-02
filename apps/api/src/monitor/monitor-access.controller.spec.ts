@@ -7,7 +7,7 @@ test("returns whatever the entitlement service decides for the authenticated use
   const entitlementService = {
     canUseMonitor: async (userId: string) => ({
       allowed: true,
-      reason: "launch_access" as const,
+      reason: "internal_access" as const,
       checkedUserId: userId,
     }),
   };
@@ -17,7 +17,7 @@ test("returns whatever the entitlement service decides for the authenticated use
 
   assert.deepEqual(result, {
     allowed: true,
-    reason: "launch_access",
+    reason: "internal_access",
     checkedUserId: "user-1",
   });
 });
