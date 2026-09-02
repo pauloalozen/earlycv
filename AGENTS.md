@@ -215,6 +215,7 @@ Mergear o hotfix em `develop` imediatamente apos o deploy em `main` e obrigatori
 - Bug de travamento no back/forward com spinner de transicao: **RESOLVIDO** — ver seção abaixo.
 - Slice `analysis-protection + analysis-observability` implementado (facade protegida, turnstile, rate-limit/dedupe/usage policy, telemetry e funnel idempotente) e integrado no `cv-adaptation` sem mudar UX visivel.
 - Referencia operacional oficial do slice: `docs/analysis-protection-operational-runbook.md`.
+- Pre-lancamento do Alerta de Vaga Certa (ghost mode via `JOBS_GHOST_MODE` + correcao de atribuicao da jornada): implementado e testado na branch `pré-lançamento-monitor` (não mergeada em `develop`), aguardando decisao do Paulo sobre `/meu-perfil` e levantamento de usuarios ja com acesso. Status completo em `docs/specs/2026-09-02-monitor-pre-lancamento-ghost-mode.md`.
 
 ---
 
