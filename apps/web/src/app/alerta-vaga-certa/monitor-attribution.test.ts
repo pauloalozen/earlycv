@@ -6,7 +6,7 @@ import {
 } from "./monitor-attribution";
 
 function setUrl(search: string) {
-  window.history.replaceState({}, "", `/monitor${search}`);
+  window.history.replaceState({}, "", `/alerta-vaga-certa${search}`);
 }
 
 describe("monitor-attribution", () => {

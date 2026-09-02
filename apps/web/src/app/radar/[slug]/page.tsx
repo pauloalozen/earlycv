@@ -67,7 +67,7 @@ const SENIORITY_LABELS: Record<string, string> = {
 // CTAs de conversão do visitante anônimo (Agressivo-v2) sempre levam pro
 // cadastro com `next` — sem isso, o usuário cai no default (/meu-perfil)
 // depois de criar conta, perdendo o fio da ação que o trouxe até aqui.
-const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/monitor")}`;
+const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/alerta-vaga-certa")}`;
 const SIGNUP_NEXT_CV = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/meu-cv-master")}`;
 
 type ScoreState = "anonymous" | "no-cv" | "has-cv";
@@ -1836,11 +1836,12 @@ export default async function JobPage({ params }: JobPageProps) {
                   secondaryHref={adaptarJobHref}
                 />
               )}
-              {!user ? (
+              {!user || !hasExistingAnalysisScore ? (
                 <ExternalApplyGate
                   href={job.sourceJobUrl}
                   company={job.company}
                   jobId={job.id}
+                  isAuthenticated={!!user}
                 />
               ) : (
                 <a

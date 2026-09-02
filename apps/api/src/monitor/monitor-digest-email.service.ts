@@ -113,7 +113,9 @@ export class MonitorDigestEmailService {
       `Encontramos ${total} ${total === 1 ? "nova oportunidade" : "novas oportunidades"} para você:`,
       "",
       ...lines,
-      ...(remaining > 0 ? ["", `+ ${remaining} outras no seu Monitor.`] : []),
+      ...(remaining > 0
+        ? ["", `+ ${remaining} outras no seu Alerta de Vaga Certa.`]
+        : []),
       "",
       `Ver minhas oportunidades: ${digestLink}`,
       "",
@@ -203,12 +205,12 @@ export class MonitorDigestEmailService {
         </table>
         <h1 style="font-size:19px;font-weight:600;">Encontramos ${input.total} ${input.total === 1 ? "nova oportunidade" : "novas oportunidades"} para você</h1>
         <table role="presentation" style="width:100%;border-collapse:collapse;">${items}</table>
-        ${input.remaining > 0 ? `<p style="color:#6a6560;font-size:13px;">+ ${input.remaining} outras no seu Monitor.</p>` : ""}
+        ${input.remaining > 0 ? `<p style="color:#6a6560;font-size:13px;">+ ${input.remaining} outras no seu Alerta de Vaga Certa.</p>` : ""}
         <p style="margin:24px 0;">
           <a href="${input.digestLink}" style="background:#0a0a0a;color:#fafaf6;padding:12px 20px;border-radius:9px;text-decoration:none;font-weight:600;display:inline-block;">Ver minhas oportunidades</a>
         </p>
         <p style="color:#8a8a85;font-size:11px;margin-top:32px;">
-          Você está recebendo isso porque o Meu Monitor está ativo na sua conta EarlyCV.
+          Você está recebendo isso porque o Alerta de Vaga Certa está ativo na sua conta EarlyCV.
           <a href="${input.unsubscribeLink}" style="color:#8a8a85;">Cancelar esses e-mails</a>.
         </p>
       </div>`;

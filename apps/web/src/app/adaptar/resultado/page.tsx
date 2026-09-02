@@ -1549,9 +1549,27 @@ export default function ResultadoPage() {
           jobAnalysisCount?: number;
           adaptationNotes?: string | null;
           jobApplicationId?: string | null;
+          jobTitle?: string | null;
+          companyName?: string | null;
         };
         if (!active) return;
-        setRawData(payload.adaptedContentJson);
+        // Defesa extra além da reconciliação no backend (ver
+        // reconcileVagaFields em cv-adaptation.service.ts): mesmo que o
+        // JSON persistido ainda carregue vaga.cargo/empresa desatualizado
+        // (linha criada antes desse fix), payload.jobTitle/companyName são
+        // as colunas confiáveis — nunca "Não informado" por reextração de
+        // IA quando o backend já sabia a resposta.
+        const reconciledContent: CvAnalysisData = {
+          ...payload.adaptedContentJson,
+          vaga: {
+            cargo:
+              payload.jobTitle?.trim() || payload.adaptedContentJson.vaga.cargo,
+            empresa:
+              payload.companyName?.trim() ||
+              payload.adaptedContentJson.vaga.empresa,
+          },
+        };
+        setRawData(reconciledContent);
         setFinalCvOutput(payload.finalCvOutput ?? null);
         setReviewPaymentStatus(
           payload.isUnlocked ? "completed" : payload.paymentStatus,

@@ -430,7 +430,7 @@ export function PublicNav() {
         <Link href="/#faq" style={{ fontSize: 13, color: "#3a3a38" }}>
           Perguntas
         </Link>
-        <Link href="/entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
+        <Link href="/entrar?tab=entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
           Entrar
         </Link>
         <Link

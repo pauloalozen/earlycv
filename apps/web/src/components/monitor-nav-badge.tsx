@@ -30,7 +30,7 @@ export function MonitorNavBadge({ enabled }: { enabled: boolean }) {
   return (
     <span
       role="status"
-      aria-label={`${count} novas oportunidades no Meu Monitor`}
+      aria-label={`${count} novas oportunidades no Alerta de Vaga Certa`}
       style={{
         display: "inline-flex",
         alignItems: "center",

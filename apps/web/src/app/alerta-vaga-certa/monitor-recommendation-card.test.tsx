@@ -211,4 +211,59 @@ describe("MonitorRecommendationCard", () => {
       "AREA_MISMATCH",
     );
   });
+
+  it("shows a status badge (e.g. 'Candidatado') when the job already has a JobApplication", () => {
+    render(
+      <MonitorRecommendationCard
+        item={buildItem({
+          job: { existingApplication: { id: "app-1", status: "APPLIED", bestScore: 80 } } as never,
+        })}
+        onViewed={vi.fn()}
+        onDismiss={vi.fn()}
+        onFeedback={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Candidatado")).toBeInTheDocument();
+  });
+
+  it("shows 'Salva' when the job is saved but has no JobApplication", () => {
+    render(
+      <MonitorRecommendationCard
+        item={buildItem({ job: { isSaved: true } as never })}
+        onViewed={vi.fn()}
+        onDismiss={vi.fn()}
+        onFeedback={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Salva")).toBeInTheDocument();
+  });
+
+  it("shows 'Descartada' when dismissed and there is no JobApplication, and disables the dismiss button", () => {
+    render(
+      <MonitorRecommendationCard
+        item={buildItem({ dismissedAt: new Date().toISOString() })}
+        onViewed={vi.fn()}
+        onDismiss={vi.fn()}
+        onFeedback={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Descartada")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ignorar")).toBeDisabled();
+  });
+
+  it("prioritizes a real JobApplication status over 'Descartada' (applied after having been dismissed)", () => {
+    render(
+      <MonitorRecommendationCard
+        item={buildItem({
+          dismissedAt: new Date().toISOString(),
+          job: { existingApplication: { id: "app-1", status: "APPLIED", bestScore: 80 } } as never,
+        })}
+        onViewed={vi.fn()}
+        onDismiss={vi.fn()}
+        onFeedback={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Candidatado")).toBeInTheDocument();
+    expect(screen.queryByText("Descartada")).not.toBeInTheDocument();
+  });
 });

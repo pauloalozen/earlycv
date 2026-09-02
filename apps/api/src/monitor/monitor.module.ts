@@ -18,6 +18,7 @@ import { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
 import { MonitorEntitlementGuard } from "./monitor-entitlement.guard";
 import { MonitorEntitlementService } from "./monitor-entitlement.service";
 import { MonitorMatchingWorker } from "./monitor-matching.worker";
+import { MonitorNotificationsService } from "./monitor-notifications.service";
 import { MonitorProfileMatchService } from "./monitor-profile-match.service";
 import { MonitorProfileMatchingWorker } from "./monitor-profile-matching.worker";
 import { MonitorPublicController } from "./monitor-public.controller";
@@ -43,6 +44,7 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
   // gerenciada pelo Nest é equivalente à usada por JobEnrichmentWorker.
   providers: [
     MonitorRecommendationsService,
+    MonitorNotificationsService,
     MonitorMatchingWorker,
     MonitorProfileMatchService,
     MonitorProfileMatchingWorker,

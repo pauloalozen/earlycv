@@ -152,9 +152,9 @@ function renderUnsubscribeConfirmationPage(
   }
 
   return pageShell(
-    "Cancelar e-mails do Meu Monitor",
-    `<h1 style="font-size:18px;margin:0 0 12px;color:#0a0a0a;">Cancelar e-mails do Meu Monitor?</h1>
-     <p style="font-size:14px;color:#5a5a55;margin:0 0 20px;">Suas recomendações continuam disponíveis a qualquer momento em earlycv.com.br/monitor — isso só desliga o aviso por e-mail.</p>
+    "Cancelar e-mails do Alerta de Vaga Certa",
+    `<h1 style="font-size:18px;margin:0 0 12px;color:#0a0a0a;">Cancelar e-mails do Alerta de Vaga Certa?</h1>
+     <p style="font-size:14px;color:#5a5a55;margin:0 0 20px;">Suas recomendações continuam disponíveis a qualquer momento em earlycv.com.br/alerta-vaga-certa — isso só desliga o aviso por e-mail.</p>
      <form method="POST" action="/api/monitor/unsubscribe?token=${encodeURIComponent(token)}">
        <button type="submit" style="background:#0a0a0a;color:#fafaf6;border:none;border-radius:9px;padding:11px 20px;font-size:13.5px;font-weight:600;cursor:pointer;">Cancelar e-mails</button>
      </form>`,
@@ -164,10 +164,10 @@ function renderUnsubscribeConfirmationPage(
 // POST — já efetivou (ou confirmou que já estava cancelado).
 function renderUnsubscribeResultPage(success: boolean): string {
   const title = success
-    ? "Você não vai mais receber e-mails do Meu Monitor"
+    ? "Você não vai mais receber e-mails do Alerta de Vaga Certa"
     : "Link inválido ou expirado";
   const body = success
-    ? "Suas recomendações continuam disponíveis a qualquer momento em earlycv.com.br/monitor — só paramos de te avisar por e-mail."
+    ? "Suas recomendações continuam disponíveis a qualquer momento em earlycv.com.br/alerta-vaga-certa — só paramos de te avisar por e-mail."
     : "Não conseguimos processar esse link de descadastro. Se o problema continuar, entre em contato com a gente.";
 
   return pageShell(

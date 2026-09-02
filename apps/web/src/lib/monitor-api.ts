@@ -61,6 +61,29 @@ export type MonitorFeed = {
   monitorStatus: MonitorProfileStatus;
 };
 
+// Histórico de notificações ("Alerta de Vaga Certa" na UI) — um grupo por
+// e-mail efetivamente enviado (MonitorDigest com status SENT), mais
+// recente primeiro. `frequency` só existe no payload/analytics, nunca é
+// exibido no header do grupo (ver monitor-notification-group.tsx).
+export type MonitorNotificationGroup = {
+  digestId: string;
+  sentAt: string;
+  frequency: MonitorAlertFrequency;
+  items: MonitorRecommendationItem[];
+  total: number;
+};
+
+export type MonitorNotificationsFeed = {
+  pending: { items: MonitorRecommendationItem[]; total: number; hasMore: boolean } | null;
+  groups: MonitorNotificationGroup[];
+  page: number;
+  limit: number;
+  totalGroups: number;
+  hasMore: boolean;
+  nextPage: number | null;
+  monitorStatus: MonitorProfileStatus;
+};
+
 export type MonitorCount = {
   count: number;
   monitorStatus: MonitorProfileStatus;
@@ -140,6 +163,7 @@ export async function listMonitorRecommendations(
   includeDismissed = false,
   level?: number,
   sort: MonitorSort = "score",
+  excludeAnalyzed = false,
 ): Promise<MonitorFeed> {
   try {
     const qs = new URLSearchParams({
@@ -149,6 +173,7 @@ export async function listMonitorRecommendations(
     });
     if (includeDismissed) qs.set("includeDismissed", "true");
     if (level !== undefined) qs.set("level", String(level));
+    if (excludeAnalyzed) qs.set("excludeAnalyzed", "true");
     const response = await apiRequest("GET", `/monitor?${qs}`);
     if (!response.ok) return { ...EMPTY_FEED, page, limit };
     return (await response.json()) as MonitorFeed;
@@ -157,17 +182,33 @@ export async function listMonitorRecommendations(
   }
 }
 
-// Contagem de recomendações ativas por nível de oportunidade (0-5) — a UI
-// busca isso uma vez pra saber quais seções renderizar antes de paginar
-// cada uma independentemente.
-export async function getMonitorLevelCounts(): Promise<Record<number, number>> {
-  const empty = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+const EMPTY_NOTIFICATIONS_FEED: MonitorNotificationsFeed = {
+  pending: null,
+  groups: [],
+  page: 1,
+  limit: 10,
+  totalGroups: 0,
+  hasMore: false,
+  nextPage: null,
+  monitorStatus: "INITIALIZING",
+};
+
+// GET /monitor/notifications — histórico agrupado por envio. Página 1
+// também traz o bucket "novas vagas encontradas" (pending); páginas
+// seguintes só trazem mais grupos enviados (pending vem null).
+export async function listMonitorNotifications(
+  page = 1,
+  limit = 10,
+  pendingLimit?: number,
+): Promise<MonitorNotificationsFeed> {
   try {
-    const response = await apiRequest("GET", "/monitor/level-counts");
-    if (!response.ok) return empty;
-    return (await response.json()) as Record<number, number>;
+    const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (pendingLimit !== undefined) qs.set("pendingLimit", String(pendingLimit));
+    const response = await apiRequest("GET", `/monitor/notifications?${qs}`);
+    if (!response.ok) return { ...EMPTY_NOTIFICATIONS_FEED, page, limit };
+    return (await response.json()) as MonitorNotificationsFeed;
   } catch {
-    return empty;
+    return { ...EMPTY_NOTIFICATIONS_FEED, page, limit };
   }
 }
 

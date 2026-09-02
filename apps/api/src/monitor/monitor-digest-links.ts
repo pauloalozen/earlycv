@@ -28,7 +28,7 @@ export function buildMonitorDigestLink(
     utm_content: digestId,
     ...(recommendationId ? { rec: recommendationId } : {}),
   });
-  return `${getFrontendBaseUrl()}/monitor?${params.toString()}`;
+  return `${getFrontendBaseUrl()}/alerta-vaga-certa?${params.toString()}`;
 }
 
 export function buildMonitorUnsubscribeLink(token: string): string {

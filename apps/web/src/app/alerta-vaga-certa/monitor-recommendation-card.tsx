@@ -5,12 +5,45 @@ import { CompanyLogo } from "@/app/radar/company-logo";
 import { formatRelativeTime } from "@/app/radar/job-card";
 import { OPPORTUNITY_LEVELS } from "@/app/radar/radar-ui";
 import { trackEvent } from "@/lib/analytics-tracking";
+import { getStatusConfig } from "@/lib/job-application-status";
 import type {
   MonitorRecommendationFeedback,
   MonitorRecommendationFeedbackReason,
   MonitorRecommendationItem,
 } from "@/lib/monitor-api";
 import { getMonitorProductOrigin } from "./monitor-attribution";
+
+const DISMISSED_BADGE = {
+  label: "Descartada",
+  bg: "#fff",
+  color: "#8a8a85",
+  border: "rgba(10,10,10,0.10)",
+  dot: "#c8c6bf",
+};
+
+const SAVED_BADGE = {
+  label: "Salva",
+  bg: "#fff",
+  color: "#3a3a36",
+  border: "rgba(10,10,10,0.10)",
+  dot: "#a8a6a0",
+};
+
+// Ordem de precedência: candidatura real > "descartada" > "salva". Alguém
+// pode ter clicado "ignorar" aqui e depois se candidatado pelo Radar —
+// nesse caso "Candidatou-se" é informação mais relevante que "Descartada".
+function getRecommendationBadge(item: MonitorRecommendationItem) {
+  if (item.job.existingApplication?.status) {
+    return getStatusConfig(item.job.existingApplication.status);
+  }
+  if (item.dismissedAt) {
+    return DISMISSED_BADGE;
+  }
+  if (item.job.isSaved) {
+    return SAVED_BADGE;
+  }
+  return null;
+}
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -89,6 +122,10 @@ function DismissIcon() {
 
 export type MonitorRecommendationCardProps = {
   item: MonitorRecommendationItem;
+  // Só presentes quando o card vive num grupo "Alertas enviados" — usados
+  // só pra enriquecer o analytics de clique (ver handleTitleClick).
+  digestId?: string;
+  notificationStatus?: "sent" | "pending";
   onViewed: (recommendationId: string) => void;
   onDismiss: (recommendationId: string) => void;
   onFeedback: (
@@ -107,6 +144,8 @@ export type MonitorRecommendationCardProps = {
 // vaga, de onde esses fluxos continuam acessíveis.
 export function MonitorRecommendationCard({
   item,
+  digestId,
+  notificationStatus,
   onViewed,
   onDismiss,
   onFeedback,
@@ -121,6 +160,8 @@ export function MonitorRecommendationCard({
     ? (WORK_MODEL_LABELS[item.job.workModel] ?? item.job.workModel)
     : null;
   const published = item.job.publishedAtSource ?? item.job.firstSeenAt;
+  const badge = getRecommendationBadge(item);
+  const isDismissed = Boolean(item.dismissedAt);
 
   function handleTitleClick() {
     if (!engagedRef.current) {
@@ -134,6 +175,8 @@ export function MonitorRecommendationCard({
         jobId: item.job.id,
         score: item.score,
         opportunityLevel: item.opportunityLevel,
+        digestId: digestId ?? null,
+        notificationStatus: notificationStatus ?? null,
         product_origin: getMonitorProductOrigin(),
       },
     });
@@ -232,6 +275,39 @@ export function MonitorRecommendationCard({
       >
         {item.job.title}
       </a>
+
+      {badge ? (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            alignSelf: "flex-start",
+            fontFamily: MONO,
+            fontSize: 9.5,
+            fontWeight: 600,
+            letterSpacing: 0.3,
+            textTransform: "uppercase",
+            padding: "3px 7px",
+            borderRadius: 999,
+            background: badge.bg,
+            color: badge.color,
+            border: `1px solid ${badge.border}`,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: badge.dot,
+              flexShrink: 0,
+            }}
+          />
+          {badge.label}
+        </span>
+      ) : null}
 
       <p
         style={{
@@ -379,14 +455,15 @@ export function MonitorRecommendationCard({
           <button
             type="button"
             aria-label="Ignorar"
+            disabled={isDismissed}
             onClick={() => onDismiss(item.recommendationId)}
             style={{
               border: "none",
               background: "transparent",
               padding: 5,
               borderRadius: 6,
-              cursor: "pointer",
-              color: "#8a8a85",
+              cursor: isDismissed ? "default" : "pointer",
+              color: isDismissed ? "#c8c6bf" : "#8a8a85",
               display: "flex",
             }}
           >

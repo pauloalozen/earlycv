@@ -1351,7 +1351,7 @@ export function MonitorMock() {
             color: GRAY,
           }}
         >
-          Seu Monitor está procurando
+          Seu Alerta de Vaga Certa está procurando
         </span>
       </div>
       <h3
@@ -1780,7 +1780,7 @@ export function MonitorMock() {
 
             {[
               {
-                sender: "Meu Monitor",
+                sender: "Alerta de Vaga Certa",
                 subject: "3 vagas novas com alta aderência ao seu perfil",
                 snippet:
                   "Cresol, Nubank e CI&T têm vagas que batem muito com você — dá uma olhada antes que...",
@@ -1891,7 +1891,7 @@ export function MonitorMock() {
       </div>
 
       <Link
-        href="/monitor"
+        href="/alerta-vaga-certa"
         style={{
           display: "inline-block",
           marginTop: 18,
@@ -1903,7 +1903,7 @@ export function MonitorMock() {
           textUnderlineOffset: 4,
         }}
       >
-        Ativar meu Monitor de vagas →
+        Ativar meu Alerta de Vaga Certa →
       </Link>
     </div>
   );
@@ -2738,7 +2738,7 @@ const FEATURES: {
   },
   {
     key: "monitor",
-    label: "Alerta de Vagas",
+    label: "Alerta de Vaga Certa",
     icon: (
       <>
         <path d="M10 21a2 2 0 003.46 0" />

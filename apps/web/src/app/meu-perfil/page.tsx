@@ -486,7 +486,7 @@ export default async function MeuPerfilPage() {
               </p>
             )}
             <Link
-              href="/monitor"
+              href="/alerta-vaga-certa"
               className="mt-2.5 inline-block text-[11.5px] font-medium text-[#5a5a55] hover:text-[#0a0a0a]"
             >
               Abrir Meu Monitor →
@@ -715,7 +715,7 @@ export default async function MeuPerfilPage() {
 
               {hasJobsAccess && (
                 <Link
-                  href="/monitor"
+                  href="/alerta-vaga-certa"
                   className="group rounded-[12px] border border-[rgba(10,10,10,0.08)] bg-[#fafaf6] px-5 py-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-[rgba(10,10,10,0.16)] hover:shadow-[0_8px_20px_-10px_rgba(10,10,10,0.18)] block"
                 >
                   <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#8a8a85]">

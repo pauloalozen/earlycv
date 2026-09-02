@@ -205,7 +205,8 @@ export function MonitorProfileEditor({
             </h2>
             <p style={{ margin: 0, fontSize: 12.5, color: "#6a6560" }}>
               Esse perfil foi criado automaticamente a partir do seu CV — você
-              pode ajustar o que o Monitor usa para procurar vagas.
+              pode ajustar o que o Alerta de Vaga Certa usa para procurar
+              vagas.
             </p>
           </div>
           <button

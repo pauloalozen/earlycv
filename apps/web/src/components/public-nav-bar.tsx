@@ -167,7 +167,7 @@ export function PublicNavBar({
           )}
           {IS_JOBS_GHOST_MODE || hideJobsLink || !userName ? null : (
             <Link
-              href="/monitor"
+              href="/alerta-vaga-certa"
               style={{
                 fontSize: 13,
                 color: linkColor,
@@ -178,7 +178,7 @@ export function PublicNavBar({
                 gap: 6,
               }}
             >
-              Meu Monitor
+              Alerta de Vaga Certa
               <MonitorNavBadge enabled />
             </Link>
           )}
@@ -288,7 +288,7 @@ export function PublicNavBar({
         )}
         {IS_JOBS_GHOST_MODE || hideJobsLink || !userName ? null : (
           <Link
-            href="/monitor"
+            href="/alerta-vaga-certa"
             onClick={() => setIsMenuOpen(false)}
             className="public-mob-nav-item"
             style={{
@@ -297,7 +297,7 @@ export function PublicNavBar({
               justifyContent: "space-between",
             }}
           >
-            Meu Monitor
+            Alerta de Vaga Certa
             <MonitorNavBadge enabled />
           </Link>
         )}

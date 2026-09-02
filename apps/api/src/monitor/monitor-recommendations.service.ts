@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type {
+  Prisma,
   RecommendationFeedback,
   RecommendationFeedbackReason,
 } from "@prisma/client";
@@ -58,6 +59,9 @@ export class MonitorRecommendationsService {
       // toggle "Mais recentes" da UI. Só afeta a ordem DENTRO do filtro
       // aplicado (ex.: dentro de um opportunityLevel específico).
       sort?: "score" | "recent";
+      // Mesmo filtro "excluir analisadas" do Radar (ver PublicJobsController)
+      // — desligado por padrão aqui, ao contrário do Radar.
+      excludeAnalyzed?: boolean;
     },
   ) {
     // "Entrar no Monitor" — dispara o backfill inicial se este usuário
@@ -99,16 +103,48 @@ export class MonitorRecommendationsService {
 
     const monitorStatus = await this.getMonitorStatus(userId);
 
-    const [rows, total] = await Promise.all([
-      this.database.userJobRecommendation.findMany({
+    const include = {
+      job: { include: { company: true, enrichment: true } },
+    } satisfies Prisma.UserJobRecommendationInclude;
+
+    let rows: Array<
+      Prisma.UserJobRecommendationGetPayload<{ include: typeof include }>
+    >;
+    let total: number;
+
+    if (options.excludeAnalyzed) {
+      // excludeAnalyzed precisa decidir quem entra na paginação antes de
+      // fatiar (mesmo motivo do Radar, ver PublicJobsController) — busca
+      // todo o conjunto que bate no filtro, resolve bestScores pra ele
+      // inteiro, filtra e só então pagina. Só entra nesse caminho mais
+      // caro quando o usuário liga o toggle explicitamente; o fluxo
+      // padrão (abaixo) continua paginando direto no banco.
+      const allRows = await this.database.userJobRecommendation.findMany({
         where,
-        include: { job: { include: { company: true, enrichment: true } } },
+        include,
         orderBy,
-        skip,
-        take: limit,
-      }),
-      this.database.userJobRecommendation.count({ where }),
-    ]);
+      });
+      const allBestScores = await this.jobApplicationsService.getBestScoresByJobIds(
+        userId,
+        allRows.map((row) => row.jobId),
+      );
+      const filteredRows = allRows.filter(
+        (row) => typeof allBestScores.get(row.jobId)?.bestScore !== "number",
+      );
+      total = filteredRows.length;
+      rows = filteredRows.slice(skip, skip + limit);
+    } else {
+      [rows, total] = await Promise.all([
+        this.database.userJobRecommendation.findMany({
+          where,
+          include,
+          orderBy,
+          skip,
+          take: limit,
+        }),
+        this.database.userJobRecommendation.count({ where }),
+      ]);
+    }
 
     const jobIds = rows.map((row) => row.jobId);
     const [savedJobIds, bestScores, radarProfile] = await Promise.all([

@@ -174,7 +174,7 @@ export function LandingNavV2({
         >
           {!isAuthenticated && (
             <Link
-              href="/entrar"
+              href="/entrar?tab=entrar"
               className="lp-fv2-nav-entrar"
               style={{ fontSize: 13, color: "#3a3a38" }}
             >
@@ -199,7 +199,10 @@ export function LandingNavV2({
             links={
               isAuthenticated
                 ? MOBILE_MENU_LINKS
-                : [...MOBILE_MENU_LINKS, { href: "/entrar", label: "Entrar" }]
+                : [
+                    ...MOBILE_MENU_LINKS,
+                    { href: "/entrar?tab=entrar", label: "Entrar" },
+                  ]
             }
             ctaAuthenticated={{ href: "/meu-perfil", label: "Meu Perfil" }}
             ctaUnauthenticated={{

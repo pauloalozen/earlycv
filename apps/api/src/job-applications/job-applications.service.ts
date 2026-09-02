@@ -302,6 +302,11 @@ export class JobApplicationsService {
             take: 5,
           },
           interviewPrep: { select: { id: true, generatedAt: true } },
+          job: {
+            select: {
+              company: { select: { logoUrl: true, websiteUrl: true } },
+            },
+          },
         },
         orderBy: { updatedAt: "desc" },
         skip,
@@ -311,16 +316,21 @@ export class JobApplicationsService {
     ]);
 
     return {
-      items: items.map((item) => ({
-        ...item,
-        ...deriveSummaryFromAdaptations(
-          item.cvAdaptations as AdaptationSummaryView[],
-        ),
-        ...deriveInterviewPrepEligibility(
-          item.currentCvAdaptationId,
-          item.cvAdaptations as AdaptationSummaryView[],
-        ),
-      })),
+      items: items.map((item) => {
+        const { job, ...rest } = item;
+        return {
+          ...rest,
+          companyLogoUrl: job?.company.logoUrl ?? null,
+          companyWebsiteUrl: job?.company.websiteUrl ?? null,
+          ...deriveSummaryFromAdaptations(
+            item.cvAdaptations as AdaptationSummaryView[],
+          ),
+          ...deriveInterviewPrepEligibility(
+            item.currentCvAdaptationId,
+            item.cvAdaptations as AdaptationSummaryView[],
+          ),
+        };
+      }),
       total,
     };
   }
@@ -459,6 +469,12 @@ export class JobApplicationsService {
           },
           orderBy: { createdAt: "desc" },
         },
+        job: {
+          select: {
+            slug: true,
+            company: { select: { logoUrl: true, websiteUrl: true } },
+          },
+        },
       },
     });
 
@@ -476,9 +492,14 @@ export class JobApplicationsService {
       };
     });
 
+    const { job, ...applicationRest } = application;
+
     return {
-      ...application,
+      ...applicationRest,
       cvAdaptations: mappedAdaptations,
+      companyLogoUrl: job?.company.logoUrl ?? null,
+      companyWebsiteUrl: job?.company.websiteUrl ?? null,
+      jobSlug: job?.slug ?? null,
       ...deriveSummaryFromAdaptations(
         application.cvAdaptations as AdaptationSummaryView[],
       ),
@@ -1168,6 +1189,16 @@ export class JobApplicationsService {
           });
         }
       } else {
+        // Vaga do radar já tem o link de origem (portal/empresa) — pré-preenche
+        // jobUrl com ele, mesmo campo/significado que o usuário preenchia à
+        // mão antes de o Radar existir (nunca o link interno do EarlyCV).
+        const radarJob = radarJobId
+          ? await tx.job.findUnique({
+              where: { id: radarJobId },
+              select: { sourceJobUrl: true },
+            })
+          : null;
+
         // Create new JobApplication
         const created = await tx.jobApplication.create({
           data: {
@@ -1184,6 +1215,7 @@ export class JobApplicationsService {
             scoreAfter: resolvedScoreAfter,
             language: adaptation.language,
             jobId: radarJobId ?? null,
+            jobUrl: radarJob?.sourceJobUrl ?? null,
           },
         });
 

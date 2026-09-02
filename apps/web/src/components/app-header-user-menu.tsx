@@ -87,8 +87,8 @@ export function buildUserMenuItems({
     // alvo/pulso reforça "algo trabalhando por você", não "explorar uma
     // lista" (ver distinção de produto Radar x Monitor).
     {
-      href: "/monitor",
-      label: "Meu Monitor",
+      href: "/alerta-vaga-certa",
+      label: "Alerta de Vaga Certa",
       icon: (
         <>
           <circle cx="12" cy="12" r="9" />
@@ -148,7 +148,7 @@ export function buildUserMenuItems({
         ]
       : []),
   ].filter((item) =>
-    item.href === "/radar" || item.href === "/monitor" ? canSeeJobsLink : true,
+    item.href === "/radar" || item.href === "/alerta-vaga-certa" ? canSeeJobsLink : true,
   );
 }
 
@@ -440,7 +440,7 @@ export function AppHeaderUserMenu({
             >
               <MenuIcon>{item.icon}</MenuIcon>
               {item.label}
-              {item.href === "/monitor" ? (
+              {item.href === "/alerta-vaga-certa" ? (
                 <span style={{ marginLeft: "auto" }}>
                   <MonitorNavBadge enabled />
                 </span>

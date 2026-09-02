@@ -5,25 +5,34 @@ import { useEffect, useState } from "react";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
-// Intercepta o clique em "Candidatar-se externamente" só pra visitante
-// anônimo — usuário logado já viu o CTA de análise (AnalysisCtaButtons)
-// acima na mesma sidebar, então um segundo gate aqui seria só atrito.
-// A saída ("candidatar-se sem analisar") sempre existe e nunca fica
-// escondida — é atrito de funil, não bloqueio.
+// Intercepta o clique em "Candidatar-se externamente" quando ainda não
+// existe análise pra ESTA vaga — visitante anônimo (sempre, já que não há
+// como ter analisado sem conta) ou usuário logado sem candidatura/score
+// pra este job específico (ver hasExistingAnalysisScore em
+// radar/[slug]/page.tsx). Usuário logado que já analisou essa vaga nunca
+// vê isso — já viu o CTA de análise (AnalysisCtaButtons) acima na mesma
+// sidebar, então um segundo gate ali seria só atrito. A saída
+// ("candidatar-se sem analisar") sempre existe e nunca fica escondida —
+// é atrito de funil, não bloqueio.
 export function ExternalApplyGate({
   href,
   company,
   jobId,
+  isAuthenticated,
 }: {
   href: string;
   company: string;
   jobId: string;
+  isAuthenticated: boolean;
 }) {
-  // Cadastro primeiro, análise depois: /adaptar exige sessão, então o CTA
-  // sempre passa por /entrar. O `next` carrega o jobId — assim que a conta
-  // é criada, o redirect cai direto em /adaptar já com a descrição desta
+  // Usuário logado vai direto pra /adaptar (já tem sessão). Anônimo
+  // precisa criar conta primeiro — /adaptar exige sessão, então o CTA
+  // passa por /entrar, com `next` carregando o jobId: assim que a conta é
+  // criada, o redirect cai direto em /adaptar já com a descrição desta
   // vaga carregada (ver adaptar-client.tsx, fluxo de 1 clique via jobId).
-  const analyzeHref = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(`/adaptar?jobId=${jobId}`)}`;
+  const analyzeHref = isAuthenticated
+    ? `/adaptar?jobId=${jobId}`
+    : `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(`/adaptar?jobId=${jobId}`)}`;
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -209,7 +218,9 @@ export function ExternalApplyGate({
                 marginBottom: 8,
               }}
             >
-              Criar usuário e fazer minha análise →
+              {isAuthenticated
+                ? "Fazer minha análise →"
+                : "Criar usuário e fazer minha análise →"}
             </a>
             <div
               style={{

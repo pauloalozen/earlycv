@@ -83,7 +83,7 @@ export function MonitorProfileSummary({
                 boxShadow: "0 0 0 3px rgba(47,168,76,0.18)",
               }}
             />
-            SEU MONITOR ESTÁ PROCURANDO
+            SEU ALERTA ESTÁ PROCURANDO
           </p>
 
           <p

@@ -25,6 +25,7 @@ import { UpdateAlertPreferenceDto } from "./dto/update-alert-preference.dto";
 import { MonitorAlertPreferenceService } from "./monitor-alert-preference.service";
 import { MonitorEntitlementGuard } from "./monitor-entitlement.guard";
 import { MonitorEntitlementService } from "./monitor-entitlement.service";
+import { MonitorNotificationsService } from "./monitor-notifications.service";
 import { MonitorProfileMatchService } from "./monitor-profile-match.service";
 import { MonitorRecommendationsService } from "./monitor-recommendations.service";
 
@@ -51,6 +52,8 @@ export class MonitorController {
   constructor(
     @Inject(MonitorRecommendationsService)
     private readonly recommendationsService: MonitorRecommendationsService,
+    @Inject(MonitorNotificationsService)
+    private readonly notificationsService: MonitorNotificationsService,
     @Inject(UserRadarProfileService)
     private readonly userRadarProfileService: UserRadarProfileService,
     @Inject(BusinessFunnelEventService)
@@ -71,6 +74,7 @@ export class MonitorController {
     @Query("includeDismissed") includeDismissedRaw?: string,
     @Query("level") level?: string,
     @Query("sort") sort?: string,
+    @Query("excludeAnalyzed") excludeAnalyzedRaw?: string,
   ) {
     const opportunityLevel = level ? Number.parseInt(level, 10) : undefined;
     return this.recommendationsService.list(user.id, {
@@ -82,12 +86,30 @@ export class MonitorController {
           ? opportunityLevel
           : undefined,
       sort: sort === "recent" ? "recent" : "score",
+      excludeAnalyzed: excludeAnalyzedRaw === "true",
     });
   }
 
   @Get("count")
   count(@AuthenticatedUser() user: AuthenticatedRequestUser) {
     return this.recommendationsService.countUnviewed(user.id);
+  }
+
+  // Histórico de notificações ("Alerta de Vaga Certa" na UI) — grupos por
+  // envio (MonitorDigest), não por nível de oportunidade. Ver
+  // MonitorNotificationsService pra semântica completa.
+  @Get("notifications")
+  listNotifications(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("pendingLimit") pendingLimit?: string,
+  ) {
+    return this.notificationsService.listNotifications(user.id, {
+      page: page ? Number.parseInt(page, 10) : undefined,
+      limit: limit ? Number.parseInt(limit, 10) : undefined,
+      pendingLimit: pendingLimit ? Number.parseInt(pendingLimit, 10) : undefined,
+    });
   }
 
   // Contagem por nível de oportunidade — a UI busca isso uma vez pra saber

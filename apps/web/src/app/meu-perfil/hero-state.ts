@@ -124,7 +124,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
       titleEmphasis: `${input.topRecommendation.jobTitle}.`,
       description: `${input.topRecommendation.companyName} — ${input.topRecommendation.score}% de match com seu perfil.`,
       ctaLabel: "Ver vaga →",
-      ctaHref: "/monitor",
+      ctaHref: "/alerta-vaga-certa",
     };
   }
 

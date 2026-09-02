@@ -406,6 +406,89 @@ test("list() with opportunityLevel only returns recommendations of that level", 
   assert.equal(items[0].recommendationId, "rec-1");
 });
 
+test("list() with excludeAnalyzed=true drops recommendations whose job already has a score, and total reflects the filtered count", async () => {
+  const recommendations = new Map([
+    [
+      "rec-1",
+      buildRecommendationRow("rec-1", { userId: "user-1", jobId: "job-1" }),
+    ],
+    [
+      "rec-2",
+      buildRecommendationRow("rec-2", { userId: "user-1", jobId: "job-2" }),
+    ],
+  ]);
+  const jobs = new Map([
+    ["job-1", buildJobRow("job-1")],
+    ["job-2", buildJobRow("job-2")],
+  ]);
+  const db = createDb(recommendations, jobs);
+
+  const jobApplicationsService = {
+    getBestScoresByJobIds: async () =>
+      new Map([
+        ["job-1", { applicationId: "app-1", status: "APPLIED", bestScore: 90 }],
+      ]),
+  };
+
+  const service = new MonitorRecommendationsServiceCtor(
+    db,
+    jobApplicationsService,
+    NO_SAVED_JOBS,
+    NOOP_FUNNEL_EVENTS,
+    NOOP_PROFILE_MATCH_SERVICE,
+    NOOP_MATCHING_ENGINE,
+    NOOP_RADAR_PROFILE_SERVICE,
+    ALLOW_ENTITLEMENT,
+  );
+
+  const { items, total } = await service.list("user-1", {
+    excludeAnalyzed: true,
+  });
+  assert.equal(total, 1);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].recommendationId, "rec-2");
+});
+
+test("list() without excludeAnalyzed keeps recommendations whose job already has a score", async () => {
+  const recommendations = new Map([
+    [
+      "rec-1",
+      buildRecommendationRow("rec-1", { userId: "user-1", jobId: "job-1" }),
+    ],
+    [
+      "rec-2",
+      buildRecommendationRow("rec-2", { userId: "user-1", jobId: "job-2" }),
+    ],
+  ]);
+  const jobs = new Map([
+    ["job-1", buildJobRow("job-1")],
+    ["job-2", buildJobRow("job-2")],
+  ]);
+  const db = createDb(recommendations, jobs);
+
+  const jobApplicationsService = {
+    getBestScoresByJobIds: async () =>
+      new Map([
+        ["job-1", { applicationId: "app-1", status: "APPLIED", bestScore: 90 }],
+      ]),
+  };
+
+  const service = new MonitorRecommendationsServiceCtor(
+    db,
+    jobApplicationsService,
+    NO_SAVED_JOBS,
+    NOOP_FUNNEL_EVENTS,
+    NOOP_PROFILE_MATCH_SERVICE,
+    NOOP_MATCHING_ENGINE,
+    NOOP_RADAR_PROFILE_SERVICE,
+    ALLOW_ENTITLEMENT,
+  );
+
+  const { items, total } = await service.list("user-1", {});
+  assert.equal(total, 2);
+  assert.equal(items.length, 2);
+});
+
 test("countByLevel groups active recommendations by opportunityLevel, excluding dismissed", async () => {
   const recommendations = new Map([
     [

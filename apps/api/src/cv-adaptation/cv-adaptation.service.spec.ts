@@ -4269,6 +4269,104 @@ test("startAuthenticatedAnalysisJob prefers the radar Job's title/company over w
   const finalUpdate = jobUpdates[jobUpdates.length - 1]?.data;
   assert.equal(finalUpdate?.jobTitle, "Coordenador de BI");
   assert.equal(finalUpdate?.companyName, "HAPVIDA");
+
+  // Regressão: bug real investigado em 2026-09-02 (CvAdaptation
+  // cmtkce568002kqwyu5h21a8kd) — as colunas-irmãs jobTitle/companyName já
+  // vinham certas há dois fixes anteriores (52f6ffb, 1b6e411), mas o
+  // vaga.cargo/vaga.empresa embutido no PRÓPRIO adaptedContentJson nunca
+  // era corrigido — e é isso que /adaptar/resultado de fato renderiza.
+  const persistedContent = finalUpdate?.adaptedContentJson as {
+    vaga: { cargo: string; empresa: string };
+  };
+  assert.equal(persistedContent.vaga.cargo, "Coordenador de BI");
+  assert.equal(persistedContent.vaga.empresa, "HAPVIDA");
+});
+
+test("startGuestAnalysisJob (radar) also reconciles jobTitle/companyName and the embedded vaga.{cargo,empresa} — the guest flow never had this fix before", async () => {
+  const jobUpdates: Array<{ data: Record<string, unknown> }> = [];
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      resume: { findFirst: async () => null },
+      analysisCvSnapshot: {
+        create: async () => ({ id: "snapshot-guest-radar-1" }),
+      },
+      analysisJob: {
+        create: async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "job-guest-radar-1",
+          ...data,
+        }),
+        update: async (args: { data: Record<string, unknown> }) => {
+          jobUpdates.push(args);
+          return args;
+        },
+      },
+      job: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          assert.equal(where.id, "job-abc-guest");
+          return {
+            id: "job-abc-guest",
+            title: "Coordenador de BI",
+            status: "active",
+            descriptionClean: "desc",
+            company: { name: "HAPVIDA" },
+          };
+        },
+      },
+    },
+    {
+      analyzeAndAdapt: async () => {},
+      analyzeAndAdaptDirect: async () => {
+        throw new Error("not used in this flow");
+      },
+      buildPaidCvOutputFromGuest: async () => ({ summary: "", sections: [] }),
+    },
+    { createIntent: async () => ({}) },
+    { generatePdf: async () => Buffer.from("pdf") },
+    {
+      generateDocx: async () => Buffer.from("docx"),
+      toPdf: async () => Buffer.from("pdf"),
+    },
+    {
+      precheckTurnstile: async () => ({ ok: true }),
+      executeProtectedAnalyze: async () => ({
+        ok: true,
+        cached: false,
+        canonicalHash: "hash-guest-radar-1",
+        result: {
+          // A IA não achou cargo/empresa no texto colado — mesmo caso real
+          // investigado, agora reproduzido no fluxo guest.
+          adaptedContentJson: {
+            vaga: { cargo: "Não informado", empresa: "Não informado" },
+            scoreBefore: 60,
+            scoreAfter: 85,
+          },
+          masterCvText: "CV completo",
+          previewText: "preview",
+        },
+      }),
+    },
+  );
+
+  await service.startGuestAnalysisJob(
+    "Vaga com requisitos, responsabilidades e experiencia em analise de dados e produto.",
+    undefined,
+    validMasterCvText,
+    "token",
+    undefined,
+    "job-abc-guest",
+  );
+
+  await sleep(20);
+
+  const finalUpdate = jobUpdates[jobUpdates.length - 1]?.data;
+  assert.equal(finalUpdate?.jobTitle, "Coordenador de BI");
+  assert.equal(finalUpdate?.companyName, "HAPVIDA");
+  const persistedContent = finalUpdate?.adaptedContentJson as {
+    vaga: { cargo: string; empresa: string };
+  };
+  assert.equal(persistedContent.vaga.cargo, "Coordenador de BI");
+  assert.equal(persistedContent.vaga.empresa, "HAPVIDA");
 });
 
 test("startAuthenticatedAnalysisJob with a valid radarJobId loads descriptionClean from the Job", async () => {
@@ -5135,6 +5233,7 @@ test("startGuestAnalysisJob resolves product_origin=radar only when radarJobId i
         update: async () => ({}),
       },
       resume: { findFirst: async () => null },
+      job: { findUnique: async () => null },
     },
     {},
     {},
@@ -5652,7 +5751,7 @@ test("claimGuestAnalysisJob returns { status: 'failed' } for a failed job, no ma
   assert.equal(capturedCvAdaptationCreateData.length, 0);
 });
 
-test("claimGuestAnalysisJob materializes CvAdaptation strictly from AnalysisJob content — never from an external payload — and never calls AI", async () => {
+test("claimGuestAnalysisJob materializes CvAdaptation strictly from AnalysisJob content (own DB row, never an external payload) — and never calls AI", async () => {
   const job = baseSucceededJob();
   const { service, capturedCvAdaptationCreateData } =
     makeClaimServiceMocks(job);
@@ -5667,7 +5766,15 @@ test("claimGuestAnalysisJob materializes CvAdaptation strictly from AnalysisJob 
 
   assert.equal(capturedCvAdaptationCreateData.length, 1);
   const created = capturedCvAdaptationCreateData[0];
-  assert.deepEqual(created.adaptedContentJson, job.adaptedContentJson);
+  // adaptedContentJson.vaga é reconciliado com job.jobTitle/companyName
+  // (o próprio AnalysisJob, nunca payload externo) — ver
+  // reconcileVagaFields. job.adaptedContentJson.vaga.cargo="Analista"
+  // (sem empresa) é deliberadamente o fixture do bug real: a IA errou
+  // cargo/empresa, mas o job já sabia os dois certos.
+  assert.deepEqual(created.adaptedContentJson, {
+    ...job.adaptedContentJson,
+    vaga: { cargo: job.jobTitle, empresa: job.companyName },
+  });
   assert.equal(created.previewText, job.previewText);
   assert.equal(created.jobDescriptionText, job.jobDescriptionText);
   assert.equal(created.jobTitle, job.jobTitle);

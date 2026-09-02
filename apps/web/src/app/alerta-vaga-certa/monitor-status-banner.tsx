@@ -44,7 +44,7 @@ export function MonitorInitializingBanner() {
       <Spinner />
       <div>
         <p style={{ margin: "0 0 2px", fontSize: 14, fontWeight: 500 }}>
-          Estamos preparando seu Monitor
+          Estamos preparando seu Alerta de Vaga Certa
         </p>
         <p
           style={{ margin: 0, fontSize: 12.5, color: "rgba(250,250,246,0.65)" }}
@@ -166,7 +166,7 @@ export function MonitorEmptyActiveState({ onEdit }: { onEdit: () => void }) {
           color: "#2fa84c",
         }}
       >
-        SEU MONITOR ESTÁ ATIVO
+        SEU ALERTA DE VAGA CERTA ESTÁ ATIVO
       </p>
       <p
         style={{

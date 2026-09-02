@@ -636,9 +636,12 @@ export class CvAdaptationService {
         newMasterResumeId = created.id;
       }
 
-      const adaptedContent = this.withFrozenMissingKeywords(
-        dto.adaptedContentJson,
-        dto.selectedMissingKeywords,
+      const adaptedContent = this.reconcileVagaFields(
+        this.withFrozenMissingKeywords(
+          dto.adaptedContentJson,
+          dto.selectedMissingKeywords,
+        ),
+        { jobTitle: dto.jobTitle ?? null, companyName: dto.companyName ?? null },
       );
 
       const created = await tx.cvAdaptation.create({
@@ -983,13 +986,22 @@ export class CvAdaptationService {
     const guestPossessionTokenHash =
       hashGuestPossessionToken(guestPossessionToken);
 
+    // Mesmo enriquecimento de startAuthenticatedAnalysisJob (ver
+    // resolveAnalysisJobDescription) — faltava aqui, o que deixava toda
+    // análise guest via radar sem jobTitle/companyName confiáveis desde a
+    // origem (só o texto colado, nunca o Job/Company reais).
+    const resolved = await this.resolveAnalysisJobDescription({
+      radarJobId,
+      jobDescriptionText,
+    });
+
     const job = await this.database.analysisJob.create({
       data: {
         ownerKind: "guest",
         status: "pending",
         guestSessionHash,
         guestPossessionTokenHash,
-        jobDescriptionText,
+        jobDescriptionText: resolved.text,
         masterCvText: masterCvText?.trim() || null,
       },
     });
@@ -998,7 +1010,7 @@ export class CvAdaptationService {
       job.id,
       () =>
         this.analyzeGuest(
-          jobDescriptionText,
+          resolved.text,
           file,
           masterCvText,
           turnstileToken,
@@ -1013,6 +1025,10 @@ export class CvAdaptationService {
         mode: "guest",
         cvSource: file ? "upload" : "master_cv",
         productOrigin: radarJobId ? "radar" : "direct",
+      },
+      {
+        jobTitle: resolved.radarJobTitle,
+        companyName: resolved.radarCompanyName,
       },
     ).catch((err) => {
       this.logger.error(
@@ -1046,7 +1062,10 @@ export class CvAdaptationService {
   // que é sempre o caso nesse fluxo — nunca chegava a buscar o Job. Ver
   // processAnalysisJob, que prioriza esses valores sobre o que a IA
   // extrair.
-  private async resolveAnalysisJobDescription(dto: AnalyzeCvDto): Promise<{
+  private async resolveAnalysisJobDescription(dto: {
+    radarJobId?: string | null;
+    jobDescriptionText?: string | null;
+  }): Promise<{
     text: string;
     radarJobTitle: string | null;
     radarCompanyName: string | null;
@@ -1218,19 +1237,26 @@ export class CvAdaptationService {
     try {
       const result = await run();
       const signals = this.extractAnalysisJobSignals(result.adaptedContentJson);
+      const jobTitle = radarFallback?.jobTitle ?? signals.jobTitle;
+      const companyName = radarFallback?.companyName ?? signals.companyName;
+      // Corrige vaga.cargo/vaga.empresa DENTRO do JSON persistido — não só
+      // as colunas-irmãs acima — sempre que o radar já sabia a resposta
+      // certa (ver reconcileVagaFields).
+      const reconciledContentJson = radarFallback
+        ? this.reconcileVagaFields(result.adaptedContentJson, radarFallback)
+        : result.adaptedContentJson;
 
       await this.database.analysisJob.update({
         where: { id: jobId },
         data: {
           status: "succeeded",
           finishedAt: new Date(),
-          adaptedContentJson:
-            result.adaptedContentJson as Prisma.InputJsonValue,
+          adaptedContentJson: reconciledContentJson as Prisma.InputJsonValue,
           previewText: result.previewText,
           masterCvText: result.masterCvText,
           analysisCvSnapshotId: result.analysisCvSnapshotId,
-          jobTitle: radarFallback?.jobTitle ?? signals.jobTitle,
-          companyName: radarFallback?.companyName ?? signals.companyName,
+          jobTitle,
+          companyName,
           scoreBefore: signals.scoreBefore,
           scoreAfter: signals.scoreAfter,
         },
@@ -1342,6 +1368,42 @@ export class CvAdaptationService {
         `[analytics] failed to record ${eventName}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  // Sobrescreve vaga.cargo/vaga.empresa DENTRO do próprio JSON persistido
+  // com o cargo/empresa já conhecidos com certeza (Job do radar ou o que
+  // já foi resolvido antes) — nunca confiar no que a IA reextraiu do
+  // texto colado pra esses dois campos quando já sabemos a resposta certa.
+  // Histórico: dois fixes anteriores (52f6ffb, 1b6e411) corrigiram as
+  // colunas-irmãs AnalysisJob/CvAdaptation.jobTitle/companyName, mas
+  // NUNCA tocaram o vaga.{cargo,empresa} embutido no adaptedContentJson —
+  // que é o que o relatório (/adaptar/resultado), o fluxo guest e todo o
+  // resto de fato leem. Sem isso, a coluna fica certa e o JSON continua
+  // errado pra sempre, porque isso é IMUTÁVEL — mesmo array/objeto salvo
+  // exatamente como a IA devolveu.
+  private reconcileVagaFields(
+    adaptedContentJson: unknown,
+    known: { jobTitle?: string | null; companyName?: string | null },
+  ): unknown {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return adaptedContentJson;
+    }
+    if (!known.jobTitle && !known.companyName) {
+      return adaptedContentJson;
+    }
+    const data = adaptedContentJson as Record<string, unknown>;
+    const vaga =
+      data.vaga && typeof data.vaga === "object"
+        ? (data.vaga as Record<string, unknown>)
+        : {};
+    return {
+      ...data,
+      vaga: {
+        ...vaga,
+        ...(known.jobTitle ? { cargo: known.jobTitle } : {}),
+        ...(known.companyName ? { empresa: known.companyName } : {}),
+      },
+    };
   }
 
   private extractAnalysisJobSignals(adaptedContentJson: unknown): {
@@ -2241,6 +2303,15 @@ export class CvAdaptationService {
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
   ) {
+    // Mesma reconciliação de processAnalysisJob — dto.jobTitle/companyName
+    // já chegam confiáveis (ver analyze-master-cv-flow.ts/
+    // authenticated-analysis-flow.ts no frontend), mas o JSON em si pode
+    // ter vindo de um cliente antigo/análise anterior sem essa correção.
+    dto.adaptedContentJson = this.reconcileVagaFields(dto.adaptedContentJson, {
+      jobTitle: dto.jobTitle ?? null,
+      companyName: dto.companyName ?? null,
+    }) as Record<string, unknown>;
+
     const defaultTemplate = await this.getDefaultTemplate();
     const canonicalJob = await this.resolveCanonicalJob(
       dto.jobDescriptionText,

@@ -8,15 +8,15 @@ afterEach(() => cleanup());
 
 describe("CompanyLogo", () => {
   it("renders the colored initial square when there is no websiteUrl", () => {
-    const { container } = render(<CompanyLogo name="Earlycv" />);
+    const { container } = render(<CompanyLogo name="Acme Corp" />);
 
     expect(container.querySelector("img")).not.toBeInTheDocument();
-    expect(container.textContent).toBe("E");
+    expect(container.textContent).toBe("A");
   });
 
   it("renders the favicon img when websiteUrl is present", () => {
     const { container } = render(
-      <CompanyLogo name="EarlyCV" websiteUrl="https://earlycv.com.br" />,
+      <CompanyLogo name="Acme Corp" websiteUrl="https://earlycv.com.br" />,
     );
 
     const img = container.querySelector("img");
@@ -27,19 +27,19 @@ describe("CompanyLogo", () => {
 
   it("falls back to the initial square when the favicon fails to load", () => {
     const { container } = render(
-      <CompanyLogo name="EarlyCV" websiteUrl="https://earlycv.com.br" />,
+      <CompanyLogo name="Acme Corp" websiteUrl="https://earlycv.com.br" />,
     );
 
     const img = container.querySelector("img") as HTMLImageElement;
     fireEvent.error(img);
 
     expect(container.querySelector("img")).not.toBeInTheDocument();
-    expect(container.textContent).toBe("E");
+    expect(container.textContent).toBe("A");
   });
 
   it("falls back to the initial square when the loaded favicon is below the minimum resolution (Google's generic icon)", () => {
     const { container } = render(
-      <CompanyLogo name="EarlyCV" websiteUrl="https://earlycv.com.br" />,
+      <CompanyLogo name="Acme Corp" websiteUrl="https://earlycv.com.br" />,
     );
 
     const img = container.querySelector("img") as HTMLImageElement;
@@ -54,12 +54,12 @@ describe("CompanyLogo", () => {
     fireEvent.load(img);
 
     expect(container.querySelector("img")).not.toBeInTheDocument();
-    expect(container.textContent).toBe("E");
+    expect(container.textContent).toBe("A");
   });
 
   it("keeps the favicon img when the loaded resolution is good", () => {
     const { container } = render(
-      <CompanyLogo name="EarlyCV" websiteUrl="https://earlycv.com.br" />,
+      <CompanyLogo name="Acme Corp" websiteUrl="https://earlycv.com.br" />,
     );
 
     const img = container.querySelector("img") as HTMLImageElement;
@@ -78,17 +78,17 @@ describe("CompanyLogo", () => {
 
   it("returns null src (no img) for a websiteUrl that fails URL parsing, falling back to the square", () => {
     const { container } = render(
-      <CompanyLogo name="EarlyCV" websiteUrl="not-a-valid-url" />,
+      <CompanyLogo name="Acme Corp" websiteUrl="not-a-valid-url" />,
     );
 
     expect(container.querySelector("img")).not.toBeInTheDocument();
-    expect(container.textContent).toBe("E");
+    expect(container.textContent).toBe("A");
   });
 
   it("prefers logoUrl (source ATS logo) over the Google favicon when both are present", () => {
     const { container } = render(
       <CompanyLogo
-        name="EarlyCV"
+        name="Acme Corp"
         logoUrl="https://attachments.gupy.io/earlycv/logo.png"
         websiteUrl="https://earlycv.com.br"
       />,
@@ -101,7 +101,7 @@ describe("CompanyLogo", () => {
   it("falls back to the Google favicon when logoUrl fails to load", () => {
     const { container } = render(
       <CompanyLogo
-        name="EarlyCV"
+        name="Acme Corp"
         logoUrl="https://attachments.gupy.io/earlycv/logo.png"
         websiteUrl="https://earlycv.com.br"
       />,
@@ -117,7 +117,7 @@ describe("CompanyLogo", () => {
   it("falls back to the Google favicon when logoUrl loads below the minimum resolution", () => {
     const { container } = render(
       <CompanyLogo
-        name="EarlyCV"
+        name="Acme Corp"
         logoUrl="https://attachments.gupy.io/earlycv/logo.png"
         websiteUrl="https://earlycv.com.br"
       />,
@@ -141,7 +141,7 @@ describe("CompanyLogo", () => {
   it("falls all the way to the initial square when both logoUrl and the favicon are bad", () => {
     const { container } = render(
       <CompanyLogo
-        name="EarlyCV"
+        name="Acme Corp"
         logoUrl="https://attachments.gupy.io/earlycv/logo.png"
         websiteUrl="https://earlycv.com.br"
       />,
@@ -153,13 +153,13 @@ describe("CompanyLogo", () => {
     fireEvent.error(faviconImg);
 
     expect(container.querySelector("img")).not.toBeInTheDocument();
-    expect(container.textContent).toBe("E");
+    expect(container.textContent).toBe("A");
   });
 
   it("uses the favicon (skips logoUrl tier) when logoUrl is null", () => {
     const { container } = render(
       <CompanyLogo
-        name="EarlyCV"
+        name="Acme Corp"
         logoUrl={null}
         websiteUrl="https://earlycv.com.br"
       />,
@@ -167,5 +167,30 @@ describe("CompanyLogo", () => {
 
     const img = container.querySelector("img");
     expect(img?.src).toContain("s2/favicons");
+  });
+
+  it("renders the earlyCV brand mark (never the fallback square or a fetched logo/favicon) when name is 'earlyCV', case-insensitively", () => {
+    for (const name of ["earlyCV", "EarlyCV", "EARLYCV", "  earlycv  "]) {
+      const { container } = render(
+        <CompanyLogo
+          name={name}
+          logoUrl="https://attachments.gupy.io/some/logo.png"
+          websiteUrl="https://example.com"
+        />,
+      );
+
+      const img = container.querySelector("img");
+      expect(img?.getAttribute("src")).toBe("/favicon-white.svg");
+      cleanup();
+    }
+  });
+
+  it("does not treat a name merely containing 'earlycv' as the brand (exact match only)", () => {
+    const { container } = render(<CompanyLogo name="EarlyCV Talent Partners" />);
+
+    expect(
+      container.querySelector('img[src="/favicon-white.svg"]'),
+    ).not.toBeInTheDocument();
+    expect(container.textContent).toBe("E");
   });
 });

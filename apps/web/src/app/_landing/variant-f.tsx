@@ -249,7 +249,7 @@ export function LandingVariantF({
           }}
         >
           {!isAuthenticated && (
-            <Link href="/entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
+            <Link href="/entrar?tab=entrar" style={{ fontSize: 13, color: "#3a3a38" }}>
               Entrar
             </Link>
           )}

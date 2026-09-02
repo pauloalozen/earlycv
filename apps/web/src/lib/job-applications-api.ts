@@ -109,8 +109,15 @@ export type JobApplicationDto = {
   userId: string;
   jobTitle: string;
   companyName: string;
+  companyLogoUrl?: string | null;
+  companyWebsiteUrl?: string | null;
   location: string | null;
   jobUrl: string | null;
+  // jobId vem direto da coluna (sempre presente no payload); jobSlug só
+  // quando a candidatura veio de uma vaga do Radar — usado pra montar o
+  // link /radar/{slug} (ver detail-client.tsx).
+  jobId?: string | null;
+  jobSlug?: string | null;
   jobDescriptionText: string | null;
   status: JobApplicationStatus;
   origin: JobApplicationOrigin;

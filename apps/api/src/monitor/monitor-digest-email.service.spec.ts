@@ -128,7 +128,7 @@ test("body previews at most 5 recommendations even when more are included in the
   const text = sendCalls[0].text;
   const jobLines = text.split("\n").filter((line) => line.startsWith("- Vaga"));
   assert.equal(jobLines.length, 5);
-  assert.match(text, /\+ 3 outras no seu Monitor\./);
+  assert.match(text, /\+ 3 outras no seu Alerta de Vaga Certa\./);
 });
 
 test("does not send (and reports email_disabled) when the user's preference has emailEnabled=false at send time", async () => {
