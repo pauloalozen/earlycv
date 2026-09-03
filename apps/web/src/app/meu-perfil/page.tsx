@@ -736,7 +736,9 @@ export default async function MeuPerfilPage() {
               )}
             </div>
 
-            {/* 4 · Grid operacional — Candidaturas / Descoberta / Seu CV */}
+            {/* 4 · Grid operacional — Candidaturas / Descoberta / Seu CV.
+                "Descoberta" some em ghost mode pra quem não tem acesso ao
+                Alerta, e as outras 2 colunas ocupam o espaço dela. */}
             <DashboardColumnTabs
               tabs={[
                 {
@@ -744,11 +746,15 @@ export default async function MeuPerfilPage() {
                   label: "Candidaturas",
                   icon: <BriefcaseIcon size={13} />,
                 },
-                {
-                  id: "descoberta",
-                  label: "Descoberta",
-                  icon: <RadarIcon size={13} />,
-                },
+                ...(hasJobsAccess
+                  ? [
+                      {
+                        id: "descoberta",
+                        label: "Descoberta",
+                        icon: <RadarIcon size={13} />,
+                      },
+                    ]
+                  : []),
                 {
                   id: "seu-cv",
                   label: "Seu CV",
@@ -757,7 +763,7 @@ export default async function MeuPerfilPage() {
               ]}
               columns={{
                 candidaturas: candidaturasColumn,
-                descoberta: descobertaColumn,
+                ...(hasJobsAccess ? { descoberta: descobertaColumn } : {}),
                 "seu-cv": seuCvColumn,
               }}
             />

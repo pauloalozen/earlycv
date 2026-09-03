@@ -83,6 +83,15 @@ export function buildUserMenuItems({
         </>
       ),
     },
+    {
+      href: "/minhas-vagas",
+      label: "Minhas Vagas",
+      icon: (
+        <>
+          <path d="M6 3h12v18l-6-4-6 4V3z" />
+        </>
+      ),
+    },
     // Ícone deliberadamente diferente do Radar (retângulos/prateleira) —
     // alvo/pulso reforça "algo trabalhando por você", não "explorar uma
     // lista" (ver distinção de produto Radar x Monitor).
@@ -148,7 +157,11 @@ export function buildUserMenuItems({
         ]
       : []),
   ].filter((item) =>
-    item.href === "/radar" || item.href === "/alerta-vaga-certa" ? canSeeJobsLink : true,
+    item.href === "/radar" ||
+    item.href === "/minhas-vagas" ||
+    item.href === "/alerta-vaga-certa"
+      ? canSeeJobsLink
+      : true,
   );
 }
 

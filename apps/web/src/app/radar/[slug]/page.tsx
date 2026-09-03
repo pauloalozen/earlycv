@@ -227,7 +227,11 @@ function LockIcon({ size = 13 }: { size?: number }) {
 // número é um placeholder deliberado (skeleton, não dígito) — sem CV do
 // visitante não existe score real pra mostrar, e um número "de exemplo"
 // já foi descartado por poder ser lido como dado calculado de verdade.
-function MonitorGateBand() {
+// Abre com uma pergunta ("quanto seu currículo bate com ESSA vaga")
+// em vez de "é assim que fica SEU match" — o visitante chega aqui direto
+// do Google, ainda não sabe o que é o EarlyCV nem o que "match" significa
+// aqui, então a headline precisa explicar antes de pedir o CV.
+function MonitorGateBand({ jobTitle }: { jobTitle: string }) {
   const breakdownPreview: Array<{
     label: string;
     width: string;
@@ -268,7 +272,7 @@ function MonitorGateBand() {
               letterSpacing: 1.3,
               color: "#8a8a85",
               fontWeight: 500,
-              marginBottom: 12,
+              marginBottom: 10,
             }}
           >
             <span
@@ -280,7 +284,19 @@ function MonitorGateBand() {
                 display: "inline-block",
               }}
             />
-            É ASSIM QUE FICA SEU MATCH
+            ANÁLISE DE COMPATIBILIDADE COM IA
+          </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: -0.4,
+              lineHeight: 1.3,
+              marginBottom: 18,
+              maxWidth: 420,
+            }}
+          >
+            Quanto o seu currículo bate com essa vaga de {jobTitle}?
           </div>
           <div
             style={{
@@ -309,7 +325,7 @@ function MonitorGateBand() {
               marginBottom: 14,
             }}
           >
-            o seu número aparece depois do CV
+            o EarlyCV compara linha a linha assim que você sobe o CV
           </div>
           <div
             style={{
@@ -390,14 +406,18 @@ function MonitorGateBand() {
   );
 }
 
-// "Isso é só a porta de entrada" — vitrine do resto da plataforma pra
-// visitante anônimo, no lugar de mais um CTA repetido de monitor.
+// "Depois da vaga, vem o resto" — vitrine do resto da plataforma pra
+// visitante anônimo, no lugar de mais um CTA repetido de monitor. Mesma
+// linguagem visual do MonitorHighlightBand (faixa preta, eyebrow lime,
+// CTA lime) — reforça que isto é vitrine séria de produto, não só
+// decoração, e sempre termina em CTA de cadastro (antes não tinha nenhum).
 function FeatureShowcaseStrip() {
-  const items: Array<{ label: string; icon: ReactNode }> = [
+  const items: Array<{ label: string; description: string; icon: ReactNode }> = [
     {
       label: "Análise de CV com IA",
+      description: "O que te elimina nos filtros, antes de você aplicar.",
       icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <title>Análise de CV com IA</title>
           <circle cx="10" cy="10" r="6" stroke="#c6ff3a" strokeWidth="1.8" />
           <path
@@ -411,8 +431,9 @@ function FeatureShowcaseStrip() {
     },
     {
       label: "Carta de apresentação",
+      description: "Gerada do mesmo CV, pronta em segundos.",
       icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <title>Carta de apresentação</title>
           <rect
             x="3"
@@ -435,8 +456,9 @@ function FeatureShowcaseStrip() {
     },
     {
       label: "Prep de entrevista",
+      description: "Perguntas prováveis, sob medida pra essa vaga.",
       icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <title>Prep de entrevista</title>
           <path
             d="M4 18v-3a4 4 0 014-4h1M13 11h1a4 4 0 014 4v3"
@@ -451,8 +473,9 @@ function FeatureShowcaseStrip() {
     },
     {
       label: "Gestão de candidaturas",
+      description: "Cada vaga que você aplicar, num só lugar.",
       icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <title>Gestão de candidaturas</title>
           <rect
             x="3.5"
@@ -489,62 +512,149 @@ function FeatureShowcaseStrip() {
   return (
     <div
       style={{
-        background: "#fafaf6",
-        border: "1px solid rgba(10,10,10,0.1)",
-        borderRadius: 12,
-        padding: 22,
+        background: "#0a0a0a",
+        borderRadius: 16,
+        padding: "32px 30px",
+        color: "#fafaf6",
         marginBottom: 26,
       }}
     >
       <div
         style={{
-          fontSize: 14,
+          fontFamily: MONO,
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          color: "#c6ff3a",
           fontWeight: 600,
-          letterSpacing: -0.2,
-          margin: "0 0 3px",
+          marginBottom: 12,
         }}
       >
-        Isso é só a porta de entrada.
+        DEPOIS DA VAGA, VEM O RESTO
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 600,
+          letterSpacing: -0.8,
+          lineHeight: 1.2,
+          margin: "0 0 8px",
+          maxWidth: 520,
+        }}
+      >
+        Essa vaga é só o começo. O EarlyCV cuida da candidatura inteira.
       </div>
       <p
         style={{
-          fontSize: 12,
-          color: "#6a6560",
-          margin: "0 0 16px",
-          lineHeight: 1.5,
+          fontSize: 13.5,
+          color: "#a8a6a0",
+          margin: "0 0 26px",
+          lineHeight: 1.6,
+          maxWidth: 480,
         }}
       >
-        O monitor avisa. Depois disso, o mesmo CV vira carta de apresentação,
-        prep de entrevista e candidaturas organizadas — tudo em um lugar.
+        Um CV master alimenta tudo — análise, carta de apresentação, prep de
+        entrevista e o controle de cada candidatura, sem retrabalho.
       </p>
+
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 10,
+          gap: 12,
+          marginBottom: 26,
         }}
+        className="fss-grid"
       >
+        <style>{`
+          @media (max-width: 640px) {
+            .fss-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          }
+        `}</style>
         {items.map((item) => (
-          <div key={item.label} style={{ textAlign: "center" }}>
+          <div
+            key={item.label}
+            style={{
+              background: "rgba(250,250,246,0.045)",
+              border: "1px solid rgba(250,250,246,0.1)",
+              borderRadius: 12,
+              padding: "16px 14px",
+            }}
+          >
             <div
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                background: "#0a0a0a",
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: "rgba(198,255,58,0.12)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                margin: "0 auto 8px",
+                marginBottom: 12,
               }}
             >
               {item.icon}
             </div>
-            <div style={{ fontSize: 10.5, color: "#3a3a38", lineHeight: 1.35 }}>
+            <div
+              style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "#fafaf6",
+                marginBottom: 5,
+              }}
+            >
               {item.label}
+            </div>
+            <div style={{ fontSize: 11, color: "#8a8a85", lineHeight: 1.45 }}>
+              {item.description}
             </div>
           </div>
         ))}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <a
+          href="/entrar?tab=cadastrar&ctx=radar"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            background: "#c6ff3a",
+            color: "#1c2a05",
+            borderRadius: 10,
+            padding: "14px 24px",
+            fontSize: 13.5,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Criar minha conta grátis
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M5 12h14M13 6l6 6-6 6"
+              stroke="#1c2a05"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            color: "#6a6560",
+            letterSpacing: 0.3,
+          }}
+        >
+          grátis · sem cartão · leva 1 minuto
+        </span>
       </div>
     </div>
   );
@@ -1688,7 +1798,7 @@ export default async function JobPage({ params }: JobPageProps) {
         {/* Gate de compatibilidade acima da dobra — só visitante anônimo;
         usuário logado já vê o CompatCard real na sidebar, não precisa do
         placeholder */}
-        {!user ? <MonitorGateBand /> : null}
+        {!user ? <MonitorGateBand jobTitle={job.title} /> : null}
 
         {/* Two-column body */}
         <div

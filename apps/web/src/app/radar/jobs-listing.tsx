@@ -1012,7 +1012,7 @@ export async function RadarJobsListing({
               {user ? (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <Link
-                    href="/radar-salvas"
+                    href="/minhas-vagas"
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
@@ -1245,7 +1245,7 @@ export async function RadarJobsListing({
                   </div>
 
                   <Link
-                    href="/radar-salvas"
+                    href="/minhas-vagas"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1280,7 +1280,7 @@ export async function RadarJobsListing({
           {scoreState !== "has-cv" && user ? (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Link
-                href="/radar-salvas"
+                href="/minhas-vagas"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",

@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppHeader } from "@/components/app-header";
 import { PublicFooter } from "@/components/public-footer";
-import { PublicNavBar } from "@/components/public-nav-bar";
 import {
   getDefaultAppRedirectPath,
   getRouteAccessRedirectPath,
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { getMyPlan } from "@/lib/plans-api";
 import { listSavedJobs } from "@/lib/saved-jobs-api";
 import { JobCard } from "../radar/job-card";
 
@@ -33,9 +35,9 @@ type Props = {
   searchParams: Promise<{ page?: string; sort?: string }>;
 };
 
-export default async function VagasSalvasPage({ searchParams }: Props) {
+export default async function MinhasVagasPage({ searchParams }: Props) {
   const user = await getCurrentAppUserFromCookies();
-  const redirectPath = getRouteAccessRedirectPath("/vagas-salvas", user);
+  const redirectPath = getRouteAccessRedirectPath("/minhas-vagas", user);
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
@@ -45,12 +47,17 @@ export default async function VagasSalvasPage({ searchParams }: Props) {
     ? (params.sort as SortValue)
     : "date_desc";
 
-  const { items, total } = await listSavedJobs(page, LIMIT, sort).catch(() => ({
-    items: [],
-    total: 0,
-    page: 1,
-    limit: LIMIT,
-  }));
+  const [savedJobsResult, planResult] = await Promise.allSettled([
+    listSavedJobs(page, LIMIT, sort),
+    getMyPlan(),
+  ]);
+  const { items, total } =
+    savedJobsResult.status === "fulfilled"
+      ? savedJobsResult.value
+      : { items: [], total: 0 };
+  const availableCredits = toHeaderAvailableCredits(
+    planResult.status === "fulfilled" ? planResult.value : null,
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
@@ -59,7 +66,7 @@ export default async function VagasSalvasPage({ searchParams }: Props) {
     if (sortValue !== "date_desc") p.set("sort", sortValue);
     if (targetPage > 1) p.set("page", String(targetPage));
     const qs = p.toString();
-    return `/vagas-salvas${qs ? `?${qs}` : ""}`;
+    return `/minhas-vagas${qs ? `?${qs}` : ""}`;
   }
 
   return (
@@ -72,13 +79,17 @@ export default async function VagasSalvasPage({ searchParams }: Props) {
         color: "#0a0a0a",
       }}
     >
-      <PublicNavBar hideHowItWorksLink fixed />
+      <AppHeader
+        userName={user.name}
+        userRole={user.internalRole}
+        availableCredits={availableCredits}
+      />
 
       <div
         style={{
           maxWidth: 1100,
           margin: "0 auto",
-          padding: "120px clamp(16px,4vw,48px) 80px",
+          padding: "88px clamp(16px,4vw,48px) 80px",
         }}
       >
         <nav

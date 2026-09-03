@@ -43,6 +43,7 @@ export function JobCardResponsiveStyles() {
         .jc-badges { display: none; }
         .jc-ringcol { display: none; }
         .jc-ringcol-mobile { display: flex; }
+        .jc-save-desktop { display: none; }
         .jc-actions > :last-child { flex: 1; }
       }
     `}</style>
@@ -313,7 +314,7 @@ function ScoreIndicator({
         return (
           <>
             <ScoreRing value={displayScore} size={ringSize} />
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 12.5,
@@ -362,7 +363,7 @@ function ScoreIndicator({
       return (
         <>
           <OpportunityRing score={displayScore} size={ringSize} />
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 12.5,
@@ -477,6 +478,8 @@ function ScoreIndicator({
         {uploadIcon}
         <span
           style={{
+            flex: 1,
+            minWidth: 0,
             fontFamily: MONO,
             fontSize: 9,
             fontWeight: 600,
@@ -531,7 +534,7 @@ export type JobCardProps = {
 // chips de skill quando disponíveis. `showScore=false` cobre tanto anônimo
 // quanto vaga ainda não enriquecida (score null) — o card fica idêntico,
 // só sem a coluna de compatibilidade. Reaproveitado tal e qual em /radar e
-// /radar-salvas (mesmas informações, mesmo componente).
+// /minhas-vagas (mesmas informações, mesmo componente).
 export function JobCard({
   job,
   adaptarHref,
@@ -605,15 +608,29 @@ export function JobCard({
               showScore={showScore}
               isLoggedIn={isLoggedIn}
             />
-          </div>
-
-          <div className="jc-actions">
+            {/* Este SaveJobBtn só aparece de fato no mobile — o pai
+            (.jc-ringcol-mobile) já é display:none no desktop. O espaço que
+            sobrava ao lado do anel+label agora é ocupado por ele, empurrado
+            pra ponta pelo flex:1 do texto do ScoreIndicator. No desktop o
+            botão de salvar segue vivendo só em .jc-actions (ver
+            .jc-save-desktop). */}
             <SaveJobBtn
               jobId={job.id}
               initialSaved={!!job.isSaved}
               isLoggedIn={isLoggedIn}
               origin={saveOrigin}
             />
+          </div>
+
+          <div className="jc-actions">
+            <span className="jc-save-desktop">
+              <SaveJobBtn
+                jobId={job.id}
+                initialSaved={!!job.isSaved}
+                isLoggedIn={isLoggedIn}
+                origin={saveOrigin}
+              />
+            </span>
             {hasAnalysis && job.existingApplication ? (
               <AdaptBtn
                 href={`/candidaturas/${job.existingApplication.id}`}

@@ -27,7 +27,7 @@ const GROUP_PAGE_SIZE = 10;
 // Alerta de Vaga Certa é 100% autenticado — sem exploração pública, sem
 // SEO, sem facetas. Diferente do Radar (guest-first), não tem fallback
 // anônimo: sem sessão válida, redireciona pra /entrar (mesmo padrão de
-// /vagas-salvas).
+// /minhas-vagas).
 export default async function MonitorPage() {
   const user = await getCurrentAppUserFromCookies();
   const redirectPath = getRouteAccessRedirectPath("/alerta-vaga-certa", user);

@@ -26,7 +26,7 @@ function Spinner() {
   );
 }
 
-// Botão "Analisar meu CV" da listagem de vagas (/radar, /radar-salvas):
+// Botão "Analisar meu CV" da listagem de vagas (/radar, /minhas-vagas):
 // mesma regra do card de detalhe (analysis-cta.tsx) — com CV master,
 // dispara a análise direto (sem passar por /adaptar), mostra loading no
 // próprio botão e redireciona pro resultado. Sem CV master, cai pro link
@@ -62,7 +62,7 @@ export function AnalyzeCardBtn({
       const result = await analyzeMasterCvForJob({
         masterResumeId: masterResumeId as string,
         radarJobId,
-        // Este botão só existe na listagem do Radar (/radar, /vagas-salvas)
+        // Este botão só existe na listagem do Radar (/radar, /minhas-vagas)
         // — nunca no card de recomendação do Alerta, que tem seu próprio
         // link (monitor-recommendation-card.tsx) direto pro detalhe da
         // vaga, sem análise inline.

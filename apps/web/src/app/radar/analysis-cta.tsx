@@ -257,7 +257,7 @@ export function AnalysisCtaButtons({
               }
         }
       >
-        Analisar com outro CV
+        {showPrimary ? "Analisar com outro CV" : "Analisar meu CV"}
       </a>
 
       {error ? <Toast message={error} onClose={() => setError(null)} /> : null}

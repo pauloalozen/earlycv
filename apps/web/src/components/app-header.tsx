@@ -8,6 +8,10 @@ import {
 } from "@/components/app-header-user-menu";
 import { Logo } from "@/components/logo";
 import type { AppInternalRole } from "@/lib/app-session";
+import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -72,6 +76,13 @@ export function AppHeader({
   const mobileBg =
     backgroundColor !== "transparent" ? backgroundColor : "#f9f8f4";
   const menuItems = buildUserMenuItems({ userRole });
+  // Badge de versão: v2.1 é o que está publicamente em prod; v3.1 (Alerta
+  // de Vaga Certa) só aparece com ghost mode desligado ou pra quem já tem
+  // acesso ao Alerta durante o rollout controlado.
+  const versionBadge =
+    !isJobsGhostModeEnabled() || canAccessJobsInGhostMode(userRole)
+      ? "v3.1"
+      : "v2.1";
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -387,7 +398,7 @@ export function AppHeader({
                 fontWeight: 500,
               }}
             >
-              v2.1
+              {versionBadge}
             </span>
           </a>
 

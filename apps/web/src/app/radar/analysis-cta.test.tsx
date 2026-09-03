@@ -49,7 +49,7 @@ describe("AnalysisCtaButtons", () => {
     ).toBeInTheDocument();
   });
 
-  it("usuário logado sem CV master: só mostra 'Analisar com outro CV'", () => {
+  it("usuário logado sem CV master: só mostra 'Analisar meu CV' (não há 'outro' CV pra contrastar)", () => {
     render(
       <AnalysisCtaButtons
         isLoggedIn
@@ -62,11 +62,11 @@ describe("AnalysisCtaButtons", () => {
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Analisar com outro CV/i }),
+      screen.getByRole("link", { name: /^Analisar meu CV$/i }),
     ).toBeInTheDocument();
   });
 
-  it("usuário não logado: só mostra 'Analisar com outro CV'", () => {
+  it("usuário não logado: só mostra 'Analisar meu CV' (não há 'outro' CV pra contrastar)", () => {
     render(
       <AnalysisCtaButtons
         isLoggedIn={false}
@@ -78,7 +78,7 @@ describe("AnalysisCtaButtons", () => {
     );
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Analisar com outro CV/i });
+    const link = screen.getByRole("link", { name: /^Analisar meu CV$/i });
     expect(link).toHaveAttribute("href", "/entrar?tab=cadastrar&jobId=job-1");
   });
 

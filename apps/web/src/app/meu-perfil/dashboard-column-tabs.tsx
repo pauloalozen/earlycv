@@ -7,13 +7,14 @@ const MONO = "var(--font-geist-mono), monospace";
 type Tab = { id: string; label: string; icon: ReactNode };
 
 type Props = {
-  tabs: [Tab, Tab, Tab];
+  tabs: Tab[];
   columns: Record<string, ReactNode>;
 };
 
-// Desktop: as 3 colunas do grid operacional ficam lado a lado sempre.
+// Desktop: as colunas do grid operacional ficam lado a lado sempre (3, ou
+// 2 quando "Descoberta" está oculta em ghost mode — ver meu-perfil/page.tsx).
 // Mobile (<=900px): viram abas — só a coluna ativa é exibida, evitando o
-// empilhamento vertical infinito das 3 seções.
+// empilhamento vertical infinito das seções.
 export function DashboardColumnTabs({ tabs, columns }: Props) {
   const [active, setActive] = useState(tabs[0].id);
 
@@ -23,7 +24,7 @@ export function DashboardColumnTabs({ tabs, columns }: Props) {
         .dpt-tabs { display: none; }
         .dpt-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(${tabs.length}, minmax(0, 1fr));
           gap: 16px;
           align-items: stretch;
         }
