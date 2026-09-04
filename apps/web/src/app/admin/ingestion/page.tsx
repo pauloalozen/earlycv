@@ -20,6 +20,7 @@ import { FontesTableClient } from "./_components/fontes-table-client";
 import { IndexacaoTabClient } from "./_components/indexacao-tab-client";
 import { IngestionDashboardCards } from "./_components/ingestion-dashboard-cards";
 import { JobsTabClient } from "./_components/jobs-tab-client";
+import { MatchingTabContent } from "./_components/matching-tab-content";
 import { VagasTabClient } from "./_components/vagas-tab-client";
 
 export const metadata = buildAdminMetadata("Ingestao");
@@ -29,6 +30,7 @@ type SearchParams = Promise<{
     | "fontes"
     | "vagas"
     | "jobs"
+    | "matching"
     | "enrichment"
     | "descoberta"
     | "audit"
@@ -49,6 +51,8 @@ type SearchParams = Promise<{
   search?: string;
   sourceId?: string;
   sourceType?: string;
+  userQuery?: string;
+  jobQuery?: string;
 }>;
 
 type AdminIngestionPageProps = {
@@ -127,12 +131,14 @@ export default async function AdminIngestionPage({
     enrichPage,
     enrichTab,
     enrichStatus,
+    jobQuery,
     message,
     search,
     sourceId,
     sourceType,
     status,
     tab,
+    userQuery,
     vagaQuery,
     vagaSource,
     vagaStatus,
@@ -147,6 +153,7 @@ export default async function AdminIngestionPage({
     "fontes",
     "jobs",
     "vagas",
+    "matching",
     "enrichment",
     "descoberta",
     "audit",
@@ -270,6 +277,12 @@ export default async function AdminIngestionPage({
           >
             Indexação de vagas
           </TabLink>
+          <TabLink
+            active={activeTab === "matching"}
+            href={buildTabHref("matching")}
+          >
+            Matching
+          </TabLink>
           <TabLink active={activeTab === "jobs"} href={buildTabHref("jobs")}>
             Jobs
           </TabLink>
@@ -321,6 +334,17 @@ export default async function AdminIngestionPage({
 
         {/* ── INDEXAÇÃO DE VAGAS ── */}
         {activeTab === "indexacao" && <IndexacaoTabClient />}
+
+        {/* ── MATCHING ── */}
+        {activeTab === "matching" && (
+          <MatchingTabContent
+            token={token}
+            userQuery={userQuery}
+            jobQuery={jobQuery}
+            redirectPath="/admin/ingestion?tab=matching"
+            hiddenFields={{ tab: "matching" }}
+          />
+        )}
 
         {/* ── DESCOBERTA ── */}
         {activeTab === "descoberta" && <DiscoveryTabClient />}

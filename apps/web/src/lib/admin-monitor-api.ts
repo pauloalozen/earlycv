@@ -47,9 +47,6 @@ export type AdminMonitorOverview = {
   };
   matchJobs: Record<MonitorMatchJobStatus, number>;
   profileMatchJobs: Record<MonitorMatchJobStatus, number>;
-  digests: Record<MonitorDigestStatus, number>;
-  digestsSentLast24h: number;
-  digestEventsLast24h: Record<MonitorDigestEventType, number>;
 };
 
 export type AdminMonitorUserSummary = {
@@ -217,18 +214,9 @@ export type AdminMonitorFailures = {
     updatedAt: string;
     user: { id: string; email: string; name: string };
   }[];
-  failedDigests: {
-    id: string;
-    userId: string;
-    attempts: number;
-    lastError: string | null;
-    updatedAt: string;
-    user: { id: string; email: string; name: string };
-  }[];
   stuckProcessingCounts: {
     matchJobs: number;
     profileMatchJobs: number;
-    digests: number;
   };
   staleProcessingThresholdMs: number;
   stuckProfiles: {
@@ -464,4 +452,163 @@ export function resendAdminMonitorDigest(id: string, token?: string) {
     token,
     { method: "POST" },
   );
+}
+
+// ─── Alerta de Vagas (/admin/alerta-vagas) ─────────────────────────────
+// Ver docs/specs/2026-09-04-admin-alerta-vagas-tab.md
+
+export type TrackedAlertUser = {
+  id: string;
+  email: string;
+  name: string;
+  internalRole: "none" | "admin" | "superadmin";
+  entitledToday: boolean;
+  frequency: "DAILY" | "WEEKLY" | "OFF";
+};
+
+export type SendDigestNowResult = {
+  sent: boolean;
+  digestId?: string;
+  recommendationCount?: number;
+  skippedReason: string | null;
+};
+
+export type DigestHistorySource = "SCHEDULER" | "ADMIN_MANUAL";
+
+export type DigestHistoryItem = {
+  id: string;
+  frequency: "DAILY" | "WEEKLY" | "OFF";
+  status: MonitorDigestStatus;
+  scheduledFor: string;
+  sentAt: string | null;
+  createdAt: string;
+  source: DigestHistorySource;
+  triggeredByAdmin: { id: string; name: string; email: string } | null;
+  user: { id: string; email: string; name: string };
+};
+
+export type DigestSchedule = {
+  dailyHour: number;
+  dailyMinute: number;
+  weeklyDayOfWeek: number;
+  timezone: string;
+};
+
+export type DigestContent = {
+  subject: string;
+  introText: string;
+};
+
+export type DigestEmailStats = {
+  byStatus: Record<MonitorDigestStatus, number>;
+  sentLast24h: number;
+  eventsLast24h: Record<MonitorDigestEventType, number>;
+  stuckProcessing: number;
+  staleProcessingThresholdMs: number;
+  failedDigests: {
+    id: string;
+    userId: string;
+    attempts: number;
+    lastError: string | null;
+    updatedAt: string;
+    user: { id: string; email: string; name: string };
+  }[];
+};
+
+export function listTrackedAlertUsers(
+  params: { page?: number; limit?: number; query?: string } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.query) qs.set("query", params.query);
+  const suffix = qs.toString();
+  return apiRequest<{
+    page: number;
+    limit: number;
+    total: number;
+    users: TrackedAlertUser[];
+  }>(
+    `/admin/monitor/alert-preference/tracked${suffix ? `?${suffix}` : ""}`,
+    token,
+  );
+}
+
+export function trackAlertUser(userId: string, token?: string) {
+  return apiRequest<{ tracked: boolean; frequency: string }>(
+    "/admin/monitor/alert-preference/track",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    },
+  );
+}
+
+export function sendMonitorDigestNow(userId: string, token?: string) {
+  return apiRequest<SendDigestNowResult>(
+    "/admin/monitor/digest/send-now",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    },
+  );
+}
+
+export function getMonitorDigestHistory(
+  params: {
+    page?: number;
+    limit?: number;
+    userQuery?: string;
+    source?: "MANUAL" | "AUTOMATIC";
+  } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.userQuery) qs.set("userQuery", params.userQuery);
+  if (params.source) qs.set("source", params.source);
+  const suffix = qs.toString();
+  return apiRequest<{
+    page: number;
+    limit: number;
+    total: number;
+    items: DigestHistoryItem[];
+  }>(`/admin/monitor/digest/history${suffix ? `?${suffix}` : ""}`, token);
+}
+
+export function getMonitorDigestStats(token?: string) {
+  return apiRequest<DigestEmailStats>("/admin/monitor/digest/stats", token);
+}
+
+export function getMonitorDigestSchedule(token?: string) {
+  return apiRequest<DigestSchedule>("/admin/monitor/digest/schedule", token);
+}
+
+export function updateMonitorDigestSchedule(
+  dto: { dailyHour: number; dailyMinute: number; weeklyDayOfWeek: number },
+  token?: string,
+) {
+  return apiRequest<DigestSchedule>("/admin/monitor/digest/schedule", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dto),
+  });
+}
+
+export function getMonitorDigestContent(token?: string) {
+  return apiRequest<DigestContent>("/admin/monitor/digest/content", token);
+}
+
+export function updateMonitorDigestContent(dto: DigestContent, token?: string) {
+  return apiRequest<DigestContent>("/admin/monitor/digest/content", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dto),
+  });
 }

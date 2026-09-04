@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Inject,
@@ -17,10 +18,29 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import { AdminMonitorService } from "./admin-monitor.service";
-import type { ListAdminMonitorJobsDto } from "./dto/list-admin-monitor-jobs.dto";
-import type { ListAdminMonitorRecommendationsDto } from "./dto/list-admin-monitor-recommendations.dto";
-import type { ListAdminMonitorUsersDto } from "./dto/list-admin-monitor-users.dto";
-import type { PageQueryDto } from "./dto/page-query.dto";
+// Imports de VALOR (não `import type`) de propósito, apesar do biome achar
+// que só são usados como tipo: o ValidationPipe global (main.ts) + o local
+// por parâmetro dependem dos metadados de decorator (`design:paramtypes`)
+// que o TS só emite quando a classe é referenciada como valor em tempo de
+// execução. Com `import type` a classe é apagada e o Nest valida contra
+// `Object` — resultado, todo parâmetro cai em "property X should not
+// exist" mesmo existindo no DTO (bug real encontrado ao testar
+// /admin/alerta-vagas: afetava também os endpoints antigos de busca por
+// usuário/vaga deste controller — biome converteria de volta pra `import
+// type` no autofix se não fosse pelo biome-ignore abaixo).
+// biome-ignore-start lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype (ver comentário acima)
+import { ListAdminMonitorJobsDto } from "./dto/list-admin-monitor-jobs.dto";
+import { ListAdminMonitorRecommendationsDto } from "./dto/list-admin-monitor-recommendations.dto";
+import { ListAdminMonitorUsersDto } from "./dto/list-admin-monitor-users.dto";
+import { ListDigestHistoryDto } from "./dto/list-digest-history.dto";
+import { ListTrackedAlertUsersDto } from "./dto/list-tracked-alert-users.dto";
+import { PageQueryDto } from "./dto/page-query.dto";
+import { SendDigestNowDto } from "./dto/send-digest-now.dto";
+import { TrackAlertUserDto } from "./dto/track-alert-user.dto";
+import { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
+import { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
+
+// biome-ignore-end lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype
 
 const validationOptions = {
   transform: true,
@@ -136,5 +156,72 @@ export class AdminMonitorController {
     @AuthenticatedUser() admin: AuthenticatedRequestUser,
   ) {
     return this.adminMonitorService.resendDigest(admin.id, id);
+  }
+
+  // ---------------------------------------------------------------------
+  // Alerta de Vagas (/admin/alerta-vagas) — ver
+  // docs/specs/2026-09-04-admin-alerta-vagas-tab.md
+  // ---------------------------------------------------------------------
+
+  @Get("alert-preference/tracked")
+  listTrackedAlertUsers(
+    @Query(new ValidationPipe(validationOptions))
+    query: ListTrackedAlertUsersDto,
+  ) {
+    return this.adminMonitorService.listTrackedAlertUsers(query);
+  }
+
+  @Post("alert-preference/track")
+  trackAlertUser(
+    @Body(new ValidationPipe(validationOptions)) body: TrackAlertUserDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.trackAlertUser(admin.id, body.userId);
+  }
+
+  @Post("digest/send-now")
+  sendDigestNow(
+    @Body(new ValidationPipe(validationOptions)) body: SendDigestNowDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.sendDigestNow(admin.id, body.userId);
+  }
+
+  @Get("digest/history")
+  listDigestHistory(
+    @Query(new ValidationPipe(validationOptions)) query: ListDigestHistoryDto,
+  ) {
+    return this.adminMonitorService.listDigestHistory(query);
+  }
+
+  @Get("digest/stats")
+  getDigestEmailStats() {
+    return this.adminMonitorService.getDigestEmailStats();
+  }
+
+  @Get("digest/schedule")
+  getDigestSchedule() {
+    return this.adminMonitorService.getDigestSchedule();
+  }
+
+  @Post("digest/schedule")
+  updateDigestSchedule(
+    @Body(new ValidationPipe(validationOptions)) body: UpdateDigestScheduleDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.updateDigestSchedule(admin.id, body);
+  }
+
+  @Get("digest/content")
+  getDigestContent() {
+    return this.adminMonitorService.getDigestContent();
+  }
+
+  @Post("digest/content")
+  updateDigestContent(
+    @Body(new ValidationPipe(validationOptions)) body: UpdateDigestContentDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.updateDigestContent(admin.id, body);
   }
 }

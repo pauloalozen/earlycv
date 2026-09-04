@@ -62,6 +62,9 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
     MonitorRecommendationsService,
     MonitorProfileMatchService,
     MonitorEntitlementService,
+    MonitorAlertPreferenceService,
+    MonitorDigestContentService,
+    MonitorDigestEmailService,
   ],
 })
 export class MonitorModule {}

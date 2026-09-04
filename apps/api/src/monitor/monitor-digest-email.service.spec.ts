@@ -66,6 +66,11 @@ function createFixture(options: {
         emailEnabled: options.emailEnabled ?? true,
       }),
     },
+    // null simula a tabela sem a linha singleton (defesa em profundidade)
+    // — o service cai pros defaults hardcoded, testados por essas specs.
+    monitorDigestEmailContent: {
+      findUnique: async () => null,
+    },
   };
 
   const emailDelivery = {
@@ -212,6 +217,45 @@ test("the idempotencyKey is identical across repeated calls for the same digest 
   await service.sendDigest("digest-1");
 
   assert.equal(sendCalls[0].idempotencyKey, sendCalls[1].idempotencyKey);
+});
+
+test("uses the admin-configured subject template and intro text when the singleton row exists", async () => {
+  const { database, sendCalls, service } = createFixture({
+    recommendationCount: 4,
+  });
+  database.monitorDigestEmailContent.findUnique = async () => ({
+    subject: "Vagas novas pra você — {count} oportunidades",
+    introText: "Separamos o que combina mais com seu perfil.",
+  });
+
+  await service.sendDigest("digest-1");
+
+  assert.equal(sendCalls[0].subject, "Vagas novas pra você — 4 oportunidades");
+  assert.match(
+    sendCalls[0].text,
+    /Separamos o que combina mais com seu perfil\./,
+  );
+  assert.match(
+    sendCalls[0].html ?? "",
+    /Separamos o que combina mais com seu perfil\./,
+  );
+});
+
+test("a single recommendation always uses the fixed singular subject, ignoring the admin's template", async () => {
+  const { database, sendCalls, service } = createFixture({
+    recommendationCount: 1,
+  });
+  database.monitorDigestEmailContent.findUnique = async () => ({
+    subject: "Vagas novas pra você — {count} oportunidades",
+    introText: "",
+  });
+
+  await service.sendDigest("digest-1");
+
+  assert.equal(
+    sendCalls[0].subject,
+    "Encontramos 1 nova oportunidade para você",
+  );
 });
 
 test("does not send (and reports not_entitled) when the user has lost Monitor entitlement by send time", async () => {

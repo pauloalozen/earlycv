@@ -1936,6 +1936,15 @@ enum MonitorDigestStatus {
   SKIPPED
 }
 
+// Quem gerou este MonitorDigest — distingue o disparo do
+// MonitorDigestScheduler (rotina normal) de um disparo manual pedido por
+// um admin na aba /admin/alerta-vagas (ver admin-monitor.service.ts). Só
+// rotula a origem: não muda nenhuma outra regra de conteúdo/envio.
+enum MonitorDigestSource {
+  SCHEDULER
+  ADMIN_MANUAL
+}
+
 // Um registro por (usuário, frequência, período) — @@unique é o mecanismo
 // de idempotência: o scheduler faz upsert nessa chave antes de montar o
 // conteúdo, então um worker reiniciado no meio do processamento nunca
@@ -1951,6 +1960,13 @@ model MonitorDigest {
   frequency    MonitorDigestFrequency
   status       MonitorDigestStatus    @default(PENDING)
   scheduledFor DateTime
+
+  // Default SCHEDULER preserva o significado dos registros existentes sem
+  // backfill — todo MonitorDigest criado antes desta coluna existir veio
+  // mesmo da rotina normal. triggeredByAdminId só é preenchido quando
+  // source é ADMIN_MANUAL (ver AdminMonitorService.sendDigestNow).
+  source             MonitorDigestSource @default(SCHEDULER)
+  triggeredByAdminId String?
 
   attempts  Int       @default(0)
   lastError String?
@@ -2048,6 +2064,42 @@ model MonitorAdminActionLog {
 
   @@index([entityType, entityId, createdAt])
   @@index([adminId, createdAt])
+}
+
+// Singleton (id fixo "default") — horário de geração dos digests
+// automáticos, editável via /admin/alerta-vagas. Guardado em hora local
+// (não UTC) pra edição no admin ficar legível; MonitorDigestScheduler
+// converte pra UTC no momento de decidir se deve disparar (ver
+// monitor-digest-schedule.util.ts). Nasce com uma migration que já insere
+// a linha default com os valores hoje hardcoded (11:00 America/Sao_Paulo
+// diário, segunda-feira pro semanal) — zero mudança de comportamento até
+// alguém editar pelo admin.
+model MonitorDigestScheduleConfig {
+  id String @id @default("default")
+
+  dailyHour       Int    @default(11)
+  dailyMinute     Int    @default(0)
+  weeklyDayOfWeek Int    @default(1) // 0=domingo..6=sábado (getUTCDay())
+  timezone        String @default("America/Sao_Paulo")
+
+  updatedAt        DateTime @updatedAt
+  updatedByAdminId String?
+}
+
+// Singleton (id fixo "default") — assunto e texto de introdução do
+// digest, editáveis via /admin/alerta-vagas (ver
+// monitor-digest-email.service.ts). As recomendações continuam montadas
+// automaticamente pelo MonitorDigestContentService — só o texto ao redor
+// delas é editável. Nasce com uma migration que já insere a linha default
+// com os valores hoje hardcoded no service.
+model MonitorDigestEmailContent {
+  id String @id @default("default")
+
+  subject   String
+  introText String
+
+  updatedAt        DateTime @updatedAt
+  updatedByAdminId String?
 }
 
 model JobEnrichment {

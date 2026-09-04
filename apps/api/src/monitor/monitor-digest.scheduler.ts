@@ -7,6 +7,7 @@ import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { MonitorDigestContentService } from "./monitor-digest-content.service";
 import {
+  isScheduledDailyMoment,
   isWeeklyDigestDay,
   startOfIsoWeekUtc,
   startOfUtcDay,
@@ -15,6 +16,16 @@ import { MonitorEntitlementService } from "./monitor-entitlement.service";
 
 const LOCK_ID = "monitor-digest-scheduler";
 const LOCK_TTL_MS = 5 * 60_000;
+
+// Espelha o seed da migration (MonitorDigestScheduleConfig id="default")
+// — só usado se a linha singleton não existir por algum motivo (defesa em
+// profundidade, nunca o caminho esperado em operação normal).
+const DEFAULT_SCHEDULE_CONFIG = {
+  dailyHour: 11,
+  dailyMinute: 0,
+  weeklyDayOfWeek: 1,
+  timezone: "America/Sao_Paulo",
+};
 
 // Descobre QUAIS digests são devidos hoje e grava as linhas
 // (MonitorDigest + MonitorDigestRecommendation) com status PENDING (ou
@@ -38,20 +49,38 @@ export class MonitorDigestScheduler {
     private readonly entitlementService: MonitorEntitlementService,
   ) {}
 
-  // "0 14 * * *" em UTC = 11h em America/Sao_Paulo (UTC-3, sem horário de
-  // verão hoje). O processo roda em UTC (sem TZ configurada no container),
-  // então o horário-alvo precisa ser convertido aqui em vez de usar um
-  // CronExpression nomeado (ex: EVERY_DAY_AT_1PM), que soa como "13h" mas
-  // na prática disparava 13h UTC = 10h em Brasília.
-  @Cron("0 14 * * *")
+  // Polling por minuto em vez de um único @Cron fixo: assim o horário
+  // configurado em MonitorDigestScheduleConfig (editável via
+  // /admin/alerta-vagas) vale sem precisar reiniciar o serviço. O custo é
+  // desprezível (1 SELECT singleton + comparação de hora/minuto por
+  // minuto) — mesmo raciocínio de custo do MonitorDigestWorker, que já
+  // faz polling a cada 30s. Deliberadamente NÃO usa NestJS
+  // SchedulerRegistry pra registrar/desregistrar um cron dinâmico: mais
+  // simples de revisar e sem risco de bugar o boot do serviço.
+  @Cron("0 * * * * *")
   async tick() {
     if (process.env.NODE_ENV === "test") {
       return;
     }
-    await this.discoverDue(new Date());
+    const now = new Date();
+    const config = await this.loadScheduleConfig();
+    if (!isScheduledDailyMoment(now, config)) {
+      return;
+    }
+    await this.discoverDue(now, config.weeklyDayOfWeek);
   }
 
-  async discoverDue(now: Date): Promise<{ daily: number; weekly: number }> {
+  private async loadScheduleConfig() {
+    const config = await this.database.monitorDigestScheduleConfig.findUnique({
+      where: { id: "default" },
+    });
+    return config ?? DEFAULT_SCHEDULE_CONFIG;
+  }
+
+  async discoverDue(
+    now: Date,
+    weeklyDayOfWeek = 1,
+  ): Promise<{ daily: number; weekly: number }> {
     const owner = `monitor-digest-scheduler-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -69,7 +98,7 @@ export class MonitorDigestScheduler {
       );
 
       let weekly = 0;
-      if (isWeeklyDigestDay(now)) {
+      if (isWeeklyDigestDay(now, weeklyDayOfWeek)) {
         weekly = await this.discoverForFrequency(
           "WEEKLY",
           startOfIsoWeekUtc(now),

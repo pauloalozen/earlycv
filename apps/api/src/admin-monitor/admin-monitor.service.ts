@@ -1,7 +1,23 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import type { MonitorMatchJobStatus, Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { MonitorAlertPreferenceService } from "../monitor/monitor-alert-preference.service";
+import { MonitorDigestContentService } from "../monitor/monitor-digest-content.service";
+import {
+  DEFAULT_INTRO_TEXT,
+  DEFAULT_SUBJECT_TEMPLATE,
+  MonitorDigestEmailService,
+} from "../monitor/monitor-digest-email.service";
+import {
+  startOfIsoWeekUtc,
+  startOfUtcDay,
+} from "../monitor/monitor-digest-schedule.util";
 import { MonitorEntitlementService } from "../monitor/monitor-entitlement.service";
 import { MonitorProfileMatchService } from "../monitor/monitor-profile-match.service";
 import {
@@ -11,6 +27,16 @@ import {
   scoreToOpportunityLevel,
 } from "../radar/matching.engine";
 import type { AdminMonitorRecommendationStatusFilter } from "./dto/list-admin-monitor-recommendations.dto";
+import type { DigestHistorySourceFilter } from "./dto/list-digest-history.dto";
+import type { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
+import type { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
+
+const DEFAULT_SCHEDULE_CONFIG = {
+  dailyHour: 11,
+  dailyMinute: 0,
+  weeklyDayOfWeek: 1,
+  timezone: "America/Sao_Paulo",
+};
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -149,14 +175,24 @@ export class AdminMonitorService {
     private readonly entitlementService: MonitorEntitlementService,
     @Inject(MonitorProfileMatchService)
     private readonly profileMatchService: MonitorProfileMatchService,
+    @Inject(MonitorAlertPreferenceService)
+    private readonly alertPreferenceService: MonitorAlertPreferenceService,
+    @Inject(MonitorDigestContentService)
+    private readonly digestContentService: MonitorDigestContentService,
+    @Inject(MonitorDigestEmailService)
+    private readonly digestEmailService: MonitorDigestEmailService,
   ) {}
 
   // ---------------------------------------------------------------------
   // §2 Visão geral
   // ---------------------------------------------------------------------
+  // Escopo de matching (perfil/recomendação/filas) só — tudo que é sobre o
+  // e-mail do digest (contagem por status, 24h de entrega/abertura/clique,
+  // digests FAILED) mudou pra getDigestEmailStats(), que alimenta
+  // /admin/alerta-vagas em vez desta tela (ver decisão do Paulo: as duas
+  // telas mostravam o mesmo MonitorDigest, gerando sobreposição/confusão —
+  // Monitor fica só com matching, Alerta de Vagas fica com tudo de e-mail).
   async getOverview() {
-    const since24h = new Date(Date.now() - 24 * 60 * 60_000);
-
     const [
       profileStatusGroups,
       recommendationsActive,
@@ -165,9 +201,6 @@ export class AdminMonitorService {
       recommendationsDismissed,
       matchJobGroups,
       profileMatchJobGroups,
-      digestGroups,
-      digestsSentLast24h,
-      digestEventGroupsLast24h,
       configuredProfiles,
     ] = await Promise.all([
       this.database.userRadarProfile.groupBy({
@@ -194,18 +227,6 @@ export class AdminMonitorService {
       this.database.monitorProfileMatchJob.groupBy({
         by: ["status"],
         _count: { _all: true },
-      }),
-      this.database.monitorDigest.groupBy({
-        by: ["status"],
-        _count: { _all: true },
-      }),
-      this.database.monitorDigest.count({
-        where: { status: "SENT", sentAt: { gte: since24h } },
-      }),
-      this.database.monitorDigestEvent.groupBy({
-        by: ["type"],
-        _count: { _all: true },
-        where: { occurredAt: { gte: since24h } },
       }),
       this.database.userRadarProfile.findMany({
         where: { areas: { isEmpty: false } },
@@ -249,17 +270,64 @@ export class AdminMonitorService {
         profileMatchJobGroups,
         (g) => g.status,
       ),
-      digests: countsByKey(
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // Estatísticas de e-mail do digest — usado por /admin/alerta-vagas, não
+  // pelo Monitor (ver comentário em getOverview). Junta o que antes estava
+  // espalhado entre getOverview (contagem por status, 24h) e getFailures
+  // (digests FAILED, processamento travado).
+  // ---------------------------------------------------------------------
+  async getDigestEmailStats() {
+    const since24h = new Date(Date.now() - 24 * 60 * 60_000);
+    const staleThreshold = new Date(Date.now() - STALE_PROCESSING_THRESHOLD_MS);
+
+    const [
+      digestGroups,
+      sentLast24h,
+      eventGroupsLast24h,
+      stuckProcessing,
+      failedDigests,
+    ] = await Promise.all([
+      this.database.monitorDigest.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      this.database.monitorDigest.count({
+        where: { status: "SENT", sentAt: { gte: since24h } },
+      }),
+      this.database.monitorDigestEvent.groupBy({
+        by: ["type"],
+        _count: { _all: true },
+        where: { occurredAt: { gte: since24h } },
+      }),
+      this.database.monitorDigest.count({
+        where: { status: "PROCESSING", updatedAt: { lt: staleThreshold } },
+      }),
+      this.database.monitorDigest.findMany({
+        where: { status: "FAILED" },
+        orderBy: [{ updatedAt: "desc" }],
+        take: 100,
+        include: { user: { select: { id: true, email: true, name: true } } },
+      }),
+    ]);
+
+    return {
+      byStatus: countsByKey(
         MONITOR_DIGEST_STATUSES,
         digestGroups,
         (g) => g.status,
       ),
-      digestsSentLast24h,
-      digestEventsLast24h: countsByKey(
+      sentLast24h,
+      eventsLast24h: countsByKey(
         MONITOR_DIGEST_EVENT_TYPES,
-        digestEventGroupsLast24h,
+        eventGroupsLast24h,
         (g) => g.type,
       ),
+      stuckProcessing,
+      staleProcessingThresholdMs: STALE_PROCESSING_THRESHOLD_MS,
+      failedDigests,
     };
   }
 
@@ -732,10 +800,8 @@ export class AdminMonitorService {
     const [
       failedMatchJobs,
       failedProfileMatchJobs,
-      failedDigests,
       stuckMatchJobsProcessing,
       stuckProfileMatchJobsProcessing,
-      stuckDigestsProcessing,
       stuckProfiles,
     ] = await Promise.all([
       this.database.monitorMatchJob.findMany({
@@ -750,19 +816,10 @@ export class AdminMonitorService {
         take: 100,
         include: { user: { select: { id: true, email: true, name: true } } },
       }),
-      this.database.monitorDigest.findMany({
-        where: { status: "FAILED" },
-        orderBy: [{ updatedAt: "desc" }],
-        take: 100,
-        include: { user: { select: { id: true, email: true, name: true } } },
-      }),
       this.database.monitorMatchJob.count({
         where: { status: "PROCESSING", updatedAt: { lt: staleThreshold } },
       }),
       this.database.monitorProfileMatchJob.count({
-        where: { status: "PROCESSING", updatedAt: { lt: staleThreshold } },
-      }),
-      this.database.monitorDigest.count({
         where: { status: "PROCESSING", updatedAt: { lt: staleThreshold } },
       }),
       this.database.userRadarProfile.findMany({
@@ -783,7 +840,6 @@ export class AdminMonitorService {
     return {
       failedMatchJobs,
       failedProfileMatchJobs,
-      failedDigests,
       // Contagens, não listas — "preso além do limite" é sinal de vida do
       // worker (deveria ter sido recuperado por recoverStaleProcessing no
       // próximo tick), então o número já é o alerta; investigar linha a
@@ -791,7 +847,6 @@ export class AdminMonitorService {
       stuckProcessingCounts: {
         matchJobs: stuckMatchJobsProcessing,
         profileMatchJobs: stuckProfileMatchJobsProcessing,
-        digests: stuckDigestsProcessing,
       },
       staleProcessingThresholdMs: STALE_PROCESSING_THRESHOLD_MS,
       stuckProfiles,
@@ -912,6 +967,394 @@ export class AdminMonitorService {
     });
 
     return { requeued: true };
+  }
+
+  // ---------------------------------------------------------------------
+  // §14 Alerta de Vagas (/admin/alerta-vagas) — elegibilidade + disparo
+  // manual, histórico, agendamento e conteúdo do e-mail. Ver
+  // docs/specs/2026-09-04-admin-alerta-vagas-tab.md para o plano completo.
+  // ---------------------------------------------------------------------
+
+  // A tabela de elegibilidade não lista a base inteira de usuários — só
+  // quem já tem MonitorAlertPreference (mexeu na própria preferência, ou
+  // foi incluído aqui por um admin via trackAlertUser). Ver decisão no
+  // doc: buscar sobre todos os usuários poluiria a tela com milhares de
+  // candidatos irrelevantes.
+  async listTrackedAlertUsers(params: {
+    page?: number;
+    limit?: number;
+    query?: string;
+  }) {
+    const { page, limit, skip } = paginate(params.page, params.limit);
+    const query = params.query?.trim();
+
+    const where: Prisma.UserWhereInput = {
+      monitorAlertPreference: { isNot: null },
+      ...(query
+        ? {
+            OR: [
+              { email: { contains: query, mode: "insensitive" } },
+              { name: { contains: query, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [users, total] = await Promise.all([
+      this.database.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          internalRole: true,
+          monitorAlertPreference: {
+            select: { frequency: true, emailEnabled: true },
+          },
+        },
+        orderBy: [{ createdAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      this.database.user.count({ where }),
+    ]);
+
+    const entitledIds = await this.entitlementService.filterEntitledUserIds(
+      users.map((user) => user.id),
+    );
+
+    return {
+      page,
+      limit,
+      total,
+      users: users.map((user) => ({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        internalRole: user.internalRole,
+        entitledToday: entitledIds.has(user.id),
+        frequency: user.monitorAlertPreference?.frequency ?? "OFF",
+      })),
+    };
+  }
+
+  // Idempotente por natureza (MonitorAlertPreferenceService.getOrCreate já
+  // é upsert) — chamar duas vezes pro mesmo usuário nunca altera uma
+  // frequência que ele já tenha configurado sozinho.
+  async trackAlertUser(adminId: string, userId: string) {
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new NotFoundException("user not found");
+    }
+
+    const preference = await this.alertPreferenceService.getOrCreate(userId);
+
+    await this.logAction(
+      adminId,
+      "alert_preference_tracked",
+      "MonitorAlertPreference",
+      userId,
+      "ok",
+      { frequency: preference.frequency },
+    );
+
+    return { tracked: true, frequency: preference.frequency };
+  }
+
+  // Disparo síncrono: a requisição só retorna depois que o e-mail foi de
+  // fato enviado (ou definitivamente pulado) — nunca enfileira pro
+  // MonitorDigestWorker. Reaproveita a mesma sequência do script
+  // apps/api/src/scripts/trigger-monitor-digest.ts, agora como endpoint
+  // admin. userId (nunca e-mail solto) e frequência sempre lida do
+  // MonitorAlertPreference do próprio usuário — nunca escolhida avulsa
+  // nesta chamada (ver decisão de design no doc do plano).
+  async sendDigestNow(adminId: string, userId: string) {
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+    if (!user) {
+      throw new NotFoundException("user not found");
+    }
+
+    const preference = await this.database.monitorAlertPreference.findUnique({
+      where: { userId },
+    });
+    if (!preference || preference.frequency === "OFF") {
+      throw new UnprocessableEntityException(
+        "user has no active alert frequency (OFF or never configured)",
+      );
+    }
+
+    const entitlement = await this.entitlementService.canUseMonitor(userId);
+    if (!entitlement.allowed) {
+      await this.logAction(
+        adminId,
+        "digest_manual_send",
+        "MonitorDigest",
+        userId,
+        "skipped",
+        { reason: "not_entitled" },
+      );
+      return { sent: false, skippedReason: "not_entitled" as const };
+    }
+
+    const frequency = preference.frequency;
+    const now = new Date();
+    const scheduledFor =
+      frequency === "WEEKLY" ? startOfIsoWeekUtc(now) : startOfUtcDay(now);
+
+    const existing = await this.database.monitorDigest.findUnique({
+      where: {
+        userId_frequency_scheduledFor: { userId, frequency, scheduledFor },
+      },
+    });
+    if (existing) {
+      await this.database.monitorDigest.delete({ where: { id: existing.id } });
+    }
+
+    const eligible =
+      await this.digestContentService.getEligibleRecommendations(userId);
+    if (eligible.length === 0) {
+      await this.logAction(
+        adminId,
+        "digest_manual_send",
+        "MonitorDigest",
+        userId,
+        "skipped",
+        { reason: "no_eligible_recommendations" },
+      );
+      return {
+        sent: false,
+        skippedReason: "no_eligible_recommendations" as const,
+      };
+    }
+
+    const digest = await this.database.monitorDigest.create({
+      data: {
+        userId,
+        frequency,
+        scheduledFor,
+        status: "PROCESSING",
+        source: "ADMIN_MANUAL",
+        triggeredByAdminId: adminId,
+        recommendations: {
+          create: eligible.map((recommendation) => ({
+            recommendationId: recommendation.id,
+          })),
+        },
+      },
+    });
+
+    let result: Awaited<ReturnType<typeof this.digestEmailService.sendDigest>>;
+    try {
+      result = await this.digestEmailService.sendDigest(digest.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: { status: "FAILED", attempts: 1, lastError: message },
+      });
+      await this.logAction(
+        adminId,
+        "digest_manual_send",
+        "MonitorDigest",
+        digest.id,
+        "failed",
+        { userId, email: user.email, frequency, error: message },
+      );
+      return {
+        sent: false,
+        digestId: digest.id,
+        recommendationCount: eligible.length,
+        skippedReason: "send_failed" as const,
+      };
+    }
+
+    if (result.sent) {
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "SENT",
+          sentAt: new Date(),
+          providerMessageId: result.providerMessageId,
+        },
+      });
+    } else {
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: { status: "SKIPPED", lastError: result.skippedReason },
+      });
+    }
+
+    await this.logAction(
+      adminId,
+      "digest_manual_send",
+      "MonitorDigest",
+      digest.id,
+      result.sent ? "ok" : "skipped",
+      {
+        userId,
+        email: user.email,
+        frequency,
+        recommendationCount: eligible.length,
+        ...(result.sent ? {} : { skippedReason: result.skippedReason }),
+      },
+    );
+
+    return {
+      sent: result.sent,
+      digestId: digest.id,
+      recommendationCount: eligible.length,
+      skippedReason: result.sent ? null : result.skippedReason,
+    };
+  }
+
+  async listDigestHistory(params: {
+    page?: number;
+    limit?: number;
+    userQuery?: string;
+    source?: DigestHistorySourceFilter;
+  }) {
+    const { page, limit, skip } = paginate(params.page, params.limit);
+    const userQuery = params.userQuery?.trim();
+
+    const where: Prisma.MonitorDigestWhereInput = {
+      ...(params.source
+        ? {
+            source: params.source === "MANUAL" ? "ADMIN_MANUAL" : "SCHEDULER",
+          }
+        : {}),
+      ...(userQuery
+        ? {
+            user: {
+              OR: [
+                { email: { contains: userQuery, mode: "insensitive" } },
+                { name: { contains: userQuery, mode: "insensitive" } },
+              ],
+            },
+          }
+        : {}),
+    };
+
+    const [digests, total] = await Promise.all([
+      this.database.monitorDigest.findMany({
+        where,
+        select: {
+          id: true,
+          frequency: true,
+          status: true,
+          scheduledFor: true,
+          sentAt: true,
+          source: true,
+          triggeredByAdminId: true,
+          createdAt: true,
+          user: { select: { id: true, email: true, name: true } },
+        },
+        orderBy: [{ createdAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      this.database.monitorDigest.count({ where }),
+    ]);
+
+    const adminIds = Array.from(
+      new Set(
+        digests
+          .map((digest) => digest.triggeredByAdminId)
+          .filter((id): id is string => id !== null),
+      ),
+    );
+    const admins = adminIds.length
+      ? await this.database.user.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const adminById = new Map(admins.map((admin) => [admin.id, admin]));
+
+    return {
+      page,
+      limit,
+      total,
+      items: digests.map((digest) => ({
+        id: digest.id,
+        frequency: digest.frequency,
+        status: digest.status,
+        scheduledFor: digest.scheduledFor,
+        sentAt: digest.sentAt,
+        createdAt: digest.createdAt,
+        source: digest.source,
+        triggeredByAdmin: digest.triggeredByAdminId
+          ? (adminById.get(digest.triggeredByAdminId) ?? null)
+          : null,
+        user: digest.user,
+      })),
+    };
+  }
+
+  async getDigestSchedule() {
+    const config = await this.database.monitorDigestScheduleConfig.findUnique({
+      where: { id: "default" },
+    });
+    return config ?? { id: "default", ...DEFAULT_SCHEDULE_CONFIG };
+  }
+
+  async updateDigestSchedule(adminId: string, dto: UpdateDigestScheduleDto) {
+    const updated = await this.database.monitorDigestScheduleConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", ...dto, updatedByAdminId: adminId },
+      update: { ...dto, updatedByAdminId: adminId },
+    });
+
+    await this.logAction(
+      adminId,
+      "digest_schedule_updated",
+      "MonitorDigestScheduleConfig",
+      "default",
+      "ok",
+      { ...dto },
+    );
+
+    return updated;
+  }
+
+  async getDigestContent() {
+    const content = await this.database.monitorDigestEmailContent.findUnique({
+      where: { id: "default" },
+    });
+    return (
+      content ?? {
+        id: "default",
+        subject: DEFAULT_SUBJECT_TEMPLATE,
+        introText: DEFAULT_INTRO_TEXT,
+      }
+    );
+  }
+
+  async updateDigestContent(adminId: string, dto: UpdateDigestContentDto) {
+    const updated = await this.database.monitorDigestEmailContent.upsert({
+      where: { id: "default" },
+      create: { id: "default", ...dto, updatedByAdminId: adminId },
+      update: { ...dto, updatedByAdminId: adminId },
+    });
+
+    await this.logAction(
+      adminId,
+      "digest_content_updated",
+      "MonitorDigestEmailContent",
+      "default",
+      "ok",
+      {
+        subjectLength: dto.subject.length,
+        introTextLength: dto.introText.length,
+      },
+    );
+
+    return updated;
   }
 
   private async logAction(

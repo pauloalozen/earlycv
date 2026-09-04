@@ -41,6 +41,11 @@ const adminNavItems: BackofficeNavItem[] = [
     label: "Meu Monitor",
     section: "ingestion",
   },
+  {
+    href: "/admin/alerta-vagas",
+    label: "Alerta de Vagas",
+    section: "ingestion",
+  },
   { href: "/admin/templates", label: "Templates de CV", section: "sistema" },
   { href: "/admin/cv-benchmark", label: "CV Benchmark", section: "sistema" },
   { href: "/admin/configuracoes", label: "Configuracoes", section: "sistema" },

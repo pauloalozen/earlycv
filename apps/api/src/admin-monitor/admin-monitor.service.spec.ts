@@ -5,6 +5,10 @@ import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { FakeEmailDeliveryService } from "../email/fake-email-delivery.service";
+import { MonitorAlertPreferenceService } from "../monitor/monitor-alert-preference.service";
+import { MonitorDigestContentService } from "../monitor/monitor-digest-content.service";
+import { MonitorDigestEmailService } from "../monitor/monitor-digest-email.service";
 import { MonitorEntitlementService } from "../monitor/monitor-entitlement.service";
 import { MonitorProfileMatchService } from "../monitor/monitor-profile-match.service";
 import { MatchingEngine } from "../radar/matching.engine";
@@ -12,17 +16,42 @@ import { AdminMonitorService } from "./admin-monitor.service";
 
 const prisma = new PrismaClient();
 const database = new DatabaseService(prisma);
-const entitlementService = new MonitorEntitlementService();
+// Passa a database real (não vazio): funciona igual antes quando ghost
+// mode está off (early-return sem tocar o banco) e passa a funcionar
+// corretamente nos testes de sendDigestNow com ghost mode ligado, que
+// realmente precisam consultar internalRole.
+const entitlementService = new MonitorEntitlementService(database);
 const matchingEngine = new MatchingEngine(database);
 const profileMatchService = new MonitorProfileMatchService(
   database,
   entitlementService,
 );
+
+// Stub — o funil de eventos não é o que este spec verifica; mesmo padrão
+// de monitor-alert-preference.service.spec.ts.
+const NOOP_FUNNEL_EVENTS = {
+  record: async () => ({ event: null, ingested: true }),
+};
+const alertPreferenceService = new MonitorAlertPreferenceService(
+  database,
+  NOOP_FUNNEL_EVENTS as never,
+  entitlementService,
+);
+const digestContentService = new MonitorDigestContentService(database);
+const digestEmailService = new MonitorDigestEmailService(
+  database,
+  new FakeEmailDeliveryService(),
+  entitlementService,
+);
+
 const service = new AdminMonitorService(
   database,
   matchingEngine,
   entitlementService,
   profileMatchService,
+  alertPreferenceService,
+  digestContentService,
+  digestEmailService,
 );
 
 function tag() {
@@ -556,5 +585,288 @@ test("getUserAttribution returns only events for the requested user, ordered by 
       .catch(() => undefined);
     await cleanupUser(userA.id);
     await cleanupUser(userB.id);
+  }
+});
+
+// ---------------------------------------------------------------------
+// Alerta de Vagas (/admin/alerta-vagas) — elegibilidade/disparo manual,
+// histórico e configuração. Ver docs/specs/2026-09-04-admin-alerta-vagas-tab.md.
+// ---------------------------------------------------------------------
+
+let originalGhostMode: string | undefined;
+
+function withGhostModeOn() {
+  originalGhostMode = process.env.JOBS_GHOST_MODE;
+  process.env.JOBS_GHOST_MODE = "true";
+}
+
+function restoreGhostMode() {
+  if (originalGhostMode === undefined) {
+    delete process.env.JOBS_GHOST_MODE;
+  } else {
+    process.env.JOBS_GHOST_MODE = originalGhostMode;
+  }
+}
+
+test("trackAlertUser creates a MonitorAlertPreference with the default frequency for a user who never configured one", async () => {
+  const user = await seedUser();
+  try {
+    const result = await service.trackAlertUser("admin-1", user.id);
+    assert.equal(result.tracked, true);
+    assert.equal(result.frequency, "DAILY");
+
+    const preference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: user.id },
+    });
+    assert.ok(preference);
+    assert.equal(preference?.frequency, "DAILY");
+  } finally {
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityId: user.id } })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+  }
+});
+
+test("trackAlertUser is idempotent — never overwrites a frequency the user already configured", async () => {
+  const user = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: { userId: user.id, frequency: "WEEKLY" },
+    });
+
+    const result = await service.trackAlertUser("admin-1", user.id);
+
+    assert.equal(result.frequency, "WEEKLY");
+  } finally {
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityId: user.id } })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+  }
+});
+
+test("trackAlertUser throws NotFoundException for a userId that doesn't exist", async () => {
+  await assert.rejects(() =>
+    service.trackAlertUser("admin-1", "does-not-exist"),
+  );
+});
+
+test("listTrackedAlertUsers only returns users who already have a MonitorAlertPreference, never the whole user base", async () => {
+  const tracked = await seedUser();
+  const untracked = await seedUser();
+  try {
+    await service.trackAlertUser("admin-1", tracked.id);
+
+    const result = await service.listTrackedAlertUsers({});
+
+    assert.ok(result.users.some((u) => u.id === tracked.id));
+    assert.ok(!result.users.some((u) => u.id === untracked.id));
+  } finally {
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityId: tracked.id } })
+      .catch(() => undefined);
+    await cleanupUser(tracked.id);
+    await cleanupUser(untracked.id);
+  }
+});
+
+test("sendDigestNow rejects (422-equivalent) when the user has no MonitorAlertPreference or it is OFF", async () => {
+  const user = await seedUser();
+  try {
+    await assert.rejects(() => service.sendDigestNow("admin-1", user.id));
+
+    await prisma.monitorAlertPreference.create({
+      data: { userId: user.id, frequency: "OFF" },
+    });
+    await assert.rejects(() => service.sendDigestNow("admin-1", user.id));
+  } finally {
+    await cleanupUser(user.id);
+  }
+});
+
+test("sendDigestNow reports not_entitled (and never creates a digest) when the user isn't entitled today", async () => {
+  const user = await seedUser();
+  try {
+    await service.trackAlertUser("admin-1", user.id);
+    // Ghost mode off por padrão neste ambiente de teste — ninguém é
+    // elegível, nem staff.
+    const result = await service.sendDigestNow("admin-1", user.id);
+
+    assert.deepEqual(result, { sent: false, skippedReason: "not_entitled" });
+    const digests = await prisma.monitorDigest.findMany({
+      where: { userId: user.id },
+    });
+    assert.equal(digests.length, 0);
+  } finally {
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityId: user.id } })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+  }
+});
+
+test("sendDigestNow sends synchronously and records source=ADMIN_MANUAL with the triggering admin", async () => {
+  withGhostModeOn();
+  // sendDigest monta o link de unsubscribe, que exige este secret — mesmo
+  // setup de monitor-digest-email.service.spec.ts.
+  const originalSecret = process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET;
+  process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET = "test-secret";
+  const user = await seedUser();
+  const { company, job } = await seedCompanyAndJob();
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { internalRole: "admin" },
+    });
+    await service.trackAlertUser("admin-1", user.id);
+    await prisma.userJobRecommendation.create({
+      data: { userId: user.id, jobId: job.id, score: 90, opportunityLevel: 5 },
+    });
+
+    const result = await service.sendDigestNow("admin-99", user.id);
+
+    assert.equal(result.sent, true);
+    assert.ok(result.digestId);
+
+    const digest = await prisma.monitorDigest.findUnique({
+      where: { id: result.digestId as string },
+    });
+    assert.equal(digest?.status, "SENT");
+    assert.equal(digest?.source, "ADMIN_MANUAL");
+    assert.equal(digest?.triggeredByAdminId, "admin-99");
+    assert.equal(digest?.frequency, "DAILY");
+  } finally {
+    restoreGhostMode();
+    process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET = originalSecret;
+    // Este log usa o digestId como entityId (não userId) — o mesmo
+    // padrão de logAction("digest_manual_send", ..., digest.id, ...)
+    // acima em resendDigest.
+    await prisma.monitorAdminActionLog
+      .deleteMany({
+        where: { metadataJson: { path: ["userId"], equals: user.id } },
+      })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+    await cleanupJob(job.id, company.id);
+  }
+});
+
+test("sendDigestNow reports no_eligible_recommendations without creating a PENDING digest when there is nothing to send", async () => {
+  withGhostModeOn();
+  const user = await seedUser();
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { internalRole: "admin" },
+    });
+    await service.trackAlertUser("admin-1", user.id);
+
+    const result = await service.sendDigestNow("admin-99", user.id);
+
+    assert.deepEqual(result, {
+      sent: false,
+      skippedReason: "no_eligible_recommendations",
+    });
+  } finally {
+    restoreGhostMode();
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityId: user.id } })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+  }
+});
+
+test("listDigestHistory filters by source (manual vs automatic) and by user query", async () => {
+  const user = await seedUser();
+  try {
+    const manual = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "DAILY",
+        status: "SENT",
+        scheduledFor: new Date(),
+        source: "ADMIN_MANUAL",
+        triggeredByAdminId: "admin-99",
+      },
+    });
+    const automatic = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "WEEKLY",
+        status: "SENT",
+        scheduledFor: new Date("2026-01-05T00:00:00Z"),
+        source: "SCHEDULER",
+      },
+    });
+
+    const manualOnly = await service.listDigestHistory({ source: "MANUAL" });
+    assert.ok(manualOnly.items.some((i) => i.id === manual.id));
+    assert.ok(!manualOnly.items.some((i) => i.id === automatic.id));
+    const manualEntry = manualOnly.items.find((i) => i.id === manual.id);
+    assert.equal(manualEntry?.triggeredByAdmin, null); // admin-99 não existe como User real
+
+    const automaticOnly = await service.listDigestHistory({
+      source: "AUTOMATIC",
+    });
+    assert.ok(automaticOnly.items.some((i) => i.id === automatic.id));
+    assert.ok(!automaticOnly.items.some((i) => i.id === manual.id));
+
+    const byUser = await service.listDigestHistory({
+      userQuery: user.email.slice(0, 10),
+    });
+    assert.ok(byUser.items.some((i) => i.id === manual.id));
+  } finally {
+    await prisma.monitorDigest.deleteMany({ where: { userId: user.id } });
+    await cleanupUser(user.id);
+  }
+});
+
+test("getDigestSchedule / updateDigestSchedule roundtrip through the singleton row", async () => {
+  const original = await service.getDigestSchedule();
+  try {
+    const updated = await service.updateDigestSchedule("admin-1", {
+      dailyHour: 8,
+      dailyMinute: 15,
+      weeklyDayOfWeek: 3,
+    });
+    assert.equal(updated.dailyHour, 8);
+    assert.equal(updated.dailyMinute, 15);
+    assert.equal(updated.weeklyDayOfWeek, 3);
+
+    const reread = await service.getDigestSchedule();
+    assert.equal(reread.dailyHour, 8);
+  } finally {
+    await service.updateDigestSchedule("admin-1", {
+      dailyHour: original.dailyHour,
+      dailyMinute: original.dailyMinute,
+      weeklyDayOfWeek: original.weeklyDayOfWeek,
+    });
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityType: "MonitorDigestScheduleConfig" } })
+      .catch(() => undefined);
+  }
+});
+
+test("getDigestContent / updateDigestContent roundtrip through the singleton row", async () => {
+  const original = await service.getDigestContent();
+  try {
+    const updated = await service.updateDigestContent("admin-1", {
+      subject: "Assunto de teste — {count} vagas",
+      introText: "Introdução de teste.",
+    });
+    assert.equal(updated.subject, "Assunto de teste — {count} vagas");
+    assert.equal(updated.introText, "Introdução de teste.");
+
+    const reread = await service.getDigestContent();
+    assert.equal(reread.subject, "Assunto de teste — {count} vagas");
+  } finally {
+    await service.updateDigestContent("admin-1", {
+      subject: original.subject,
+      introText: original.introText,
+    });
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityType: "MonitorDigestEmailContent" } })
+      .catch(() => undefined);
   }
 });

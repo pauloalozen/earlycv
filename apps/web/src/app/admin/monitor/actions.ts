@@ -6,7 +6,6 @@ import {
   forceAdminMonitorUserRematch,
   requeueAdminMonitorMatchJob,
   requeueAdminMonitorProfileMatchJob,
-  resendAdminMonitorDigest,
 } from "@/lib/admin-monitor-api";
 
 // Cada action só delega para AdminMonitorService (via admin-monitor-api) —
@@ -38,14 +37,5 @@ export async function forceUserRematchAction(formData: FormData) {
   if (!userId) return;
 
   await forceAdminMonitorUserRematch(userId);
-  revalidatePath(redirectPath);
-}
-
-export async function resendDigestAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  const redirectPath = String(formData.get("redirectPath") ?? "/admin/monitor");
-  if (!id) return;
-
-  await resendAdminMonitorDigest(id);
   revalidatePath(redirectPath);
 }

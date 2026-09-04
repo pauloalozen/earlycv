@@ -20,6 +20,18 @@ const OPPORTUNITY_LEVEL_LABELS: Record<number, string> = {
   3: "Aderente",
 };
 
+// Espelha o seed da migration (MonitorDigestEmailContent id="default") —
+// só usado se a linha singleton não existir por algum motivo (nunca
+// deveria acontecer em operação normal, é defesa em profundidade, não o
+// caminho esperado). {count} é o único placeholder suportado; o caso
+// singular (1 recomendação) sempre usa a frase fixa abaixo, nunca o
+// template do admin, pra nunca quebrar a concordância "1 nova
+// oportunidade" (ver AdminMonitorService/monitor-digest-content.dto).
+export const DEFAULT_SUBJECT_TEMPLATE =
+  "Encontramos {count} novas oportunidades para você";
+const SINGULAR_SUBJECT = "Encontramos 1 nova oportunidade para você";
+export const DEFAULT_INTRO_TEXT = "";
+
 export type SendDigestResult =
   | { sent: true; providerMessageId: string | null }
   // skippedReason existe só pra log/observabilidade — o worker decide o
@@ -101,7 +113,15 @@ export class MonitorDigestEmailService {
     const unsubscribeToken = createMonitorUnsubscribeToken(digest.userId);
     const unsubscribeLink = buildMonitorUnsubscribeLink(unsubscribeToken);
 
-    const subject = `Encontramos ${total} ${total === 1 ? "nova oportunidade" : "novas oportunidades"} para você`;
+    const content = await this.database.monitorDigestEmailContent.findUnique({
+      where: { id: "default" },
+    });
+    const subjectTemplate = content?.subject ?? DEFAULT_SUBJECT_TEMPLATE;
+    const introText = content?.introText ?? DEFAULT_INTRO_TEXT;
+    const subject =
+      total === 1
+        ? SINGULAR_SUBJECT
+        : subjectTemplate.replace("{count}", String(total));
 
     const lines = preview.map(({ recommendation: rec }) => {
       const level =
@@ -111,6 +131,7 @@ export class MonitorDigestEmailService {
 
     const text = [
       `Encontramos ${total} ${total === 1 ? "nova oportunidade" : "novas oportunidades"} para você:`,
+      ...(introText ? ["", introText] : []),
       "",
       ...lines,
       ...(remaining > 0
@@ -129,6 +150,7 @@ export class MonitorDigestEmailService {
       digestLink,
       unsubscribeLink,
       digestId: digest.id,
+      introText,
     });
 
     const result = await this.emailDelivery.send({
@@ -169,6 +191,7 @@ export class MonitorDigestEmailService {
     digestLink: string;
     unsubscribeLink: string;
     digestId: string;
+    introText: string;
   }): string {
     const items = input.preview
       .map(({ recommendation: rec }) => {
@@ -204,6 +227,7 @@ export class MonitorDigestEmailService {
           </tr>
         </table>
         <h1 style="font-size:19px;font-weight:600;">Encontramos ${input.total} ${input.total === 1 ? "nova oportunidade" : "novas oportunidades"} para você</h1>
+        ${input.introText ? `<p style="color:#3a3a36;font-size:14px;margin:0 0 16px;">${escapeHtml(input.introText)}</p>` : ""}
         <table role="presentation" style="width:100%;border-collapse:collapse;">${items}</table>
         ${input.remaining > 0 ? `<p style="color:#6a6560;font-size:13px;">+ ${input.remaining} outras no seu Alerta de Vaga Certa.</p>` : ""}
         <p style="margin:24px 0;">
