@@ -8,6 +8,7 @@ import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toCompanySlug } from "@/lib/company-slug";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { getMyPlan } from "@/lib/plans-api";
 import {
   getPublicJobBySlug,
@@ -19,6 +20,7 @@ import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { AnalysisCtaButtons } from "../analysis-cta";
 import { CompanyLogo } from "../company-logo";
+import { ExternalApplyGate } from "../external-apply-gate";
 import { JobDetailViewTracker } from "../job-detail-view-tracker";
 import { RadarOpportunityLink } from "../radar-opportunity-link";
 import {
@@ -63,6 +65,12 @@ const SENIORITY_LABELS: Record<string, string> = {
   principal: "Principal",
 };
 
+// CTAs de conversão do visitante anônimo (Agressivo-v2) sempre levam pro
+// cadastro com `next` — sem isso, o usuário cai no default (/meu-perfil)
+// depois de criar conta, perdendo o fio da ação que o trouxe até aqui.
+const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/alerta-vaga-certa")}`;
+const SIGNUP_NEXT_CV = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/meu-cv-master")}`;
+
 type ScoreState = "anonymous" | "no-cv" | "has-cv";
 
 type JobPageProps = {
@@ -77,6 +85,35 @@ const BREAKDOWN_ROWS: Array<{ key: keyof MatchBreakdown; label: string }> = [
   { key: "language", label: "Idioma" },
   { key: "workModel", label: "Modelo de trabalho" },
 ];
+
+// Separadores usados por diferentes fontes de vaga pra marcar o
+// subtítulo do cargo (ex.: "Backend — Plataforma de Pagamentos",
+// "Analista SR - Full Stack", "Produto | Ecommerce"). Em ordem de
+// prioridade — "—" é o mais específico, "-"/"|" aparecem soltos com
+// mais frequência então só contam com espaço nos dois lados, senão
+// cortariam palavra composta por engano (ex.: "SR-Pleno").
+const TITLE_SPLIT_SEPARATORS = ["—", " - ", " | "] as const;
+
+function splitJobTitleForDisplay(title: string): {
+  lead: string;
+  emphasis: string | null;
+} {
+  for (const separator of TITLE_SPLIT_SEPARATORS) {
+    const index = title.indexOf(separator);
+    if (index === -1) continue;
+
+    const keepSeparatorInLead = separator === "—";
+    const lead = title
+      .slice(0, index + (keepSeparatorInLead ? separator.length : 0))
+      .trim();
+    const emphasis = title.slice(index + separator.length).trim();
+    if (lead && emphasis) {
+      return { lead, emphasis };
+    }
+  }
+
+  return { lead: title, emphasis: null };
+}
 
 function dimensionDescription(
   key: keyof MatchBreakdown,
@@ -137,6 +174,562 @@ function CompatHead({ isAnalysis = false }: { isAnalysis?: boolean }) {
       >
         {isAnalysis ? "Baseado na sua candidatura" : "Baseado no seu perfil"}
       </span>
+    </div>
+  );
+}
+
+function BellIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <title>Monitor</title>
+      <path
+        d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"
+        stroke="#c6ff3a"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13.73 21a2 2 0 01-3.46 0"
+        stroke="#c6ff3a"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LockIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <title>Compatibilidade bloqueada</title>
+      <rect
+        x="5"
+        y="11"
+        width="14"
+        height="9"
+        rx="2"
+        stroke="#c6ff3a"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M8 11V7a4 4 0 018 0v4"
+        stroke="#c6ff3a"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// Gate de compatibilidade acima da dobra, só pra visitante anônimo. O
+// número é um placeholder deliberado (skeleton, não dígito) — sem CV do
+// visitante não existe score real pra mostrar, e um número "de exemplo"
+// já foi descartado por poder ser lido como dado calculado de verdade.
+// Abre com uma pergunta ("quanto seu currículo bate com ESSA vaga")
+// em vez de "é assim que fica SEU match" — o visitante chega aqui direto
+// do Google, ainda não sabe o que é o EarlyCV nem o que "match" significa
+// aqui, então a headline precisa explicar antes de pedir o CV.
+function MonitorGateBand({ jobTitle }: { jobTitle: string }) {
+  const breakdownPreview: Array<{
+    label: string;
+    width: string;
+    color: string;
+  }> = [
+    { label: "Skills técnicas", width: "82%", color: "#c6ff3a" },
+    { label: "Senioridade", width: "65%", color: "#4ade80" },
+    { label: "Tecnologias", width: "70%", color: "#c6ff3a" },
+  ];
+
+  return (
+    <div
+      style={{
+        background: "#0a0a0a",
+        borderRadius: 16,
+        padding: "26px 28px",
+        marginBottom: 28,
+        color: "#fafaf6",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 24,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: 1.3,
+              color: "#8a8a85",
+              fontWeight: 500,
+              marginBottom: 10,
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#c6ff3a",
+                display: "inline-block",
+              }}
+            />
+            ANÁLISE DE COMPATIBILIDADE COM IA
+          </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: -0.4,
+              lineHeight: 1.3,
+              marginBottom: 18,
+              maxWidth: 420,
+            }}
+          >
+            Quanto o seu currículo bate com essa vaga de {jobTitle}?
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 9,
+              marginBottom: 6,
+            }}
+          >
+            <div
+              style={{
+                width: 58,
+                height: 24,
+                borderRadius: 6,
+                background:
+                  "linear-gradient(90deg, rgba(250,250,246,0.06) 0%, rgba(250,250,246,0.16) 50%, rgba(250,250,246,0.06) 100%)",
+              }}
+            />
+            <span style={{ color: "#8a8a85", fontSize: 16 }}>% de match</span>
+          </div>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              color: "#6a6560",
+              marginBottom: 14,
+            }}
+          >
+            o EarlyCV compara linha a linha assim que você sobe o CV
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              maxWidth: 340,
+            }}
+          >
+            {breakdownPreview.map((row) => (
+              <div key={row.label}>
+                <div
+                  style={{ fontSize: 11, color: "#c8c6bf", marginBottom: 3 }}
+                >
+                  {row.label}
+                </div>
+                <div
+                  style={{
+                    height: 5,
+                    background: "rgba(250,250,246,0.1)",
+                    borderRadius: 99,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: row.width,
+                      background: row.color,
+                      filter: "blur(5px)",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div
+          style={{
+            flexShrink: 0,
+            textAlign: "center",
+            background: "rgba(250,250,246,0.04)",
+            border: "1px solid rgba(250,250,246,0.08)",
+            borderRadius: 14,
+            padding: "22px 26px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              color: "#e8e6df",
+              marginBottom: 14,
+              maxWidth: 220,
+            }}
+          >
+            Suba seu CV pra ver o seu número — e onde você ganha ou perde
+            pontos.
+          </div>
+          <a
+            href={SIGNUP_NEXT_CV}
+            style={{
+              display: "block",
+              background: "#c6ff3a",
+              color: "#1c2a05",
+              borderRadius: 9,
+              padding: "13px 22px",
+              fontSize: 13.5,
+              fontWeight: 700,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Calcular meu match →
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// "Depois da vaga, vem o resto" — vitrine do resto da plataforma pra
+// visitante anônimo, no lugar de mais um CTA repetido de monitor. Mesma
+// linguagem visual do MonitorHighlightBand (faixa preta, eyebrow lime,
+// CTA lime) — reforça que isto é vitrine séria de produto, não só
+// decoração, e sempre termina em CTA de cadastro (antes não tinha nenhum).
+function FeatureShowcaseStrip() {
+  const items: Array<{ label: string; description: string; icon: ReactNode }> = [
+    {
+      label: "Análise de CV com IA",
+      description: "O que te elimina nos filtros, antes de você aplicar.",
+      icon: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <title>Análise de CV com IA</title>
+          <circle cx="10" cy="10" r="6" stroke="#c6ff3a" strokeWidth="1.8" />
+          <path
+            d="M20 20l-5.5-5.5"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+        </svg>
+      ),
+    },
+    {
+      label: "Carta de apresentação",
+      description: "Gerada do mesmo CV, pronta em segundos.",
+      icon: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <title>Carta de apresentação</title>
+          <rect
+            x="3"
+            y="5"
+            width="18"
+            height="14"
+            rx="2"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+          />
+          <path
+            d="M3 6.5l9 6.5 9-6.5"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+    },
+    {
+      label: "Prep de entrevista",
+      description: "Perguntas prováveis, sob medida pra essa vaga.",
+      icon: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <title>Prep de entrevista</title>
+          <path
+            d="M4 18v-3a4 4 0 014-4h1M13 11h1a4 4 0 014 4v3"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <circle cx="8.5" cy="8" r="2.6" stroke="#c6ff3a" strokeWidth="1.8" />
+          <circle cx="15.5" cy="8" r="2.6" stroke="#c6ff3a" strokeWidth="1.8" />
+        </svg>
+      ),
+    },
+    {
+      label: "Gestão de candidaturas",
+      description: "Cada vaga que você aplicar, num só lugar.",
+      icon: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <title>Gestão de candidaturas</title>
+          <rect
+            x="3.5"
+            y="4"
+            width="5"
+            height="16"
+            rx="1.3"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+          />
+          <rect
+            x="10"
+            y="4"
+            width="5"
+            height="10"
+            rx="1.3"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+          />
+          <rect
+            x="16.5"
+            y="4"
+            width="4"
+            height="13"
+            rx="1.3"
+            stroke="#c6ff3a"
+            strokeWidth="1.8"
+          />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        background: "#0a0a0a",
+        borderRadius: 16,
+        padding: "32px 30px",
+        color: "#fafaf6",
+        marginBottom: 26,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          color: "#c6ff3a",
+          fontWeight: 600,
+          marginBottom: 12,
+        }}
+      >
+        DEPOIS DA VAGA, VEM O RESTO
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 600,
+          letterSpacing: -0.8,
+          lineHeight: 1.2,
+          margin: "0 0 8px",
+          maxWidth: 520,
+        }}
+      >
+        Essa vaga é só o começo. O EarlyCV cuida da candidatura inteira.
+      </div>
+      <p
+        style={{
+          fontSize: 13.5,
+          color: "#a8a6a0",
+          margin: "0 0 26px",
+          lineHeight: 1.6,
+          maxWidth: 480,
+        }}
+      >
+        Um CV master alimenta tudo — análise, carta de apresentação, prep de
+        entrevista e o controle de cada candidatura, sem retrabalho.
+      </p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 12,
+          marginBottom: 26,
+        }}
+        className="fss-grid"
+      >
+        <style>{`
+          @media (max-width: 640px) {
+            .fss-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          }
+        `}</style>
+        {items.map((item) => (
+          <div
+            key={item.label}
+            style={{
+              background: "rgba(250,250,246,0.045)",
+              border: "1px solid rgba(250,250,246,0.1)",
+              borderRadius: 12,
+              padding: "16px 14px",
+            }}
+          >
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: "rgba(198,255,58,0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 12,
+              }}
+            >
+              {item.icon}
+            </div>
+            <div
+              style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "#fafaf6",
+                marginBottom: 5,
+              }}
+            >
+              {item.label}
+            </div>
+            <div style={{ fontSize: 11, color: "#8a8a85", lineHeight: 1.45 }}>
+              {item.description}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <a
+          href="/entrar?tab=cadastrar&ctx=radar"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            background: "#c6ff3a",
+            color: "#1c2a05",
+            borderRadius: 10,
+            padding: "14px 24px",
+            fontSize: 13.5,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Criar minha conta grátis
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M5 12h14M13 6l6 6-6 6"
+              stroke="#1c2a05"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 10.5,
+            color: "#6a6560",
+            letterSpacing: 0.3,
+          }}
+        >
+          grátis · sem cartão · leva 1 minuto
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Destaque grande do Monitor, no lugar do fechamento genérico
+// "outras oportunidades" — reforça o papel central do Monitor antes do
+// visitante sair da página.
+function MonitorHighlightBand() {
+  if (isJobsGhostModeEnabled()) return null;
+  return (
+    <div
+      style={{
+        background: "#0a0a0a",
+        borderRadius: 20,
+        padding: "52px 40px",
+        textAlign: "center",
+        color: "#fafaf6",
+        marginTop: 20,
+      }}
+    >
+      <div style={{ marginBottom: 16 }}>
+        <BellIcon size={34} />
+      </div>
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          color: "#c6ff3a",
+          fontWeight: 600,
+          marginBottom: 14,
+        }}
+      >
+        MONITOR DE VAGAS
+      </div>
+      <div
+        style={{
+          fontSize: 34,
+          fontWeight: 600,
+          letterSpacing: -1,
+          lineHeight: 1.15,
+          margin: "0 auto 14px",
+          maxWidth: 620,
+        }}
+      >
+        Receba vagas como essa — antes de todo mundo.
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: "#a8a6a0",
+          margin: "0 auto 26px",
+          maxWidth: 460,
+          lineHeight: 1.6,
+        }}
+      >
+        Assim que uma vaga parecida com esta entra no ar, você é avisado por
+        e-mail na hora — não precisa voltar aqui pra procurar de novo.
+      </div>
+      <a
+        href={SIGNUP_NEXT_MONITOR}
+        style={{
+          display: "inline-block",
+          background: "#c6ff3a",
+          color: "#1c2a05",
+          borderRadius: 10,
+          padding: "15px 28px",
+          fontSize: 14,
+          fontWeight: 700,
+          textDecoration: "none",
+        }}
+      >
+        Ativar Monitor grátis
+      </a>
     </div>
   );
 }
@@ -217,6 +810,98 @@ function CompatCardCta({
   );
 }
 
+// Card #1 da sidebar pra visitante anônimo — Monitor como CTA principal,
+// no lugar do antigo "Cadastre-se para ver sua oportunidade" (genérico e
+// sem prova de valor). Fica acima do card de Candidatura, que continua
+// intacto (AnalysisCtaButtons, aplicação externa, salvar) logo abaixo.
+function MonitorPrimaryCard() {
+  if (isJobsGhostModeEnabled()) return null;
+  const benefits = [
+    "Novas vagas parecidas assim que entram no ar",
+    "Compatibilidade calculada em cada uma",
+    "CV adaptado com um clique quando você quiser aplicar",
+  ];
+
+  return (
+    <CompatCardShell>
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 600,
+          letterSpacing: -0.3,
+          marginBottom: 14,
+        }}
+      >
+        O que você ganha com o Monitor:
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 11,
+          marginBottom: 20,
+        }}
+      >
+        {benefits.map((text) => (
+          <div
+            key={text}
+            style={{ display: "flex", gap: 9, alignItems: "flex-start" }}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              style={{ flexShrink: 0, marginTop: 1 }}
+            >
+              <title>Incluído</title>
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="#c6ff3a"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span style={{ fontSize: 12.5, color: "#e8e6df" }}>{text}</span>
+          </div>
+        ))}
+      </div>
+      <a
+        href={SIGNUP_NEXT_MONITOR}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          width: "100%",
+          boxSizing: "border-box",
+          background: "#c6ff3a",
+          color: "#1c2a05",
+          borderRadius: 9,
+          padding: "14px 16px",
+          fontSize: 14,
+          fontWeight: 700,
+          textDecoration: "none",
+          marginBottom: 10,
+        }}
+      >
+        Ativar Monitor grátis
+      </a>
+      <div
+        style={{
+          textAlign: "center",
+          fontFamily: MONO,
+          fontSize: 10.5,
+          color: "#6a6560",
+        }}
+      >
+        grátis · sem cartão · 30s pra configurar
+      </div>
+    </CompatCardShell>
+  );
+}
+
 function CompatCard({
   scoreState,
   match,
@@ -263,14 +948,7 @@ function CompatCard({
   }
 
   if (scoreState === "anonymous") {
-    return (
-      <CompatCardCta
-        title="Cadastre-se para ver sua oportunidade"
-        description="Análise gratuita, calculada a partir do seu CV."
-        href="/entrar?tab=cadastrar&ctx=radar"
-        linkLabel="Cadastre-se grátis"
-      />
-    );
+    return <MonitorPrimaryCard />;
   }
 
   if (scoreState === "no-cv") {
@@ -444,6 +1122,20 @@ function toSchemaEmploymentType(value: string | null): string | undefined {
   return SCHEMA_EMPLOYMENT_TYPE[value];
 }
 
+// Rótulo pra exibir no badge/card — mesmo valor normalizado acima (snake_
+// case), só formatado pra leitura ("full_time" -> "Full time"). "pj" fica
+// em caixa alta (sigla), o resto vira frase com só a primeira letra maiúscula.
+const EMPLOYMENT_TYPE_DISPLAY_OVERRIDES: Record<string, string> = {
+  pj: "PJ",
+};
+
+function formatEmploymentType(value: string): string {
+  const override = EMPLOYMENT_TYPE_DISPLAY_OVERRIDES[value];
+  if (override) return override;
+  const spaced = value.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
@@ -481,7 +1173,13 @@ export async function generateMetadata({
   };
 }
 
-function SimCard({ job }: { job: PublicJob }) {
+function SimCard({
+  job,
+  showMatchLock = false,
+}: {
+  job: PublicJob;
+  showMatchLock?: boolean;
+}) {
   return (
     <RadarOpportunityLink
       href={`/radar/${job.slug}`}
@@ -512,16 +1210,32 @@ function SimCard({ job }: { job: PublicJob }) {
           borderRadius={7}
           fontSize={11}
         />
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 14,
-            fontWeight: 600,
-            color: "#8a8a85",
-          }}
-        >
-          —
-        </span>
+        {showMatchLock ? (
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 7,
+              background: "#0a0a0a",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <LockIcon />
+          </div>
+        ) : (
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#8a8a85",
+            }}
+          >
+            —
+          </span>
+        )}
       </div>
       <div
         style={{
@@ -604,6 +1318,7 @@ export default async function JobPage({ params }: JobPageProps) {
   const adaptarJobHref = `${adaptarHref}${adaptarHref.includes("?") ? `&jobId=${job.id}` : `?jobId=${job.id}`}`;
 
   const sections = splitHtmlSections(job.descriptionHtml);
+  const titleParts = splitJobTitleForDisplay(job.title);
 
   const workModelLabel = job.workModel
     ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
@@ -773,6 +1488,7 @@ export default async function JobPage({ params }: JobPageProps) {
         {/* Breadcrumb */}
         <nav
           aria-label="Breadcrumb"
+          className="job-breadcrumb"
           style={{
             fontFamily: MONO,
             fontSize: 11,
@@ -787,12 +1503,14 @@ export default async function JobPage({ params }: JobPageProps) {
         >
           <Link
             href="/radar"
-            style={{ color: "#5a5a55", textDecoration: "none" }}
+            style={{ color: "#5a5a55", textDecoration: "none", flexShrink: 0 }}
           >
             Vagas
           </Link>
-          <span style={{ color: "#c8c6bf" }}>›</span>
-          <span style={{ color: "#0a0a0a" }}>{job.title}</span>
+          <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
+          <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
+            {job.title}
+          </span>
         </nav>
 
         {/* Internal linking — discreto, contextual às landing pages de SEO
@@ -803,6 +1521,7 @@ export default async function JobPage({ params }: JobPageProps) {
         aparece pra toda vaga. */}
         {internalLinks.length > 0 ? (
           <div
+            className="job-internal-links"
             style={{
               display: "flex",
               alignItems: "center",
@@ -816,7 +1535,14 @@ export default async function JobPage({ params }: JobPageProps) {
           >
             {internalLinks.map((link, index) => (
               <Fragment key={link.href}>
-                {index > 0 ? <span style={{ color: "#c8c6bf" }}>|</span> : null}
+                {index > 0 ? (
+                  <span
+                    className="job-internal-links-sep"
+                    style={{ color: "#c8c6bf" }}
+                  >
+                    |
+                  </span>
+                ) : null}
                 <Link
                   href={link.href}
                   style={{ color: "#6a6560", textDecoration: "none" }}
@@ -827,6 +1553,33 @@ export default async function JobPage({ params }: JobPageProps) {
             ))}
           </div>
         ) : null}
+
+        <style>{`
+          @media (max-width: 640px) {
+            /* Long job titles ("Product Owner | Scrum Master - Pleno")
+             * wrapped across 2-3 lines right under "Vagas ›", and the
+             * internal-links row below it wrapped mid-sentence leaving a
+             * "|" separator dangling at the end of a line — both read as
+             * disorganized clutter before the reader even reaches the job
+             * header. Truncate the breadcrumb title to one line and stack
+             * the internal links vertically (no separators needed once
+             * each is on its own line). */
+            .job-breadcrumb-title {
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              min-width: 0;
+            }
+            .job-internal-links {
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              gap: 6px !important;
+            }
+            .job-internal-links-sep {
+              display: none !important;
+            }
+          }
+        `}</style>
 
         {/* Job header */}
         <header style={{ marginBottom: 32 }}>
@@ -878,9 +1631,9 @@ export default async function JobPage({ params }: JobPageProps) {
               maxWidth: 760,
             }}
           >
-            {job.title.includes("—") ? (
+            {titleParts.emphasis ? (
               <>
-                {job.title.slice(0, job.title.indexOf("—") + 1)}
+                {titleParts.lead}
                 <br />
                 <em
                   style={{
@@ -890,11 +1643,11 @@ export default async function JobPage({ params }: JobPageProps) {
                     color: "#3a3a38",
                   }}
                 >
-                  {job.title.slice(job.title.indexOf("—") + 1).trim()}.
+                  {titleParts.emphasis}.
                 </em>
               </>
             ) : (
-              job.title
+              titleParts.lead
             )}
           </h1>
 
@@ -950,7 +1703,7 @@ export default async function JobPage({ params }: JobPageProps) {
                   borderRadius: 5,
                 }}
               >
-                {job.employmentType}
+                {formatEmploymentType(job.employmentType)}
               </span>
             ) : null}
           </div>
@@ -1042,6 +1795,11 @@ export default async function JobPage({ params }: JobPageProps) {
           </div>
         </header>
 
+        {/* Gate de compatibilidade acima da dobra — só visitante anônimo;
+        usuário logado já vê o CompatCard real na sidebar, não precisa do
+        placeholder */}
+        {!user ? <MonitorGateBand jobTitle={job.title} /> : null}
+
         {/* Two-column body */}
         <div
           style={{
@@ -1100,6 +1858,9 @@ export default async function JobPage({ params }: JobPageProps) {
                 />
               </div>
             ))}
+
+            {/* Vitrine do resto da plataforma — só visitante anônimo */}
+            {!user ? <FeatureShowcaseStrip /> : null}
           </div>
 
           {/* Sidebar */}
@@ -1188,29 +1949,38 @@ export default async function JobPage({ params }: JobPageProps) {
                   secondaryHref={adaptarJobHref}
                 />
               )}
-              <a
-                href={job.sourceJobUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  width: "100%",
-                  display: "block",
-                  background: "#fff",
-                  color: "#0a0a0a",
-                  border: "1px solid rgba(10,10,10,0.15)",
-                  borderRadius: 9,
-                  padding: "11px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  textAlign: "center",
-                  fontFamily: GEIST,
-                  marginBottom: 8,
-                  boxSizing: "border-box",
-                }}
-              >
-                Candidatar-se externamente ↗
-              </a>
+              {!user || !hasExistingAnalysisScore ? (
+                <ExternalApplyGate
+                  href={job.sourceJobUrl}
+                  company={job.company}
+                  jobId={job.id}
+                  isAuthenticated={!!user}
+                />
+              ) : (
+                <a
+                  href={job.sourceJobUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    width: "100%",
+                    display: "block",
+                    background: "#fff",
+                    color: "#0a0a0a",
+                    border: "1px solid rgba(10,10,10,0.15)",
+                    borderRadius: 9,
+                    padding: "11px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                    textAlign: "center",
+                    fontFamily: GEIST,
+                    marginBottom: 8,
+                    boxSizing: "border-box",
+                  }}
+                >
+                  Candidatar-se externamente ↗
+                </a>
+              )}
               <SaveJobTextBtn
                 jobId={job.id}
                 initialSaved={isSaved}
@@ -1250,7 +2020,10 @@ export default async function JobPage({ params }: JobPageProps) {
                       ? { label: "Modelo", value: workModelLabel }
                       : null,
                     job.employmentType
-                      ? { label: "Contrato", value: job.employmentType }
+                      ? {
+                          label: "Contrato",
+                          value: formatEmploymentType(job.employmentType),
+                        }
                       : null,
                     {
                       label: "Fonte",
@@ -1382,9 +2155,12 @@ export default async function JobPage({ params }: JobPageProps) {
             `}</style>
             <div className="job-similar-grid">
               {similarJobs.map((j) => (
-                <SimCard key={j.id} job={j} />
+                <SimCard key={j.id} job={j} showMatchLock={!user} />
               ))}
             </div>
+
+            {/* Destaque grande do Monitor — só visitante anônimo */}
+            {!user ? <MonitorHighlightBand /> : null}
           </div>
         ) : null}
       </div>

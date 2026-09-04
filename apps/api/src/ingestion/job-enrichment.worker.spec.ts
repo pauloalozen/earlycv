@@ -53,6 +53,8 @@ function createFixture() {
   const jobs = new Map<string, JobRecord>();
   const batchRuns = new Map<string, BatchRunRecord>();
   let nextBatchRunId = 1;
+  const monitorMatchJobUpserts: string[] = [];
+  let monitorMatchJobUpsertShouldThrow = false;
 
   const database = {
     enrichmentBatchRun: {
@@ -134,6 +136,15 @@ function createFixture() {
         const next = { ...current, ...data, updatedAt: new Date() };
         enrichments.set(where.id, next);
         return next;
+      },
+    },
+    monitorMatchJob: {
+      upsert: async ({ where }: { where: { jobId: string } }) => {
+        if (monitorMatchJobUpsertShouldThrow) {
+          throw new Error("monitor match job upsert failed");
+        }
+        monitorMatchJobUpserts.push(where.jobId);
+        return { id: `monitor-match-${where.jobId}`, jobId: where.jobId };
       },
     },
   };
@@ -227,6 +238,10 @@ function createFixture() {
     enrichments,
     getEnrichCalls: () => enrichCalls,
     getIndexingCalls: () => indexingCalls,
+    getMonitorMatchJobUpserts: () => monitorMatchJobUpserts,
+    setMonitorMatchJobUpsertShouldThrow(value: boolean) {
+      monitorMatchJobUpsertShouldThrow = value;
+    },
     jobs,
     lockRepository,
     seedEnrichment,
@@ -378,6 +393,29 @@ test("JobEnrichmentWorker notifies Google Indexing API once enrichment completes
   await fixture.worker.processPendingBatch();
 
   assert.deepEqual(fixture.getIndexingCalls(), [`${record.jobId}-slug`]);
+});
+
+test("JobEnrichmentWorker enqueues a MonitorMatchJob once enrichment completes", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  const record = fixture.seedEnrichment();
+
+  await fixture.worker.processPendingBatch();
+
+  assert.deepEqual(fixture.getMonitorMatchJobUpserts(), [record.jobId]);
+});
+
+test("JobEnrichmentWorker still marks enrichment COMPLETED even if enqueuing the MonitorMatchJob fails — the Monitor can never break enrichment", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  fixture.seedEnrichment();
+  fixture.setMonitorMatchJobUpsertShouldThrow(true);
+
+  await fixture.worker.processPendingBatch();
+
+  const [record] = fixture.enrichments.values();
+  assert.equal(record.enrichmentStatus, "COMPLETED");
+  assert.deepEqual(fixture.getMonitorMatchJobUpserts(), []);
 });
 
 test("JobEnrichmentWorker does not notify Google Indexing API when the job was inactivated before enrichment finished", async () => {

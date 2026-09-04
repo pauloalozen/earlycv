@@ -134,6 +134,11 @@ function makeDb(overrides: Partial<DbMock> = {}): DbMock {
       },
       count: async () => cvAdaptations.size,
     },
+    job: {
+      findUnique: async () => ({
+        sourceJobUrl: "https://portal.example.com/vaga-radar-1",
+      }),
+    },
     $transaction: async <T>(fn: (tx: DbMock) => Promise<T>): Promise<T> => {
       return fn(defaultDb as unknown as DbMock);
     },
@@ -393,6 +398,33 @@ test("upsertFromCvAdaptation links Job.id when analysis came from the Radar (rad
   assert.equal(app.jobId, "job-radar-1");
 });
 
+test("upsertFromCvAdaptation auto-fills jobUrl with the radar Job's sourceJobUrl (same field/meaning users filled by hand before Radar existed)", async () => {
+  const db = makeDb();
+
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-radar-url", {
+    id: "adapt-radar-url",
+    jobApplicationId: null,
+  });
+
+  const service = new JobApplicationsServiceCtor(db);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-radar-url",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+    radarJobId: "job-radar-1",
+  });
+
+  const apps = db._jobApplications as Map<string, Record<string, unknown>>;
+  const app = Array.from(apps.values())[0];
+  assert.equal(app.jobUrl, "https://portal.example.com/vaga-radar-1");
+});
+
 test("upsertFromCvAdaptation leaves jobId null when analysis did not come from the Radar", async () => {
   const db = makeDb();
 
@@ -417,6 +449,7 @@ test("upsertFromCvAdaptation leaves jobId null when analysis did not come from t
   const apps = db._jobApplications as Map<string, Record<string, unknown>>;
   const app = Array.from(apps.values())[0];
   assert.equal(app.jobId, null);
+  assert.equal(app.jobUrl, null);
 });
 
 // ─── Fase B.3: product_origin, sessionInternalId, idempotência ───────────
@@ -499,7 +532,7 @@ test("upsertFromCvAdaptation propagates visitorId/journeySessionInternalId into 
   assert.equal(created?.metadata?.sessionInternalId, "journey-hook-1");
 });
 
-test("upsertFromCvAdaptation records candidatura_created with product_origin=analysis when radarJobId is absent", async () => {
+test("upsertFromCvAdaptation records candidatura_created with product_origin=direct when radarJobId is absent — unified with analysis_started/completed, which already used 'direct' for this same case", async () => {
   const db = makeDb();
   const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
   adaptations.set("adapt-analysis-origin", {
@@ -521,7 +554,34 @@ test("upsertFromCvAdaptation records candidatura_created with product_origin=ana
   });
 
   const created = calls.find((c) => c.eventName === "candidatura_created");
-  assert.equal(created?.metadata?.product_origin, "analysis");
+  assert.equal(created?.metadata?.product_origin, "direct");
+});
+
+test("upsertFromCvAdaptation records candidatura_created with product_origin from radarJobOrigin (monitor/monitor_email) instead of always 'radar' when radarJobId is present", async () => {
+  const db = makeDb();
+  const adaptations = db._cvAdaptations as Map<string, Record<string, unknown>>;
+  adaptations.set("adapt-monitor-origin", {
+    id: "adapt-monitor-origin",
+    jobApplicationId: null,
+  });
+
+  const { funnelEvents, calls } = makeFunnelEventsCapture();
+  const service = new JobApplicationsServiceCtor(db, funnelEvents);
+
+  await service.upsertFromCvAdaptation({
+    userId: "user-1",
+    cvAdaptationId: "adapt-monitor-origin",
+    jobTitle: "Desenvolvedor Full Stack",
+    companyName: "Tech LTDA",
+    jobDescriptionText: "Descricao da vaga...",
+    targetStatus: "ANALYZED",
+    origin: "analysis_auto",
+    radarJobId: "job-radar-monitor",
+    radarJobOrigin: "monitor_email",
+  });
+
+  const created = calls.find((c) => c.eventName === "candidatura_created");
+  assert.equal(created?.metadata?.product_origin, "monitor_email");
 });
 
 test("createManual records candidatura_created with product_origin=candidatura, sessionInternalId when provided, and a stable idempotencyKey", async () => {
@@ -1575,6 +1635,61 @@ test("getById returns derived best-version fields", async () => {
   assert.equal(response.scorePresentation, "scored");
   assert.equal(response.interviewPrepLocked, true);
   assert.equal(response.interviewPrepLockReason, "missing_selected_cv");
+});
+
+test("getById exposes jobSlug when the candidatura is linked to a Radar Job, null otherwise", async () => {
+  const dbWithJob = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findFirst: async () => ({
+        id: "app-radar",
+        userId: "user-1",
+        jobTitle: "Engenheiro",
+        companyName: "Empresa",
+        status: "ANALYZED",
+        updatedAt: new Date("2026-05-02T12:00:00Z"),
+        cvAdaptations: [],
+        events: [],
+        interviewPrep: null,
+        job: {
+          slug: "engenheiro-empresa-abc123",
+          company: { logoUrl: null, websiteUrl: null },
+        },
+      }),
+    },
+  });
+
+  const serviceWithJob = new JobApplicationsServiceCtor(dbWithJob);
+  const withJob = (await serviceWithJob.getById(
+    "user-1",
+    "app-radar",
+  )) as Record<string, unknown>;
+  assert.equal(withJob.jobSlug, "engenheiro-empresa-abc123");
+
+  const dbWithoutJob = makeDb({
+    jobApplication: {
+      ...(makeDb().jobApplication as Record<string, unknown>),
+      findFirst: async () => ({
+        id: "app-manual",
+        userId: "user-1",
+        jobTitle: "Engenheiro",
+        companyName: "Empresa",
+        status: "ANALYZED",
+        updatedAt: new Date("2026-05-02T12:00:00Z"),
+        cvAdaptations: [],
+        events: [],
+        interviewPrep: null,
+        job: null,
+      }),
+    },
+  });
+
+  const serviceWithoutJob = new JobApplicationsServiceCtor(dbWithoutJob);
+  const withoutJob = (await serviceWithoutJob.getById(
+    "user-1",
+    "app-manual",
+  )) as Record<string, unknown>;
+  assert.equal(withoutJob.jobSlug, null);
 });
 
 test("getById keeps strict CV_READY precedence when scores tie", async () => {

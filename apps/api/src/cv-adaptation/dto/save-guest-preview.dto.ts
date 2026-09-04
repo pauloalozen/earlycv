@@ -2,6 +2,7 @@ import { Transform } from "class-transformer";
 import {
   Allow,
   IsBoolean,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -76,4 +77,14 @@ export class SaveGuestPreviewDto {
   @IsOptional()
   @IsString()
   radarJobId?: string;
+
+  // Mesmo valor enviado em AnalyzeCvDto.radarJobOrigin — precisa vir de
+  // novo aqui porque save-guest-preview é uma chamada HTTP separada
+  // (depois do poll da análise), sem acesso ao contexto da chamada
+  // original. Usado pra JobApplicationsService.upsertFromCvAdaptation
+  // gravar candidatura_created.product_origin corretamente (radar vs.
+  // monitor/monitor_email) em vez de assumir sempre "radar".
+  @IsOptional()
+  @IsIn(["radar", "monitor", "monitor_email"])
+  radarJobOrigin?: "radar" | "monitor" | "monitor_email";
 }

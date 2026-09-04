@@ -13,6 +13,7 @@ import {
 import { EcvBuildLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
+import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { trackEvent } from "@/lib/analytics-tracking";
 import { downloadFromApi } from "@/lib/client-download";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
@@ -988,51 +989,65 @@ function CandRow({
           padding: "16px 18px",
         }}
       >
-        <div
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            color: "#8a8a85",
-            letterSpacing: 0.4,
-            marginBottom: 4,
-          }}
-        >
-          {shortId}
-        </div>
-        <div
-          style={{
-            fontSize: 16,
-            fontWeight: 500,
-            letterSpacing: -0.3,
-            color: "#0a0a0a",
-            marginBottom: 4,
-            lineHeight: 1.25,
-            textOverflow: "ellipsis",
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {application.jobTitle}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            marginBottom: 12,
-          }}
-        >
-          <span style={{ fontSize: 13.5, fontWeight: 500, color: "#3a3a36" }}>
-            {application.companyName}
-          </span>
-          {application.location && (
-            <>
-              <span style={{ color: "#c0beb4" }}>·</span>
-              <span style={{ fontSize: 13, color: "#6a6a66" }}>
-                {application.location}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+          <CompanyLogo
+            name={application.companyName}
+            logoUrl={application.companyLogoUrl}
+            websiteUrl={application.companyWebsiteUrl}
+            size={36}
+            borderRadius={8}
+            fontSize={14}
+          />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: "#8a8a85",
+                letterSpacing: 0.4,
+                marginBottom: 4,
+              }}
+            >
+              {shortId}
+            </div>
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 500,
+                letterSpacing: -0.3,
+                color: "#0a0a0a",
+                marginBottom: 4,
+                lineHeight: 1.25,
+                textOverflow: "ellipsis",
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {application.jobTitle}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                marginBottom: 12,
+              }}
+            >
+              <span
+                style={{ fontSize: 13.5, fontWeight: 500, color: "#3a3a36" }}
+              >
+                {getCompanyDisplayName(application.companyName)}
               </span>
-            </>
-          )}
+              {application.location && (
+                <>
+                  <span style={{ color: "#c0beb4" }}>·</span>
+                  <span style={{ fontSize: 13, color: "#6a6a66" }}>
+                    {application.location}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         {/* Bottom row */}
         <div
@@ -1738,7 +1753,7 @@ function CandRow({
                   color: "#6a6a65",
                 }}
               >
-                {application.companyName}
+                {getCompanyDisplayName(application.companyName)}
               </p>
             </div>
             <p

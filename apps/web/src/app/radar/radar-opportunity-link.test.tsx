@@ -2,13 +2,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackEventMock = vi.hoisted(() => vi.fn());
-const writeRadarJobNavigationContextMock = vi.hoisted(() => vi.fn());
+const writeJobNavigationContextMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
 }));
 vi.mock("@/lib/journey-session", () => ({
-  writeRadarJobNavigationContext: writeRadarJobNavigationContextMock,
+  writeJobNavigationContext: writeJobNavigationContextMock,
 }));
 
 import { RadarOpportunityLink } from "./radar-opportunity-link";
@@ -17,7 +17,7 @@ describe("RadarOpportunityLink", () => {
   beforeEach(() => {
     trackEventMock.mockReset();
     trackEventMock.mockResolvedValue(undefined);
-    writeRadarJobNavigationContextMock.mockReset();
+    writeJobNavigationContextMock.mockReset();
   });
 
   afterEach(() => {
@@ -100,6 +100,9 @@ describe("RadarOpportunityLink", () => {
 
     fireEvent.click(screen.getByText("Vaga 5"));
 
-    expect(writeRadarJobNavigationContextMock).toHaveBeenCalledWith("job-5");
+    expect(writeJobNavigationContextMock).toHaveBeenCalledWith(
+      "job-5",
+      "radar",
+    );
   });
 });

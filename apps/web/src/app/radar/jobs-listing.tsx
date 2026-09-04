@@ -136,12 +136,50 @@ const HERO_SCORE = Math.round(
 // Card esquerdo do hero de 2 colunas (anônimo/no-cv) — só título, descrição
 // e CTA mudam entre as duas variantes; moldura e ícone (raio) são
 // idênticos, por isso ficaram num componente à parte em vez de duplicados.
+const HERO_BENEFIT_BULLETS = [
+  "Vagas antes de todo mundo",
+  "Score de aderência automático",
+  "Adapte seu CV em segundos",
+];
+
+function HeroBenefitRow({ label }: { label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          background: "rgba(198,255,58,0.22)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M20 6L9 17l-5-5"
+            stroke="#405410"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+      <span style={{ fontSize: 13, color: "#3a3a36" }}>{label}</span>
+    </div>
+  );
+}
+
 function HeroCtaCard({
+  eyebrow,
   title,
   description,
   href,
   buttonLabel,
 }: {
+  eyebrow: string;
   title: string;
   description: string;
   href: string;
@@ -153,45 +191,86 @@ function HeroCtaCard({
         background: "#fff",
         border: "1px solid rgba(10,10,10,0.08)",
         borderRadius: 14,
-        padding: "28px 24px",
+        padding: "24px 26px",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        gap: 12,
+        height: "100%",
       }}
     >
-      <div
+      <p
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          background: "rgba(198,255,58,0.22)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          fontFamily: MONO,
+          fontSize: 10.5,
+          letterSpacing: 0.4,
+          color: "#8a8a85",
+          margin: "0 0 14px",
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <title>{title}</title>
-          <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill="#405410" />
-        </svg>
-      </div>
-      <div>
-        <p
+        {eyebrow}
+      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        <div
           style={{
-            fontSize: 15,
-            fontWeight: 600,
-            color: "#0a0a0a",
-            margin: "0 0 4px",
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            background: "rgba(198,255,58,0.22)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
           }}
         >
-          {title}
-        </p>
-        <p style={{ fontSize: 13, color: "#5a5a55", margin: 0 }}>
-          {description}
-        </p>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <title>{title}</title>
+            <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill="#405410" />
+          </svg>
+        </div>
+        <div>
+          <p
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#0a0a0a",
+              margin: "0 0 3px",
+              lineHeight: 1.25,
+            }}
+          >
+            {title}
+          </p>
+          <p
+            style={{
+              fontSize: 13,
+              color: "#5a5a55",
+              margin: 0,
+              lineHeight: 1.4,
+            }}
+          >
+            {description}
+          </p>
+        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          padding: "14px 0",
+          margin: "2px 0 16px",
+          borderTop: "1px solid rgba(10,10,10,0.06)",
+          borderBottom: "1px solid rgba(10,10,10,0.06)",
+        }}
+      >
+        {HERO_BENEFIT_BULLETS.map((label) => (
+          <HeroBenefitRow key={label} label={label} />
+        ))}
       </div>
       <a
         href={href}
@@ -207,7 +286,8 @@ function HeroCtaCard({
           fontWeight: 500,
           textDecoration: "none",
           fontFamily: GEIST,
-          marginTop: 4,
+          marginTop: "auto",
+          alignSelf: "center",
         }}
       >
         {buttonLabel} →
@@ -424,9 +504,10 @@ function AnonymousHeroCard() {
     <HeroTwoColumnGrid>
       <HeroCtaCard
         buttonLabel="Criar conta grátis"
-        description="para ver as melhores oportunidades pro seu perfil"
+        description="Crie sua conta e envie o CV pra ver as melhores oportunidades com score calculado pra você."
+        eyebrow="SEM CONTA AINDA"
         href="/entrar?tab=cadastrar&ctx=radar"
-        title="criar conta"
+        title="Vagas feitas pro seu perfil"
       />
       <HeroPreviewCard />
     </HeroTwoColumnGrid>
@@ -447,6 +528,7 @@ function NoCvHeroCard({ cvFileName }: { cvFileName: string | null }) {
             ? "seu CV está sendo processado — assim que terminar, cada vaga ganha uma classificação de oportunidade com seu perfil"
             : "para ver as melhores oportunidades pro seu perfil"
         }
+        eyebrow="FALTA UM PASSO"
         href="/meu-cv-master"
         title="cadastrar CV master"
       />
@@ -1012,7 +1094,7 @@ export async function RadarJobsListing({
               {user ? (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <Link
-                    href="/radar-salvas"
+                    href="/minhas-vagas"
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
@@ -1245,7 +1327,7 @@ export async function RadarJobsListing({
                   </div>
 
                   <Link
-                    href="/radar-salvas"
+                    href="/minhas-vagas"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1280,7 +1362,7 @@ export async function RadarJobsListing({
           {scoreState !== "has-cv" && user ? (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Link
-                href="/radar-salvas"
+                href="/minhas-vagas"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",

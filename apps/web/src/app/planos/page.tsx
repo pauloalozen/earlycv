@@ -111,6 +111,7 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
         <AppHeader
           userName={user?.name}
           userRole={user?.internalRole ?? null}
+          hideAnalyzeButton
         />
 
         <div

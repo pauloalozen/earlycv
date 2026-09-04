@@ -21,6 +21,7 @@ import { saveGuestPreview } from "@/lib/cv-adaptation-api";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { DEMO_CV_ANALYSIS_MOCK } from "@/lib/demo-cv-analysis-mock";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
+import { fetchGuestAnalysisAuthGateEnabled } from "@/lib/guest-analysis-auth-gate";
 import {
   clearGuestAnalysisRaw,
   getGuestAnalysisRaw,
@@ -1387,10 +1388,18 @@ const CAMPO_PTS_MAP: Record<string, number> = {
 export default function ResultadoPage() {
   const router = useRouter();
 
+  // Hidratação síncrona de storage guest preservada (evita flash de
+  // loading no fluxo atual, flag desligada). Com a flag ligada, o efeito
+  // abaixo nunca ESCREVE em guestAnalysis a partir do novo fluxo — a única
+  // forma de rawData vir preenchido aqui é storage antigo, de antes da
+  // flag ter sido ativada (mesmo usuário reencontrando o próprio resultado
+  // recente, não um vazamento entre usuários). Esse resíduo é limpo
+  // assim que a flag é confirmada ligada, no mesmo efeito que já resolve
+  // isAuthenticated de forma assíncrona.
   const [rawData, setRawData] = useState<CvAnalysisData | null>(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("adaptationId")) return null;
+    if (params.get("adaptationId") || params.get("claimJobId")) return null;
     const stored = getGuestAnalysisRaw();
     if (!stored) return null;
     try {
@@ -1422,6 +1431,9 @@ export default function ResultadoPage() {
   }, []);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [claimStatus, setClaimStatus] = useState<"idle" | "waiting" | "failed">(
+    "idle",
+  );
   const [internalRole, setInternalRole] = useState<
     "none" | "admin" | "superadmin" | null
   >(null);
@@ -1509,65 +1521,68 @@ export default function ResultadoPage() {
 
     const params = new URLSearchParams(window.location.search);
     const adaptationId = params.get("adaptationId");
+    const claimJobId = params.get("claimJobId");
 
-    getAuthStatus().then(
-      ({
-        isAuthenticated: auth,
-        userName: name,
-        hasCredits,
-        internalRole,
-        availableCreditsDisplay,
-      }) => {
-        if (!active) return;
-        setIsAuthenticated(auth);
-        setUserName(name);
-        setHasCredits(hasCredits);
-        setInternalRole(internalRole);
-        setAvailableCreditsDisplay(availableCreditsDisplay);
-      },
-    );
-
-    if (adaptationId) {
-      setReviewAdaptationId(adaptationId);
-      fetch(`/api/cv-adaptation/${adaptationId}/content`, {
-        cache: "no-store",
-        signal: controller.signal,
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const responseText = await res.text();
-            throw new Error(
-              buildContentFetchErrorMessage(res.status, responseText),
-            );
-          }
-          return res.json() as Promise<{
-            adaptedContentJson: CvAnalysisData;
-            finalCvOutput?: FinalCvOutput | null;
-            paymentStatus:
-              | "none"
-              | "pending"
-              | "completed"
-              | "failed"
-              | "refunded";
-            isUnlocked?: boolean;
-            jobAnalysisCount?: number;
-            adaptationNotes?: string | null;
-            jobApplicationId?: string | null;
-          }>;
-        })
-        .then((payload) => {
-          if (!active) return;
-          setRawData(payload.adaptedContentJson);
-          setFinalCvOutput(payload.finalCvOutput ?? null);
-          setReviewPaymentStatus(
-            payload.isUnlocked ? "completed" : payload.paymentStatus,
+    async function loadAdaptationContent(id: string, gateEnabled: boolean) {
+      setReviewAdaptationId(id);
+      try {
+        const res = await fetch(`/api/cv-adaptation/${id}/content`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const responseText = await res.text();
+          throw new Error(
+            buildContentFetchErrorMessage(res.status, responseText),
           );
-          setJobAnalysisCount(payload.jobAnalysisCount ?? null);
-          setJobApplicationId(payload.jobApplicationId ?? null);
-        })
-        .catch((error: unknown) => {
-          if (!active || controller.signal.aborted) return;
+        }
+        const payload = (await res.json()) as {
+          adaptedContentJson: CvAnalysisData;
+          finalCvOutput?: FinalCvOutput | null;
+          paymentStatus:
+            | "none"
+            | "pending"
+            | "completed"
+            | "failed"
+            | "refunded";
+          isUnlocked?: boolean;
+          jobAnalysisCount?: number;
+          adaptationNotes?: string | null;
+          jobApplicationId?: string | null;
+          jobTitle?: string | null;
+          companyName?: string | null;
+        };
+        if (!active) return;
+        // Defesa extra além da reconciliação no backend (ver
+        // reconcileVagaFields em cv-adaptation.service.ts): mesmo que o
+        // JSON persistido ainda carregue vaga.cargo/empresa desatualizado
+        // (linha criada antes desse fix), payload.jobTitle/companyName são
+        // as colunas confiáveis — nunca "Não informado" por reextração de
+        // IA quando o backend já sabia a resposta.
+        const reconciledContent: CvAnalysisData = {
+          ...payload.adaptedContentJson,
+          vaga: {
+            cargo:
+              payload.jobTitle?.trim() || payload.adaptedContentJson.vaga.cargo,
+            empresa:
+              payload.companyName?.trim() ||
+              payload.adaptedContentJson.vaga.empresa,
+          },
+        };
+        setRawData(reconciledContent);
+        setFinalCvOutput(payload.finalCvOutput ?? null);
+        setReviewPaymentStatus(
+          payload.isUnlocked ? "completed" : payload.paymentStatus,
+        );
+        setJobAnalysisCount(payload.jobAnalysisCount ?? null);
+        setJobApplicationId(payload.jobApplicationId ?? null);
+      } catch (error) {
+        if (!active || controller.signal.aborted) return;
 
+        // Fallback de resiliência a storage guest só existe (e só pode
+        // existir) quando o gate de autenticação está desligado — com o
+        // gate ligado, nunca chega conteúdo guest aqui de propósito.
+        if (!gateEnabled) {
           const stored = getGuestAnalysisRaw();
           if (stored) {
             try {
@@ -1583,47 +1598,155 @@ export default function ResultadoPage() {
               // ignore parse errors and fallback to route redirect below
             }
           }
+        }
 
-          const message =
-            error instanceof Error && error.message.trim()
-              ? error.message
-              : "Não foi possível carregar essa análise agora.";
-          console.error(
-            `[resultado] failed to load adaptation ${adaptationId}: ${message}`,
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : "Não foi possível carregar essa análise agora.";
+        console.error(
+          `[resultado] failed to load adaptation ${id}: ${message}`,
+        );
+        setClaimError(message);
+        router.replace("/adaptar");
+      }
+    }
+
+    // Fase 5 do gate de autenticação guest: claimJobId chega aqui pós-login
+    // (email/senha ou Google, ver guest-analysis-claim.server.ts) quando o
+    // claim ainda não pôde ser concluído no servidor (job ainda
+    // processando). Nunca reprocessa IA — só repete o claim (idempotente)
+    // até a AnalysisJob terminar.
+    async function pollAndClaim(jobId: string, gateEnabled: boolean) {
+      setClaimStatus("waiting");
+      const deadline = Date.now() + 8 * 60 * 1000;
+      while (Date.now() < deadline) {
+        if (!active || controller.signal.aborted) return;
+        let response: Response;
+        try {
+          response = await fetch(
+            `/api/cv-adaptation/analysis-jobs/${jobId}/claim`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+              cache: "no-store",
+              signal: controller.signal,
+            },
           );
-          setClaimError(message);
+        } catch {
+          if (!active || controller.signal.aborted) return;
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+        if (!active) return;
+        if (!response.ok) {
+          setClaimStatus("failed");
+          setClaimError("Não foi possível recuperar sua análise agora.");
           router.replace("/adaptar");
-        });
-      return () => {
-        active = false;
-        controller.abort();
-      };
+          return;
+        }
+        const body = (await response.json()) as
+          | { status: "succeeded"; cvAdaptationId: string }
+          | { status: "pending" | "processing" | "failed" };
+        if (body.status === "succeeded") {
+          setClaimStatus("idle");
+          await loadAdaptationContent(body.cvAdaptationId, gateEnabled);
+          return;
+        }
+        if (body.status === "failed") {
+          setClaimStatus("failed");
+          setClaimError(
+            "A análise falhou. Volte para /adaptar e tente novamente.",
+          );
+          router.replace("/adaptar");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      setClaimStatus("failed");
+      setClaimError(
+        "A análise está demorando mais que o esperado. Tente novamente.",
+      );
+      router.replace("/adaptar");
     }
 
-    const stored = getGuestAnalysisRaw();
-    if (!stored) {
-      router.replace("/adaptar");
-      return;
-    }
-    try {
-      const parsed = JSON.parse(stored) as GuestAnalysisStored;
-      if (!parsed?.adaptedContentJson) throw new Error();
-      setRawData(parsed.adaptedContentJson);
-      const { cargo, empresa } = parsed.adaptedContentJson.vaga;
-      fetch(
-        `/api/cv-adaptation/job-count?jobTitle=${encodeURIComponent(cargo)}&companyName=${encodeURIComponent(empresa)}`,
-        { cache: "no-store", signal: controller.signal },
-      )
-        .then((r) => r.json() as Promise<{ count: number }>)
-        .then((body) => {
-          if (!active) return;
-          setJobAnalysisCount(body.count);
-        })
-        .catch(() => {});
-    } catch {
-      clearGuestAnalysisRaw();
-      router.replace("/adaptar");
-    }
+    (async () => {
+      const [authStatus, gateEnabled] = await Promise.all([
+        getAuthStatus(),
+        fetchGuestAnalysisAuthGateEnabled(),
+      ]);
+      if (!active) return;
+
+      setIsAuthenticated(authStatus.isAuthenticated);
+      setUserName(authStatus.userName);
+      setHasCredits(authStatus.hasCredits);
+      setInternalRole(authStatus.internalRole);
+      setAvailableCreditsDisplay(authStatus.availableCreditsDisplay);
+
+      // Com o gate ligado, não autenticado nunca alcança conteúdo — nem
+      // por adaptationId (o backend já nega por ownership), nem por
+      // storage antigo. Bounce direto para autenticação. setRawData(null)
+      // fecha a janela de um possível rawData semeado de forma síncrona
+      // (initial state) a partir de storage antigo, de antes da flag ter
+      // sido ativada.
+      if (gateEnabled && !authStatus.isAuthenticated && !claimJobId) {
+        setRawData(null);
+        clearGuestAnalysisRaw();
+        router.replace("/entrar?ctx=analysis_guest");
+        return;
+      }
+
+      if (claimJobId) {
+        if (!authStatus.isAuthenticated) {
+          router.replace("/entrar?ctx=analysis_guest");
+          return;
+        }
+        await pollAndClaim(claimJobId, gateEnabled);
+        return;
+      }
+
+      if (adaptationId) {
+        await loadAdaptationContent(adaptationId, gateEnabled);
+        return;
+      }
+
+      if (gateEnabled) {
+        // Gate ligado, sem adaptationId/claimJobId: nunca confia em
+        // storage guest, mesmo que exista (sessão antiga de antes do gate
+        // ser ativado) e mesmo já autenticado — não é esse o caminho de
+        // entrada válido.
+        setRawData(null);
+        clearGuestAnalysisRaw();
+        router.replace("/adaptar");
+        return;
+      }
+
+      const stored = getGuestAnalysisRaw();
+      if (!stored) {
+        router.replace("/adaptar");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stored) as GuestAnalysisStored;
+        if (!parsed?.adaptedContentJson) throw new Error();
+        setRawData(parsed.adaptedContentJson);
+        const { cargo, empresa } = parsed.adaptedContentJson.vaga;
+        fetch(
+          `/api/cv-adaptation/job-count?jobTitle=${encodeURIComponent(cargo)}&companyName=${encodeURIComponent(empresa)}`,
+          { cache: "no-store", signal: controller.signal },
+        )
+          .then((r) => r.json() as Promise<{ count: number }>)
+          .then((body) => {
+            if (!active) return;
+            setJobAnalysisCount(body.count);
+          })
+          .catch(() => {});
+      } catch {
+        clearGuestAnalysisRaw();
+        router.replace("/adaptar");
+      }
+    })();
 
     return () => {
       active = false;
@@ -2098,6 +2221,8 @@ export default function ResultadoPage() {
           inset: 0,
           zIndex: 80,
           display: "flex",
+          flexDirection: "column",
+          gap: 16,
           alignItems: "center",
           justifyContent: "center",
           background:
@@ -2105,6 +2230,18 @@ export default function ResultadoPage() {
         }}
       >
         <EcvBuildLoader size={48} />
+        {claimStatus === "waiting" && (
+          <p
+            style={{
+              fontFamily: MONO,
+              fontSize: 12.5,
+              color: "#6a6560",
+              letterSpacing: 0.2,
+            }}
+          >
+            Estamos finalizando sua análise...
+          </p>
+        )}
       </div>
     );
   }
@@ -2261,6 +2398,7 @@ export default function ResultadoPage() {
           userName={userName}
           userRole={internalRole}
           availableCredits={availableCreditsDisplay}
+          hideAnalyzeButton
         />
 
         <div

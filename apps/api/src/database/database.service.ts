@@ -137,6 +137,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.analysisJob;
   }
 
+  get oAuthAttempt() {
+    return this.prisma.oAuthAttempt;
+  }
+
   get masterCvCanonicalExtraction() {
     return this.prisma.masterCvCanonicalExtraction;
   }
@@ -203,6 +207,46 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   get savedJob() {
     return this.prisma.savedJob;
+  }
+
+  get userJobRecommendation() {
+    return this.prisma.userJobRecommendation;
+  }
+
+  get monitorProfileMatchJob() {
+    return this.prisma.monitorProfileMatchJob;
+  }
+
+  get monitorAlertPreference() {
+    return this.prisma.monitorAlertPreference;
+  }
+
+  get monitorDigest() {
+    return this.prisma.monitorDigest;
+  }
+
+  get monitorDigestRecommendation() {
+    return this.prisma.monitorDigestRecommendation;
+  }
+
+  get monitorDigestEvent() {
+    return this.prisma.monitorDigestEvent;
+  }
+
+  get monitorAdminActionLog() {
+    return this.prisma.monitorAdminActionLog;
+  }
+
+  get monitorDigestScheduleConfig() {
+    return this.prisma.monitorDigestScheduleConfig;
+  }
+
+  get monitorDigestEmailContent() {
+    return this.prisma.monitorDigestEmailContent;
+  }
+
+  get monitorMatchJob() {
+    return this.prisma.monitorMatchJob;
   }
 
   get googleIndexingLog() {

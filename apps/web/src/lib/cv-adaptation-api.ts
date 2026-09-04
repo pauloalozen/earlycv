@@ -368,7 +368,12 @@ export type CvAnalysisData = {
 };
 
 export type AnalysisJobStartResult =
-  | { ok: true; jobId: string; guestSessionPublicToken: string | null }
+  | {
+      ok: true;
+      jobId: string;
+      guestSessionPublicToken: string | null;
+      guestPossessionToken?: string;
+    }
   | { ok: false; error: string };
 
 export type BusinessFunnelEventPayload = {
@@ -434,11 +439,13 @@ export async function analyzeGuestCv(
   const body = (await response.json()) as {
     jobId: string;
     guestSessionPublicToken: string | null;
+    guestPossessionToken?: string;
   };
   return {
     ok: true,
     jobId: body.jobId,
     guestSessionPublicToken: body.guestSessionPublicToken,
+    guestPossessionToken: body.guestPossessionToken,
   };
 }
 
@@ -483,6 +490,7 @@ export async function saveGuestPreview(payload: {
   guestSessionPublicToken?: string;
   jobApplicationId?: string;
   radarJobId?: string;
+  radarJobOrigin?: "radar" | "monitor" | "monitor_email";
   sessionInternalId?: string | null;
   visitorId?: string | null;
 }): Promise<CvAdaptationDto> {
@@ -511,6 +519,8 @@ export async function saveGuestPreview(payload: {
     if (payload.jobApplicationId)
       formData.append("jobApplicationId", payload.jobApplicationId);
     if (payload.radarJobId) formData.append("radarJobId", payload.radarJobId);
+    if (payload.radarJobOrigin)
+      formData.append("radarJobOrigin", payload.radarJobOrigin);
     return formData;
   })();
 

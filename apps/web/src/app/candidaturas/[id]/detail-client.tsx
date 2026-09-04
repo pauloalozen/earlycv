@@ -12,6 +12,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import {
   CvReleaseModal,
@@ -2967,7 +2968,7 @@ function DetalhesCard({
 
   type Row = { k: string; v: React.ReactNode };
   const rows: Row[] = [
-    { k: "Empresa", v: application.companyName },
+    { k: "Empresa", v: getCompanyDisplayName(application.companyName) },
     ...(application.location ? [{ k: "Local", v: application.location }] : []),
     ...(application.jobUrl
       ? [
@@ -2988,6 +2989,29 @@ function DetalhesCard({
                 }}
               >
                 {application.jobUrl.replace(/^https?:\/\//, "").slice(0, 32)}
+              </a>
+            ),
+          },
+        ]
+      : []),
+    ...(application.jobSlug
+      ? [
+          {
+            k: "Vaga no EarlyCV",
+            v: (
+              <a
+                href={`/radar/${application.jobSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: "#0a0a0a",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 2,
+                }}
+              >
+                Ver detalhe da vaga ↗
               </a>
             ),
           },
@@ -5422,6 +5446,11 @@ export function DetailClient({
           .detail-top-spacer { padding-top: 54px !important; margin-bottom: 12px !important; }
           .detail-hero-grid { grid-template-columns: 1fr !important; }
           .detail-hero-actions { flex-wrap: wrap !important; gap: 6px !important; align-items: stretch !important; }
+          /* "Ver vaga no EarlyCV" já aparece na tabela de detalhes logo
+             abaixo (linha "Vaga no EarlyCV") — no mobile, incluir esse botão
+             aqui também deixava a barra de ações com 4 caixas quebradas e
+             espremidas; no desktop tem espaço de sobra, então fica só lá. */
+          .detail-radar-hero-link { display: none !important; }
           .detail-hero-actions > *:not(.detail-prep-btn) { flex: 1 !important; }
           .detail-hero-actions > div:not(.detail-prep-btn) { display: flex !important; }
           .detail-hero-actions > div:not(.detail-prep-btn) > button,
@@ -5517,34 +5546,46 @@ export function DetailClient({
 
           {/* Hero */}
           <div style={{ marginBottom: 18 }}>
-            {/* Company / location */}
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 10.5,
-                color: "#6a6560",
-                letterSpacing: 0.5,
-                marginBottom: 7,
-                textTransform: "uppercase",
-              }}
-            >
-              {application.companyName}
-              {application.location ? ` · ${application.location}` : ""}
-            </div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+              <CompanyLogo
+                name={application.companyName}
+                logoUrl={application.companyLogoUrl}
+                websiteUrl={application.companyWebsiteUrl}
+                size={44}
+                borderRadius={9}
+                fontSize={17}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                {/* Company / location */}
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#6a6560",
+                    letterSpacing: 0.5,
+                    marginBottom: 7,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {application.companyName}
+                  {application.location ? ` · ${application.location}` : ""}
+                </div>
 
-            {/* Title */}
-            <h1
-              style={{
-                margin: "0 0 11px",
-                fontSize: "clamp(22px, 2.4vw, 30px)",
-                fontWeight: 500,
-                letterSpacing: -1,
-                lineHeight: 1.15,
-                color: "#0a0a0a",
-              }}
-            >
-              {application.jobTitle}
-            </h1>
+                {/* Title */}
+                <h1
+                  style={{
+                    margin: "0 0 11px",
+                    fontSize: "clamp(22px, 2.4vw, 30px)",
+                    fontWeight: 500,
+                    letterSpacing: -1,
+                    lineHeight: 1.15,
+                    color: "#0a0a0a",
+                  }}
+                >
+                  {application.jobTitle}
+                </h1>
+              </div>
+            </div>
 
             {/* Badge + stats + actions — all on the same line */}
             <div
@@ -5669,6 +5710,31 @@ export function DetailClient({
                 >
                   {application.jobUrl ? "Editar link ↗" : "+ Link da vaga"}
                 </button>
+
+                {application.jobSlug ? (
+                  <a
+                    href={`/radar/${application.jobSlug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="detail-radar-hero-link"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "8px 13px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(10,10,10,0.20)",
+                      background: "rgba(255,255,255,0.7)",
+                      color: "#3a3a36",
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      fontFamily: GEIST,
+                    }}
+                  >
+                    Ver vaga no EarlyCV ↗
+                  </a>
+                ) : null}
 
                 {isPrepEligible &&
                   (unlockedAdaptations.length > 0 ||

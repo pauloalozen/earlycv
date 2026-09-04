@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPendingGuestAnalysis } from "@/lib/guest-analysis-pending";
 import {
   SIGNUP_PASSWORD_RULES,
   validateSignupPassword,
@@ -25,6 +26,8 @@ export function RegisterForm({
   const [touched, setTouched] = useState({ email: false, password: false });
   const [sessionInternalId, setSessionInternalId] = useState("");
   const [visitorId, setVisitorId] = useState("");
+  const [guestAnalysisJobId, setGuestAnalysisJobId] = useState("");
+  const [guestPossessionToken, setGuestPossessionToken] = useState("");
 
   useEffect(() => {
     try {
@@ -34,6 +37,14 @@ export function RegisterForm({
       // correlação de sessão, conversionContext continua enviado.
     }
     setVisitorId(getOrCreateVisitorId() ?? "");
+
+    // Fase 5 do gate de autenticação guest: retoma o claim server-side
+    // depois do cadastro, sem depender do fluxo Google.
+    const pending = getPendingGuestAnalysis();
+    if (pending) {
+      setGuestAnalysisJobId(pending.jobId);
+      setGuestPossessionToken(pending.guestPossessionToken);
+    }
   }, []);
 
   const emailValid = EMAIL_REGEX.test(email);
@@ -87,6 +98,20 @@ export function RegisterForm({
         />
       )}
       {visitorId && <input type="hidden" name="visitorId" value={visitorId} />}
+      {guestAnalysisJobId && (
+        <input
+          type="hidden"
+          name="guestAnalysisJobId"
+          value={guestAnalysisJobId}
+        />
+      )}
+      {guestPossessionToken && (
+        <input
+          type="hidden"
+          name="guestPossessionToken"
+          value={guestPossessionToken}
+        />
+      )}
 
       <div>
         <label htmlFor="register-name" style={labelStyle}>

@@ -54,7 +54,7 @@ export class SavedJobsController {
     )
     dto: SaveJobDto,
   ) {
-    return this.service.save(user.id, dto.jobId);
+    return this.service.save(user.id, dto.jobId, dto.origin);
   }
 
   @Delete(":jobId")

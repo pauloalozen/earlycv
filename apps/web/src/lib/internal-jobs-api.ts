@@ -95,3 +95,33 @@ export async function getPublicJobsByTech(
     return { total: 0, jobs: [] };
   }
 }
+
+export type TopCompany = {
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  jobCount: number;
+};
+
+// Usado pela landing page (marquee de empresas). Só devolve empresas com
+// vaga pública ativa agora — nunca uma lista estática. Endpoint sem auth,
+// mesma justificativa de getSitemapJobs acima.
+export async function getTopCompaniesWithActiveJobs(
+  limit?: number,
+): Promise<TopCompany[]> {
+  try {
+    const qs = limit ? `?limit=${limit}` : "";
+    const response = await fetch(
+      `${getApiBaseUrl()}/internal/jobs/top-companies${qs}`,
+      { cache: "no-store" },
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return (await response.json()) as TopCompany[];
+  } catch {
+    return [];
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { resolveJobProductOrigin } from "@/lib/journey-session";
 import { saveJob, unsaveJob } from "@/lib/saved-jobs-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -10,10 +11,12 @@ function useSaveJobToggle({
   jobId,
   initialSaved,
   isLoggedIn,
+  origin = "RADAR",
 }: {
   jobId: string;
   initialSaved: boolean;
   isLoggedIn: boolean;
+  origin?: "RADAR" | "MONITOR";
 }) {
   const router = useRouter();
   const [saved, setSaved] = useState(initialSaved);
@@ -28,7 +31,7 @@ function useSaveJobToggle({
     const next = !saved;
     setSaved(next);
     startTransition(async () => {
-      const ok = next ? await saveJob(jobId) : await unsaveJob(jobId);
+      const ok = next ? await saveJob(jobId, origin) : await unsaveJob(jobId);
       if (!ok) {
         // Reverte estado otimista se a chamada falhar — não deixa o botão
         // "mentir" pro usuário sobre o que está salvo de verdade.
@@ -45,15 +48,18 @@ export function SaveJobBtn({
   jobId,
   initialSaved = false,
   isLoggedIn = true,
+  origin = "RADAR",
 }: {
   jobId: string;
   initialSaved?: boolean;
   isLoggedIn?: boolean;
+  origin?: "RADAR" | "MONITOR";
 }) {
   const { saved, pending, toggle } = useSaveJobToggle({
     jobId,
     initialSaved,
     isLoggedIn,
+    origin,
   });
 
   return (
@@ -94,7 +100,12 @@ export function SaveJobBtn({
   );
 }
 
-// Botão texto+ícone, usado no card de candidatura em /radar/[slug].
+// Botão texto+ícone, usado no card de candidatura em /radar/[slug]. Único
+// lugar que resolve origin=MONITOR de verdade — a página de detalhe é o
+// destino tanto de um clique no Radar quanto de um clique numa
+// recomendação do Alerta, então a origem real precisa vir da mesma
+// resolução usada por JobDetailViewTracker (resolveJobProductOrigin),
+// nunca assumir "RADAR" incondicionalmente.
 export function SaveJobTextBtn({
   jobId,
   initialSaved = false,
@@ -104,10 +115,17 @@ export function SaveJobTextBtn({
   initialSaved?: boolean;
   isLoggedIn?: boolean;
 }) {
+  const [origin] = useState<"RADAR" | "MONITOR">(() => {
+    const productOrigin = resolveJobProductOrigin(jobId);
+    return productOrigin === "monitor" || productOrigin === "monitor_email"
+      ? "MONITOR"
+      : "RADAR";
+  });
   const { saved, pending, toggle } = useSaveJobToggle({
     jobId,
     initialSaved,
     isLoggedIn,
+    origin,
   });
 
   return (

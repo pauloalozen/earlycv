@@ -22,6 +22,10 @@ export async function GET(
   const { jobId } = await params;
   const { accessToken: token } = await getAppSessionTokens();
   const cookieHeader = request.headers.get("cookie") ?? "";
+  // Fase 5: repassa o token de posse guest (Fase 1/2) quando o browser o
+  // enviar — só importa para requisição não autenticada com o gate ligado;
+  // o backend ignora silenciosamente fora desse caso.
+  const guestPossessionToken = request.headers.get("x-guest-possession-token");
 
   const apiResponse = await fetch(
     `${getApiBaseUrl()}/cv-adaptation/analysis-jobs/${jobId}`,
@@ -29,6 +33,9 @@ export async function GET(
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        ...(guestPossessionToken
+          ? { "x-guest-possession-token": guestPossessionToken }
+          : {}),
       },
       cache: "no-store",
     },

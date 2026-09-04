@@ -24,7 +24,12 @@ function buildCorsOrigins(): string[] {
 async function bootstrap() {
   loadLocalEnvFileIfPresent();
 
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true preserva o corpo bruto da request em req.rawBody (Buffer)
+  // ao lado do corpo já parseado — necessário pro webhook do Resend
+  // (assinatura Svix é HMAC sobre os bytes crus, não sobre o JSON
+  // re-serializado, que pode divergir byte a byte do que foi assinado).
+  // Aditivo: não muda nenhum comportamento de rota existente.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const env = await loadAppEnv();
 
   app.use(helmet());

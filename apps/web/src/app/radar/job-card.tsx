@@ -43,6 +43,7 @@ export function JobCardResponsiveStyles() {
         .jc-badges { display: none; }
         .jc-ringcol { display: none; }
         .jc-ringcol-mobile { display: flex; }
+        .jc-save-desktop { display: none; }
         .jc-actions > :last-child { flex: 1; }
       }
     `}</style>
@@ -72,7 +73,7 @@ const SENIORITY_LABELS: Record<string, string> = {
   principal: "Principal",
 };
 
-function formatRelativeTime(isoDate: string): string {
+export function formatRelativeTime(isoDate: string): string {
   const diffMs = Date.now() - new Date(isoDate).getTime();
   const diffH = Math.floor(diffMs / 3_600_000);
   if (diffH < 1) return "< 1h";
@@ -294,12 +295,14 @@ function ScoreIndicator({
   displayScore,
   hasAnalysis,
   showScore,
+  isLoggedIn,
 }: {
   mobile: boolean;
   hasScore: boolean;
   displayScore: number | null | undefined;
   hasAnalysis: boolean;
   showScore: boolean;
+  isLoggedIn: boolean;
 }) {
   const ringSize = mobile ? 56 : 64;
 
@@ -311,7 +314,7 @@ function ScoreIndicator({
         return (
           <>
             <ScoreRing value={displayScore} size={ringSize} />
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 12.5,
@@ -360,7 +363,7 @@ function ScoreIndicator({
       return (
         <>
           <OpportunityRing score={displayScore} size={ringSize} />
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 12.5,
@@ -437,6 +440,12 @@ function ScoreIndicator({
     );
   }
 
+  // Convite pra enviar o CV só faz sentido pra quem já tem conta — pra um
+  // visitante deslogado (sem CV, sem conta) o círculo tracejado + "envie
+  // seu CV" nos cards vira ruído repetido em cada vaga da lista; o convite
+  // pra criar conta já está no restante da página.
+  if (!isLoggedIn) return null;
+
   const uploadIcon = (
     <div
       style={{
@@ -469,6 +478,8 @@ function ScoreIndicator({
         {uploadIcon}
         <span
           style={{
+            flex: 1,
+            minWidth: 0,
             fontFamily: MONO,
             fontSize: 9,
             fontWeight: 600,
@@ -513,19 +524,24 @@ export type JobCardProps = {
   showScore: boolean;
   isLoggedIn: boolean;
   masterResumeId?: string | null;
+  // Superfície do produto de onde este card é renderizado — só afeta o
+  // origin gravado em SavedJob quando o usuário clica em salvar (ver
+  // SaveJobsService.save). Default RADAR preserva todo caller existente.
+  saveOrigin?: "RADAR" | "MONITOR";
 };
 
 // Card full-width: ring de score dominante à direita + breakdown inline +
 // chips de skill quando disponíveis. `showScore=false` cobre tanto anônimo
 // quanto vaga ainda não enriquecida (score null) — o card fica idêntico,
 // só sem a coluna de compatibilidade. Reaproveitado tal e qual em /radar e
-// /radar-salvas (mesmas informações, mesmo componente).
+// /minhas-vagas (mesmas informações, mesmo componente).
 export function JobCard({
   job,
   adaptarHref,
   showScore,
   isLoggedIn,
   masterResumeId = null,
+  saveOrigin = "RADAR",
 }: JobCardProps) {
   const bestAnalysisScore = job.existingApplication?.bestScore;
   const hasAnalysis = typeof bestAnalysisScore === "number";
@@ -576,6 +592,7 @@ export function JobCard({
               displayScore={displayScore}
               hasAnalysis={hasAnalysis}
               showScore={showScore}
+              isLoggedIn={isLoggedIn}
             />
           </div>
 
@@ -589,15 +606,31 @@ export function JobCard({
               displayScore={displayScore}
               hasAnalysis={hasAnalysis}
               showScore={showScore}
+              isLoggedIn={isLoggedIn}
             />
-          </div>
-
-          <div className="jc-actions">
+            {/* Este SaveJobBtn só aparece de fato no mobile — o pai
+            (.jc-ringcol-mobile) já é display:none no desktop. O espaço que
+            sobrava ao lado do anel+label agora é ocupado por ele, empurrado
+            pra ponta pelo flex:1 do texto do ScoreIndicator. No desktop o
+            botão de salvar segue vivendo só em .jc-actions (ver
+            .jc-save-desktop). */}
             <SaveJobBtn
               jobId={job.id}
               initialSaved={!!job.isSaved}
               isLoggedIn={isLoggedIn}
+              origin={saveOrigin}
             />
+          </div>
+
+          <div className="jc-actions">
+            <span className="jc-save-desktop">
+              <SaveJobBtn
+                jobId={job.id}
+                initialSaved={!!job.isSaved}
+                isLoggedIn={isLoggedIn}
+                origin={saveOrigin}
+              />
+            </span>
             {hasAnalysis && job.existingApplication ? (
               <AdaptBtn
                 href={`/candidaturas/${job.existingApplication.id}`}

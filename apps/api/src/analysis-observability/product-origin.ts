@@ -12,6 +12,8 @@ export const PRODUCT_ORIGINS = [
   "dashboard",
   "seo_job",
   "direct",
+  "monitor",
+  "monitor_email",
   "unknown",
 ] as const;
 

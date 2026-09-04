@@ -55,7 +55,11 @@ function Star({ size, fill }: { size: number; fill: string }) {
   );
 }
 
-export function DepoimentosSection() {
+export function DepoimentosSection({
+  background = "radial-gradient(ellipse 90% 70% at 50% 0%, #f9f8f4 0%, #eeede7 100%)",
+}: {
+  background?: string;
+}) {
   const [idx, setIdx] = useState(0);
   const [leaving, setLeaving] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -82,8 +86,7 @@ export function DepoimentosSection() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       style={{
-        background:
-          "radial-gradient(ellipse 90% 70% at 50% 0%, #f9f8f4 0%, #eeede7 100%)",
+        background,
         minHeight: "100dvh",
         display: "flex",
         alignItems: "center",
@@ -91,6 +94,7 @@ export function DepoimentosSection() {
       }}
     >
       <div
+        className="e-depoimentos-container"
         style={{
           maxWidth: 1200,
           margin: "0 auto",
@@ -197,6 +201,7 @@ export function DepoimentosSection() {
         >
           {/* Spotlight escuro rotativo */}
           <article
+            className="e-depoimentos-spotlight"
             style={{
               background: "#0a0a0a",
               borderRadius: 18,
@@ -361,6 +366,7 @@ export function DepoimentosSection() {
 
           {/* Roster */}
           <div
+            className="e-depoimentos-roster"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
@@ -502,6 +508,9 @@ export function DepoimentosSection() {
         @keyframes dpFill {
           from { transform: scaleX(0); }
           to   { transform: scaleX(1); }
+        }
+        @media (max-width: 900px) {
+          .e-depoimentos-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>

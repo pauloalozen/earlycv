@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
-import { writeRadarJobNavigationContext } from "@/lib/journey-session";
+import { writeJobNavigationContext } from "@/lib/journey-session";
 
 // Link clicável pra uma vaga específica do Radar (listagem principal,
 // carrossel de vagas similares na listagem, carrossel de vagas similares
@@ -33,7 +33,7 @@ export function RadarOpportunityLink({
       style={style}
       className={className}
       onClick={() => {
-        writeRadarJobNavigationContext(jobId);
+        writeJobNavigationContext(jobId, "radar");
         void trackEvent({
           eventName: "radar_opportunity_clicked",
           eventVersion: 1,

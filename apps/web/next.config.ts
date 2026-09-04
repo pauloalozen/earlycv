@@ -110,6 +110,11 @@ const nextConfig: NextConfig = {
         destination: "/radar/:slug*",
         permanent: false,
       },
+      {
+        source: "/monitor",
+        destination: "/alerta-vaga-certa",
+        permanent: false,
+      },
     ];
   },
   async headers() {

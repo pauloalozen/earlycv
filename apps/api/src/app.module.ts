@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
+import { AdminMonitorModule } from "./admin-monitor/admin-monitor.module";
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminTalentProfilesModule } from "./admin-talent-profiles/admin-talent-profiles.module";
@@ -23,6 +24,7 @@ import { JobApplicationsModule } from "./job-applications/job-applications.modul
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { MasterCvCanonicalExtractionModule } from "./master-cv-canonical-extraction/master-cv-canonical-extraction.module";
+import { MonitorModule } from "./monitor/monitor.module";
 import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { PlansModule } from "./plans/plans.module";
@@ -49,6 +51,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     HealthModule,
     AuthModule,
     AdminUsersModule,
+    AdminMonitorModule,
     AdminProfilesModule,
     AdminResumesModule,
     AdminTalentProfilesModule,
@@ -69,6 +72,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CvUnlocksModule,
     JobApplicationsModule,
     SavedJobsModule,
+    MonitorModule,
     PlansModule,
     PaymentsModule,
     PaymentRecoveryModule,

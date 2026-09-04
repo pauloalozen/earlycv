@@ -14,6 +14,7 @@ import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
 import { PlansService } from "../plans/plans.service";
 import { StorageService } from "../storage/storage.service";
+import { CvAdaptationService } from "./cv-adaptation.service";
 import {
   buildCanonicalJobHash,
   buildRequirementSourceHash,
@@ -1435,10 +1436,7 @@ test("user can redeem an awaiting analysis with one credit", async () => {
   // Let the background deliverAdaptation finish before tearing down the
   // user — otherwise it races the cleanup below (FK/deadlock noise, even
   // though it doesn't fail the test).
-  await waitForAdaptationStatus(database, adaptation.id, [
-    "delivered",
-    "paid",
-  ]);
+  await waitForAdaptationStatus(database, adaptation.id, ["delivered", "paid"]);
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -1496,7 +1494,10 @@ test("redeem-credit returns immediately with status paid and delivers the CV in 
     "delivered",
   ]);
   assert.equal(delivered.status, "delivered");
-  assert.ok(delivered.adaptedResumeId, "adaptedResumeId should be set once delivered");
+  assert.ok(
+    delivered.adaptedResumeId,
+    "adaptedResumeId should be set once delivered",
+  );
 
   await request(app.getHttpServer())
     .get(`/api/cv-adaptation/${adaptation.id}`)
@@ -1564,10 +1565,7 @@ test("redeem-credit does not debit twice for the same adaptation", async () => {
   });
   assert.equal(unlockCount, 1);
 
-  await waitForAdaptationStatus(database, adaptation.id, [
-    "delivered",
-    "paid",
-  ]);
+  await waitForAdaptationStatus(database, adaptation.id, ["delivered", "paid"]);
 
   await deleteUserByEmail(database, user.email);
   await app.close();
@@ -1642,10 +1640,7 @@ test("admin payments list excludes cv unlock entries and cv-unlocks list include
       );
     });
 
-  await waitForAdaptationStatus(database, adaptation.id, [
-    "delivered",
-    "paid",
-  ]);
+  await waitForAdaptationStatus(database, adaptation.id, ["delivered", "paid"]);
 
   await deleteUserByEmail(database, user.email);
   await deleteUserByEmail(database, superadmin.email);
@@ -2140,4 +2135,299 @@ test("missing adapted content records autoUnlockError and preserves purchased cr
 
   await deleteUserByEmail(database, user.email);
   await app.close();
+});
+
+// Fase 4 do gate de autenticação guest (specs/no-guest-analysis-preview-auth-gate-diagnostic-plan-ADENDO-hardening.md
+// seção 6): claim server-side por jobId, sem reprocessar IA, sem aceitar
+// conteúdo do corpo da requisição, mantendo a CvAdaptation vinculada ao
+// analysisCvSnapshotId (crítico: é essa vinculação que exclui o snapshot do
+// cleanup de 30 dias em cleanupExpiredGuestSnapshots). A transferência de
+// ownership (Fase 3, via OAuth) é simulada diretamente no banco aqui — o
+// round-trip real com o Google não é exercitado neste conjunto de testes.
+
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim materializes CvAdaptation from the already-processed AnalysisJob, without reprocessing, and keeps the snapshot linked (survives the 30-day cleanup)", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "claim-job-user");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    assert.equal(typeof analyzeResponse.body.guestPossessionToken, "string");
+
+    // Aguarda o processamento assíncrono terminar, como guest — isso não
+    // muda em nada com o gate: análise guest continua processando
+    // normalmente (ver seção 1.2 da revisão).
+    const job = await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+    );
+    assert.equal(job.status, "succeeded");
+    assert.equal(typeof job.analysisCvSnapshotId, "string");
+    const snapshotId = job.analysisCvSnapshotId as string;
+
+    // Simula a Fase 3 (transferência de ownership pelo callback OAuth,
+    // já provada por possession token + state) sem exercitar o round-trip
+    // real com o Google.
+    await database.analysisJob.update({
+      where: { id: jobId },
+      data: { userId: user.userId },
+    });
+
+    const claimResponse = await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .expect(201);
+
+    assert.equal(claimResponse.body.status, "succeeded");
+    assert.equal(typeof claimResponse.body.cvAdaptationId, "string");
+    const cvAdaptationId = claimResponse.body.cvAdaptationId as string;
+
+    const adaptation = await database.cvAdaptation.findUnique({
+      where: { id: cvAdaptationId },
+    });
+    assert.equal(adaptation?.userId, user.userId);
+    // Critério crítico: continua vinculada ao analysisCvSnapshotId.
+    assert.equal(adaptation?.analysisCvSnapshotId, snapshotId);
+
+    const refreshedJob = await database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+    assert.ok(refreshedJob?.convertedAt);
+    assert.equal(refreshedJob?.convertedCvAdaptationId, cvAdaptationId);
+    // Nenhuma segunda AnalysisJob foi criada para a mesma análise.
+    assert.equal(refreshedJob?.id, jobId);
+
+    // Critério explícito pedido: snapshot de guest convertido não fica
+    // elegível ao cleanup de 30 dias, mesmo com expiresAt já vencido.
+    await database.analysisCvSnapshot.update({
+      where: { id: snapshotId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const cvAdaptationService = app.get(CvAdaptationService);
+    await cvAdaptationService.cleanupExpiredGuestSnapshots();
+
+    const survivingSnapshot = await database.analysisCvSnapshot.findUnique({
+      where: { id: snapshotId },
+    });
+    assert.ok(
+      survivingSnapshot,
+      "snapshot vinculado a uma CvAdaptation não deveria ser apagado pelo cleanup de 30 dias",
+    );
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim transfers ownership via guestPossessionToken — the real email login/register path (no manual DB userId, unlike the OAuth-simulating test above)", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "claim-job-email-flow");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    const guestPossessionToken = analyzeResponse.body
+      .guestPossessionToken as string;
+    assert.equal(typeof guestPossessionToken, "string");
+
+    await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+    );
+
+    // Nunca setamos job.userId manualmente aqui — é exatamente isso que o
+    // login/cadastro por email precisa fazer sozinho a partir só do
+    // guestPossessionToken, ao contrário do Google OAuth (que já chega com
+    // ownership transferida por transferAnalysisJobOwnership antes deste
+    // endpoint). Sem essa cobertura, o bug (endpoint ignorando o token do
+    // body e rejeitando qualquer job ainda com userId null) passou
+    // despercebido.
+    const claimResponse = await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({ guestPossessionToken })
+      .expect(201);
+
+    assert.equal(claimResponse.body.status, "succeeded");
+    const cvAdaptationId = claimResponse.body.cvAdaptationId as string;
+
+    const adaptation = await database.cvAdaptation.findUnique({
+      where: { id: cvAdaptationId },
+    });
+    assert.equal(adaptation?.userId, user.userId);
+
+    const refreshedJob = await database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+    assert.equal(refreshedJob?.userId, user.userId);
+    assert.ok(refreshedJob?.convertedAt);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim rejects an unclaimed guest job when the caller sends no guestPossessionToken or the wrong one", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "claim-job-no-token");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+    );
+
+    await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({ guestPossessionToken: "wrong-token-value" })
+      .expect(404);
+
+    const refreshedJob = await database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+    assert.equal(refreshedJob?.userId, null);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim rejects a caller who does not own the job — jobId alone never grants access", async () => {
+  const { app, database } = await createApp();
+  const owner = await registerUser(app, database, "claim-owner");
+  const stranger = await registerUser(app, database, "claim-stranger");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    await waitForAnalysisJobStatus(app, null, jobId, ["succeeded", "failed"]);
+
+    await database.analysisJob.update({
+      where: { id: jobId },
+      data: { userId: owner.userId },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+      .set("Authorization", `Bearer ${stranger.accessToken}`)
+      .expect(404);
+  } finally {
+    await deleteUserByEmail(database, owner.email);
+    await deleteUserByEmail(database, stranger.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/analysis-jobs/:jobId/claim is idempotent under real concurrent requests — at most one CvAdaptation is ever created for the same snapshot", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "claim-concurrent-user");
+
+  try {
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    const jobId = analyzeResponse.body.jobId as string;
+    const job = await waitForAnalysisJobStatus(app, null, jobId, [
+      "succeeded",
+      "failed",
+    ]);
+    assert.equal(job.status, "succeeded");
+    const snapshotId = job.analysisCvSnapshotId as string;
+
+    await database.analysisJob.update({
+      where: { id: jobId },
+      data: { userId: user.userId },
+    });
+
+    // Duas requisições HTTP verdadeiramente concorrentes contra o Postgres
+    // de teste — diferente do teste unitário com mocks, aqui a latência de
+    // I/O real cria a janela de corrida de fato.
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+        .set("Authorization", `Bearer ${user.accessToken}`),
+      request(app.getHttpServer())
+        .post(`/api/cv-adaptation/analysis-jobs/${jobId}/claim`)
+        .set("Authorization", `Bearer ${user.accessToken}`),
+    ]);
+
+    const succeeded = [first, second].filter((r) => r.status === 201);
+    assert.ok(
+      succeeded.length >= 1,
+      "pelo menos uma das duas requisições concorrentes deve ter sucesso",
+    );
+
+    const cvAdaptationCount = await database.cvAdaptation.count({
+      where: { analysisCvSnapshotId: snapshotId },
+    });
+    assert.equal(
+      cvAdaptationCount,
+      1,
+      "nunca deve existir mais de uma CvAdaptation para o mesmo analysisCvSnapshotId — protegido pela constraint @unique já existente no schema",
+    );
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
 });

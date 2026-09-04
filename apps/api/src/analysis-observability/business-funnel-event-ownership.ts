@@ -65,6 +65,43 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   radar_view: "frontend",
   radar_opportunity_clicked: "frontend",
   job_detail_viewed: "frontend",
+  // Meu Monitor — viewed/dismissed/feedback/profile_updated são emitidos
+  // pelo backend nesta fase (mutações reais em UserJobRecommendation /
+  // UserRadarProfile via apps/api/src/monitor/). view/clicked/
+  // application_started ficam registrados para quando o frontend do
+  // Monitor existir (page view e cliques são eventos de interação, não
+  // faz sentido inferir a partir de uma chamada de API isolada — ver
+  // decisão documentada na spec da Fase 1). monitor_recommendation_saved
+  // virou "backend" na Fase 3: SavedJobsService.save() agora sabe a
+  // origem (SaveJobDto.origin) e emite direto no server quando
+  // origin=MONITOR, sem depender do frontend chamar trackEvent separado
+  // (evita perder o evento se o clique de salvar não navegar/re-renderizar).
+  monitor_view: "frontend",
+  monitor_profile_viewed: "frontend",
+  monitor_profile_updated: "backend",
+  monitor_recommendation_viewed: "backend",
+  monitor_recommendation_clicked: "frontend",
+  monitor_recommendation_saved: "backend",
+  monitor_recommendation_dismissed: "backend",
+  monitor_recommendation_feedback: "backend",
+  monitor_application_started: "frontend",
+  // Alteração de frequência (DAILY/WEEKLY/OFF, em qualquer direção) —
+  // backend-owned porque a mutação real acontece no endpoint (ver
+  // MonitorAlertPreferenceService.update); nunca confundir com
+  // monitor_digest_unsubscribed, que é exclusivo do fluxo de e-mail/token.
+  monitor_alert_frequency_changed: "backend",
+  // Digest por e-mail (Fase 3) — sent/unsubscribed são ações que só o
+  // backend consegue afirmar de verdade (o e-mail foi de fato mandado /
+  // o unsubscribe foi processado). delivered/opened/clicked/bounced/
+  // complained vêm do webhook do Resend (Svix) — também backend, nunca
+  // confiar em parâmetro vindo do frontend pra essas métricas de entrega.
+  monitor_digest_sent: "backend",
+  monitor_digest_delivered: "backend",
+  monitor_digest_opened: "backend",
+  monitor_digest_clicked: "backend",
+  monitor_digest_bounced: "backend",
+  monitor_digest_complained: "backend",
+  monitor_digest_unsubscribed: "backend",
   // Interview Prep
   interview_prep_drawer_opened: "frontend",
   interview_prep_generate_clicked: "frontend",

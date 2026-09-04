@@ -31,6 +31,10 @@
       "types": "./src/env.ts",
       "default": "./dist/env.js"
     },
+    "./opportunity-level": {
+      "types": "./src/opportunity-level.ts",
+      "default": "./dist/opportunity-level.js"
+    },
     "./typescript/base": "./typescript/base.json",
     "./typescript/nest": "./typescript/nest.json",
     "./typescript/nextjs": "./typescript/nextjs.json"

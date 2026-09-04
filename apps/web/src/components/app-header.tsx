@@ -8,6 +8,10 @@ import {
 } from "@/components/app-header-user-menu";
 import { Logo } from "@/components/logo";
 import type { AppInternalRole } from "@/lib/app-session";
+import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
 
 const MONO = "var(--font-geist-mono), monospace";
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -41,6 +45,10 @@ type Props = {
   backgroundColor?: string;
   variant?: "dark" | "light";
   availableCredits?: number | "∞" | "—";
+  // Algumas rotas são o próprio fluxo de análise (ex.: /adaptar) — o botão
+  // "Analisar CV" no header não faz sentido linkando pra página em que a
+  // pessoa já está.
+  hideAnalyzeButton?: boolean;
 };
 
 const CREDIT_REDEEMED_EVENT = "dashboard:credit-redeemed";
@@ -52,6 +60,7 @@ export function AppHeader({
   backgroundColor = "rgba(243,242,237,0.95)",
   variant = "dark",
   availableCredits,
+  hideAnalyzeButton = false,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuCredits, setMenuCredits] = useState<
@@ -67,6 +76,13 @@ export function AppHeader({
   const mobileBg =
     backgroundColor !== "transparent" ? backgroundColor : "#f9f8f4";
   const menuItems = buildUserMenuItems({ userRole });
+  // Badge de versão: v2.1 é o que está publicamente em prod; v3.1 (Alerta
+  // de Vaga Certa) só aparece com ghost mode desligado ou pra quem já tem
+  // acesso ao Alerta durante o rollout controlado.
+  const versionBadge =
+    !isJobsGhostModeEnabled() || canAccessJobsInGhostMode(userRole)
+      ? "v3.1"
+      : "v2.1";
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -243,6 +259,27 @@ export function AppHeader({
           color: #c0392b;
           background: rgba(192,57,43,0.1);
         }
+        .app-hdr-analyze-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          margin-right: 12px;
+          border-radius: 999px;
+          background: #c6ff3a;
+          color: #0a0a0a;
+          font-family: ${GEIST};
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+          flex-shrink: 0;
+          transition: opacity 120ms ease;
+        }
+        .app-hdr-analyze-btn:hover { opacity: 0.88; }
+        .app-hdr-mob-nav-item--analyze {
+          background: rgba(198,255,58,0.22);
+          font-weight: 700;
+        }
         .app-hdr-burger {
           display: none;
           align-items: center;
@@ -361,12 +398,30 @@ export function AppHeader({
                 fontWeight: 500,
               }}
             >
-              v2.1
+              {versionBadge}
             </span>
           </a>
 
           {/* Desktop right */}
           <div className="app-hdr-desktop" style={{ alignItems: "center" }}>
+            {userName && !hideAnalyzeButton && (
+              <a href="/adaptar" className="app-hdr-analyze-btn">
+                <svg
+                  aria-hidden="true"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 11L11 3M11 3H6M11 3v5" />
+                </svg>
+                Analisar CV
+              </a>
+            )}
             {userName && visibleInterviews.length > 0 && (
               <div style={{ position: "relative" }} ref={bellRef}>
                 <button
@@ -609,6 +664,28 @@ export function AppHeader({
       >
         {userName ? (
           <>
+            {!hideAnalyzeButton && (
+              <a
+                href="/adaptar"
+                className="app-hdr-mob-nav-item app-hdr-mob-nav-item--analyze"
+                onClick={() => setMobileOpen(false)}
+              >
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 11L11 3M11 3H6M11 3v5" />
+                </svg>
+                Analisar CV
+              </a>
+            )}
             {menuItems.map((item) => (
               <a
                 key={item.href}

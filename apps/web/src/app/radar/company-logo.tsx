@@ -25,6 +25,17 @@ function getCompanyColor(name: string): string {
   return COMPANY_COLORS[name.charCodeAt(0) % COMPANY_COLORS.length];
 }
 
+function isEarlyCv(name: string): boolean {
+  return name.trim().toLowerCase() === "earlycv";
+}
+
+// earlyCV é sempre grafado com "e" minúsculo e "CV" maiúsculo, independente
+// de como o nome foi digitado (ex: candidatura de exemplo salva como
+// "EARLYCV").
+export function getCompanyDisplayName(name: string): string {
+  return isEarlyCv(name) ? "earlyCV" : name;
+}
+
 function faviconUrl(websiteUrl: string): string | null {
   try {
     const domain = new URL(websiteUrl).hostname.replace(/^www\./, "");
@@ -61,6 +72,33 @@ export function CompanyLogo({
   const faviconSrc = websiteUrl ? faviconUrl(websiteUrl) : null;
   const [isSourceLogoBad, setIsSourceLogoBad] = useState(false);
   const [isFaviconBad, setIsFaviconBad] = useState(false);
+
+  if (isEarlyCv(name)) {
+    return (
+      <div
+        aria-hidden
+        style={{
+          width: size,
+          height: size,
+          borderRadius,
+          background: "#0a0a0a",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {/* biome-ignore lint/performance/noImgElement: SVG estático em /public, sem otimização do next/image */}
+        <img
+          src="/favicon-white.svg"
+          alt=""
+          width={size * 0.6}
+          height={size * 0.6}
+          style={{ objectFit: "contain" }}
+        />
+      </div>
+    );
+  }
 
   const imgStyle = {
     width: size,

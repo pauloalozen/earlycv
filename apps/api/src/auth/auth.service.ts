@@ -15,6 +15,10 @@ import * as argon2 from "argon2";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
+import {
+  EMAIL_DELIVERY_PORT,
+  type EmailDeliveryPort,
+} from "../email/email-delivery.port";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
@@ -23,10 +27,6 @@ import type { RegisterDto, SignupConversionContext } from "./dto/register.dto";
 import type { ResendVerificationCodeDto } from "./dto/resend-verification-code.dto";
 import type { ResetPasswordDto } from "./dto/reset-password.dto";
 import type { VerifyEmailDto } from "./dto/verify-email.dto";
-import {
-  EMAIL_DELIVERY_PORT,
-  type EmailDeliveryPort,
-} from "./email-delivery.port";
 
 type PersistedUser = Awaited<ReturnType<DatabaseService["user"]["findUnique"]>>;
 type UserRecord = NonNullable<PersistedUser>;

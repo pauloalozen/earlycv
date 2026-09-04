@@ -151,3 +151,115 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     expect(link).toHaveAttribute("href", expect.stringContaining("/entrar"));
   });
 });
+
+describe("/radar/[slug] external-apply gate visibility", () => {
+  beforeEach(() => {
+    mocks.notFound.mockReset();
+    mocks.getCurrentAppUserFromCookies.mockReset();
+    mocks.getPublicJobBySlug.mockReset();
+    mocks.listPublicJobs.mockReset();
+    mocks.getMyMasterResume.mockReset();
+    mocks.getJobMatchScore.mockReset();
+    mocks.useRouter.mockReturnValue({ push: vi.fn() });
+
+    mocks.notFound.mockImplementation(() => {
+      throw new Error("NEXT_NOT_FOUND");
+    });
+
+    mocks.getPublicJobBySlug.mockResolvedValue({
+      id: "job_1",
+      slug: "eng-1",
+      title: "Engenheiro",
+      company: "EarlyCV",
+      location: "Brasil",
+      country: "BR",
+      description: "desc",
+      descriptionHtml: "<section><h2>Descricao</h2><p>desc</p></section>",
+      employmentType: null,
+      firstSeenAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      publishedAtSource: new Date().toISOString(),
+      seniorityLevel: null,
+      sourceJobUrl: "https://example.com/jobs/1",
+      canonicalKey: "job-1",
+      status: "active",
+      workModel: null,
+    });
+    mocks.listPublicJobs.mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 4,
+    });
+  });
+
+  afterEach(() => cleanup());
+
+  it("usuário não logado: candidatar-se externamente abre o gate (botão, não link direto)", async () => {
+    mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
+    mocks.getJobMatchScore.mockResolvedValue(null);
+
+    const element = await JobPage({
+      params: Promise.resolve({ slug: "eng-1" }),
+    });
+    render(element);
+
+    expect(
+      screen.getByRole("button", { name: /Candidatar-se externamente/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Candidatar-se externamente/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("usuário logado sem análise pra esta vaga: mesmo gate do anônimo, não o link direto", async () => {
+    mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
+    mocks.getMyMasterResume.mockResolvedValue({ id: "resume-1" });
+    mocks.getJobMatchScore.mockResolvedValue(null);
+
+    const element = await JobPage({
+      params: Promise.resolve({ slug: "eng-1" }),
+    });
+    render(element);
+
+    expect(
+      screen.getByRole("button", { name: /Candidatar-se externamente/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Candidatar-se externamente/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("usuário logado já com análise pra esta vaga: link direto, sem gate", async () => {
+    mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
+    mocks.getMyMasterResume.mockResolvedValue({ id: "resume-1" });
+    mocks.getJobMatchScore.mockResolvedValue({
+      score: 80,
+      breakdown: {
+        area: 20,
+        skills: 20,
+        seniority: 20,
+        technologies: 20,
+        language: 0,
+        workModel: 0,
+      },
+      matchedSkills: [],
+      missingSkills: [],
+      existingApplication: { id: "app-1", status: "APPLIED", bestScore: 80 },
+      isSaved: false,
+    });
+
+    const element = await JobPage({
+      params: Promise.resolve({ slug: "eng-1" }),
+    });
+    render(element);
+
+    const link = screen.getByRole("link", {
+      name: /Candidatar-se externamente/i,
+    });
+    expect(link).toHaveAttribute("href", "https://example.com/jobs/1");
+    expect(
+      screen.queryByRole("button", { name: /Candidatar-se externamente/i }),
+    ).not.toBeInTheDocument();
+  });
+});

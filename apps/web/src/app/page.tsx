@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { fetchGuestAnalysisAuthGateEnabledServer } from "@/lib/guest-analysis-auth-gate.server";
+import { getTopCompaniesWithActiveJobs } from "@/lib/internal-jobs-api";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 import { resolveLandingVariant } from "./_landing/variant";
 import { LandingVariantA } from "./_landing/variant-a";
@@ -6,6 +9,8 @@ import { LandingVariantB } from "./_landing/variant-b";
 import { LandingVariantC } from "./_landing/variant-c";
 import { LandingVariantD } from "./_landing/variant-d";
 import { LandingVariantE } from "./_landing/variant-e";
+import { LandingVariantF } from "./_landing/variant-f";
+import { LandingVariantF2 } from "./_landing/variant-f-v2";
 
 export const metadata: Metadata = {
   title: "Seu CV ajustado para cada vaga",
@@ -36,7 +41,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
+export default async function Home() {
   const variant = resolveLandingVariant(
     process.env.NEXT_PUBLIC_LANDING_VARIANT,
   );
@@ -55,6 +60,35 @@ export default function Home() {
 
   if (variant === "E") {
     return <LandingVariantE />;
+  }
+
+  if (variant === "F") {
+    const [guestAnalysisAuthGateEnabled, user] = await Promise.all([
+      fetchGuestAnalysisAuthGateEnabledServer(),
+      getCurrentAppUserFromCookies(),
+    ]);
+    return (
+      <LandingVariantF
+        guestAnalysisAuthGateEnabled={guestAnalysisAuthGateEnabled}
+        isAuthenticated={!!user}
+      />
+    );
+  }
+
+  if (variant === "F2") {
+    const [guestAnalysisAuthGateEnabled, user, topCompanies] =
+      await Promise.all([
+        fetchGuestAnalysisAuthGateEnabledServer(),
+        getCurrentAppUserFromCookies(),
+        getTopCompaniesWithActiveJobs(24),
+      ]);
+    return (
+      <LandingVariantF2
+        guestAnalysisAuthGateEnabled={guestAnalysisAuthGateEnabled}
+        isAuthenticated={!!user}
+        topCompanies={topCompanies}
+      />
+    );
   }
 
   return <LandingVariantA />;

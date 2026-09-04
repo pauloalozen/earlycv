@@ -143,7 +143,7 @@ export function LandingVariantD() {
                   display: "inline-block",
                 }}
               />
-              ANÁLISE GRÁTIS • SEM CARTÃO • RESULTADO IMEDIATO
+              ANÁLISE GRÁTIS • RESULTADO IMEDIATO
             </div>
 
             <h1

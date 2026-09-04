@@ -1,0 +1,1914 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import Script from "next/script";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AppHeader } from "@/components/app-header";
+import { EcvBuildLoader, EcvScanLoader } from "@/components/ecv-loader";
+import { PageShell } from "@/components/page-shell";
+import {
+  type AnalysisJobResult,
+  pollAnalysisJob,
+} from "@/lib/analysis-job-polling";
+import { trackEvent } from "@/lib/analytics-tracking";
+import type { AppInternalRole } from "@/lib/app-session";
+import {
+  type AnalysisJobStartResult,
+  analyzeAuthenticatedCv,
+  analyzeGuestCv,
+  saveGuestPreview,
+} from "@/lib/cv-adaptation-api";
+import {
+  appendTurnstileTokenToAnalyzeFormData,
+  buildFunnelEventIdempotencyKey,
+  validateCvTextInput,
+} from "@/lib/cv-adaptation-flow-helpers";
+import { fetchGuestAnalysisAuthGateEnabled } from "@/lib/guest-analysis-auth-gate";
+import { setPendingGuestAnalysis } from "@/lib/guest-analysis-pending";
+import { setGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
+import { getJourneySessionInternalId } from "@/lib/journey-session";
+import type { PublicJob } from "@/lib/public-jobs-api";
+import { getPublicJobById } from "@/lib/public-jobs-client-api";
+import type { MasterCvExtractionStatusDto, ResumeDto } from "@/lib/resumes-api";
+import {
+  getMyMasterCvExtractionStatus,
+  getMyMasterResume,
+  uploadMasterResume,
+} from "@/lib/resumes-api";
+import { getAuthStatus } from "@/lib/session-actions";
+import { useTurnstileToken } from "@/lib/use-turnstile-token";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
+
+const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+const MONO = "var(--font-geist-mono), monospace";
+const SERIF_ITALIC = "var(--font-instrument-serif), serif";
+
+const LOADING_STEPS = [
+  "Lendo seu CV...",
+  "Comparando com a vaga...",
+  "Identificando gaps...",
+  "Melhorando seu CV...",
+];
+
+const MASTER_CV_OVERLAY_MESSAGES = [
+  "Lendo o documento...",
+  "Identificando seções...",
+  "Extraindo experiências...",
+  "Mapeando competências...",
+  "Encontrando dados de contato...",
+  "Organizando formação acadêmica...",
+  "Finalizando extração...",
+];
+
+const CV_INPUT_BOX_MIN_HEIGHT = 154;
+const IS_TEST_ENV = process.env.NODE_ENV === "test";
+const ANALYSIS_MIN_LOADING_MS = IS_TEST_ENV ? 0 : 5000;
+const RESULT_TRANSITION_DELAY_MS = IS_TEST_ENV ? 0 : 2000;
+
+const EXAMPLE_JOB = `Analista de Dados Sênior — Nubank
+
+Somos um dos maiores bancos digitais do mundo e buscamos um Analista de Dados Sênior para integrar nosso time de Growth Analytics.
+
+Responsabilidades:
+• Construir e manter dashboards e relatórios em Looker/Tableau para times de produto e negócio
+• Desenvolver modelos preditivos e análises exploratórias usando Python e SQL
+• Colaborar com times de engenharia na definição de eventos de tracking e qualidade de dados
+• Transformar dados brutos em insights acionáveis que guiem decisões estratégicas
+• Mentorear analistas juniores e contribuir para a cultura data-driven da empresa
+
+Requisitos:
+• 4+ anos de experiência com análise de dados em ambiente de alta escala
+• Domínio avançado de SQL e Python (pandas, scikit-learn)
+• Experiência com ferramentas de BI (Looker, Tableau ou Power BI)
+• Familiaridade com pipelines de dados (dbt, Airflow ou similares)
+• Excelente comunicação para traduzir análises técnicas em linguagem de negócio
+
+Diferenciais:
+• Experiência em fintechs ou startups de crescimento acelerado
+• Conhecimento de metodologias de experimentação (A/B testing)
+• Background em estatística ou ciências de dados
+
+Local: Remoto (Brasil) | Regime: CLT | Área: Dados & Analytics`;
+
+type CvMode = "profile" | "upload" | "text";
+
+const ADAPT_FLOW_SESSION_ID_KEY = "adaptFlowSessionId";
+
+function buildClientAttemptId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function AdaptarPageContent() {
+  const {
+    turnstileSiteKey,
+    containerRef: turnstileContainerRef,
+    requestToken: requestTurnstileToken,
+    onScriptReady: markTurnstileScriptReady,
+  } = useTurnstileToken();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const jobIdParam = searchParams.get("jobId");
+  const [radarJob, setRadarJob] = useState<PublicJob | null>(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [cvText, setCvText] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [availableCredits, setAvailableCredits] = useState<
+    number | "∞" | "—" | undefined
+  >(undefined);
+  const [userRole, setUserRole] = useState<AppInternalRole | null>(null);
+  const [masterResume, setMasterResume] = useState<
+    ResumeDto | null | undefined
+  >(undefined);
+  const [cvMode, setCvMode] = useState<CvMode>("upload");
+  const [saveMasterCv, setSaveMasterCv] = useState(false);
+  const saveMasterDecisionRef = useRef(false);
+  const [saveMasterDecided, setSaveMasterDecided] = useState(false);
+  const [overlayMsgIndex, setOverlayMsgIndex] = useState(0);
+  const [overlayDots, setOverlayDots] = useState(0);
+  const [fileHover, setFileHover] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [guestAuthGateEnabled, setGuestAuthGateEnabled] = useState(false);
+  const jobDescriptionFilledTrackedRef = useRef(false);
+  const jobDescriptionFocusTrackedRef = useRef(false);
+  const jobDescriptionPasteTrackedRef = useRef(false);
+  const flowSessionIdRef = useRef<string | null>(null);
+  const [profileReadinessStatus, setProfileReadinessStatus] = useState<
+    "empty" | "partial" | "ready" | null
+  >(null);
+  const [_masterCvExtractionStatus, setMasterCvExtractionStatus] =
+    useState<MasterCvExtractionStatusDto>(null);
+
+  const clearSelectedFile = useCallback(() => {
+    setFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
+
+  const getFlowSessionId = useCallback(() => {
+    if (flowSessionIdRef.current) {
+      return flowSessionIdRef.current;
+    }
+
+    if (typeof sessionStorage === "undefined") {
+      return null;
+    }
+
+    const existingSessionId = sessionStorage.getItem(ADAPT_FLOW_SESSION_ID_KEY);
+    if (existingSessionId) {
+      flowSessionIdRef.current = existingSessionId;
+      return existingSessionId;
+    }
+
+    const nextSessionId = buildClientAttemptId();
+    sessionStorage.setItem(ADAPT_FLOW_SESSION_ID_KEY, nextSessionId);
+    flowSessionIdRef.current = nextSessionId;
+    return nextSessionId;
+  }, []);
+
+  const emitUiFunnelEvent = useCallback(
+    (
+      eventName: string,
+      payload?: {
+        attemptId?: string;
+        metadata?: Record<string, unknown>;
+      },
+    ) => {
+      const flowSessionId = getFlowSessionId();
+      if (!flowSessionId) {
+        return;
+      }
+
+      const attemptId = payload?.attemptId ?? "ui";
+      const idempotencyKey = buildFunnelEventIdempotencyKey({
+        flowSessionId,
+        attemptId,
+        eventName,
+      });
+
+      const route =
+        typeof window !== "undefined" ? window.location.pathname : "/adaptar";
+      const previousRoute =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("journey_previous_route")
+          : null;
+      const routeVisitId =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("journey_current_route_visit_id")
+          : null;
+      const journeySessionId =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("journey_session_internal_id")
+          : null;
+
+      void trackEvent({
+        eventName,
+        eventVersion: 1,
+        idempotencyKey,
+        properties: {
+          occurredAt: new Date().toISOString(),
+          previous_route: previousRoute,
+          route,
+          routeVisitId,
+          sessionInternalId: journeySessionId ?? flowSessionId,
+          userId: null,
+          ...payload?.metadata,
+        },
+      }).catch(() => undefined);
+    },
+    [getFlowSessionId],
+  );
+
+  const [prefillApplicationId, setPrefillApplicationId] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    const prefill = sessionStorage.getItem("adaptar_prefill_job_description");
+    if (prefill) {
+      setJobDescription(prefill);
+      sessionStorage.removeItem("adaptar_prefill_job_description");
+    }
+    const appId = sessionStorage.getItem("adaptar_prefill_application_id");
+    if (appId) {
+      setPrefillApplicationId(appId);
+      sessionStorage.removeItem("adaptar_prefill_application_id");
+    }
+  }, []);
+
+  // Fluxo de 1 clique a partir do Radar (/radar): jobId na URL carrega a
+  // descrição da vaga automaticamente. jobId inválido ou vaga indisponível
+  // — getPublicJobById devolve null e isso vira falha silenciosa (campo
+  // segue vazio, sem banner). setJobDescription usa forma funcional pra
+  // nunca sobrescrever texto que o usuário já tenha colado/editado.
+  useEffect(() => {
+    if (!jobIdParam) {
+      return;
+    }
+
+    let cancelled = false;
+    getPublicJobById(jobIdParam).then((job) => {
+      if (cancelled || !job) {
+        return;
+      }
+      setRadarJob(job);
+      setJobDescription((current) =>
+        current.trim() ? current : job.description,
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobIdParam]);
+
+  useEffect(() => {
+    router.prefetch("/adaptar/resultado");
+    Promise.all([
+      getAuthStatus(),
+      getMyMasterResume().catch(() => null as ResumeDto | null),
+      getMyMasterCvExtractionStatus().catch(
+        () => null as MasterCvExtractionStatusDto,
+      ),
+      fetchGuestAnalysisAuthGateEnabled(),
+    ]).then(([status, resume, extractionStatus, guestAuthGateEnabled]) => {
+      setGuestAuthGateEnabled(guestAuthGateEnabled);
+      setUserName(status.userName ?? null);
+      setUserRole(status.internalRole ?? null);
+      setAvailableCredits(status.availableCreditsDisplay);
+      const readiness = (status as { profileReadinessStatus?: unknown })
+        .profileReadinessStatus;
+      setProfileReadinessStatus(
+        readiness === "empty" ||
+          readiness === "partial" ||
+          readiness === "ready"
+          ? readiness
+          : null,
+      );
+      setMasterResume(resume ?? null);
+      setMasterCvExtractionStatus(extractionStatus ?? null);
+      const hasResumeResult = !!resume;
+      const _profileIsReady =
+        (status as { profileReadinessStatus?: unknown })
+          .profileReadinessStatus === "ready";
+      if (status.userName && hasResumeResult) {
+        setCvMode("profile");
+      } else {
+        setCvMode("upload");
+      }
+      setAuthReady(true);
+    });
+  }, [router]);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStep(0);
+      return;
+    }
+    const intervals = [0, 3000, 6000, 10000];
+    const timers = intervals.map((delay, i) =>
+      setTimeout(() => setLoadingStep(i), delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [loading]);
+
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const dotsTimer = setInterval(
+      () => setOverlayDots((d) => (d + 1) % 4),
+      500,
+    );
+    if (!saveMasterDecided) return () => clearInterval(dotsTimer);
+    const msgTimer = setInterval(
+      () =>
+        setOverlayMsgIndex((i) => (i + 1) % MASTER_CV_OVERLAY_MESSAGES.length),
+      2200,
+    );
+    return () => {
+      clearInterval(dotsTimer);
+      clearInterval(msgTimer);
+    };
+  }, [loading, saveMasterDecided]);
+
+  const isAuthenticated = !!userName;
+  const hasMaster = !!masterResume;
+  const isProfileModeReady = profileReadinessStatus === "ready";
+  const _isProfileModeAvailable = isAuthenticated && hasMaster;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const submitAttemptId = buildClientAttemptId();
+    emitUiFunnelEvent("analyze_submit_clicked", {
+      attemptId: submitAttemptId,
+      metadata: {
+        cvMode,
+        isAuthenticated,
+      },
+    });
+
+    const isTextMode = cvMode === "text";
+    const requiresUploadedFile =
+      cvMode === "upload" || (!isAuthenticated && !isTextMode);
+
+    if (requiresUploadedFile && !file) {
+      setError("Selecione seu CV em PDF, DOCX ou ODT.");
+      return;
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      setError("O arquivo é muito grande. Envie um PDF de até 5 MB.");
+      return;
+    }
+    // Vaga do Radar (jobIdParam): o backend resolve a descrição sozinho a
+    // partir de radarJobId (resolveAnalysisJobDescription), então esse campo
+    // só é obrigatório no client quando não há vaga do Radar ou o usuário é
+    // guest (analyze-guest não lê radarJobId, só jobDescriptionText).
+    if (!jobDescription.trim() && !(jobIdParam && isAuthenticated)) {
+      setError("Cole a descrição da vaga.");
+      return;
+    }
+
+    if (isTextMode) {
+      const cvTextError = validateCvTextInput(cvText);
+      if (cvTextError) {
+        setError(cvTextError);
+        return;
+      }
+    }
+
+    // Primeiro CV do usuário: vira CV master automaticamente, sem
+    // perguntar nada — mesma pipeline (uploadMasterResume) que já disparava
+    // quando a pessoa respondia "sim" no popup antigo, só que agora sempre.
+    // Só quem JÁ tem master precisa marcar a opção "substituir CV Master"
+    // pra chegar aqui com saveMasterCv=true.
+    const isFirstCv =
+      isAuthenticated &&
+      !hasMaster &&
+      (cvMode === "upload" ? !!file : cvMode === "text");
+
+    if (isFirstCv || (isAuthenticated && hasMaster && saveMasterCv)) {
+      saveMasterDecisionRef.current = true;
+      setSaveMasterDecided(true);
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("jobDescriptionText", jobDescription);
+      if (jobIdParam) {
+        formData.append("radarJobId", jobIdParam);
+      }
+      if (isTextMode) {
+        formData.append("masterCvText", cvText.trim());
+      }
+      const turnstileToken = await requestTurnstileToken();
+      appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
+
+      // analyzeGuestCv/analyzeAuthenticatedCv/saveGuestPreview são Server
+      // Actions — rodam no servidor Next.js, sem acesso a sessionStorage/
+      // localStorage. sessionInternalId/visitorId precisam ser lidos aqui,
+      // no client, e repassados explicitamente, senão o backend nunca vê
+      // esses headers e analysis_started/completed/candidatura_created
+      // ficam sem correlação de jornada.
+      const journeyContext = {
+        sessionInternalId: getJourneySessionInternalId(),
+        visitorId: getOrCreateVisitorId(),
+      };
+
+      // A análise em si roda em background no servidor (job assíncrono) —
+      // startAndPoll dispara o job e espera aqui, junto com um piso mínimo
+      // de tempo de loading pra não "piscar" quando a resposta é rápida.
+      async function startAndPoll(
+        starter: Promise<AnalysisJobStartResult>,
+      ): Promise<{
+        result: AnalysisJobResult;
+        guestSessionPublicToken: string | null;
+      }> {
+        const started = await starter;
+        if (!started.ok) {
+          return {
+            result: { ok: false, error: started.error },
+            guestSessionPublicToken: null,
+          };
+        }
+        const [result] = await Promise.all([
+          pollAnalysisJob(started.jobId),
+          new Promise((r) => setTimeout(r, ANALYSIS_MIN_LOADING_MS)),
+        ]);
+        return {
+          result,
+          guestSessionPublicToken: started.guestSessionPublicToken,
+        };
+      }
+
+      let analyzeResult: AnalysisJobResult;
+      let guestSessionPublicToken: string | null = null;
+
+      if (isAuthenticated && cvMode === "profile") {
+        if (!isProfileModeReady) {
+          if (masterResume?.id) {
+            formData.append("masterResumeId", masterResume.id);
+          } else {
+            setError(
+              "Seu perfil ainda nao esta pronto para essa opcao. Complete o CV base para liberar o modo perfil.",
+            );
+            setLoading(false);
+            return;
+          }
+        }
+        const started = await startAndPoll(
+          analyzeAuthenticatedCv(formData, "profile", journeyContext),
+        );
+        analyzeResult = started.result;
+      } else if (isAuthenticated && cvMode === "upload" && file) {
+        if (saveMasterDecisionRef.current) {
+          const masterFormData = new FormData();
+          masterFormData.append("file", file);
+          masterFormData.append("title", file.name.replace(/\.[^.]+$/, ""));
+          masterFormData.append("isPrimary", "true");
+          masterFormData.append(
+            "turnstileToken",
+            turnstileToken ?? "upload-client-token",
+          );
+          const savedResume = await uploadMasterResume(masterFormData);
+          formData.append("masterResumeId", savedResume.id);
+          formData.append("saveAsMaster", "true");
+        } else {
+          formData.append("file", file);
+        }
+        // inputMode aqui é sempre "file_upload", mesmo quando este envio
+        // também vira o CV master (saveMasterDecisionRef) — "profile" exige
+        // profileReadinessStatus "ready" no backend (resolveProfileMasterCvText),
+        // e a extração canônica do upload que acabou de rolar é assíncrona
+        // (enqueueFromMasterResumeUpload), nunca "ready" a tempo. O backend já
+        // resolve o texto certo via masterResumeId nesse modo — não precisa
+        // do modo perfil pra isso.
+        const started = await startAndPoll(
+          analyzeAuthenticatedCv(formData, "file_upload", journeyContext),
+        );
+        analyzeResult = started.result;
+      } else if (isAuthenticated && cvMode === "text") {
+        if (saveMasterDecisionRef.current) {
+          const masterFormData = new FormData();
+          masterFormData.append("title", "Meu CV");
+          masterFormData.append("rawText", cvText.trim());
+          masterFormData.append("isPrimary", "true");
+          const savedResume = await uploadMasterResume(masterFormData);
+          formData.delete("masterCvText");
+          formData.append("masterResumeId", savedResume.id);
+          formData.append("saveAsMaster", "true");
+        }
+        // Mesmo raciocínio do branch "upload" acima: "profile" exigiria
+        // profileReadinessStatus "ready", que a extração assíncrona do
+        // uploadMasterResume que acabou de rodar não teve tempo de atingir.
+        const started = await startAndPoll(
+          analyzeAuthenticatedCv(formData, "text_paste", journeyContext),
+        );
+        analyzeResult = started.result;
+      } else if (guestAuthGateEnabled) {
+        // Fase 5 do gate de autenticação guest: a análise ainda roda
+        // normalmente no backend (sem mudança nenhuma no pipeline), mas o
+        // frontend não faz polling de conteúdo, não grava resultado em
+        // storage nenhum — só o jobId + guestPossessionToken (nunca o
+        // resultado) para retomar depois da autenticação.
+        if (cvMode !== "text") {
+          const uploadedFile = file;
+          if (!uploadedFile) {
+            setError("Selecione seu CV em PDF, DOCX ou ODT.");
+            setLoading(false);
+            return;
+          }
+          formData.append("file", uploadedFile);
+        }
+
+        const started = await analyzeGuestCv(formData, journeyContext);
+        if (!started.ok) {
+          setLoading(false);
+          setError(started.error);
+          return;
+        }
+
+        setLoadingStep(3);
+        await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
+
+        if (started.guestPossessionToken) {
+          setPendingGuestAnalysis({
+            jobId: started.jobId,
+            guestPossessionToken: started.guestPossessionToken,
+          });
+        }
+
+        router.push("/entrar?ctx=analysis_guest");
+        return;
+      } else {
+        if (cvMode === "text") {
+          const started = await startAndPoll(
+            analyzeGuestCv(formData, journeyContext),
+          );
+          analyzeResult = started.result;
+          guestSessionPublicToken = started.guestSessionPublicToken;
+          if (!analyzeResult.ok) {
+            setLoading(false);
+            setError(analyzeResult.error);
+            return;
+          }
+          setLoadingStep(3);
+          await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
+          setGuestAnalysisRaw(
+            JSON.stringify({
+              ...analyzeResult,
+              guestSessionPublicToken,
+              jobDescriptionText: jobDescription,
+            }),
+          );
+          router.push("/adaptar/resultado");
+          return;
+        }
+
+        const uploadedFile = file;
+        if (!uploadedFile) {
+          setError("Selecione seu CV em PDF, DOCX ou ODT.");
+          setLoading(false);
+          return;
+        }
+        formData.append("file", uploadedFile);
+        const started = await startAndPoll(
+          analyzeGuestCv(formData, journeyContext),
+        );
+        analyzeResult = started.result;
+        guestSessionPublicToken = started.guestSessionPublicToken;
+      }
+      if (!analyzeResult.ok) {
+        setLoading(false);
+        setError(analyzeResult.error);
+        return;
+      }
+      setLoadingStep(3);
+      await new Promise((r) => setTimeout(r, RESULT_TRANSITION_DELAY_MS));
+
+      if (isAuthenticated) {
+        try {
+          const saved = await saveGuestPreview({
+            adaptedContentJson: analyzeResult.adaptedContentJson,
+            // Prioriza o cargo/empresa curados do Radar (analyzeResult.
+            // jobTitle/companyName, resolvidos server-side a partir do Job)
+            // sobre o que a IA reextraiu do texto colado — a IA raramente
+            // repete o nome da empresa no corpo da descrição colada, então
+            // falha silenciosamente mesmo com o dado real disponível no Job.
+            companyName:
+              analyzeResult.companyName ??
+              analyzeResult.adaptedContentJson?.vaga?.empresa,
+            jobDescriptionText: jobDescription.trim()
+              ? jobDescription
+              : (radarJob?.description ?? jobDescription),
+            jobTitle:
+              analyzeResult.jobTitle ??
+              analyzeResult.adaptedContentJson?.vaga?.cargo,
+            masterCvText: analyzeResult.masterCvText,
+            analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
+            previewText: analyzeResult.previewText,
+            file: file ?? undefined,
+            jobApplicationId: prefillApplicationId ?? undefined,
+            radarJobId: jobIdParam ?? undefined,
+            sessionInternalId: journeyContext.sessionInternalId,
+            visitorId: journeyContext.visitorId,
+          });
+
+          router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
+          return;
+        } catch {
+          // fallback to session storage path
+        }
+      }
+
+      setGuestAnalysisRaw(
+        JSON.stringify({
+          ...analyzeResult,
+          guestSessionPublicToken,
+          jobDescriptionText: jobDescription,
+        }),
+      );
+      router.push("/adaptar/resultado");
+    } catch (err) {
+      setLoading(false);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Erro ao analisar CV. Tente novamente.",
+      );
+    }
+  };
+
+  if (!authReady) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+        }}
+      >
+        <EcvBuildLoader size={48} />
+      </div>
+    );
+  }
+
+  return (
+    <PageShell>
+      {turnstileSiteKey ? (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+          onReady={markTurnstileScriptReady}
+        />
+      ) : null}
+      <main
+        style={{
+          fontFamily: GEIST,
+          color: "#0a0a0a",
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          minHeight: "100dvh",
+          position: "relative",
+          overflowX: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Grain */}
+        <div
+          aria-hidden
+          style={{
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            opacity: 0.5,
+            mixBlendMode: "multiply",
+            zIndex: 0,
+            backgroundImage: `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+          }}
+        />
+
+        <AppHeader
+          userName={userName}
+          userRole={userRole}
+          availableCredits={availableCredits}
+          hideAnalyzeButton
+        />
+        <div
+          ref={turnstileContainerRef}
+          aria-hidden
+          style={{
+            position: "fixed",
+            left: -10000,
+            top: -10000,
+            width: 320,
+            height: 80,
+            pointerEvents: "none",
+            opacity: 0,
+          }}
+        />
+
+        {/* Main */}
+        <div
+          className="adaptar-content"
+          style={{
+            flex: 1,
+            padding: "32px 32px 28px",
+            position: "relative",
+            zIndex: 2,
+            maxWidth: 1200,
+            margin: "0 auto",
+            width: "100%",
+          }}
+        >
+          {/* Header */}
+          <div style={{ maxWidth: 780, marginBottom: 28 }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                letterSpacing: 1.2,
+                fontWeight: 500,
+                color: "#555",
+                background: "rgba(10,10,10,0.04)",
+                border: "1px solid rgba(10,10,10,0.06)",
+                padding: "6px 10px",
+                borderRadius: 999,
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#c6ff3a",
+                  boxShadow: "0 0 6px #c6ff3a",
+                  display: "inline-block",
+                }}
+              />
+              ANÁLISE EM ATÉ 2 MINUTOS
+            </div>
+            <h1
+              style={{
+                fontSize: "clamp(26px, 6vw, 46px)",
+                fontWeight: 500,
+                letterSpacing: -1.8,
+                lineHeight: 1.04,
+                margin: 0,
+                color: "#0a0a0a",
+              }}
+            >
+              Cole a vaga, envie seu CV.
+              <br />
+              Descubra{" "}
+              <em
+                style={{
+                  fontFamily: SERIF_ITALIC,
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                }}
+              >
+                exatamente{" "}
+              </em>
+              por que você
+              <br />
+              está sendo eliminado.
+            </h1>
+          </div>
+
+          {/* 2-col grid */}
+          <form ref={formRef} onSubmit={handleSubmit}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr 0.8fr",
+                gap: 40,
+                alignItems: "start",
+              }}
+              className="adaptar-grid"
+            >
+              {/* Left column */}
+              <div>
+                {/* Error */}
+                {error && (
+                  <div
+                    ref={errorRef}
+                    style={{
+                      marginBottom: 16,
+                      padding: "10px 14px",
+                      background: "#fee2e2",
+                      border: "1px solid #fecaca",
+                      borderRadius: 10,
+                      fontSize: 13,
+                      color: "#991b1b",
+                      fontFamily: MONO,
+                    }}
+                  >
+                    {error}
+                  </div>
+                )}
+
+                {/* Step 01 — CV */}
+                <div style={{ marginBottom: 14 }}>
+                  <div
+                    className="adaptar-cv-header"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: "#0a0a0a",
+                        color: "#fafaf6",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      01
+                    </div>
+                    <div className="adaptar-cv-heading" style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        Seu CV
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#7a7a74",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        PDF, DOCX ou ODT · até 5 MB
+                      </div>
+                    </div>
+                    {/* Mode toggle */}
+                    {isAuthenticated && hasMaster ? (
+                      <div
+                        className="adaptar-cv-toggle-row"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                        }}
+                      >
+                        <div
+                          className="adaptar-cv-mode-toggle"
+                          style={{
+                            display: "inline-flex",
+                            gap: 4,
+                            background: "rgba(10,10,10,0.05)",
+                            borderRadius: 8,
+                            padding: 3,
+                          }}
+                        >
+                          {(["profile", "upload", "text"] as CvMode[]).map(
+                            (mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => {
+                                  setCvMode(mode);
+                                  if (mode === "profile") clearSelectedFile();
+                                  if (mode === "text") clearSelectedFile();
+                                  setError(null);
+                                }}
+                                style={{
+                                  fontFamily: MONO,
+                                  fontSize: 10,
+                                  fontWeight: 500,
+                                  letterSpacing: 0.3,
+                                  padding: "4px 10px",
+                                  borderRadius: 6,
+                                  border: "none",
+                                  cursor: "pointer",
+                                  background:
+                                    cvMode === mode ? "#0a0a0a" : "transparent",
+                                  color:
+                                    cvMode === mode ? "#fafaf6" : "#7a7a74",
+                                  transition: "all 120ms",
+                                }}
+                              >
+                                {mode === "profile"
+                                  ? "CV Master"
+                                  : mode === "upload"
+                                    ? "Upload"
+                                    : "Digitar texto"}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="adaptar-cv-toggle-row"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                        }}
+                      >
+                        <div
+                          className="adaptar-cv-mode-toggle"
+                          style={{
+                            display: "inline-flex",
+                            gap: 4,
+                            background: "rgba(10,10,10,0.05)",
+                            borderRadius: 8,
+                            padding: 3,
+                          }}
+                        >
+                          {(["upload", "text"] as CvMode[]).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => {
+                                setCvMode(mode);
+                                if (mode === "text") clearSelectedFile();
+                                setError(null);
+                              }}
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                fontWeight: 500,
+                                letterSpacing: 0.3,
+                                padding: "4px 10px",
+                                borderRadius: 6,
+                                border: "none",
+                                cursor: "pointer",
+                                background:
+                                  cvMode === mode ? "#0a0a0a" : "transparent",
+                                color: cvMode === mode ? "#fafaf6" : "#7a7a74",
+                                transition: "all 120ms",
+                              }}
+                            >
+                              {mode === "upload" ? "Upload" : "Digitar texto"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Master selected */}
+                  {isAuthenticated && cvMode === "profile" ? (
+                    <div
+                      style={{
+                        background: "#fafaf6",
+                        border: "1px solid rgba(10,10,10,0.08)",
+                        borderRadius: 14,
+                        padding: "28px 20px",
+                        textAlign: "center",
+                        minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          marginBottom: 10,
+                        }}
+                      >
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                        <svg
+                          width="22"
+                          height="22"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <polyline
+                            points="14 2 14 8 20 8"
+                            stroke="#0a0a0a"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {hasMaster
+                          ? (masterResume.sourceFileName ?? masterResume.title)
+                          : "Usando dados do seu perfil canonico"}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                        }}
+                      >
+                        Perfil salvo carregado ·{" "}
+                        <span style={{ color: "#405410" }}>✓ pronto</span>
+                      </div>
+                    </div>
+                  ) : cvMode === "text" ? (
+                    <div
+                      style={{
+                        width: "100%",
+                        border: "1.5px dashed #d0ceC6",
+                        borderRadius: 14,
+                        padding: "14px 14px 10px",
+                        background: "#fafaf6",
+                        minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <textarea
+                        value={cvText}
+                        onChange={(e) =>
+                          setCvText(e.target.value.slice(0, 20000))
+                        }
+                        placeholder="Cole seu currículo em texto (resumo, experiências, formação, competências)..."
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          outline: "none",
+                          fontFamily: GEIST,
+                          fontSize: 13.5,
+                          lineHeight: 1.5,
+                          color: "#0a0a0a",
+                          resize: "none",
+                          minHeight: 0,
+                          flex: 1,
+                          background: "transparent",
+                        }}
+                      />
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#7a7a74",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        Sem upload. Use texto real do seu CV para manter
+                        rastreabilidade.
+                      </div>
+                    </div>
+                  ) : (
+                    /* Upload area */
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          fileInputRef.current?.click();
+                        }}
+                        onMouseEnter={() => setFileHover(true)}
+                        onMouseLeave={() => setFileHover(false)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "copy";
+                          setFileHover(true);
+                        }}
+                        onDragLeave={() => setFileHover(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setFileHover(false);
+                          const droppedFile = e.dataTransfer.files?.[0] ?? null;
+                          if (!droppedFile) return;
+                          const ext =
+                            droppedFile.name.split(".").pop()?.toLowerCase() ??
+                            "";
+                          if (!["pdf", "docx", "odt"].includes(ext)) {
+                            setError(
+                              "Formato inválido. Envie um arquivo PDF, DOCX ou ODT.",
+                            );
+                            return;
+                          }
+                          setFile(droppedFile);
+                          setCvMode("upload");
+                        }}
+                        style={{
+                          width: "100%",
+                          border: `1.5px dashed ${fileHover || file ? "#0a0a0a" : "#d0ceC6"}`,
+                          borderRadius: 14,
+                          padding: "35px 20px",
+                          textAlign: "center",
+                          background: fileHover ? "#f5f4ee" : "#fafaf6",
+                          cursor: "pointer",
+                          transition: "border-color 120ms, background 120ms",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 8,
+                          minHeight: CV_INPUT_BOX_MIN_HEIGHT,
+                          justifyContent: "center",
+                        }}
+                      >
+                        {file ? (
+                          <>
+                            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              aria-hidden
+                            >
+                              <path
+                                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                                stroke="#0a0a0a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <polyline
+                                points="14 2 14 8 20 8"
+                                stroke="#0a0a0a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                            <span style={{ fontSize: 14, fontWeight: 500 }}>
+                              {file.name}
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 11,
+                                color: "#8a8a85",
+                              }}
+                            >
+                              clique para trocar
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              aria-hidden
+                            >
+                              <path
+                                d="M12 4v12m0-12l-4 4m4-4l4 4M4 20h16"
+                                stroke="#0a0a0a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                            <span style={{ fontSize: 14, fontWeight: 500 }}>
+                              Arraste ou clique para enviar
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: 11,
+                                color: "#8a8a85",
+                              }}
+                            >
+                              seu-cv.pdf · ou solte aqui
+                            </span>
+                          </>
+                        )}
+                      </button>
+                      {isAuthenticated && hasMaster && file && (
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginTop: 10,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={saveMasterCv}
+                            onChange={(e) => setSaveMasterCv(e.target.checked)}
+                            style={{
+                              accentColor: "#0a0a0a",
+                              width: 14,
+                              height: 14,
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#7a7a74",
+                              letterSpacing: 0.2,
+                            }}
+                          >
+                            Salvar como novo CV base (substitui o atual)
+                          </span>
+                        </label>
+                      )}
+                    </>
+                  )}
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.odt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const nextFile = e.target.files?.[0] ?? null;
+                      setFile(nextFile);
+                      if (nextFile) {
+                        setCvMode("upload");
+                      }
+                    }}
+                  />
+                </div>
+
+                {/* Step 02 — Vaga */}
+                <div style={{ marginBottom: 14 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: "#0a0a0a",
+                        color: "#fafaf6",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      02
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 500,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        Descrição da vaga
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#7a7a74",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        LinkedIn, Gupy, Infojobs, etc.
+                      </div>
+                    </div>
+                    {!prefillApplicationId && !radarJob && (
+                      <div style={{ display: "flex", gap: 12 }}>
+                        <button
+                          type="button"
+                          onClick={() => setJobDescription(EXAMPLE_JOB)}
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#0a0a0a",
+                            background: "none",
+                            border: "none",
+                            textDecoration: "underline",
+                            textUnderlineOffset: 2,
+                            cursor: "pointer",
+                            letterSpacing: 0.3,
+                          }}
+                        >
+                          colar exemplo
+                        </button>
+                        {jobDescription && (
+                          <button
+                            type="button"
+                            onClick={() => setJobDescription("")}
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                            }}
+                          >
+                            limpar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {radarJob && !prefillApplicationId && !descriptionExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionExpanded(true)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        boxSizing: "border-box",
+                        background: "#fafaf6",
+                        border: "1px solid #d8d6ce",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        fontFamily: GEIST,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: "#0a0a0a",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {radarJob.title} · {radarJob.company}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#8a8a85",
+                          flexShrink: 0,
+                          marginLeft: 12,
+                        }}
+                      >
+                        ver descrição completa ▾
+                      </span>
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        background:
+                          prefillApplicationId || radarJob
+                            ? "#f4f4f0"
+                            : "#fafaf6",
+                        border: "1px solid #d8d6ce",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <textarea
+                        value={jobDescription}
+                        readOnly={!!prefillApplicationId || !!radarJob}
+                        onFocus={() => {
+                          if (
+                            prefillApplicationId ||
+                            radarJob ||
+                            jobDescriptionFocusTrackedRef.current
+                          ) {
+                            return;
+                          }
+
+                          jobDescriptionFocusTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_focus");
+                        }}
+                        onPaste={() => {
+                          if (
+                            prefillApplicationId ||
+                            radarJob ||
+                            jobDescriptionPasteTrackedRef.current
+                          ) {
+                            return;
+                          }
+
+                          jobDescriptionPasteTrackedRef.current = true;
+                          emitUiFunnelEvent("job_description_paste");
+                        }}
+                        onChange={(e) => {
+                          if (prefillApplicationId || radarJob) {
+                            return;
+                          }
+                          const nextJobDescription = e.target.value.slice(
+                            0,
+                            12000,
+                          );
+                          setJobDescription(nextJobDescription);
+
+                          if (
+                            !jobDescriptionFilledTrackedRef.current &&
+                            nextJobDescription.trim()
+                          ) {
+                            jobDescriptionFilledTrackedRef.current = true;
+                            emitUiFunnelEvent("job_description_filled");
+                          }
+                        }}
+                        placeholder="Cole a vaga completa"
+                        style={{
+                          width: "100%",
+                          border: "none",
+                          outline: "none",
+                          fontFamily: GEIST,
+                          fontSize: 13.5,
+                          background: "transparent",
+                          color:
+                            prefillApplicationId || radarJob
+                              ? "#555550"
+                              : "#0a0a0a",
+                          minHeight: 128,
+                          resize: "none",
+                          lineHeight: 1.55,
+                          cursor:
+                            prefillApplicationId || radarJob
+                              ? "default"
+                              : undefined,
+                        }}
+                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          borderTop: "1px solid rgba(10,10,10,0.06)",
+                          paddingTop: 8,
+                          marginTop: 6,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: "#8a8a85",
+                          }}
+                        >
+                          {prefillApplicationId
+                            ? "vaga da candidatura · não editável"
+                            : radarJob
+                              ? "vaga do radar · não editável"
+                              : `${jobDescription.length} / 12000`}
+                        </span>
+                        {!prefillApplicationId && !radarJob && (
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: "#8a8a85",
+                            }}
+                          >
+                            ⌘+V para colar
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    background: "#0a0a0a",
+                    color: "#fafaf6",
+                    border: "none",
+                    borderRadius: 12,
+                    padding: "15px",
+                    fontSize: 15,
+                    fontWeight: 500,
+                    cursor: loading ? "wait" : "pointer",
+                    fontFamily: GEIST,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    boxShadow:
+                      "0 4px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                    letterSpacing: -0.1,
+                    transition: "opacity 150ms",
+                    opacity: loading ? 0.75 : 1,
+                  }}
+                >
+                  {loading ? (
+                    <>
+                      {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative */}
+                      <svg
+                        aria-hidden
+                        className="animate-spin"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      >
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      <span>{LOADING_STEPS[loadingStep]}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Descobrir meus erros no CV</span>
+                      <span>→</span>
+                    </>
+                  )}
+                </button>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#8a8a85",
+                    textAlign: "center",
+                    marginTop: 10,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  Grátis • sem cartão • resultado em segundos
+                </div>
+              </div>
+
+              {/* Right column */}
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 14 }}
+              >
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                  }}
+                >
+                  O QUE VOCÊ VAI RECEBER
+                </div>
+
+                {/* Preview card */}
+                <div
+                  style={{
+                    background: "#0a0a0a",
+                    color: "#f0efe9",
+                    borderRadius: 14,
+                    padding: "20px 22px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                      color: "#a0a098",
+                      marginBottom: 14,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#c6ff3a",
+                        display: "inline-block",
+                      }}
+                    />
+                    RELATÓRIO PRÉVIA
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 500,
+                      letterSpacing: -0.4,
+                      color: "#fafaf6",
+                      marginBottom: 16,
+                    }}
+                  >
+                    Relatório de alinhamento
+                  </div>
+                  {[
+                    { k: "ATS SCORE", v: "0–100" },
+                    { k: "KEYWORDS", v: "presentes · ausentes" },
+                    { k: "VERBOS DE AÇÃO", v: "mapeados da vaga" },
+                    { k: "FORMATAÇÃO", v: "problemas estruturais" },
+                    { k: "SUGESTÕES", v: "por seção" },
+                  ].map((row) => (
+                    <div
+                      key={row.k}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        padding: "9px 0",
+                        borderTop: "1px solid rgba(250,250,246,0.08)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10.5,
+                          color: "#a0a098",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {row.k}
+                      </span>
+                      <span style={{ fontSize: 13, color: "#e8e7df" }}>
+                        {row.v}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 12,
+                      borderTop: "1px solid rgba(250,250,246,0.08)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: "#7a7a74",
+                        letterSpacing: 0.2,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Priv: seus dados não são usados para treinar modelos.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Trust badges */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[
+                    { label: "DIAGNÓSTICO", v: "≈ 90s" },
+                    { label: "DADOS", v: "protegidos" },
+                    { label: "MELHORIAS", v: "10+" },
+                  ].map((b) => (
+                    <div
+                      key={b.label}
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        padding: "10px 12px",
+                        background: "rgba(10,10,10,0.03)",
+                        border: "1px solid rgba(10,10,10,0.06)",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: "#8a8a85",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {b.label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 500,
+                          letterSpacing: -0.5,
+                        }}
+                      >
+                        {b.v}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <p
+                  style={{
+                    margin: "2px 2px 0",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: "#7a7a74",
+                    lineHeight: 1.5,
+                    textAlign: "center",
+                  }}
+                >
+                  Evite enviar dados sensíveis desnecessários.
+                  <br />·{" "}
+                  <Link
+                    href="/privacidade"
+                    style={{ color: "#0a0a0a", textDecoration: "underline" }}
+                  >
+                    Privacidade
+                  </Link>{" "}
+                  ·{" "}
+                  <Link
+                    href="/termos-de-uso"
+                    style={{ color: "#0a0a0a", textDecoration: "underline" }}
+                  >
+                    Termos de Uso
+                  </Link>
+                </p>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Overlay de processamento */}
+        {loading && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0 16px",
+              background: "rgba(10,10,10,0.35)",
+              backdropFilter: "blur(4px)",
+              width: "100vw",
+              height: "100vh",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 20,
+                borderRadius: 20,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "#0a0a0a",
+                padding: "32px",
+                width: "100%",
+                maxWidth: 380,
+                boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+              }}
+            >
+              <EcvScanLoader size={64} dark />
+
+              <div style={{ textAlign: "center" }}>
+                <p
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    letterSpacing: -0.01,
+                    color: "#fafaf6",
+                    margin: 0,
+                  }}
+                >
+                  {saveMasterDecided ? "Processando CV" : "Analisando..."}
+                </p>
+                {saveMasterDecided && (
+                  <p
+                    style={{
+                      marginTop: 4,
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      color: "#8a8a85",
+                      margin: "4px 0 0",
+                    }}
+                  >
+                    {file?.name ?? "seu currículo"}
+                  </p>
+                )}
+              </div>
+
+              <div style={{ height: 22, textAlign: "center" }}>
+                <p style={{ fontSize: 13, color: "#a0a09a", margin: 0 }}>
+                  {saveMasterDecided
+                    ? MASTER_CV_OVERLAY_MESSAGES[overlayMsgIndex]
+                    : LOADING_STEPS[loadingStep]}
+                  {".".repeat(overlayDots)}
+                </p>
+              </div>
+
+              <p
+                style={{
+                  textAlign: "center",
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: "#5a5a55",
+                  margin: 0,
+                }}
+              >
+                Isso pode levar alguns segundos
+              </p>
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          @media (max-width: 860px) {
+            .adaptar-grid { grid-template-columns: 1fr !important; }
+          }
+          @media (max-width: 768px) {
+            .adaptar-content { padding: 20px 16px 28px !important; }
+            .adaptar-cv-header {
+              flex-wrap: wrap;
+              align-items: flex-start !important;
+              gap: 10px !important;
+            }
+            .adaptar-cv-toggle-row {
+              width: 100%;
+              display: flex;
+              justify-content: flex-end;
+            }
+          }
+        `}</style>
+      </main>
+    </PageShell>
+  );
+}
+
+export function AdaptarPageClient() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background:
+              "radial-gradient(ellipse 80% 60% at 50% 0%, #f9f8f4 0%, #ecebe5 100%)",
+          }}
+        >
+          <EcvBuildLoader size={48} />
+        </div>
+      }
+    >
+      <AdaptarPageContent />
+    </Suspense>
+  );
+}

@@ -436,6 +436,7 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     enrichment: {
       attempts: number;
       id: string;
+      jobId: string;
       job: {
         descriptionClean: string;
         metadataJson: unknown;
@@ -546,6 +547,25 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       // manualmente uma vaga já inativada.
       if (enrichment.job.slug && enrichment.job.status === "active") {
         await this.googleIndexingService.notifyIndexing(enrichment.job.slug);
+      }
+
+      // Enfileira o matching do Meu Monitor (MonitorMatchingWorker) — nunca
+      // roda "vaga nova × todos os UserRadarProfile" aqui dentro. Só grava a
+      // marca de trabalho pendente; upsert porque "Forçar LLM" pode
+      // reprocessar a mesma vaga mais de uma vez. Isolado no seu próprio
+      // try/catch: uma falha aqui não pode reverter/marcar como falho um
+      // enrichment que já terminou com sucesso (requisito explícito da spec
+      // do Monitor — o enrichment não pode depender do matching).
+      try {
+        await this.database.monitorMatchJob.upsert({
+          where: { jobId: enrichment.jobId },
+          create: { jobId: enrichment.jobId },
+          update: { status: "PENDING", attempts: 0, lastError: null },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `failed to enqueue monitor match job for job ${enrichment.jobId}: ${error instanceof Error ? error.message : "unknown"}`,
+        );
       }
     } catch (error) {
       const attempts = enrichment.attempts + 1;

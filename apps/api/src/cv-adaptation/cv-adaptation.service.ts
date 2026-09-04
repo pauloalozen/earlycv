@@ -1,6 +1,7 @@
 import {
   createHash,
   createHmac,
+  randomBytes,
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
@@ -14,6 +15,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type {
+  AnalysisJobStatus as AnalysisJobStatusValue,
   JobApplicationOrigin,
   JobApplicationStatus,
 } from "@prisma/client";
@@ -28,6 +30,10 @@ import {
   extractTextFromCvFile,
   validateCvFileEnvelope,
 } from "../common/cv-text-extractor";
+import {
+  hashGuestPossessionToken,
+  possessionTokenMatchesHash,
+} from "../common/guest-possession-token";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
@@ -74,6 +80,12 @@ type JobApplicationHookInput = {
   origin: JobApplicationOrigin;
   callerMethod: string;
   radarJobId?: string | null;
+  // product_origin real da navegação até a vaga (radar/monitor/
+  // monitor_email), quando disponível — ver AnalyzeCvDto.radarJobOrigin /
+  // SaveGuestPreviewDto.radarJobOrigin. undefined quando o caller não tem
+  // esse contexto (ex.: claimGuest, unlockCv — não vêm de uma vaga do
+  // Radar/Alerta).
+  radarJobOrigin?: "radar" | "monitor" | "monitor_email" | null;
   // Contexto de jornada da análise que originou esta candidatura automática
   // (quando disponível no caller — ex.: claimGuest/saveGuestPreview rodam
   // dentro do request original e têm analysisContext em mãos). Nunca
@@ -259,6 +271,7 @@ export class CvAdaptationService {
         targetStatus: input.targetStatus,
         origin: input.origin,
         radarJobId: input.radarJobId,
+        radarJobOrigin: input.radarJobOrigin,
         visitorId: input.visitorId,
         journeySessionInternalId: input.journeySessionInternalId,
       });
@@ -630,9 +643,12 @@ export class CvAdaptationService {
         newMasterResumeId = created.id;
       }
 
-      const adaptedContent = this.withFrozenMissingKeywords(
-        dto.adaptedContentJson,
-        dto.selectedMissingKeywords,
+      const adaptedContent = this.reconcileVagaFields(
+        this.withFrozenMissingKeywords(
+          dto.adaptedContentJson,
+          dto.selectedMissingKeywords,
+        ),
+        { jobTitle: dto.jobTitle ?? null, companyName: dto.companyName ?? null },
       );
 
       const created = await tx.cvAdaptation.create({
@@ -950,6 +966,7 @@ export class CvAdaptationService {
     jobId: string;
     status: "pending";
     guestSessionPublicToken: string | null;
+    guestPossessionToken: string;
   }> {
     const turnstilePrecheck =
       await this.protectedAnalyzeService.precheckTurnstile(
@@ -968,12 +985,30 @@ export class CvAdaptationService {
       analysisContext?.sessionPublicToken,
     );
 
+    // Token de posse real da análise guest (não confundir com o cuid do
+    // job, que identifica mas não autentica posse). Mesmo padrão de
+    // PasswordResetToken em auth.service.ts: randomBytes(32) cru devolvido
+    // uma única vez ao cliente, só o hash SHA-256 é persistido.
+    const guestPossessionToken = randomBytes(32).toString("hex");
+    const guestPossessionTokenHash =
+      hashGuestPossessionToken(guestPossessionToken);
+
+    // Mesmo enriquecimento de startAuthenticatedAnalysisJob (ver
+    // resolveAnalysisJobDescription) — faltava aqui, o que deixava toda
+    // análise guest via radar sem jobTitle/companyName confiáveis desde a
+    // origem (só o texto colado, nunca o Job/Company reais).
+    const resolved = await this.resolveAnalysisJobDescription({
+      radarJobId,
+      jobDescriptionText,
+    });
+
     const job = await this.database.analysisJob.create({
       data: {
         ownerKind: "guest",
         status: "pending",
         guestSessionHash,
-        jobDescriptionText,
+        guestPossessionTokenHash,
+        jobDescriptionText: resolved.text,
         masterCvText: masterCvText?.trim() || null,
       },
     });
@@ -982,7 +1017,7 @@ export class CvAdaptationService {
       job.id,
       () =>
         this.analyzeGuest(
-          jobDescriptionText,
+          resolved.text,
           file,
           masterCvText,
           turnstileToken,
@@ -998,6 +1033,10 @@ export class CvAdaptationService {
         cvSource: file ? "upload" : "master_cv",
         productOrigin: radarJobId ? "radar" : "direct",
       },
+      {
+        jobTitle: resolved.radarJobTitle,
+        companyName: resolved.radarCompanyName,
+      },
     ).catch((err) => {
       this.logger.error(
         `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
@@ -1008,6 +1047,7 @@ export class CvAdaptationService {
       jobId: job.id,
       status: "pending",
       guestSessionPublicToken: analysisContext?.sessionPublicToken ?? null,
+      guestPossessionToken,
     };
   }
 
@@ -1015,64 +1055,83 @@ export class CvAdaptationService {
   // rodar aqui (não dentro de analyzeAuthenticated) porque
   // AnalysisJob.jobDescriptionText é obrigatório no schema e é gravado
   // logo abaixo, de forma síncrona, antes do processamento assíncrono via
-  // processAnalysisJob. Se jobDescriptionText já veio preenchido, radarJobId
-  // é ignorado (texto colado manualmente sempre tem precedência).
-  // jobTitle/companyName do retorno vêm do Job do radar (fonte confiável,
-  // curada na ingestão) — nunca da IA. Achado investigando análises via
-  // radar salvas com "Não informado": a IA reextrai cargo/empresa do
-  // texto colado (job.descriptionClean), que raramente repete o nome da
-  // empresa no corpo da descrição, então falha silenciosamente mesmo
-  // com o dado real disponível ali no Job. Ver processAnalysisJob, que
-  // agora prioriza esses valores sobre o que a IA extrair.
-  private async resolveAnalysisJobDescription(dto: AnalyzeCvDto): Promise<{
+  // processAnalysisJob. jobDescriptionText já preenchido tem precedência
+  // só como TEXTO (cobre tanto colar manual quanto o auto-preenchimento
+  // do fluxo de 1 clique do radar — ver jobIdParam em adaptar-client.tsx,
+  // que sempre manda os dois juntos: jobDescriptionText E radarJobId).
+  // jobTitle/companyName SEMPRE vêm do Job do radar quando radarJobId
+  // existe, mesmo com jobDescriptionText presente — nunca da IA. Achado
+  // investigando análises via radar salvas com "Não informado": a IA
+  // reextrai cargo/empresa do texto da vaga, que raramente repete o nome
+  // da empresa no corpo da descrição, então falha silenciosamente mesmo
+  // com o dado real disponível ali no Job. A versão anterior descartava
+  // radarJobId inteiro sempre que jobDescriptionText vinha preenchido,
+  // que é sempre o caso nesse fluxo — nunca chegava a buscar o Job. Ver
+  // processAnalysisJob, que prioriza esses valores sobre o que a IA
+  // extrair.
+  private async resolveAnalysisJobDescription(dto: {
+    radarJobId?: string | null;
+    jobDescriptionText?: string | null;
+  }): Promise<{
     text: string;
     radarJobTitle: string | null;
     radarCompanyName: string | null;
   }> {
+    let radarJobTitle: string | null = null;
+    let radarCompanyName: string | null = null;
+
+    if (dto.radarJobId) {
+      const job = await this.database.job.findUnique({
+        where: { id: dto.radarJobId },
+        select: {
+          id: true,
+          title: true,
+          descriptionClean: true,
+          status: true,
+          company: { select: { name: true } },
+        },
+      });
+
+      // Sem jobDescriptionText, o Job é a ÚNICA fonte de texto — estado
+      // inválido (não encontrado/inativo/sem descrição) bloqueia a
+      // análise. Com jobDescriptionText já em mãos, o texto continua
+      // válido independente do estado atual do Job — só deixa de
+      // enriquecer jobTitle/companyName, nunca bloqueia por causa disso.
+      if (!dto.jobDescriptionText) {
+        if (!job) {
+          throw new NotFoundException(`Vaga não encontrada: ${dto.radarJobId}`);
+        }
+        if (job.status !== "active") {
+          throw new BadRequestException("Esta vaga não está mais disponível.");
+        }
+        if (!job.descriptionClean || job.descriptionClean.length < 50) {
+          throw new BadRequestException(
+            "Esta vaga não tem descrição suficiente para análise.",
+          );
+        }
+      }
+
+      if (job) {
+        radarJobTitle = job.title || null;
+        radarCompanyName = job.company?.name || null;
+      }
+
+      if (!dto.jobDescriptionText && job) {
+        return {
+          text: job.descriptionClean as string,
+          radarJobTitle,
+          radarCompanyName,
+        };
+      }
+    }
+
     if (dto.jobDescriptionText) {
-      return {
-        text: dto.jobDescriptionText,
-        radarJobTitle: null,
-        radarCompanyName: null,
-      };
+      return { text: dto.jobDescriptionText, radarJobTitle, radarCompanyName };
     }
 
-    if (!dto.radarJobId) {
-      throw new BadRequestException(
-        "É necessário fornecer a descrição da vaga ou um radarJobId válido.",
-      );
-    }
-
-    const job = await this.database.job.findUnique({
-      where: { id: dto.radarJobId },
-      select: {
-        id: true,
-        title: true,
-        descriptionClean: true,
-        status: true,
-        company: { select: { name: true } },
-      },
-    });
-
-    if (!job) {
-      throw new NotFoundException(`Vaga não encontrada: ${dto.radarJobId}`);
-    }
-
-    if (job.status !== "active") {
-      throw new BadRequestException("Esta vaga não está mais disponível.");
-    }
-
-    if (!job.descriptionClean || job.descriptionClean.length < 50) {
-      throw new BadRequestException(
-        "Esta vaga não tem descrição suficiente para análise.",
-      );
-    }
-
-    return {
-      text: job.descriptionClean,
-      radarJobTitle: job.title || null,
-      radarCompanyName: job.company?.name || null,
-    };
+    throw new BadRequestException(
+      "É necessário fornecer a descrição da vaga ou um radarJobId válido.",
+    );
   }
 
   async startAuthenticatedAnalysisJob(
@@ -1121,7 +1180,12 @@ export class CvAdaptationService {
         ),
         mode: "authenticated",
         cvSource: file ? "upload" : "master_cv",
-        productOrigin: dto.radarJobId ? "radar" : "direct",
+        // dto.radarJobOrigin (resolveJobProductOrigin no client) é a
+        // origem real quando a análise veio do fluxo de 1 clique em
+        // /radar/[slug] — pode ser "monitor"/"monitor_email" quando a vaga
+        // foi descoberta pelo Alerta, não só "radar". Sem o campo
+        // (chamadas antigas, ou fora desse fluxo), cai no fallback anterior.
+        productOrigin: dto.radarJobOrigin ?? (dto.radarJobId ? "radar" : "direct"),
       },
       {
         jobTitle: resolved.radarJobTitle,
@@ -1185,19 +1249,26 @@ export class CvAdaptationService {
     try {
       const result = await run();
       const signals = this.extractAnalysisJobSignals(result.adaptedContentJson);
+      const jobTitle = radarFallback?.jobTitle ?? signals.jobTitle;
+      const companyName = radarFallback?.companyName ?? signals.companyName;
+      // Corrige vaga.cargo/vaga.empresa DENTRO do JSON persistido — não só
+      // as colunas-irmãs acima — sempre que o radar já sabia a resposta
+      // certa (ver reconcileVagaFields).
+      const reconciledContentJson = radarFallback
+        ? this.reconcileVagaFields(result.adaptedContentJson, radarFallback)
+        : result.adaptedContentJson;
 
       await this.database.analysisJob.update({
         where: { id: jobId },
         data: {
           status: "succeeded",
           finishedAt: new Date(),
-          adaptedContentJson:
-            result.adaptedContentJson as Prisma.InputJsonValue,
+          adaptedContentJson: reconciledContentJson as Prisma.InputJsonValue,
           previewText: result.previewText,
           masterCvText: result.masterCvText,
           analysisCvSnapshotId: result.analysisCvSnapshotId,
-          jobTitle: radarFallback?.jobTitle ?? signals.jobTitle,
-          companyName: radarFallback?.companyName ?? signals.companyName,
+          jobTitle,
+          companyName,
           scoreBefore: signals.scoreBefore,
           scoreAfter: signals.scoreAfter,
         },
@@ -1311,6 +1382,42 @@ export class CvAdaptationService {
     }
   }
 
+  // Sobrescreve vaga.cargo/vaga.empresa DENTRO do próprio JSON persistido
+  // com o cargo/empresa já conhecidos com certeza (Job do radar ou o que
+  // já foi resolvido antes) — nunca confiar no que a IA reextraiu do
+  // texto colado pra esses dois campos quando já sabemos a resposta certa.
+  // Histórico: dois fixes anteriores (52f6ffb, 1b6e411) corrigiram as
+  // colunas-irmãs AnalysisJob/CvAdaptation.jobTitle/companyName, mas
+  // NUNCA tocaram o vaga.{cargo,empresa} embutido no adaptedContentJson —
+  // que é o que o relatório (/adaptar/resultado), o fluxo guest e todo o
+  // resto de fato leem. Sem isso, a coluna fica certa e o JSON continua
+  // errado pra sempre, porque isso é IMUTÁVEL — mesmo array/objeto salvo
+  // exatamente como a IA devolveu.
+  private reconcileVagaFields(
+    adaptedContentJson: unknown,
+    known: { jobTitle?: string | null; companyName?: string | null },
+  ): unknown {
+    if (!adaptedContentJson || typeof adaptedContentJson !== "object") {
+      return adaptedContentJson;
+    }
+    if (!known.jobTitle && !known.companyName) {
+      return adaptedContentJson;
+    }
+    const data = adaptedContentJson as Record<string, unknown>;
+    const vaga =
+      data.vaga && typeof data.vaga === "object"
+        ? (data.vaga as Record<string, unknown>)
+        : {};
+    return {
+      ...data,
+      vaga: {
+        ...vaga,
+        ...(known.jobTitle ? { cargo: known.jobTitle } : {}),
+        ...(known.companyName ? { empresa: known.companyName } : {}),
+      },
+    };
+  }
+
   private extractAnalysisJobSignals(adaptedContentJson: unknown): {
     jobTitle: string | null;
     companyName: string | null;
@@ -1388,6 +1495,148 @@ export class CvAdaptationService {
       jobTitle: job.status === "succeeded" ? job.jobTitle : null,
       companyName: job.status === "succeeded" ? job.companyName : null,
     };
+  }
+
+  // DTO deliberadamente estreito (nunca reaproveitar o shape autenticado
+  // com campos "a mais" que o cliente ignora — isso é exatamente o tipo de
+  // acidente de serialização que vaza dado, ver ADENDO-hardening.md seção
+  // 2). Usado só quando guest_analysis_auth_gate_enabled está ligado e a
+  // requisição não está autenticada — nunca contém conteúdo derivado da
+  // análise, só o status.
+  async getGuestAnalysisJobStatusOnly(
+    jobId: string,
+    possessionToken: string | null,
+  ): Promise<{ status: AnalysisJobStatusValue }> {
+    if (!possessionToken) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    // jobId (cuid) identifica a análise, mas nunca autentica posse dela —
+    // sem o token de posse correto, nem o status é revelado.
+    const owns = await this.verifyGuestPossessionToken(jobId, possessionToken);
+
+    if (!owns) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    return { status: job.status };
+  }
+
+  // Fase 4 do gate de autenticação guest — claim server-side, sem
+  // reprocessar IA. Diferente de getGuestAnalysisJobStatusOnly, este
+  // método é chamado só depois de autenticado: ownership do AnalysisJob
+  // já foi transferida em transferAnalysisJobOwnership
+  // (OAuthAttemptService, disparada a partir da correlação provada por
+  // possession token + state no callback OAuth) — aqui a checagem é
+  // simplesmente job.userId === userId, o mesmo padrão de
+  // getAnalysisJobStatus para autenticado. Não aceita jobId "solto" de
+  // outro usuário, nunca.
+  //
+  // O conteúdo (adaptedContentJson/previewText/masterCvText/jobTitle/
+  // companyName/jobDescriptionText) vem estritamente do que
+  // processAnalysisJob já gravou no AnalysisJob — nunca do corpo da
+  // requisição. Delega para saveGuestPreview (já testado, já usado hoje)
+  // só trocando a FONTE dos dados de entrada; toda a lógica de resolução
+  // de master CV, dedupe por (userId, analysisCvSnapshotId), hook de
+  // candidatura e markAnalysisJobConverted é reaproveitada sem alteração
+  // — o que garante, pelas mesmas garantias já existentes, que a
+  // CvAdaptation criada aqui continua vinculada ao analysisCvSnapshotId
+  // (crítico: é essa vinculação que exclui o snapshot do cleanup de 30
+  // dias em cleanupExpiredGuestSnapshots).
+  async claimGuestAnalysisJob(
+    userId: string,
+    jobId: string,
+    guestPossessionToken?: string,
+  ): Promise<
+    | { status: "pending" | "processing" | "failed" }
+    | { status: "succeeded"; cvAdaptationId: string }
+  > {
+    let job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    if (job.userId !== userId) {
+      // Único caminho de transferência de ownership fora do OAuth: prova
+      // de posse via guestPossessionToken (mesma garantia criptográfica de
+      // OAuthAttemptService.transferAnalysisJobOwnership — job ainda sem
+      // dono + token bate com o hash). Job de outro usuário, ou sem token
+      // válido, nunca é aceito.
+      const canTransfer =
+        job.userId === null &&
+        !!guestPossessionToken &&
+        (await this.verifyGuestPossessionToken(jobId, guestPossessionToken));
+
+      if (!canTransfer) {
+        throw new NotFoundException("analysis job not found");
+      }
+
+      await this.database.analysisJob.updateMany({
+        where: {
+          id: jobId,
+          ownerKind: "guest",
+          OR: [{ userId: null }, { userId }],
+        },
+        data: { userId },
+      });
+
+      job = await this.database.analysisJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job || job.userId !== userId) {
+        throw new NotFoundException("analysis job not found");
+      }
+    }
+
+    // Idempotente: se já convertida (claim repetido, callback duplicado,
+    // tentativa concorrente que já terminou antes), devolve o resultado
+    // existente sem tocar em nada de novo.
+    if (job.convertedAt && job.convertedCvAdaptationId) {
+      return {
+        status: "succeeded",
+        cvAdaptationId: job.convertedCvAdaptationId,
+      };
+    }
+
+    if (job.status !== "succeeded") {
+      return { status: job.status };
+    }
+
+    if (!job.analysisCvSnapshotId) {
+      throw new BadRequestException(
+        "Succeeded analysis job is missing its snapshot reference.",
+      );
+    }
+
+    const dto: SaveGuestPreviewDto = {
+      adaptedContentJson: (job.adaptedContentJson ?? {}) as Record<
+        string,
+        unknown
+      >,
+      previewText: job.previewText ?? undefined,
+      jobDescriptionText: job.jobDescriptionText,
+      masterCvText: job.masterCvText ?? "",
+      analysisCvSnapshotId: job.analysisCvSnapshotId,
+      jobTitle: job.jobTitle ?? undefined,
+      companyName: job.companyName ?? undefined,
+    };
+
+    const adaptation = await this.saveGuestPreview(userId, dto);
+
+    return { status: "succeeded", cvAdaptationId: adaptation.id };
   }
 
   async analyzeAuthenticated(
@@ -2066,6 +2315,15 @@ export class CvAdaptationService {
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
   ) {
+    // Mesma reconciliação de processAnalysisJob — dto.jobTitle/companyName
+    // já chegam confiáveis (ver analyze-master-cv-flow.ts/
+    // authenticated-analysis-flow.ts no frontend), mas o JSON em si pode
+    // ter vindo de um cliente antigo/análise anterior sem essa correção.
+    dto.adaptedContentJson = this.reconcileVagaFields(dto.adaptedContentJson, {
+      jobTitle: dto.jobTitle ?? null,
+      companyName: dto.companyName ?? null,
+    }) as Record<string, unknown>;
+
     const defaultTemplate = await this.getDefaultTemplate();
     const canonicalJob = await this.resolveCanonicalJob(
       dto.jobDescriptionText,
@@ -2220,6 +2478,7 @@ export class CvAdaptationService {
         origin: "analysis_auto",
         callerMethod: "saveGuestPreview(existing)",
         radarJobId: dto.radarJobId,
+        radarJobOrigin: dto.radarJobOrigin,
         visitorId: analysisContext?.visitorId,
         journeySessionInternalId: analysisContext?.journeySessionInternalId,
       });
@@ -2286,6 +2545,7 @@ export class CvAdaptationService {
       origin: "analysis_auto",
       callerMethod: "saveGuestPreview",
       radarJobId: dto.radarJobId,
+      radarJobOrigin: dto.radarJobOrigin,
       visitorId: analysisContext?.visitorId,
       journeySessionInternalId: analysisContext?.journeySessionInternalId,
     });
@@ -4978,6 +5238,42 @@ export class CvAdaptationService {
     const token = sessionPublicToken?.trim();
     if (!token) return null;
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  // Prova de posse real de uma AnalysisJob guest — jobId (cuid) sozinho
+  // identifica a análise, mas nunca autentica posse dela; só quem recebeu
+  // o guestPossessionToken cru na resposta de analyze-guest consegue
+  // passar aqui. Comparação em tempo constante via possessionTokenMatchesHash
+  // (mesmo padrão já usado para assinatura de webhook em
+  // verifyWebhookSignature) para não vazar o hash por diferença de timing.
+  // Job já convertido (claimed) também falha aqui deliberadamente — uma vez
+  // vinculado a um usuário, o token de posse guest deixa de valer como
+  // credencial (o dono passa a ser o userId, não mais o token).
+  async verifyGuestPossessionToken(
+    jobId: string,
+    rawToken: string,
+  ): Promise<boolean> {
+    if (!jobId || !rawToken) return false;
+
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+      select: {
+        ownerKind: true,
+        guestPossessionTokenHash: true,
+        convertedAt: true,
+      },
+    });
+
+    if (
+      !job ||
+      job.ownerKind !== "guest" ||
+      !job.guestPossessionTokenHash ||
+      job.convertedAt
+    ) {
+      return false;
+    }
+
+    return possessionTokenMatchesHash(rawToken, job.guestPossessionTokenHash);
   }
 
   private getSnapshotEnforcementReleaseDate() {

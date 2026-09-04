@@ -12,6 +12,11 @@ export function ProgressRing({
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const dash = (value / 100) * c;
+  // Tamanho do texto escala com o anel — hardcoded em text-lg/8.5px só
+  // coube confortavelmente no tamanho default (96px); em usos menores
+  // (ex.: 64px) o número quase encostava no traço do anel.
+  const valueFontSize = Math.max(11, Math.round(size * 0.2));
+  const labelFontSize = Math.max(7, Math.round(size * 0.1));
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
@@ -41,10 +46,16 @@ export function ProgressRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-lg font-semibold leading-none tracking-tight tabular-nums text-[#0a0a0a]">
+        <span
+          className="font-semibold leading-none tracking-tight tabular-nums text-[#0a0a0a]"
+          style={{ fontSize: valueFontSize }}
+        >
           {value}%
         </span>
-        <span className="mt-0.5 font-mono text-[8.5px] tracking-[0.06em] text-[#8a8a85]">
+        <span
+          className="mt-0.5 font-mono tracking-[0.06em] text-[#8a8a85]"
+          style={{ fontSize: labelFontSize }}
+        >
           COMPLETO
         </span>
       </div>

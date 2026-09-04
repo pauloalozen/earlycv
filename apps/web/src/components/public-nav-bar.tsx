@@ -8,8 +8,12 @@ import {
   LEARN_MENU_ITEMS,
 } from "@/components/app-header-user-menu";
 import type { AppInternalRole } from "@/lib/app-session";
-import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
+import {
+  canAccessJobsInGhostMode,
+  isJobsGhostModeEnabled,
+} from "@/lib/jobs-ghost-mode";
 import { Logo } from "./logo";
+import { MonitorNavBadge } from "./monitor-nav-badge";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -34,6 +38,14 @@ export function PublicNavBar({
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuItems = buildUserMenuItems({ userRole });
+  // Diferente do link do Radar (sempre some com ghost mode, sem exceção —
+  // Radar não tem bloqueio real de rota, é só cosmético): o Alerta tem
+  // bloqueio real via MonitorEntitlementService, e admin/superadmin
+  // precisam continuar vendo o link pra validar o fluxo em produção
+  // durante o ghost mode.
+  const hideAlertaLink =
+    (IS_JOBS_GHOST_MODE && !canAccessJobsInGhostMode(userRole)) ||
+    hideJobsLink;
   const bg = dark ? "#0a0a0a" : "transparent";
   const borderColor = dark ? "rgba(250,250,246,0.06)" : "rgba(0,0,0,0.04)";
   const linkColor = dark ? "#a0a098" : "#3a3a38";
@@ -164,6 +176,23 @@ export function PublicNavBar({
               Radar de Oportunidades
             </Link>
           )}
+          {hideAlertaLink || !userName ? null : (
+            <Link
+              href="/alerta-vaga-certa"
+              style={{
+                fontSize: 13,
+                color: linkColor,
+                fontWeight: 400,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              Alerta de Vaga Certa
+              <MonitorNavBadge enabled />
+            </Link>
+          )}
           <Link
             href="/blog"
             style={{
@@ -266,6 +295,21 @@ export function PublicNavBar({
             className="public-mob-nav-item"
           >
             Radar de Oportunidades
+          </Link>
+        )}
+        {hideAlertaLink || !userName ? null : (
+          <Link
+            href="/alerta-vaga-certa"
+            onClick={() => setIsMenuOpen(false)}
+            className="public-mob-nav-item"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            Alerta de Vaga Certa
+            <MonitorNavBadge enabled />
           </Link>
         )}
         <Link

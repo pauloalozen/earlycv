@@ -9,8 +9,8 @@ import { Test } from "@nestjs/testing";
 
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
+import { FakeEmailDeliveryService } from "../email/fake-email-delivery.service";
 import { PosthogIntegrationModule } from "../posthog-integration/posthog-integration.module";
-import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
 
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
