@@ -40,13 +40,13 @@ Typecheck limpo em `apps/api` e `apps/web`. Suítes rodadas e verdes: módulo Mo
 - Vercel (web, produção): `NEXT_PUBLIC_JOBS_GHOST_MODE=true` hoje.
 - Os dois precisam ficar sincronizados manualmente — não há fonte única entre as duas plataformas. O valor do **Railway** é quem decide o bloqueio real (rota/API/matching/e-mail); o da **Vercel** só decide se o link aparece no menu.
 
-## Pontos em aberto antes do merge/deploy (Paulo vai decidir com calma)
+## Pontos em aberto antes do merge/deploy
 
-1. **`/meu-perfil` também linka pro Alerta** (`hero-state.ts`, `page.tsx:489,718`) — já usa o padrão correto de gate (`isJobsGhostModeEnabled` + `canAccessJobsInGhostMode`), mas o Paulo levantou que precisa olhar esse fluxo com calma antes de decidir o rollout. Não foi alterado nesta entrega.
-2. **Hoje o acesso real ao Alerta já está aberto** (entitlement hardcoded liberando todo autenticado) — qualquer usuário que já tenha descoberto a URL direta (ex.: pelo CTA da landing, que não tinha gate) pode já ter usado o Alerta de verdade, inclusive configurado preferência de e-mail. Depois do deploy com `JOBS_GHOST_MODE=true`, esses usuários não-staff perdem acesso silenciosamente (comportamento correto, mas é uma mudança real pra quem já estava usando).
-   - **Pendente**: checar no banco de produção se existe algum `MonitorAlertPreference` de usuário não-staff hoje, antes do deploy — oferecido, ainda não executado.
-3. Branch **não mergeada em `develop`** — aguardando decisão do Paulo depois de resolver os pontos acima.
+1. ~~`/meu-perfil` também linka pro Alerta~~ — **resolvido** no commit `11612f5` (2026-09-03): card "Descoberta" some do grid quando o usuário não tem acesso em ghost mode.
+2. ~~Checar no banco de produção se existe `MonitorAlertPreference` de usuário não-staff~~ — **resolvido** (confirmado com o Paulo em 2026-09-04, fora do código).
+3. Valores finais das env vars — **decididos** (confirmado com o Paulo em 2026-09-04, fora do código).
+4. **Branch ainda não mergeada em `develop`** — Paulo está rodando testes finais manualmente (2026-09-04). Não mergear/deployar até ele pedir explicitamente.
 
 ## Onde continuar
 
-Retomar por aqui: revisar o ponto do `/meu-perfil`, rodar o levantamento do banco (item 2), decidir os valores finais das duas env vars, e então mergear `pré-lançamento-monitor` em `develop`.
+Aguardar o Paulo terminar os testes finais e pedir o merge de `pré-lançamento-monitor` em `develop` (e o deploy correspondente). Não tomar nenhuma ação de merge/deploy por conta própria.
