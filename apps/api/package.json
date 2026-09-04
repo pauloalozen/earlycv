@@ -18,6 +18,7 @@
     "templates:patch-docx-conditionals": "NODE_OPTIONS='--conditions=development' tsx src/scripts/patch-docx-template-conditionals.ts",
     "jobs:backfill-slugs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-job-slugs.ts",
     "talent:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-talent-profiles.ts",
+    "radar:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-radar-profiles.ts",
     "talent:enrich-ai": "NODE_OPTIONS='--conditions=development' tsx src/scripts/enrich-talent-profiles-ai.ts",
     "talent:reconstruct-history": "NODE_OPTIONS='--conditions=development' tsx src/scripts/reconstruct-talent-interaction-history.ts",
     "talent:metrics": "NODE_OPTIONS='--conditions=development' tsx src/scripts/talent-base-metrics.ts",
