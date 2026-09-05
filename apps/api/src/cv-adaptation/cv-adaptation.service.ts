@@ -307,6 +307,61 @@ export class CvAdaptationService {
       });
   }
 
+  // Fase 2G (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // item 2 do plano de fechamento): create()/claimGuest()/saveGuestPreview()
+  // nunca tinham sido tocados por nenhuma fase anterior (2A-2F) — auditados
+  // nesta fase e confirmados VIVOS (create() é o único morto — sem caller
+  // real no frontend, ver relatório da Fase 2G). Os três criam/promovem um
+  // Resume master automaticamente na primeira vez do usuário (ou por troca
+  // explícita via dto.saveAsMaster), então, pela regra de decisão do plano,
+  // precisam do mesmo desvio pro pipeline novo que resumes.service.ts#create
+  // já tem (Fase 2A) — SEMPRE ao lado de triggerMasterCvExtraction (legado),
+  // nunca substituindo-o, e sempre AWAITED antes da resposta HTTP (diferente
+  // de triggerMasterCvExtraction, que é fire-and-forget de propósito porque
+  // dispara a chamada de IA legada; aqui não há IA síncrona — só
+  // CvSource+CvSubmission+CvProcessingJob, seguro de esperar).
+  //
+  // Nunca lança para o chamador: falha aqui nunca pode quebrar a análise/
+  // claim/preview em si (mesma tolerância de resumes.service.ts#create).
+  private async enqueueCanonicalMasterProcessing(input: {
+    userId: string;
+    rawText: string | null | undefined;
+    masterIntent: "PROMOTE_IF_FIRST" | "PROMOTE_EXPLICIT";
+    file?: FileUpload;
+  }): Promise<void> {
+    if (
+      !isCvStructuredProfilePipelineEnabled() ||
+      !this.cvProcessingEntrypoint
+    ) {
+      return;
+    }
+
+    const text = input.rawText?.trim();
+    if (!text) return;
+
+    try {
+      await this.cvProcessingEntrypoint.enqueueFromUserText({
+        userId: input.userId,
+        text,
+        masterIntent: input.masterIntent,
+        submission: input.file
+          ? {
+              origin: "FILE_UPLOAD",
+              fileName: input.file.originalname,
+              mimeType: input.file.mimetype,
+              fileSizeBytes: input.file.size,
+            }
+          : { origin: "PASTED_TEXT" },
+      });
+    } catch (error) {
+      this.logger.error(
+        `[cv-processing] failed to enqueue canonical master processing for user ${input.userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   private async triggerJobApplicationHook(
     input: JobApplicationHookInput,
   ): Promise<void> {
@@ -425,6 +480,13 @@ export class CvAdaptationService {
           userId,
           resumeId: masterResume.id,
           rawText: masterCvText,
+          file,
+        });
+        await this.enqueueCanonicalMasterProcessing({
+          userId,
+          rawText: masterCvText,
+          masterIntent:
+            dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
           file,
         });
       }
@@ -791,6 +853,15 @@ export class CvAdaptationService {
         userId,
         resumeId: newMasterResumeId,
         rawText: dto.masterCvText,
+      });
+      // claimGuest só cria newMasterResumeId quando o usuário ainda não
+      // tinha nenhum master — sempre o primeiro CV, nunca uma substituição
+      // explícita (isso é feito por outro caminho, ex. resumes.service.ts
+      // #setPrimary).
+      await this.enqueueCanonicalMasterProcessing({
+        userId,
+        rawText: dto.masterCvText,
+        masterIntent: "PROMOTE_IF_FIRST",
       });
     }
 
@@ -3177,6 +3248,13 @@ export class CvAdaptationService {
           rawText: dto.masterCvText,
           file,
         });
+        await this.enqueueCanonicalMasterProcessing({
+          userId,
+          rawText: dto.masterCvText,
+          masterIntent:
+            dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
+          file,
+        });
       }
     } else if (existingMaster) {
       masterResumeId = existingMaster.id;
@@ -3208,6 +3286,14 @@ export class CvAdaptationService {
         userId,
         resumeId: created.id,
         rawText: dto.masterCvText,
+      });
+      // Sem arquivo e sem master existente — é sempre o primeiro CV do
+      // usuário (o branch dto.saveAsMaster de substituição explícita só
+      // existe no ramo com arquivo, acima).
+      await this.enqueueCanonicalMasterProcessing({
+        userId,
+        rawText: dto.masterCvText,
+        masterIntent: "PROMOTE_IF_FIRST",
       });
     }
 
