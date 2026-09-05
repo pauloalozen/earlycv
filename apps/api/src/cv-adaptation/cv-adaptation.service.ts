@@ -35,6 +35,7 @@ import {
   possessionTokenMatchesHash,
 } from "../common/guest-possession-token";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
+import { NoValidMasterCvForProfileAnalysisError } from "../cv-processing/cv-processing.errors";
 import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
 import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
 import { DatabaseService } from "../database/database.service";
@@ -1167,13 +1168,15 @@ export class CvAdaptationService {
   ): Promise<{ jobId: string; status: "pending" }> {
     // Fase 2C: liga o entrypoint autenticado ao pipeline canônico de CV
     // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
-    // inputMode "profile" fica de fora desta sub-fase (não deriva de um
-    // CvSource/arquivo real — é composto a partir do UserProfile já
-    // salvo) — cai sempre no caminho legado abaixo, com ou sem a flag,
-    // pendência documentada no relatório da Fase 2C. Com a flag desligada
-    // (default), esta condição nunca é verdadeira e o resto do método
-    // roda exatamente como antes, bit a bit.
-    if (isCvStructuredProfilePipelineEnabled() && dto.inputMode !== "profile") {
+    // Fase 2C.1 fecha a lacuna que a 2C deixou: inputMode "profile" agora
+    // também é desviado pro pipeline novo — em vez de compor o CV a partir
+    // do UserProfile já salvo (reconstrução ad hoc, nunca uma extração
+    // formal), localiza/materializa o Master formal (CvMasterDesignation
+    // ativa, ou Resume.isMaster legado) e analisa a partir do
+    // CvStructuredProfile.canonicalJson correspondente. Com a flag
+    // desligada (default), esta condição nunca é verdadeira e o resto do
+    // método roda exatamente como antes, bit a bit.
+    if (isCvStructuredProfilePipelineEnabled()) {
       return this.startAuthenticatedAnalysisJobCanonical(
         userId,
         dto,
@@ -1288,8 +1291,14 @@ export class CvAdaptationService {
 
     // Resolução de conteúdo — só extração/validação LOCAL (parsing de
     // arquivo, normalização de texto), nunca chamada de IA. `cvText: null`
-    // significa "sem conteúdo novo": reusa o Master atual já processado
-    // (cenário 1 do escopo da Fase 2C).
+    // significa "sem conteúdo novo": reusa/materializa o Master formal
+    // atual (cenários 1-6 da Fase 2C.1, ver resolveActiveMasterCvProcessingJobId).
+    //
+    // inputMode "profile" (Fase 2C.1) NUNCA deriva cvText de
+    // file/masterCvText/masterResumeId, mesmo que algum desses tenha sido
+    // enviado por engano no mesmo payload — o modo perfil sempre significa
+    // "use o Master atual", nunca "aqui está um CV novo" (mesma regra já
+    // aplicada por create() pra este inputMode).
     let cvText: string | null = null;
     let submission:
       | {
@@ -1301,7 +1310,10 @@ export class CvAdaptationService {
       | { origin: "PASTED_TEXT" }
       | null = null;
 
-    if (dto.masterCvText?.trim()) {
+    if (dto.inputMode === "profile") {
+      // cvText permanece null — resolvido abaixo via
+      // resolveActiveMasterCvProcessingJobId.
+    } else if (dto.masterCvText?.trim()) {
       cvText = this.validateCvTextInput(
         this.normalizeSnapshotText(dto.masterCvText),
       );
@@ -1361,30 +1373,18 @@ export class CvAdaptationService {
     let cvSubmissionId: string | null = null;
 
     if (cvText === null) {
-      // Cenário 1: reusar o Master atual já processado — nunca reextrai.
-      const active =
-        await this.cvMasterPromotionForAnalysis.getActiveDesignation({
-          ownerType: "USER",
-          userId,
-        });
-      if (!active) {
-        throw new BadRequestException(
-          "Nenhum CV Base encontrado. Envie um arquivo ou cole o texto do seu currículo.",
-        );
+      try {
+        cvProcessingJobId =
+          await this.resolveActiveMasterCvProcessingJobId(userId);
+      } catch (error) {
+        if (error instanceof NoValidMasterCvForProfileAnalysisError) {
+          // Mapeamento erro de domínio -> erro HTTP no boundary (mesmo
+          // padrão do resto do serviço: cv-processing.errors.ts nunca
+          // depende de @nestjs/common, quem chama traduz).
+          throw new BadRequestException(error.message);
+        }
+        throw error;
       }
-      const existingJob = await this.database.cvProcessingJob.findFirst({
-        orderBy: { finishedAt: "desc" },
-        where: {
-          cvStructuredProfileId: active.cvStructuredProfileId,
-          status: "READY",
-        },
-      });
-      if (!existingJob) {
-        throw new BadRequestException(
-          "O CV Base ainda está sendo processado. Tente novamente em instantes.",
-        );
-      }
-      cvProcessingJobId = existingJob.id;
     } else {
       const masterIntent = await this.resolveCanonicalMasterIntent(
         userId,
@@ -1427,6 +1427,86 @@ export class CvAdaptationService {
         userId,
       });
     return active ? "NONE" : "PROMOTE_IF_FIRST";
+  }
+
+  // Fase 2C.1 — fecha a lacuna deixada pela 2C: localiza (ou materializa
+  // just-in-time) o Master formal do usuário pra reuso em análise sem
+  // conteúdo novo (inputMode "profile", ou nenhum file/masterCvText/
+  // masterResumeId informado). Nunca lê/reconstrói a partir de UserProfile
+  // — UserProfile é só projeção (plano, seções 1 e 6). Três desfechos:
+  //
+  //  1. Existe CvMasterDesignation ativa (supersededAt IS NULL) — é sempre
+  //     criada pelo mesmo processamento que já deixou seu CvStructuredProfile
+  //     READY (CvMasterPromotionService#promoteAndProject roda DEPOIS da
+  //     extração no CvProcessingWorker), então o CvProcessingJob READY
+  //     correspondente sempre existe — reusa sem nenhuma IA.
+  //  2/3/4. Sem designação ativa, mas existe Resume.isMaster=true (Master
+  //     "legado" — nunca passou pelo pipeline novo, ou upload novo ainda em
+  //     voo): delega a CvProcessingEntrypointService#enqueueFromUserText, que:
+  //       - reaproveita (dedup por hash) um CvSource já existente pra este
+  //         conteúdo, nunca duplica escrita no storage;
+  //       - reaproveita (dedup por status) um CvProcessingJob
+  //         PENDING/PROCESSING já em voo pro mesmo cvSourceId — cobre o
+  //         caso 2 (upload novo, extração ainda em andamento) de graça, sem
+  //         lógica extra aqui;
+  //       - só cria um CvProcessingJob genuinamente novo quando nenhum dos
+  //         dois acima existe — o worker (cv-processing.worker.ts#
+  //         tryReuseLegacyExtraction) decide, sem IA no request: reusa uma
+  //         MasterCvCanonicalExtraction legada (status succeeded, mesmo
+  //         inputHash) se existir (caso 3), senão chama IA de verdade numa
+  //         passagem de cron separada (caso 4).
+  //  5/6. Nem designação ativa nem Resume.isMaster com texto — erro de
+  //     domínio explícito (NoValidMasterCvForProfileAnalysisError), nunca
+  //     uma reconstrução a partir de UserProfile.
+  private async resolveActiveMasterCvProcessingJobId(
+    userId: string,
+  ): Promise<string> {
+    if (!this.cvProcessingEntrypoint || !this.cvMasterPromotionForAnalysis) {
+      throw new Error(
+        "CV_STRUCTURED_PROFILE_PIPELINE_ENABLED está ligado, mas " +
+          "CvProcessingEntrypointService/CvMasterPromotionService não foram " +
+          "injetados em CvAdaptationService — verifique cv-adaptation.module.ts.",
+      );
+    }
+
+    const active = await this.cvMasterPromotionForAnalysis.getActiveDesignation(
+      { ownerType: "USER", userId },
+    );
+
+    if (active) {
+      const existingJob = await this.database.cvProcessingJob.findFirst({
+        orderBy: { finishedAt: "desc" },
+        where: {
+          cvStructuredProfileId: active.cvStructuredProfileId,
+          status: "READY",
+        },
+      });
+      if (!existingJob) {
+        // Defensivo — não deveria acontecer (ver comentário do método),
+        // mas nunca finge sucesso: trata como "ainda processando".
+        throw new BadRequestException(
+          "O CV Base ainda está sendo processado. Tente novamente em instantes.",
+        );
+      }
+      return existingJob.id;
+    }
+
+    const masterResume = await this.database.resume.findFirst({
+      where: { userId, isMaster: true },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    if (!masterResume?.rawText?.trim()) {
+      throw new NoValidMasterCvForProfileAnalysisError(userId);
+    }
+
+    const enqueued = await this.cvProcessingEntrypoint.enqueueFromUserText({
+      userId,
+      text: this.normalizeSnapshotText(masterResume.rawText),
+      masterIntent: "PROMOTE_IF_FIRST",
+      submission: { origin: "PASTED_TEXT" },
+    });
+    return enqueued.job.id;
   }
 
   // Chamado exclusivamente por CvAnalysisWorker (cv-analysis.worker.ts),

@@ -12,12 +12,19 @@
 // vaza para outros specs (confirmado rodando
 // cv-adaptation.service.spec.ts — 108 testes legados — sem esta flag, todos
 // verdes).
+//
+// Fase 2C.1 (testes "2C.1) ...", ao final do arquivo): fecha a lacuna que a
+// 2C deixou — inputMode "profile" (análise sem conteúdo novo) agora também
+// passa pelo pipeline canônico, localizando/materializando o Master formal
+// (CvMasterDesignation ativa, ou Resume.isMaster legado) em vez de
+// reconstruir o CV a partir de UserProfile.
 process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "true";
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 
+import { BadRequestException } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
 import { CvProcessingWorker } from "../cv-processing/cv-processing.worker";
@@ -1260,4 +1267,559 @@ test("17) processo morto após a resposta HTTP — retomado por instâncias nova
   assert.equal(final.status, "succeeded");
   assert.equal(extractCalls, 1);
   assert.equal(protectedAnalyze.computeCalls, 1);
+});
+
+// ===========================================================================
+// Fase 2C.1 — inputMode "profile" desviado pro pipeline canônico (fecha a
+// lacuna deixada pela 2C). Casos obrigatórios do relatório da 2C.1.
+// ===========================================================================
+
+test("2C.1-1) inputMode profile reusa Master novo (CvStructuredProfile READY) sem nova extração", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    return fakeCanonicalOutput("Perfil Novo");
+  }, storage);
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  const setup = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterCvText: buildCvText("Perfil Novo", "produto"),
+  });
+  const setupJob = await database.analysisJob.findUniqueOrThrow({
+    where: { id: setup.jobId },
+  });
+  await processOneCvJob(cvWorker, setupJob.cvProcessingJobId as string);
+  assert.equal(extractCalls, 1);
+
+  const profileAnalysis = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    inputMode: "profile",
+  });
+  const profileJobRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: profileAnalysis.jobId },
+  });
+  // Mesmo CvProcessingJob READY reaproveitado — nenhum novo criado.
+  assert.equal(profileJobRow.cvProcessingJobId, setupJob.cvProcessingJobId);
+  assert.equal(extractCalls, 1);
+
+  const analysisWorker = buildAnalysisWorker(service);
+  const finalRow = await processOneAnalysisJob(
+    analysisWorker,
+    profileAnalysis.jobId,
+  );
+  assert.equal(finalRow.status, "succeeded");
+  assert.ok(finalRow.cvStructuredProfileId);
+  const structuredProfile =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: finalRow.cvStructuredProfileId as string },
+    });
+  assert.equal(structuredProfile.status, "READY");
+});
+
+test("2C.1-2) inputMode profile com Master novo ainda PROCESSING — análise fica pendente, dependente do mesmo job, sem duplicar", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const text = buildCvText("Ainda Processando", "operacoes");
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  // Simula resumes.service.ts#create com a flag ligada: Resume.isMaster já
+  // true, CvProcessingJob enfileirado (PROMOTE_IF_FIRST), mas nenhum worker
+  // rodou ainda — nenhuma CvMasterDesignation existe.
+  const resume = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master em voo",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+  const enqueued = await entrypoint.enqueueFromUserText({
+    userId: user.id,
+    text,
+    masterIntent: "PROMOTE_IF_FIRST",
+    submission: { origin: "PASTED_TEXT" },
+  });
+  assert.equal(enqueued.job.status, "PENDING");
+
+  const active = await masterPromotion.getActiveDesignation({
+    ownerType: "USER",
+    userId: user.id,
+  });
+  assert.equal(active, null);
+
+  const profileAnalysis = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    inputMode: "profile",
+  });
+  const profileJobRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: profileAnalysis.jobId },
+  });
+  // Dependente do MESMO CvProcessingJob em voo — nenhum novo criado (dedup
+  // por cvSourceId em CvProcessingJobService#enqueue).
+  assert.equal(profileJobRow.cvProcessingJobId, enqueued.job.id);
+  assert.equal(profileJobRow.status, "pending");
+
+  const pendingJobsForSource = await database.cvProcessingJob.count({
+    where: { cvSourceId: enqueued.job.cvSourceId },
+  });
+  assert.equal(pendingJobsForSource, 1);
+  assert.ok(resume.id); // referenciado só pra documentar o cenário
+});
+
+test("2C.1-3) Master legado com MasterCvCanonicalExtraction succeeded — materializa sem nova chamada de IA", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    return fakeCanonicalOutput("NUNCA deveria ser chamado");
+  }, storage);
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  const text = buildCvText("Master Legado Extraido", "financeiro");
+  const resume = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master legado",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+  const inputHash = createHash("sha256").update(text).digest("hex");
+  await prisma.masterCvCanonicalExtraction.create({
+    data: {
+      userId: user.id,
+      resumeId: resume.id,
+      inputHash,
+      status: "succeeded",
+      canonicalJson: fakeCanonicalOutput("Master Legado Extraido")
+        .canonicalProfile as never,
+      coverageJson: fakeCanonicalOutput("Master Legado Extraido")
+        .extractionCoverage as never,
+      confidenceJson: {} as never,
+      evidenceJson: {} as never,
+      finishedAt: new Date(),
+    },
+  });
+
+  const profileAnalysis = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    inputMode: "profile",
+  });
+  const profileJobRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: profileAnalysis.jobId },
+  });
+  assert.ok(profileJobRow.cvProcessingJobId);
+  const cvProcessingJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: profileJobRow.cvProcessingJobId as string },
+  });
+  assert.equal(cvProcessingJob.status, "PENDING"); // ainda não processado
+
+  await processOneCvJob(cvWorker, cvProcessingJob.id);
+  assert.equal(extractCalls, 0); // reusou a extração legada, sem IA
+
+  const finalCvJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: cvProcessingJob.id },
+  });
+  assert.equal(finalCvJob.status, "READY");
+  assert.ok(finalCvJob.masterDesignationId); // promoveu a Master formal
+
+  const structuredProfile =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: finalCvJob.cvStructuredProfileId as string },
+    });
+  assert.equal(structuredProfile.status, "READY");
+  assert.deepEqual(
+    (structuredProfile.canonicalJson as { fullName?: string })?.fullName,
+    "Master Legado Extraido",
+  );
+
+  const analysisWorker = buildAnalysisWorker(service);
+  const finalAnalysis = await processOneAnalysisJob(
+    analysisWorker,
+    profileAnalysis.jobId,
+  );
+  assert.equal(finalAnalysis.status, "succeeded");
+  assert.equal(finalAnalysis.cvStructuredProfileId, structuredProfile.id);
+});
+
+test("2C.1-4) Master legado só com Resume.rawText (sem nenhuma extração) — cria CvProcessingJob real, com IA no worker", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    return fakeCanonicalOutput("Master Legado Sem Extracao");
+  }, storage);
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  const text = buildCvText("Master Legado Sem Extracao", "vendas");
+  await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master legado sem extração",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+
+  const profileAnalysis = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    inputMode: "profile",
+  });
+  const profileJobRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: profileAnalysis.jobId },
+  });
+  const cvProcessingJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: profileJobRow.cvProcessingJobId as string },
+  });
+  assert.equal(cvProcessingJob.status, "PENDING");
+
+  await processOneCvJob(cvWorker, cvProcessingJob.id);
+  assert.equal(extractCalls, 1); // nenhuma extração legada pra reusar — IA real
+
+  const finalCvJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: cvProcessingJob.id },
+  });
+  assert.equal(finalCvJob.status, "READY");
+  assert.ok(finalCvJob.masterDesignationId);
+});
+
+test("2C.1-5) UserProfile com dados, mas nenhum Master válido — erro de domínio explícito, nunca reconstrução ad hoc", async () => {
+  const user = await createUser();
+  await prisma.userProfile.update({
+    where: { userId: user.id },
+    data: {
+      fullName: "Alguém Com Perfil Preenchido",
+      headline: "Cargo qualquer",
+      professionalSummary: "Resumo qualquer preenchido diretamente no perfil.",
+    },
+  });
+
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint: Pick<CvProcessingEntrypointService, "enqueueFromUserText"> =
+    {
+      enqueueFromUserText: async () => {
+        throw new Error("não deveria materializar nada sem Master válido");
+      },
+    };
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  await assert.rejects(
+    () =>
+      service.startAuthenticatedAnalysisJob(user.id, {
+        jobDescriptionText: JOB_DESCRIPTION,
+        inputMode: "profile",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(
+        (error as Error).message,
+        /Nenhum CV Master válido encontrado/,
+      );
+      return true;
+    },
+  );
+
+  const analysisJobsForUser = await database.analysisJob.count({
+    where: { userId: user.id },
+  });
+  assert.equal(analysisJobsForUser, 0); // nunca cria job nenhum sobre dado inválido
+});
+
+test("2C.1-6) Master apagado depois de já ter sido usado — UserProfile fica com dado antigo, mas não é tratado como válido", async () => {
+  const user = await createUser();
+  const text = buildCvText("Master Que Sera Apagado", "logistica");
+  const resume = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master que será apagado",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+
+  // Simula "já foi usado": UserProfile projetado a partir dele em algum
+  // momento (fluxo legado de sync), sem nenhuma CvMasterDesignation formal
+  // (este Resume nunca passou pelo pipeline novo).
+  await prisma.userProfile.update({
+    where: { userId: user.id },
+    data: {
+      fullName: "Master Que Sera Apagado",
+      headline: "Analista de Logística",
+      professionalSummary: "Projeção antiga do Master, agora removido.",
+    },
+  });
+
+  await prisma.resume.delete({ where: { id: resume.id } });
+
+  const activeAfterDelete = await masterPromotion.getActiveDesignation({
+    ownerType: "USER",
+    userId: user.id,
+  });
+  assert.equal(activeAfterDelete, null); // nunca existiu designação formal
+
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint: Pick<CvProcessingEntrypointService, "enqueueFromUserText"> =
+    {
+      enqueueFromUserText: async () => {
+        throw new Error("não deveria materializar nada — Master foi apagado");
+      },
+    };
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  await assert.rejects(
+    () =>
+      service.startAuthenticatedAnalysisJob(user.id, {
+        jobDescriptionText: JOB_DESCRIPTION,
+        inputMode: "profile",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(
+        (error as Error).message,
+        /Nenhum CV Master válido encontrado/,
+      );
+      return true;
+    },
+  );
+});
+
+test("2C.1-7) duas análises inputMode profile concorrentes sobre o mesmo Master legado — materializa/extrai só uma vez", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    return fakeCanonicalOutput("Concorrente Legado");
+  }, storage);
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  const text = buildCvText("Concorrente Legado", "atendimento");
+  await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master legado concorrente",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+
+  const [first, second] = await Promise.all([
+    service.startAuthenticatedAnalysisJob(user.id, {
+      jobDescriptionText: JOB_DESCRIPTION,
+      inputMode: "profile",
+    }),
+    service.startAuthenticatedAnalysisJob(user.id, {
+      jobDescriptionText: JOB_DESCRIPTION,
+      inputMode: "profile",
+    }),
+  ]);
+
+  const firstRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: first.jobId },
+  });
+  const secondRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: second.jobId },
+  });
+  const firstCvJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: firstRow.cvProcessingJobId as string },
+  });
+  const secondCvJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: secondRow.cvProcessingJobId as string },
+  });
+  assert.equal(firstCvJob.cvSourceId, secondCvJob.cvSourceId);
+
+  const pendingForSource = await database.cvProcessingJob.findMany({
+    where: { cvSourceId: firstCvJob.cvSourceId, status: "PENDING" },
+  });
+  for (const job of pendingForSource) {
+    await processOneCvJob(cvWorker, job.id);
+  }
+
+  assert.equal(extractCalls, 1); // nenhuma extração duplicada
+  const designations = await prisma.cvMasterDesignation.findMany({
+    where: { userId: user.id, supersededAt: null },
+  });
+  assert.equal(designations.length, 1);
+});
+
+test("2C.1-8) retry de AnalysisJob (inputMode profile) não reprocessa CvProcessingJob nem repete extração", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    return fakeCanonicalOutput("Retry Profile");
+  }, storage);
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+  const analysisWorker = buildAnalysisWorker(service);
+
+  const text = buildCvText("Retry Profile", "engenharia");
+  await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master retry",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+
+  const first = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    inputMode: "profile",
+  });
+  const firstRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: first.jobId },
+  });
+  await processOneCvJob(cvWorker, firstRow.cvProcessingJobId as string);
+  assert.equal(extractCalls, 1);
+
+  // Falha simulada na análise em si (extração/Master já READY) — mesmo
+  // padrão do teste 12 genérico, reaplicado aqui pro caminho profile.
+  protectedAnalyze.setFailNextCompute(true);
+  const failed = await processOneAnalysisJob(analysisWorker, first.jobId);
+  assert.equal(failed.status, "failed");
+
+  // Retry: reseta só o AnalysisJob, nunca cria outro CvProcessingJob nem
+  // chama a extração de novo.
+  await database.analysisJob.update({
+    where: { id: first.jobId },
+    data: {
+      status: "pending",
+      startedAt: null,
+      finishedAt: null,
+      lastError: null,
+    },
+  });
+  const retried = await processOneAnalysisJob(analysisWorker, first.jobId);
+  assert.equal(retried.status, "succeeded");
+  assert.equal(extractCalls, 1); // nenhuma nova extração no retry
+
+  const cvJobsForUser = await database.cvProcessingJob.count({
+    where: {
+      cvSource: { userId: user.id },
+    },
+  });
+  assert.equal(cvJobsForUser, 1); // nenhum CvProcessingJob duplicado pelo retry
+});
+
+test("2C.1-9) AnalysisJob (inputMode profile) succeeded sempre referencia um CvStructuredProfile READY", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Invariante Profile"),
+    storage,
+  );
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+  const analysisWorker = buildAnalysisWorker(service);
+
+  const text = buildCvText("Invariante Profile", "dados");
+  await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master invariante",
+      isMaster: true,
+      rawText: text,
+    },
+  });
+
+  const started = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    inputMode: "profile",
+  });
+  const row = await database.analysisJob.findUniqueOrThrow({
+    where: { id: started.jobId },
+  });
+  await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
+
+  const finalRow = await processOneAnalysisJob(analysisWorker, started.jobId);
+  assert.equal(finalRow.status, "succeeded");
+  assert.ok(finalRow.cvStructuredProfileId);
+  const structuredProfile =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: finalRow.cvStructuredProfileId as string },
+    });
+  assert.equal(structuredProfile.status, "READY");
 });

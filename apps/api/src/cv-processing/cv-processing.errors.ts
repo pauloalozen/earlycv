@@ -59,3 +59,31 @@ export class CvSourceTextObjectMissingError extends Error {
     this.name = "CvSourceTextObjectMissingError";
   }
 }
+
+// NoValidMasterCvForProfileAnalysisError: Fase 2C.1 (fecha a lacuna deixada
+// pela 2C) — análise autenticada com inputMode "profile" (ou, de modo
+// geral, qualquer chamada sem conteúdo novo de CV) precisa de um Master
+// formal para reusar/materializar. "Formal" aqui significa: uma
+// CvMasterDesignation ativa (supersededAt IS NULL), OU, na ausência dela,
+// um Resume.isMaster=true com rawText não vazio (Master "legado", ainda
+// não materializado no pipeline novo — Fase 2C.1 cria o CvProcessingJob
+// just-in-time para ele). Nenhum desses dois existindo, o método lança
+// este erro em vez de reconstruir um CV a partir de UserProfile — mesmo
+// que UserProfile tenha dados projetados de um Master antigo já apagado
+// (a projeção nunca é tratada como origem/fonte canônica, plano seção 1/6).
+// Erro de domínio puro (sem dependência de @nestjs/common), seguindo o
+// padrão já usado neste arquivo — o chamador HTTP (cv-adaptation.service.ts)
+// mapeia para BadRequestException no boundary.
+export class NoValidMasterCvForProfileAnalysisError extends Error {
+  constructor(readonly userId: string) {
+    super(
+      "Nenhum CV Master válido encontrado para analisar por perfil: não há " +
+        "CvMasterDesignation ativa nem Resume marcado como master com texto " +
+        "para este usuário. Envie um novo CV (arquivo ou texto) para " +
+        "prosseguir — o perfil salvo (UserProfile) nunca é usado como CV " +
+        "reconstruível, mesmo que contenha dados de um Master antigo já " +
+        "removido.",
+    );
+    this.name = "NoValidMasterCvForProfileAnalysisError";
+  }
+}

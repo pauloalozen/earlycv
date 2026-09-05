@@ -13,10 +13,11 @@ import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import type { CvProcessingJob } from "@prisma/client";
+import type { CvProcessingJob, CvSource } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
+import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
 import { StorageService } from "../storage/storage.service";
 import { CvMasterPromotionService } from "./cv-master-promotion.service";
 import {
@@ -99,9 +100,12 @@ export class CvProcessingWorker {
       });
       const text = await this.readSourceText(cvSource);
 
-      // 1. Extração — chamada de IA fora de qualquer transação.
+      // 1. Extração — chamada de IA fora de qualquer transação. Antes de
+      // chamar IA, verifica se já existe uma extração legada equivalente
+      // (Fase 2C.1 — materialização just-in-time de Master legado, plano
+      // seção 13 item 1, aplicada sob demanda em vez de em lote).
       const structuredProfile = await this.ensureStructuredProfile(
-        job.cvSourceId,
+        cvSource,
         text,
       );
 
@@ -177,7 +181,8 @@ export class CvProcessingWorker {
     }
   }
 
-  private async ensureStructuredProfile(cvSourceId: string, text: string) {
+  private async ensureStructuredProfile(cvSource: CvSource, text: string) {
+    const cvSourceId = cvSource.id;
     const existingReady = await this.database.cvStructuredProfile.findUnique({
       where: {
         cvSourceId_extractorVersion_schemaVersion: {
@@ -191,7 +196,9 @@ export class CvProcessingWorker {
       return existingReady;
     }
 
-    const output = await this.extractionClient.extract({ text });
+    const output =
+      (await this.tryReuseLegacyExtraction(cvSource)) ??
+      (await this.extractionClient.extract({ text }));
 
     return this.database.cvStructuredProfile.upsert({
       where: {
@@ -226,6 +233,58 @@ export class CvProcessingWorker {
         attempts: { increment: 1 },
       },
     });
+  }
+
+  // Fase 2C.1 — reuso de extração legada sem nova chamada de IA (plano,
+  // seção 5/13 item 1, aplicado just-in-time em vez de em lote). Só se
+  // aplica a fontes de USUÁRIO: MasterCvCanonicalExtraction não existe para
+  // guest. O casamento é por (userId, inputHash) — inputHash da extração
+  // legada é sha256 do texto bruto exato usado naquela extração
+  // (master-cv-canonical-extraction.service.ts#enqueueFromMasterResumeUpload),
+  // exatamente a mesma função usada para CvSource.textSha256
+  // (cv-processing-entrypoint.service.ts) — mesmo texto byte a byte produz
+  // o mesmo hash nos dois lados, então o casamento nunca reusa conteúdo
+  // divergente/desatualizado. `status: "succeeded"` garante que
+  // canonicalJson/coverageJson/confidenceJson/evidenceJson estão
+  // preenchidos (o worker legado só marca "succeeded" depois de persistir
+  // os quatro). Se por algum motivo algum vier nulo mesmo assim (dado
+  // corrompido/parcial), cai de volta pra extração real via IA em vez de
+  // gravar um CvStructuredProfile READY incompleto.
+  private async tryReuseLegacyExtraction(
+    cvSource: CvSource,
+  ): Promise<MasterCvCanonicalExtractionOutput | null> {
+    if (cvSource.ownerType !== "USER" || !cvSource.userId) {
+      return null;
+    }
+
+    const legacy = await this.database.masterCvCanonicalExtraction.findFirst({
+      where: {
+        userId: cvSource.userId,
+        inputHash: cvSource.textSha256,
+        status: "succeeded",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (
+      !legacy?.canonicalJson ||
+      !legacy.coverageJson ||
+      !legacy.confidenceJson ||
+      !legacy.evidenceJson
+    ) {
+      return null;
+    }
+
+    this.logger.log(
+      `cv processing job reusing legacy MasterCvCanonicalExtraction ${legacy.id} for cvSource ${cvSource.id} — no AI call`,
+    );
+
+    return {
+      canonicalProfile: legacy.canonicalJson,
+      extractionCoverage: legacy.coverageJson,
+      confidence: legacy.confidenceJson,
+      evidence: legacy.evidenceJson,
+    } as unknown as MasterCvCanonicalExtractionOutput;
   }
 
   private resolveOwner(cvSource: {
