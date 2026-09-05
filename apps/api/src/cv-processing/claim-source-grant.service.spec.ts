@@ -168,10 +168,19 @@ async function enqueueGuestJob(
 // reverifica posse, então os testes aqui simulam o estado que
 // cv-adaptation.service#claimGuestAnalysisJob já teria deixado ANTES de
 // chamar claim().
+// cvStructuredProfileId obrigatório aqui a partir da Fase 2F: a trigger
+// trg_analysis_job_succeeded_requires_ready_profile (migration
+// 20260905131500) passou a exigir, para toda linha com cvProcessingJobId
+// preenchido, que succeeded venha acompanhado de um cvStructuredProfileId
+// apontando pra um CvStructuredProfile READY — exatamente o que
+// cv-analysis.worker.ts#processReadyJob sempre grava na vida real. Os
+// chamadores passam readyJob.cvStructuredProfileId (do CvProcessingJob já
+// processado por processOne()), nunca um valor sintético.
 async function createClaimedAnalysisJob(
   userId: string,
   cvProcessingJobId: string,
   cvSubmissionId: string,
+  cvStructuredProfileId: string,
 ) {
   return prisma.analysisJob.create({
     data: {
@@ -180,6 +189,7 @@ async function createClaimedAnalysisJob(
       userId,
       cvProcessingJobId,
       cvSubmissionId,
+      cvStructuredProfileId,
       jobDescriptionText: "Vaga de teste para claim granular.",
     },
   });
@@ -203,6 +213,7 @@ test("claim sem Master existente do usuário: fonte do guest vira Master (design
     user.id,
     readyJob.id,
     cvSubmission.id,
+    readyJob.cvStructuredProfileId as string,
   );
 
   const result = await claimService.claim({
@@ -315,6 +326,7 @@ test("claim COM Master já existente do usuário: Master do usuário é preserva
     user.id,
     readyJob.id,
     cvSubmission.id,
+    readyJob.cvStructuredProfileId as string,
   );
 
   const result = await claimService.claim({
@@ -369,6 +381,7 @@ test("claim chamado duas vezes: segunda chamada é no-op, não duplica ClaimSour
     user.id,
     readyJob.id,
     cvSubmission.id,
+    readyJob.cvStructuredProfileId as string,
   );
 
   const first = await claimService.claim({
@@ -451,6 +464,7 @@ test("colisão de hash: usuário já tem CvSource próprio com o mesmo conteúdo
     user.id,
     readyJob.id,
     cvSubmission.id,
+    readyJob.cvStructuredProfileId as string,
   );
 
   const result = await claimService.claim({
@@ -533,6 +547,7 @@ test("claim completo (todas as fontes do TalentSubject cobertas por grants) fund
     user.id,
     readySecond.id,
     second.cvSubmission.id,
+    readySecond.cvStructuredProfileId as string,
   );
   const partial = await claimService.claim({
     userId: user.id,
@@ -571,6 +586,7 @@ test("claim completo (todas as fontes do TalentSubject cobertas por grants) fund
     user.id,
     readyFirst.id,
     first.cvSubmission.id,
+    readyFirst.cvStructuredProfileId as string,
   );
   const full = await claimService.claim({
     userId: user.id,
@@ -626,6 +642,7 @@ test("claim falha no meio: nada fica persistido — nem o grant, nem a resoluç�
     user.id,
     readyJob.id,
     cvSubmission.id,
+    readyJob.cvStructuredProfileId as string,
   );
 
   await assert.rejects(() =>

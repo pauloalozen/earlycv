@@ -45,12 +45,23 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
   // (claimGuestAnalysisJob) o usa condicionalmente (flag ligada + AnalysisJob
   // com cvProcessingJobId) pra rodar o claim granular por fonte, sem duplicar
   // a lógica de verificação de token/ownership do claim legado.
+  // CvUserProfileSyncService exportado a partir da correção da Fase 2F: já
+  // era injetado diretamente (não @Optional) por CvAnalysisWorker
+  // (cv-adaptation/cv-analysis.worker.ts, criado na Fase 2C) sem estar na
+  // lista de exports — bug de DI real que quebrava o boot de QUALQUER teste
+  // (e, potencialmente, do processo real) que instanciasse CvAdaptationModule,
+  // já que CvAnalysisWorker é um provider sempre instanciado ali (não
+  // condicionado à flag). Achado ao rodar a suíte completa do módulo nesta
+  // fase — não é um problema pré-existente isolado a um único
+  // e2e-spec (ver nota no commit da Fase 2E, que citava só
+  // guest-auth-gate-rollback.e2e-spec.ts).
   exports: [
     CvProcessingEntrypointService,
     CvProcessingJobService,
     CvMasterPromotionService,
     TalentSubjectService,
     ClaimSourceGrantService,
+    CvUserProfileSyncService,
   ],
 })
 export class CvProcessingModule {}

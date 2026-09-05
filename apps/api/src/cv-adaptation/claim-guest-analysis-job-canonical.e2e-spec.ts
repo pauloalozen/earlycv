@@ -103,6 +103,7 @@ async function createSucceededGuestAnalysisJob(input: {
   snapshotId: string;
   cvProcessingJobId?: string;
   cvSubmissionId?: string;
+  cvStructuredProfileId?: string;
 }) {
   return prisma.analysisJob.create({
     data: {
@@ -119,6 +120,11 @@ async function createSucceededGuestAnalysisJob(input: {
       companyName: "Acme",
       cvProcessingJobId: input.cvProcessingJobId ?? null,
       cvSubmissionId: input.cvSubmissionId ?? null,
+      // Obrigatório a partir da Fase 2F quando cvProcessingJobId está
+      // preenchido — trigger trg_analysis_job_succeeded_requires_ready_profile
+      // (migration 20260905131500) exige um CvStructuredProfile READY por
+      // trás de todo AnalysisJob succeeded que passou pelo pipeline novo.
+      cvStructuredProfileId: input.cvStructuredProfileId ?? null,
     },
   });
 }
@@ -162,12 +168,25 @@ test("flag ligada + AnalysisJob COM cvProcessingJobId: roda o claim granular nov
       status: "PENDING",
     },
   });
+  const structuredProfile = await prisma.cvStructuredProfile.create({
+    data: {
+      cvSourceId: cvSource.id,
+      extractorVersion: "v1",
+      schemaVersion: "v1",
+      status: "READY",
+      canonicalJson: {},
+      coverageJson: {},
+      confidenceJson: {},
+      evidenceJson: {},
+    },
+  });
 
   const job = await createSucceededGuestAnalysisJob({
     userId: user.id,
     snapshotId: snapshot.id,
     cvProcessingJobId: cvProcessingJob.id,
     cvSubmissionId: cvSubmission.id,
+    cvStructuredProfileId: structuredProfile.id,
   });
 
   const spy = new ClaimSourceGrantSpy();

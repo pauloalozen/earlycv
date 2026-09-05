@@ -83,6 +83,44 @@ test("enqueue: reaproveita job PENDING/PROCESSING existente pro mesmo cvSourceId
   assert.equal(first.id, second.id);
 });
 
+test("enqueue: duas chamadas VERDADEIRAMENTE concorrentes (sem nenhum job prévio) pro mesmo cvSourceId nunca criam dois CvProcessingJob (pendência da Fase 2A/2B, resolvida na Fase 2F via pg_advisory_xact_lock)", async () => {
+  const user = await createUser();
+  const { cvSource, cvSubmission } = await createCvSourceAndSubmission(user.id);
+
+  // Duas conexões/instâncias de PrismaClient independentes, para que as
+  // duas chamadas realmente disputem o mesmo lock advisory no Postgres em
+  // vez de serializar por acidente através de um único pool de conexão do
+  // Node — mesmo padrão de "concorrência real de banco" já usado nos
+  // testes de PROMOTE_IF_FIRST/PROMOTE_EXPLICIT do plano (seção 10).
+  const prismaA = new PrismaClient();
+  const prismaB = new PrismaClient();
+  try {
+    const serviceA = new CvProcessingJobService(new DatabaseService(prismaA));
+    const serviceB = new CvProcessingJobService(new DatabaseService(prismaB));
+
+    const [jobA, jobB] = await Promise.all([
+      serviceA.enqueue({
+        cvSourceId: cvSource.id,
+        cvSubmissionId: cvSubmission.id,
+      }),
+      serviceB.enqueue({
+        cvSourceId: cvSource.id,
+        cvSubmissionId: cvSubmission.id,
+      }),
+    ]);
+
+    assert.equal(jobA.id, jobB.id);
+
+    const allJobsForSource = await prisma.cvProcessingJob.findMany({
+      where: { cvSourceId: cvSource.id },
+    });
+    assert.equal(allJobsForSource.length, 1);
+  } finally {
+    await prismaA.$disconnect();
+    await prismaB.$disconnect();
+  }
+});
+
 test("markFailed: reseta pra PENDING enquanto não esgotou tentativas; vai a FAILED no limite", async () => {
   const user = await createUser();
   const { cvSource, cvSubmission } = await createCvSourceAndSubmission(user.id);

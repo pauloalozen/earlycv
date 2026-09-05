@@ -34,26 +34,45 @@ export class CvProcessingJobService {
   // reaproveita em vez de enfileirar um duplicado concorrente (evita duas
   // extrações da mesma fonte rodando em paralelo). Um job já READY/FAILED
   // não bloqueia a criação de um novo (ex.: novo masterIntent explícito).
+  //
+  // Pendência da Fase 2A/2B resolvida na Fase 2F: o findFirst+create acima
+  // não era atômico — duas requisições verdadeiramente concorrentes para o
+  // mesmo cvSourceId podiam ambas observar "nenhum job PENDING/PROCESSING"
+  // e criar duas linhas de CvProcessingJob (a extração em si nunca duplica,
+  // protegida pela chave única de CvStructuredProfile, mas a linha de job
+  // duplicada é desperdício e confunde observabilidade). Mesmo padrão já
+  // usado em CvMasterPromotionService#runPromotionCore: um
+  // pg_advisory_xact_lock por cvSourceId serializa o check-then-act dentro
+  // de uma transação curta — a segunda transação concorrente só reavalia o
+  // "já existe PENDING/PROCESSING?" depois que a primeira já commitou o
+  // INSERT, então sempre encontra a linha da primeira e reaproveita, nunca
+  // duplica. Lock liberado automaticamente no commit/rollback, sem exigir
+  // nenhuma limpeza explícita do chamador.
   async enqueue(input: CreateCvProcessingJobInput): Promise<CvProcessingJob> {
-    const reusable = await this.database.cvProcessingJob.findFirst({
-      where: {
-        cvSourceId: input.cvSourceId,
-        status: { in: ["PENDING", "PROCESSING"] },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    return this.database.$transaction(async (tx) => {
+      const lockKey = `cv-processing-job:${input.cvSourceId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
 
-    if (reusable) {
-      return reusable;
-    }
+      const reusable = await tx.cvProcessingJob.findFirst({
+        where: {
+          cvSourceId: input.cvSourceId,
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
 
-    return this.database.cvProcessingJob.create({
-      data: {
-        cvSourceId: input.cvSourceId,
-        cvSubmissionId: input.cvSubmissionId,
-        masterIntent: input.masterIntent ?? "NONE",
-        status: "PENDING",
-      },
+      if (reusable) {
+        return reusable;
+      }
+
+      return tx.cvProcessingJob.create({
+        data: {
+          cvSourceId: input.cvSourceId,
+          cvSubmissionId: input.cvSubmissionId,
+          masterIntent: input.masterIntent ?? "NONE",
+          status: "PENDING",
+        },
+      });
     });
   }
 
