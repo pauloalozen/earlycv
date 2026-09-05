@@ -20,6 +20,7 @@ import {
   type CvMasterPromotionReason,
   type CvSourceOwnerType,
   Prisma,
+  ResumeKind,
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -41,6 +42,23 @@ export type PromoteMasterInput = MasterOwnerRef & {
   resumeId?: string | null;
   masterIntent: "PROMOTE_IF_FIRST" | "PROMOTE_EXPLICIT";
   promotedReason: CvMasterPromotionReason;
+  // Correção da Fase 3 (pré-rollout, resumes.service.ts#setPrimary): quando
+  // true (só resumes.service.ts#setPrimary liga isto hoje — nunca o
+  // CvProcessingWorker para os entrypoints de create()/análise, que
+  // decidem Resume.isMaster no momento de CRIAR o Resume, fora de escopo
+  // desta correção), o flip de Resume.isMaster (demover os outros Resumes
+  // do dono, promover `resumeId`) acontece DENTRO desta mesma transação,
+  // JUNTO com a CvMasterDesignation — nunca antes, nunca depois. Só tem
+  // efeito quando ownerType === "USER" && resumeId presente && a
+  // designação ativa AO FINAL desta chamada aponta exatamente para
+  // `cvStructuredProfileId` (cobre os três casos em que isso é verdade:
+  // criada agora, substituída agora, ou já era a ativa — idempotência); se
+  // a designação ativa final for de outro perfil (ex.: PROMOTE_IF_FIRST
+  // bloqueado por já existir Master de outra fonte), o flip nunca
+  // acontece — Resume.isMaster não pode mentir sobre quem é o Master real.
+  // Default false: nenhum caller pré-existente (CvProcessingWorker,
+  // ClaimSourceGrantService) muda de comportamento por esta adição.
+  syncResumeIsMaster?: boolean;
 };
 
 export type PromoteMasterResult = {
@@ -182,6 +200,37 @@ export class CvMasterPromotionService {
   }
 
   private async runPromotionCore(
+    tx: Prisma.TransactionClient,
+    input: PromoteMasterInput,
+  ): Promise<PromoteMasterResult> {
+    const result = await this.runPromotionDecision(tx, input);
+
+    // Correção da Fase 3 — flip de Resume.isMaster ATÔMICO com a
+    // designação (ver doc do campo syncResumeIsMaster acima). Roda depois
+    // de toda a decisão de promoção estar resolvida, mas ainda DENTRO da
+    // mesma transação — se o commit falhar (ex.: trigger de subject-match
+    // deferred), este flip é revertido junto com tudo o mais.
+    if (
+      input.syncResumeIsMaster &&
+      input.ownerType === "USER" &&
+      input.resumeId &&
+      result.activeDesignation.cvStructuredProfileId ===
+        input.cvStructuredProfileId
+    ) {
+      await tx.resume.updateMany({
+        where: { userId: input.userId, NOT: { id: input.resumeId } },
+        data: { isMaster: false },
+      });
+      await tx.resume.update({
+        where: { id: input.resumeId },
+        data: { isMaster: true, kind: ResumeKind.master },
+      });
+    }
+
+    return result;
+  }
+
+  private async runPromotionDecision(
     tx: Prisma.TransactionClient,
     input: PromoteMasterInput,
   ): Promise<PromoteMasterResult> {

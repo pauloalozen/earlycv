@@ -52,6 +52,9 @@ export type EnqueueCvProcessingInput = {
   text: string;
   masterIntent: CvProcessingMasterIntent;
   submission: CvProcessingSubmissionInput;
+  // Fase 3 (pré-rollout) — correção de resumes.service.ts#setPrimary: ver
+  // CreateCvProcessingJobInput#resumeId (cv-processing-job.service.ts).
+  resumeId?: string | null;
 };
 
 // Fase 2D — sibling de EnqueueCvProcessingInput pro dono GUEST
@@ -79,6 +82,7 @@ export class CvProcessingEntrypointService {
       input.text,
       input.masterIntent,
       input.submission,
+      input.resumeId,
     );
   }
 
@@ -105,6 +109,7 @@ export class CvProcessingEntrypointService {
     text: string,
     masterIntent: CvProcessingMasterIntent,
     submission: CvProcessingSubmissionInput,
+    resumeId?: string | null,
   ) {
     const textSha256 = createHash("sha256").update(text).digest("hex");
     const ownerId =
@@ -164,6 +169,7 @@ export class CvProcessingEntrypointService {
       cvSourceId: cvSource.id,
       cvSubmissionId: cvSubmission.id,
       masterIntent,
+      resumeId,
     });
 
     return { cvSource, cvSubmission, job };

@@ -20,6 +20,12 @@ export type CreateCvProcessingJobInput = {
   cvSourceId: string;
   cvSubmissionId: string;
   masterIntent?: CvProcessingMasterIntent;
+  // Fase 3 (pré-rollout) — correção de resumes.service.ts#setPrimary: só
+  // preenchido quando este job precisa, ao chegar em READY e promover,
+  // flipar Resume.isMaster de um Resume JÁ EXISTENTE específico (troca
+  // explícita de Master pendente de extração). Ver CvProcessingJob.resumeId
+  // no schema e CvMasterPromotionService#syncResumeIsMaster.
+  resumeId?: string | null;
 };
 
 @Injectable()
@@ -62,7 +68,38 @@ export class CvProcessingJobService {
       });
 
       if (reusable) {
-        return reusable;
+        // Reaproveitar não pode silenciosamente descartar uma intenção
+        // mais forte do chamador atual: se o job reusável nasceu sem
+        // intenção de Master (ex.: uma análise comum chegou primeiro para
+        // a mesma fonte) e esta chamada pede uma promoção explícita, ou
+        // se esta chamada carrega um resumeId que o job reusável ainda
+        // não tem, o job precisa refletir isso — senão a promoção pedida
+        // agora nunca aconteceria (o job seguiria com masterIntent: NONE).
+        // Só atualiza enquanto ainda está PENDING (nunca PROCESSING — já
+        // reivindicado por um worker, alterar seus dados no meio da
+        // corrida seria uma condição de corrida nova; nesse caso raro o
+        // chamador precisa de um novo job, não a atualização deste).
+        const needsUpgrade =
+          reusable.status === "PENDING" &&
+          ((input.masterIntent &&
+            input.masterIntent !== "NONE" &&
+            reusable.masterIntent === "NONE") ||
+            (input.resumeId && !reusable.resumeId));
+
+        if (!needsUpgrade) {
+          return reusable;
+        }
+
+        return tx.cvProcessingJob.update({
+          where: { id: reusable.id },
+          data: {
+            masterIntent:
+              input.masterIntent && input.masterIntent !== "NONE"
+                ? input.masterIntent
+                : reusable.masterIntent,
+            resumeId: reusable.resumeId ?? input.resumeId ?? null,
+          },
+        });
       }
 
       return tx.cvProcessingJob.create({
@@ -70,6 +107,7 @@ export class CvProcessingJobService {
           cvSourceId: input.cvSourceId,
           cvSubmissionId: input.cvSubmissionId,
           masterIntent: input.masterIntent ?? "NONE",
+          resumeId: input.resumeId ?? null,
           status: "PENDING",
         },
       });

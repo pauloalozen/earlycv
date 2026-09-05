@@ -76,3 +76,13 @@
 export function isCvStructuredProfilePipelineEnabled(): boolean {
   return process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED === "true";
 }
+
+// Fase 3 (pré-rollout) — ATIVAÇÃO GRANULAR: esta função continua existindo
+// e significando exatamente "a flag GLOBAL está ligada" — nunca foi (e não
+// deve virar) o único jeito de ligar o pipeline. Para decidir se o
+// pipeline está ligado PARA UM CONTEXTO ESPECÍFICO (usuário admin,
+// usuário na allowlist, ou a flag global), use
+// CvProcessingFlagResolverService#isEnabledFor() (./cv-processing-flag-resolver.service.ts)
+// — é a única função que deve decidir essa lógica; nenhum novo call site
+// deve chamar isCvStructuredProfilePipelineEnabled() diretamente para
+// decidir se um REQUEST específico usa o pipeline novo.

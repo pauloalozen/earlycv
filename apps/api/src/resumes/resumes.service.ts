@@ -11,6 +11,7 @@ import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
 import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
 import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
+import { CvProcessingFlagResolverService } from "../cv-processing/cv-processing-flag-resolver.service";
 import { DatabaseService } from "../database/database.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
 import { StorageService } from "../storage/storage.service";
@@ -47,9 +48,28 @@ export class ResumesService {
     @Inject(CvMasterPromotionService)
     private readonly cvMasterPromotion?: Pick<
       CvMasterPromotionService,
-      "promoteAndProject"
+      "promoteAndProject" | "getActiveDesignation"
+    >,
+    // Fase 3 (pré-rollout) — resolução centralizada de ativação granular
+    // (admin/allowlist), ver cv-processing-flag-resolver.service.ts.
+    // @Optional() pelo mesmo motivo dos demais: nunca referenciado pelos
+    // testes que instanciam este service diretamente com poucos
+    // argumentos; ausência cai de volta na flag global pura (ver
+    // #isPipelineEnabledFor), preservando comportamento anterior.
+    @Optional()
+    @Inject(CvProcessingFlagResolverService)
+    private readonly flagResolver?: Pick<
+      CvProcessingFlagResolverService,
+      "isEnabledFor"
     >,
   ) {}
+
+  private async isPipelineEnabledFor(userId: string): Promise<boolean> {
+    if (this.flagResolver) {
+      return this.flagResolver.isEnabledFor({ userId });
+    }
+    return isCvStructuredProfilePipelineEnabled();
+  }
 
   list(userId: string) {
     return this.database.resume.findMany({
@@ -238,7 +258,7 @@ export class ResumesService {
     // roda depois, no CvProcessingWorker (cron separado), nunca aqui.
     if (
       createdResume.isMaster &&
-      isCvStructuredProfilePipelineEnabled() &&
+      (await this.isPipelineEnabledFor(userId)) &&
       this.cvProcessingEntrypoint
     ) {
       const text = extractedRawText?.trim();
@@ -395,19 +415,79 @@ export class ResumesService {
     });
   }
 
-  // Fase 2G (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
-  // "Integrar POST /resumes/:id/set-primary"): o flip de Resume.isMaster em
-  // si (bloco abaixo) é IDÊNTICO ao comportamento legado, com a flag ligada
-  // ou desligada — é sempre síncrono e sempre a fonte de verdade imediata
-  // do "Resume.isMaster" que o resto do produto lê hoje. A integração com o
-  // pipeline canônico (CvSource/CvStructuredProfile/CvMasterDesignation)
-  // roda DEPOIS desse commit, só quando a flag está ligada, e nunca pode
-  // fazer esta chamada falhar para o usuário — falha na integração é
-  // logada e a resposta ainda reflete o Resume.isMaster já commitado
-  // (mesma tolerância a falha fire-and-forget já usada em
-  // resumes.service.ts#create/cv-adaptation.service.ts#triggerMasterCvExtraction).
+  // Fase 3 (pré-rollout, docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // Tarefa 1) — CORRIGE a Fase 2G. A Fase 2G flipava Resume.isMaster de
+  // forma síncrona e incondicional (mesmo com a flag ligada) numa
+  // transação isolada, e SÓ DEPOIS tentava integrar com o pipeline
+  // canônico — se a extração estivesse pendente/falhasse, o resultado era
+  // um estado observável (por qualquer código que já lê Resume.isMaster
+  // hoje: /meu-cv-master, /meu-perfil, cv-adaptation.service.ts na escolha
+  // do Master para análise, admin) em que o Resume NOVO já era
+  // isMaster=true mas CvMasterDesignation/UserProfile ainda apontavam pro
+  // antigo (ou nem existiam) — exatamente a violação que o usuário pediu
+  // para eliminar: "nunca existe um momento em que o sistema 'meio que
+  // trocou'". O teste antigo (resumes.set-primary-canonical.e2e-spec.ts,
+  // ver histórico do commit desta correção) documentava isso como
+  // aceitável; não é.
+  //
+  // Correção: com a flag (central, ver CvProcessingFlagResolverService)
+  // LIGADA para este usuário, o flip de Resume.isMaster deixa de ser
+  // síncrono/incondicional — só acontece dentro da MESMA transação curta
+  // que cria/supersede a CvMasterDesignation e sincroniza o UserProfile
+  // (CvMasterPromotionService#promoteAndProject com syncResumeIsMaster:
+  // true), e só depois que o CvStructuredProfile está READY:
+  //  - Se já existe uma extração READY para a fonte do Resume alvo: tudo
+  //    roda SÍNCRONO nesta mesma chamada — resposta já reflete o Master
+  //    trocado (cvMasterPromotionStatus: "promoted").
+  //  - Senão: enfileira um CvProcessingJob (masterIntent PROMOTE_EXPLICIT,
+  //    carregando o resumeId alvo) e retorna JÁ — SEM tocar
+  //    Resume.isMaster. O Master ANTIGO continua oficial em
+  //    Resume.isMaster E em CvMasterDesignation até o worker
+  //    (CvProcessingWorker) terminar a extração e promover, atômico, via
+  //    o mesmo syncResumeIsMaster. O chamador faz polling em
+  //    GET /cv-processing-jobs/:id (cvMasterPromotionStatus: "pending").
+  //
+  // Falha (extração ou promoção) nunca deixa nada meio-trocado: o flip só
+  // acontece DEPOIS da promoção decidida, na mesma transação — se a
+  // promoção falhar/lançar, a transação inteira reverte (nenhum flip
+  // aconteceu) e o Master anterior permanece 100% intacto, tanto em
+  // Resume.isMaster quanto em CvMasterDesignation. Por isso este método,
+  // ao contrário da Fase 2G, NUNCA engole o erro da integração canônica —
+  // faz sentido responder sucesso silencioso quando algo JÁ foi commitado
+  // e não pode reverter (create()/claim, que tornam create() tolerante a
+  // falha por design), mas aqui, se a integração falhar, NADA foi
+  // commitado ainda — mentir "sucesso" faria o chamador achar que trocou
+  // quando o Master antigo continua sendo o real.
+  //
+  // Flag desligada, ou dependências do pipeline ausentes (@Optional() não
+  // resolvido): comportamento 100% legado, idêntico a antes da Fase 2G —
+  // flip síncrono incondicional, sem nenhum campo novo na resposta.
   async setPrimary(userId: string, resumeId: string) {
-    const updatedResume = await this.database.$transaction(async (tx) => {
+    const pipelineEnabled = await this.isPipelineEnabledFor(userId);
+
+    if (
+      !pipelineEnabled ||
+      !this.cvProcessingEntrypoint ||
+      !this.cvMasterPromotion
+    ) {
+      return this.setPrimaryLegacy(userId, resumeId);
+    }
+
+    return this.setPrimaryCanonical(
+      userId,
+      resumeId,
+      this.cvProcessingEntrypoint,
+      this.cvMasterPromotion,
+    );
+  }
+
+  // Comportamento legado, extraído sem nenhuma mudança de comportamento —
+  // flip de Resume.isMaster síncrono e incondicional, mesma transação
+  // curta de sempre. Usado quando a flag (central) está desligada para o
+  // usuário, ou quando as dependências do pipeline canônico não estão
+  // disponíveis (@Optional()).
+  private async setPrimaryLegacy(userId: string, resumeId: string) {
+    return this.database.$transaction(async (tx) => {
       const resume = await tx.resume.findFirst({
         where: {
           id: resumeId,
@@ -437,71 +517,42 @@ export class ResumesService {
         where: { id: resume.id, userId },
       });
     });
-
-    if (
-      !isCvStructuredProfilePipelineEnabled() ||
-      !this.cvProcessingEntrypoint ||
-      !this.cvMasterPromotion
-    ) {
-      return updatedResume;
-    }
-
-    try {
-      const pipeline = await this.ensureCanonicalMasterPromotion(
-        userId,
-        updatedResume,
-      );
-      return {
-        ...updatedResume,
-        cvProcessingJobId: pipeline.cvProcessingJobId,
-        cvMasterPromoted: pipeline.promoted,
-      };
-    } catch (error) {
-      console.error(
-        "[resumes] failed to integrate set-primary with cv structured profile pipeline",
-        {
-          error: error instanceof Error ? error.message : String(error),
-          resumeId: updatedResume.id,
-          userId,
-        },
-      );
-      return updatedResume;
-    }
   }
 
-  // Garante, em ordem (plano, itens 1-6 de "Integrar set-primary"):
-  //  1. CvSource: se o Resume alvo já está ligado a um (cvSourceId — Fase
-  //     2G é quem passa a preencher esse campo, nunca preenchido antes por
-  //     nenhum entrypoint), reusa; senão materializa just-in-time via
-  //     CvProcessingEntrypointService (mesmo padrão de
-  //     cv-adaptation.service.ts#resolveActiveMasterCvProcessingJobId,
-  //     Fase 2C.1) a partir de resume.rawText.
-  //  2. CvStructuredProfile READY: se já existe uma pronta para aquele
-  //     cvSourceId, promove SEM criar CvProcessingJob novo nem reprocessar
-  //     IA (teste obrigatório "Resume já processado"). Senão, o
-  //     CvProcessingJob recém-enfileirado cuida da extração (reusando
-  //     MasterCvCanonicalExtraction legada via tryReuseLegacyExtraction
-  //     quando aplicável) de forma assíncrona — o worker
-  //     (CvProcessingWorker) promove sozinho ao chegar em READY, porque o
-  //     job já carrega masterIntent: PROMOTE_EXPLICIT.
-  //  3. Promoção: sempre PROMOTE_EXPLICIT — é uma troca explícita do
-  //     usuário (plano, seção 10).
-  //  5/6. UserProfile + MonitorProjectionJob: cobertos dentro de
-  //     CvMasterPromotionService#promoteAndProject (síncrono, branch 1) OU
-  //     dentro do próprio CvProcessingWorker (assíncrono, branch 2) — nunca
-  //     um passo isolado aqui.
-  private async ensureCanonicalMasterPromotion(
+  // Caminho canônico (flag ligada para este usuário): NUNCA flipa
+  // Resume.isMaster fora da transação que também promove a
+  // CvMasterDesignation (ver cabeçalho de #setPrimary acima).
+  private async setPrimaryCanonical(
     userId: string,
-    resume: { id: string; cvSourceId: string | null; rawText: string | null },
-  ): Promise<{ cvProcessingJobId: string | null; promoted: boolean }> {
-    // Guardas redundantes com as do chamador (setPrimary): este método
-    // nunca é invocado sem as duas dependências resolvidas, mas capturar
-    // referências locais não-opcionais aqui evita non-null assertion (!)
-    // nas chamadas abaixo, mantendo o typecheck estrito.
-    const entrypoint = this.cvProcessingEntrypoint;
-    const masterPromotion = this.cvMasterPromotion;
-    if (!entrypoint || !masterPromotion) {
-      return { cvProcessingJobId: null, promoted: false };
+    resumeId: string,
+    entrypoint: Pick<CvProcessingEntrypointService, "enqueueFromUserText">,
+    masterPromotion: Pick<
+      CvMasterPromotionService,
+      "promoteAndProject" | "getActiveDesignation"
+    >,
+  ) {
+    const resume = await this.database.resume.findFirst({
+      where: { id: resumeId, userId },
+    });
+    if (!resume) {
+      throw new NotFoundException("resume not found");
+    }
+
+    // Idempotência: já é o Master ativo (Resume.isMaster e
+    // CvMasterDesignation concordam) — no-op, sem nova promoção nem novo
+    // job. Cobre "chamar set-primary duas vezes para o mesmo Resume".
+    if (resume.isMaster) {
+      const active = await masterPromotion.getActiveDesignation({
+        ownerType: "USER",
+        userId,
+      });
+      if (active?.resumeId === resume.id) {
+        return {
+          ...resume,
+          cvProcessingJobId: null,
+          cvMasterPromotionStatus: "promoted" as const,
+        };
+      }
     }
 
     if (resume.cvSourceId) {
@@ -511,7 +562,11 @@ export class ResumesService {
       });
 
       if (readyProfile) {
-        const promotion = await masterPromotion.promoteAndProject({
+        // Síncrono: extração já pronta, então a troca inteira (designação
+        // + Resume.isMaster + UserProfile + MonitorProjectionJob) roda
+        // AGORA, numa única transação curta — sem estado intermediário
+        // observável em nenhum momento.
+        await masterPromotion.promoteAndProject({
           ownerType: "USER",
           userId,
           cvStructuredProfileId: readyProfile.id,
@@ -523,18 +578,32 @@ export class ResumesService {
             (readyProfile.confidenceJson as Record<string, number> | null) ??
             {},
           cvSourceId: resume.cvSourceId,
+          syncResumeIsMaster: true,
         });
-        return { cvProcessingJobId: null, promoted: promotion.changed };
+
+        const finalResume = await this.database.resume.findFirstOrThrow({
+          where: { id: resume.id, userId },
+        });
+        return {
+          ...finalResume,
+          cvProcessingJobId: null,
+          cvMasterPromotionStatus: "promoted" as const,
+        };
       }
     }
 
-    // Resume legado — nunca passou pelo pipeline novo (cvSourceId nulo) ou
-    // ainda não tem nenhuma extração READY para a fonte já ligada. Sem
-    // texto extraído não há o que materializar — comportamento legado
-    // (Resume.isMaster já commitado acima) prevalece, sem erro.
+    // Extração ainda não existe/não está READY — nunca troca
+    // Resume.isMaster agora. Enfileira o processamento (reusa
+    // MasterCvCanonicalExtraction legada via tryReuseLegacyExtraction
+    // quando aplicável, dentro do worker) e devolve "pending": o Master
+    // ANTIGO continua oficial (Resume.isMaster e CvMasterDesignation) até
+    // o CvProcessingWorker terminar e promover, atômico, via
+    // syncResumeIsMaster (ver cv-processing.worker.ts).
     const text = resume.rawText?.trim();
     if (!text) {
-      return { cvProcessingJobId: null, promoted: false };
+      throw new BadRequestException(
+        "resume has no extractable content for the cv structured profile pipeline",
+      );
     }
 
     const enqueued = await entrypoint.enqueueFromUserText({
@@ -542,23 +611,30 @@ export class ResumesService {
       text,
       masterIntent: "PROMOTE_EXPLICIT",
       submission: { origin: "PASTED_TEXT" },
+      resumeId: resume.id,
     });
 
     // Guarantee #1 do plano ("Resume alvo possui CvSource"): liga o Resume
-    // à fonte materializada — nenhum entrypoint anterior (Fase 2A incluída)
-    // fazia essa ligação, então resume.cvSourceId ficava sempre nulo mesmo
-    // depois de processado. cvSubmissionId é @unique em Resume — a
-    // CvSubmission recém-criada por este enqueue nunca foi usada por outro
-    // Resume, então esta atualização nunca colide.
-    await this.database.resume.update({
-      where: { id: resume.id },
-      data: {
-        cvSourceId: enqueued.cvSource.id,
-        cvSubmissionId: enqueued.cvSubmission.id,
-      },
-    });
+    // à fonte materializada assim que ela existe — isso NÃO afeta
+    // Resume.isMaster (campo separado), só o vínculo com a fonte, então é
+    // seguro persistir imediatamente (idempotente: enqueueFromUserText
+    // dedupla por hash, então repetir esta chamada nunca cria uma segunda
+    // fonte nem sobrescreve com dado diferente).
+    if (!resume.cvSourceId) {
+      await this.database.resume.update({
+        where: { id: resume.id },
+        data: {
+          cvSourceId: enqueued.cvSource.id,
+          cvSubmissionId: enqueued.cvSubmission.id,
+        },
+      });
+    }
 
-    return { cvProcessingJobId: enqueued.job.id, promoted: false };
+    return {
+      ...resume,
+      cvProcessingJobId: enqueued.job.id,
+      cvMasterPromotionStatus: "pending" as const,
+    };
   }
 
   async download(userId: string, resumeId: string, res: Response) {

@@ -774,6 +774,7 @@ model Resume {
   cvSource           CvSource?             @relation(fields: [cvSourceId], references: [id], onDelete: SetNull)
   cvSubmission       CvSubmission?         @relation(fields: [cvSubmissionId], references: [id], onDelete: SetNull)
   masterDesignations CvMasterDesignation[]
+  cvProcessingJobs   CvProcessingJob[]
 
   @@index([userId])
   @@index([basedOnResumeId])
@@ -2832,6 +2833,20 @@ model CvProcessingJob {
   cvStructuredProfileId String?
   masterDesignationId   String?
 
+  // Fase 3 (pré-rollout, docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // correção de resumes.service.ts#setPrimary): preenchido SÓ quando este
+  // job nasceu de uma troca explícita de Master já existente
+  // (POST /resumes/:id/set-primary) que precisou esperar a extração —
+  // carrega qual Resume específico deve virar isMaster=true quando (e
+  // somente quando) a promoção de fato acontecer, para o worker fazer o
+  // flip de Resume.isMaster ATOMICAMENTE junto com a CvMasterDesignation
+  // (nunca antes). Null em todo job que não precisa desse flip (upload de
+  // Resume novo via resumes.service.ts#create, análises, etc. — esses
+  // continuam decidindo Resume.isMaster no ponto de criação do Resume,
+  // fora de escopo desta correção).
+  resumeId String?
+  resume   Resume? @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
   createdAt  DateTime  @default(now())
   finishedAt DateTime?
 
@@ -2841,6 +2856,7 @@ model CvProcessingJob {
 
   @@index([status])
   @@index([cvSourceId])
+  @@index([resumeId])
 }
 
 enum CvMasterPromotionReason {

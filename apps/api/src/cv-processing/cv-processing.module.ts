@@ -10,6 +10,7 @@ import { ClaimSourceGrantService } from "./claim-source-grant.service";
 import { CvMasterPromotionService } from "./cv-master-promotion.service";
 import { CvProcessingWorker } from "./cv-processing.worker";
 import { CvProcessingEntrypointService } from "./cv-processing-entrypoint.service";
+import { CvProcessingFlagResolverService } from "./cv-processing-flag-resolver.service";
 import { CvProcessingJobService } from "./cv-processing-job.service";
 import { CvProcessingJobsController } from "./cv-processing-jobs.controller";
 import { CvStructuredProfileExtractionService } from "./cv-structured-profile-extraction.service";
@@ -36,6 +37,7 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
     IngestionLockRepository,
     TalentSubjectService,
     ClaimSourceGrantService,
+    CvProcessingFlagResolverService,
   ],
   // CvMasterPromotionService exportado a partir da Fase 2C: cv-adaptation.service
   // (análise autenticada) precisa consultar a designação ativa de Master
@@ -62,6 +64,7 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
     TalentSubjectService,
     ClaimSourceGrantService,
     CvUserProfileSyncService,
+    CvProcessingFlagResolverService,
   ],
 })
 export class CvProcessingModule {}

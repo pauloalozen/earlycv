@@ -139,6 +139,18 @@ export class CvProcessingWorker {
                 number
               > | null) ?? {},
             cvSourceId: job.cvSourceId,
+            // Correção da Fase 3 — resumes.service.ts#setPrimary: job.resumeId
+            // só é preenchido quando este job nasceu de uma troca explícita
+            // de Master já existente que precisou esperar a extração (ver
+            // schema CvProcessingJob.resumeId). syncResumeIsMaster: true faz
+            // o flip de Resume.isMaster acontecer ATÔMICO com a
+            // CvMasterDesignation, dentro desta mesma transação — nunca
+            // antes (regra do usuário: Master antigo nunca "meio trocado").
+            // Para todo outro job (resumeId null — create()/análises,
+            // fora de escopo desta correção), este parâmetro nunca ativa
+            // nada, preservando o comportamento anterior.
+            resumeId: job.resumeId,
+            syncResumeIsMaster: !!job.resumeId,
           });
           masterDesignationId = promotion.activeDesignation.id;
         } catch (error) {

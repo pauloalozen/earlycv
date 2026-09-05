@@ -39,6 +39,7 @@ import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.s
 import { NoValidMasterCvForProfileAnalysisError } from "../cv-processing/cv-processing.errors";
 import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
 import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
+import { CvProcessingFlagResolverService } from "../cv-processing/cv-processing-flag-resolver.service";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
@@ -267,7 +268,26 @@ export class CvAdaptationService {
       ClaimSourceGrantService,
       "claim"
     >,
+    // Fase 3 (pré-rollout) — resolução centralizada de ativação granular
+    // (admin/allowlist), ver cv-processing-flag-resolver.service.ts.
+    // @Optional() pelo mesmo motivo dos serviços acima: nunca referenciado
+    // pelos ~90 testes legados; ausência cai de volta na flag global pura.
+    @Optional()
+    @Inject(CvProcessingFlagResolverService)
+    private readonly flagResolver?: Pick<
+      CvProcessingFlagResolverService,
+      "isEnabledFor"
+    >,
   ) {}
+
+  private async isPipelineEnabledFor(
+    context: Parameters<CvProcessingFlagResolverService["isEnabledFor"]>[0],
+  ): Promise<boolean> {
+    if (this.flagResolver) {
+      return this.flagResolver.isEnabledFor(context);
+    }
+    return isCvStructuredProfilePipelineEnabled();
+  }
 
   // Fire-and-forget: um CV que virou master durante uma análise (primeiro
   // CV do usuário, promovido automaticamente, ou explicitamente marcado
@@ -330,7 +350,7 @@ export class CvAdaptationService {
     file?: FileUpload;
   }): Promise<void> {
     if (
-      !isCvStructuredProfilePipelineEnabled() ||
+      !(await this.isPipelineEnabledFor({ userId: input.userId })) ||
       !this.cvProcessingEntrypoint
     ) {
       return;
@@ -1096,7 +1116,11 @@ export class CvAdaptationService {
     // exato de startAuthenticatedAnalysisJob/startAuthenticatedAnalysisJobCanonical
     // (Fase 2C) — com a flag desligada (default), esta condição nunca é
     // verdadeira e o resto do método roda exatamente como antes, bit a bit.
-    if (isCvStructuredProfilePipelineEnabled()) {
+    // Guest (sem userId resolvido ainda neste ponto): a resolução central
+    // (Fase 3) nunca liga o pipeline pra guest fora da flag global — ver
+    // cv-processing-flag-resolver.service.ts. Contexto vazio é
+    // intencional aqui, não uma omissão.
+    if (await this.isPipelineEnabledFor({})) {
       return this.startGuestAnalysisJobCanonical(
         jobDescriptionText,
         file,
@@ -1453,7 +1477,7 @@ export class CvAdaptationService {
     // CvStructuredProfile.canonicalJson correspondente. Com a flag
     // desligada (default), esta condição nunca é verdadeira e o resto do
     // método roda exatamente como antes, bit a bit.
-    if (isCvStructuredProfilePipelineEnabled()) {
+    if (await this.isPipelineEnabledFor({ userId })) {
       return this.startAuthenticatedAnalysisJobCanonical(
         userId,
         dto,
@@ -2452,7 +2476,7 @@ export class CvAdaptationService {
     // desligada: pula este bloco inteiro, comportamento idêntico ao de
     // antes da Fase 2E.
     if (
-      isCvStructuredProfilePipelineEnabled() &&
+      (await this.isPipelineEnabledFor({ userId })) &&
       job.cvProcessingJobId &&
       this.claimSourceGrantService
     ) {
