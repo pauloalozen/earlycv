@@ -245,7 +245,13 @@ test("claim sem Master existente do usuário: fonte do guest vira Master (design
   });
   assert.equal(resume.userId, user.id);
   assert.equal(resume.cvSourceId, cvSource.id);
-  assert.equal(resume.isMaster, false);
+  // Fase 3C item 1/5 — correção da premissa antiga deste teste: o Resume
+  // da designação ativa SEMPRE tem isMaster=true (invariante formalizada em
+  // schema.prisma#CvMasterDesignation), sem exceção pra claim.
+  // ClaimSourceGrantService#resolveMasterAndResume agora passa
+  // syncResumeIsMaster: true pra CvMasterPromotionService, então o flip
+  // acontece atômico com a designação, dentro da mesma transação do claim.
+  assert.equal(resume.isMaster, true);
 
   const monitorProjectionJobId = result.master?.monitorProjectionJobId;
   assert.ok(monitorProjectionJobId);
@@ -311,12 +317,30 @@ test("claim COM Master já existente do usuário: Master do usuário é preserva
       finishedAt: new Date(),
     },
   });
+  // Fase 3C item 5 — defesa estrutural nova (migration 20260905160000_
+  // cv_master_designation_integrity_defense) exige que toda designação
+  // ATIVA de USER tenha resumeId apontando pra um Resume real com
+  // isMaster=true: sem isso, o COMMIT falha. Este fixture precisa refletir
+  // a invariante real, nunca o estado incompleto pré-Fase-3C.
+  const ownResume = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master próprio do usuário",
+      kind: "master",
+      status: "uploaded",
+      isMaster: false,
+      cvSourceId: ownSource.id,
+      rawText: "conteudo do master proprio",
+    },
+  });
   await masterPromotion.promoteAndProject({
     ownerType: "USER",
     userId: user.id,
     cvStructuredProfileId: ownProfile.id,
+    resumeId: ownResume.id,
     masterIntent: "PROMOTE_IF_FIRST",
     promotedReason: "FIRST_EVER",
+    syncResumeIsMaster: true,
   });
   const userActiveBefore = await prisma.cvMasterDesignation.findFirstOrThrow({
     where: { userId: user.id, supersededAt: null },

@@ -4,6 +4,9 @@ import { CvProcessingModule } from "../cv-processing/cv-processing.module";
 import { DatabaseModule } from "../database/database.module";
 import { MasterCvCanonicalExtractionModule } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.module";
 import { ProfilesModule } from "../profiles/profiles.module";
+// Fase 3C item 4 — remove() reconcilia UserRadarProfile depois de
+// supersedir o Master ativo (ver comentário em resumes.service.ts#remove).
+import { RadarModule } from "../radar/radar.module";
 import { ResumesController } from "./resumes.controller";
 import { ResumesService } from "./resumes.service";
 
@@ -25,6 +28,7 @@ import { ResumesService } from "./resumes.service";
     // CvProcessingEntrypointService + CvMasterPromotionService) teria o
     // mesmo problema.
     CvProcessingModule,
+    RadarModule,
     ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
       ? [MasterCvCanonicalExtractionModule]
       : []),

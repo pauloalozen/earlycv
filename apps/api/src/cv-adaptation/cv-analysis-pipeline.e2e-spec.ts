@@ -635,6 +635,130 @@ test("6) reuso de Resume existente (variante 'arquivo') com saveAsMaster=true pr
 });
 
 // ---------------------------------------------------------------------------
+// Fase 3C, Tarefa 3 (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md
+// v3) — bug #2 do piloto Fase 3B: promoção explícita via análise
+// (saveAsMaster: true) atualizava CvMasterDesignation corretamente, mas
+// nunca criava/reusava um Resume real para representar o novo Master —
+// job.resumeId nascia null, então CvMasterPromotionService#syncResumeIsMaster
+// nunca disparava, e o Resume.isMaster do upload anterior nunca era
+// demovido. Corrigido em CvAdaptationService#ensureResumeForMasterPromotion
+// (chamado sempre que masterIntent !== NONE) + CvProcessingWorker
+// (syncResumeIsMaster: !!job.resumeId, já existente da Fase 3 pré-rollout).
+// Este teste prova, com Postgres real, que ao final: exatamente um
+// Resume.isMaster=true, ele é o novo (não o antigo), e
+// CvMasterDesignation.resumeId aponta pra ele — nunca diverge.
+// ---------------------------------------------------------------------------
+test("Fase 3C) saveAsMaster=true via análise demove o Resume.isMaster antigo e liga o novo (bug #2 do piloto 3B corrigido)", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Master Original 3C"),
+    storage,
+  );
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  // 1) Primeiro Master, via texto colado — nasce sem Resume prévio, o
+  // pipeline cria um via ensureResumeForMasterPromotion.
+  const setup = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterCvText: buildCvText("Master Original 3C", "engenharia"),
+  });
+  const setupJob = await database.analysisJob.findUniqueOrThrow({
+    where: { id: setup.jobId },
+  });
+  await processOneCvJob(cvWorker, setupJob.cvProcessingJobId as string);
+
+  const designationAfterFirst =
+    await prisma.cvMasterDesignation.findFirstOrThrow({
+      where: { userId: user.id, supersededAt: null },
+    });
+  assert.ok(
+    designationAfterFirst.resumeId,
+    "primeira promoção via análise precisa gravar resumeId",
+  );
+  const firstMasterResumeId = designationAfterFirst.resumeId!;
+  const firstMasterResume = await prisma.resume.findUniqueOrThrow({
+    where: { id: firstMasterResumeId },
+  });
+  assert.equal(firstMasterResume.isMaster, true);
+
+  // 2) Promoção explícita via análise (saveAsMaster: true), CV diferente,
+  // sem masterResumeId — reproduz exatamente o bug #2 do piloto 3B.
+  const explicitWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Master Substituto 3C"),
+    storage,
+  );
+  const explicit = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterCvText: buildCvText("Master Substituto 3C", "dados"),
+    saveAsMaster: true,
+  });
+  const explicitJobRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: explicit.jobId },
+  });
+  const explicitCvJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: explicitJobRow.cvProcessingJobId as string },
+  });
+  assert.equal(explicitCvJob.masterIntent, "PROMOTE_EXPLICIT");
+  assert.ok(
+    explicitCvJob.resumeId,
+    "CvProcessingJob desta promoção precisa carregar resumeId (correção do bug #2)",
+  );
+  assert.notEqual(explicitCvJob.resumeId, firstMasterResumeId);
+
+  await processOneCvJob(explicitWorker, explicitCvJob.id);
+
+  // --- Invariante formal (schema.prisma#CvMasterDesignation): exatamente
+  // um Resume.isMaster=true, e é o mesmo da designação ativa.
+  const activeDesignation = await prisma.cvMasterDesignation.findFirstOrThrow({
+    where: { userId: user.id, supersededAt: null },
+  });
+  assert.equal(activeDesignation.resumeId, explicitCvJob.resumeId);
+
+  const oldResumeAfter = await prisma.resume.findUniqueOrThrow({
+    where: { id: firstMasterResumeId },
+  });
+  assert.equal(
+    oldResumeAfter.isMaster,
+    false,
+    "bug #2: o Resume do Master anterior precisa ser demovido",
+  );
+
+  const newMasterResume = await prisma.resume.findUniqueOrThrow({
+    where: { id: activeDesignation.resumeId! },
+  });
+  assert.equal(newMasterResume.isMaster, true);
+
+  const isMasterCount = await prisma.resume.count({
+    where: { userId: user.id, isMaster: true },
+  });
+  assert.equal(
+    isMasterCount,
+    1,
+    "no máximo um Resume.isMaster=true por usuário, mesmo após promoção via análise",
+  );
+
+  // --- Reproduz literalmente as duas queries de investigação do índice
+  // parcial exigidas pela Tarefa 3, confirmando 0 divergência ao final.
+  const divergent = await prisma.$queryRaw<
+    Array<{ userId: string; count: bigint }>
+  >`
+    SELECT "userId", count(*) as count FROM "Resume" WHERE "isMaster" = true GROUP BY "userId" HAVING count(*) > 1
+  `;
+  assert.equal(divergent.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // 7. Duas análises simultâneas do mesmo conteúdo — não duplicam extração.
 // ---------------------------------------------------------------------------
 test("7) duas análises concorrentes do mesmo conteúdo — extração real roda só uma vez", async () => {
@@ -722,17 +846,43 @@ test("8) dois CvProcessingJob concorrentes disputando o primeiro Master — exat
     storageB,
   );
 
+  // Fase 3C item 5 — a defesa estrutural nova (migration 20260905160000_
+  // cv_master_designation_integrity_defense) exige resumeId em toda
+  // designação ativa de USER; todo chamador de produção real (
+  // CvAdaptationService, ResumesService, ClaimSourceGrantService) já
+  // garante isso desde a Fase 3C. Este teste chama o entrypoint
+  // diretamente (nível mais baixo que CvAdaptationService), então precisa
+  // fornecer o Resume real, igual a um chamador de produção faria.
+  const resumeA = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Candidato A",
+      isMaster: false,
+      rawText: buildCvText("Candidato A", "engenharia"),
+    },
+  });
+  const resumeB = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Candidato B",
+      isMaster: false,
+      rawText: buildCvText("Candidato B", "design"),
+    },
+  });
+
   const enqueuedA = await entrypointA.enqueueFromUserText({
     userId: user.id,
     text: buildCvText("Candidato A", "engenharia"),
     masterIntent: "PROMOTE_IF_FIRST",
     submission: { origin: "PASTED_TEXT" },
+    resumeId: resumeA.id,
   });
   const enqueuedB = await entrypointB.enqueueFromUserText({
     userId: user.id,
     text: buildCvText("Candidato B", "design"),
     masterIntent: "PROMOTE_IF_FIRST",
     submission: { origin: "PASTED_TEXT" },
+    resumeId: resumeB.id,
   });
 
   const workerA = buildProcessingWorker(

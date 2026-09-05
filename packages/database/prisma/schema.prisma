@@ -2869,6 +2869,46 @@ enum CvMasterPromotionReason {
 // (talentSubjectId). Histórico completo — nunca apaga, só marca
 // supersededAt. "Só uma ativa por dono" é garantida por índice único parcial
 // na migration SQL (Prisma DSL não expressa índice parcial).
+//
+// INVARIANTE FORMAL (Fase 3C, docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+// e docs/specs/2026-09-05-cv-canonical-profile-pipeline-fase3c-correcao-piloto.md,
+// item 1) — CvMasterDesignation é a fonte AUTORITATIVA de "quem é o Master".
+// Resume.isMaster é uma PROJEÇÃO de compatibilidade derivada dela, nunca o
+// contrário. Para TODA designação ATIVA (supersededAt IS NULL) de um
+// ownerType = USER, é sempre verdade:
+//   1. resumeId IS NOT NULL;
+//   2. o Resume referenciado existe e pertence ao MESMO userId da designação
+//      (cross-owner é impossível — trigger de integridade, ver migration
+//      20260905_cv_master_designation_integrity_defense);
+//   3. o Resume aponta pro conteúdo/perfil compatível: Resume.cvSourceId ==
+//      CvMasterDesignation.cvStructuredProfile.cvSourceId (join implícito
+//      via CvStructuredProfile — não há FK direta Resume->CvStructuredProfile);
+//   4. EXATAMENTE esse Resume tem isMaster: true;
+//   5. NENHUM outro Resume do mesmo usuário tem isMaster: true (garantido
+//      também pelo índice único parcial resume_one_master_per_user);
+//   6. UserProfile deriva do MESMO CvStructuredProfile da designação ativa
+//      (CvUserProfileSyncService#syncWithinTransaction, chamada dentro da
+//      MESMA transação que promove/substitui a designação).
+//
+// EXCEÇÃO DELIBERADA: guest (ownerType = GUEST) PODE ter designação ativa
+// com resumeId = null — guest não tem Resume (conceito exclusivamente de
+// usuário autenticado). Isso não é um bug, é o desenho: a constraint de
+// "resumeId obrigatório" abaixo é condicional a ownerType = USER.
+//
+// Quem garante a invariante, em ordem de defesa:
+//   - CvMasterPromotionService#promoteAndProject(WithinTransaction) — todo
+//     caminho de promoção passa por aqui; syncResumeIsMaster (quando true)
+//     demove TODOS os outros Resume.isMaster do usuário e promove
+//     exatamente o Resume alvo, atômico com a designação, na mesma tx;
+//   - ResumesService#remove() — exclusão do Resume Master ativo SEMPRE
+//     supersede a designação (CvMasterPromotionService#supersedeIfResumeMatches),
+//     nunca deixa órfã;
+//   - trigger trg_master_designation_subject_match (Fase 1) — ownership ou
+//     ClaimSourceGrant válido sobre a fonte;
+//   - triggers/constraints da migration 20260905_cv_master_designation_integrity_defense
+//     (Fase 3C item 5) — defesa estrutural redundante no Postgres para os
+//     pontos 1, 2 e 4 acima, independente de qualquer bug futuro na
+//     aplicação.
 model CvMasterDesignation {
   id String @id @default(cuid())
 

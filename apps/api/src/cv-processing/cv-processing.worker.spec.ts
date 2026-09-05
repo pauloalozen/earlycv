@@ -163,10 +163,29 @@ async function enqueueJob(
   const cvSubmission = await prisma.cvSubmission.create({
     data: { cvSourceId: cvSource.id, origin: "PASTED_TEXT" },
   });
+  // Fase 3C item 5 — a defesa estrutural nova (migration 20260905160000_
+  // cv_master_designation_integrity_defense) exige resumeId em toda
+  // designação ativa de USER, checado no COMMIT. Todo job com
+  // masterIntent != NONE precisa de um Resume real associado (mesmo
+  // padrão de todo chamador de produção desde a Fase 3C), senão o COMMIT
+  // da promoção falha.
+  const resume =
+    masterIntent !== "NONE"
+      ? await prisma.resume.create({
+          data: {
+            userId,
+            title: "Resume de teste",
+            isMaster: false,
+            cvSourceId: cvSource.id,
+            rawText: text,
+          },
+        })
+      : null;
   return jobService.enqueue({
     cvSourceId: cvSource.id,
     cvSubmissionId: cvSubmission.id,
     masterIntent,
+    resumeId: resume?.id,
   });
 }
 

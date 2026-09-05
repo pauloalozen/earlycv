@@ -225,6 +225,28 @@ export class CvMasterPromotionService {
         where: { id: input.resumeId },
         data: { isMaster: true, kind: ResumeKind.master },
       });
+
+      // Achado escrevendo os testes da Fase 3C (Tarefa 2, cenário "mesmo
+      // conteúdo/hash reenviado"): quando o mesmo texto é reenviado como um
+      // Resume NOVO (ex.: reupload do mesmo arquivo), runPromotionDecision
+      // acima trata como idempotente — mesmo CvStructuredProfile, então
+      // "changed: false" — e retorna a designação EXISTENTE sem tocar
+      // resumeId. Sem este ajuste, o flip de isMaster acima ainda promove
+      // corretamente o Resume novo (é o resumeId pedido por ESTA chamada,
+      // não o da designação antiga), mas CvMasterDesignation.resumeId
+      // continuava apontando pro Resume ANTIGO — que acabou de ser
+      // demovido dois passos acima. Isso violava a invariante formal
+      // (schema.prisma#CvMasterDesignation): "o Resume da designação ativa
+      // é EXATAMENTE o que tem isMaster=true". Corrige realinhando
+      // resumeId na mesma linha ativa, na MESMA transação do flip —
+      // idempotente (nunca cria uma nova designação, só corrige o
+      // ponteiro quando ele diverge do resumeId desta chamada).
+      if (result.activeDesignation.resumeId !== input.resumeId) {
+        result.activeDesignation = await tx.cvMasterDesignation.update({
+          where: { id: result.activeDesignation.id },
+          data: { resumeId: input.resumeId },
+        });
+      }
     }
 
     return result;
@@ -346,6 +368,44 @@ export class CvMasterPromotionService {
         activeDesignation: created,
       };
     }
+  }
+
+  // Correção Fase 3C item 4 (exclusão do Master, resumes.service.ts#remove) —
+  // chamado DENTRO da mesma transação Prisma que apaga o Resume. Reusa
+  // exatamente o mesmo advisory lock (mesmo lockKey) de
+  // runPromotionDecision — serializa com qualquer PROMOTE_EXPLICIT/
+  // PROMOTE_IF_FIRST concorrente pro mesmo usuário, então nunca corre o
+  // risco de supersedir uma designação que uma promoção concorrente acabou
+  // de tornar obsoleta (ou vice-versa: promover em cima de uma designação
+  // que está sendo supersedida por esta exclusão).
+  //
+  // Se a designação ativa do usuário aponta exatamente pro `resumeId`
+  // sendo excluído, supersede-a e retorna a linha atualizada. Caso
+  // contrário (não há designação ativa, ou ela aponta pra outro Resume —
+  // ex.: o Resume excluído não é/não é mais o Master real, só tem
+  // Resume.isMaster desatualizado) é no-op (retorna null): excluir um
+  // Resume comum nunca mexe em CvMasterDesignation, e nunca promove outro
+  // Resume automaticamente (fora de escopo desta correção, por design).
+  async supersedeIfResumeMatches(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    resumeId: string,
+  ): Promise<CvMasterDesignation | null> {
+    const lockKey = `cv-master-designation:userId:${userId}`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+    const active = await tx.cvMasterDesignation.findFirst({
+      where: { userId, supersededAt: null },
+    });
+
+    if (!active || active.resumeId !== resumeId) {
+      return null;
+    }
+
+    return tx.cvMasterDesignation.update({
+      where: { id: active.id },
+      data: { supersededAt: new Date() },
+    });
   }
 
   async getActiveDesignation(

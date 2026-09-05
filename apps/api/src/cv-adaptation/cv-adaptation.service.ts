@@ -348,6 +348,19 @@ export class CvAdaptationService {
     rawText: string | null | undefined;
     masterIntent: "PROMOTE_IF_FIRST" | "PROMOTE_EXPLICIT";
     file?: FileUpload;
+    // Fase 3C item 2/5 — mesmo bug de fundo do achado #1 do piloto 3B
+    // (resumes.service.ts#create), encontrado aqui também nos 4 chamadores
+    // deste método (create()/claimGuest()/saveGuestPreview(), Fase 2G):
+    // todos já têm o Resume recém-criado disponível (mesmo id passado pra
+    // triggerMasterCvExtraction ao lado), mas nenhum o repassava pro
+    // pipeline novo — CvMasterDesignation.resumeId ficava null pra todo
+    // Master promovido por estes 3 fluxos. Corrigido junto por ser a MESMA
+    // causa raiz, no mesmo arquivo, e por ser exigido pela integridade
+    // estrutural nova (migration 20260905_cv_master_designation_integrity_defense,
+    // Fase 3C item 5): designação ativa de usuário sem resumeId agora falha
+    // no banco, então deixar estes 4 chamadores sem resumeId quebraria os
+    // fluxos legítimos de claim/preview/create em runtime real.
+    resumeId: string;
   }): Promise<void> {
     if (
       !(await this.isPipelineEnabledFor({ userId: input.userId })) ||
@@ -364,6 +377,7 @@ export class CvAdaptationService {
         userId: input.userId,
         text,
         masterIntent: input.masterIntent,
+        resumeId: input.resumeId,
         submission: input.file
           ? {
               origin: "FILE_UPLOAD",
@@ -508,6 +522,7 @@ export class CvAdaptationService {
           masterIntent:
             dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
           file,
+          resumeId: masterResume.id,
         });
       }
     }
@@ -882,6 +897,7 @@ export class CvAdaptationService {
         userId,
         rawText: dto.masterCvText,
         masterIntent: "PROMOTE_IF_FIRST",
+        resumeId: newMasterResumeId,
       });
     }
 
@@ -1691,14 +1707,53 @@ export class CvAdaptationService {
         userId,
         dto.saveAsMaster === true,
       );
+
+      // Bug #2 do piloto Fase 3B: quando esta análise vai promover Master
+      // (masterIntent != NONE — inclui tanto o saveAsMaster:true explícito
+      // quanto o "primeiro Master automático" via análise), este caminho
+      // nunca criava/reusava um Resume real pra representar o CV sendo
+      // promovido. Sem Resume, o CvProcessingJob nascia com resumeId null,
+      // então CvMasterPromotionService#syncResumeIsMaster nunca disparava
+      // no worker — a CvMasterDesignation trocava de Master corretamente,
+      // mas o Resume.isMaster ANTIGO (upload de arquivo anterior) nunca era
+      // demovido, quebrando a invariante "exatamente um Resume.isMaster,
+      // igual ao Resume da designação ativa". Reaproveita o mesmo padrão já
+      // usado por resumes.service.ts#setPrimaryCanonical e por
+      // ClaimSourceGrantService#ensureResume: reusa um Resume existente do
+      // usuário que já aponte pro mesmo conteúdo (mesmo textSha256), senão
+      // cria um novo (sem cvSourceId ainda, se a fonte também for nova) e
+      // liga cvSourceId/cvSubmissionId assim que enqueueFromUserText resolve
+      // a fonte (dedup por hash já garante que não duplica).
+      const resumeId =
+        masterIntent !== "NONE"
+          ? (await this.ensureResumeForMasterPromotion(userId, cvText)).id
+          : undefined;
+
       const enqueued = await this.cvProcessingEntrypoint.enqueueFromUserText({
         masterIntent,
         submission: submission ?? { origin: "PASTED_TEXT" },
         text: cvText,
         userId,
+        resumeId,
       });
       cvProcessingJobId = enqueued.job.id;
       cvSubmissionId = enqueued.cvSubmission.id;
+
+      if (resumeId) {
+        const resumeRow = await this.database.resume.findUnique({
+          where: { id: resumeId },
+          select: { cvSourceId: true },
+        });
+        if (resumeRow && !resumeRow.cvSourceId) {
+          await this.database.resume.update({
+            where: { id: resumeId },
+            data: {
+              cvSourceId: enqueued.cvSource.id,
+              cvSubmissionId: enqueued.cvSubmission.id,
+            },
+          });
+        }
+      }
     }
 
     const analysisJob = await this.database.analysisJob.create({
@@ -1713,6 +1768,49 @@ export class CvAdaptationService {
     });
 
     return { jobId: analysisJob.id, status: "pending" };
+  }
+
+  // Correção Fase 3C item 3 (bug #2 do piloto 3B) — cria ou reusa o Resume
+  // que representa o CV desta análise, exatamente quando ela vai promover
+  // Master (masterIntent != NONE). Mesmo padrão de
+  // ClaimSourceGrantService#ensureResume: procura primeiro por um Resume
+  // do usuário já ligado a um CvSource com o mesmo textSha256 (mesmo
+  // conteúdo, upload/análise anterior) — nunca cria um segundo Resume pro
+  // mesmo conteúdo. Se não existe fonte nem Resume ainda, cria um Resume
+  // "bare" (cvSourceId null) — o chamador liga cvSourceId/cvSubmissionId
+  // logo depois que enqueueFromUserText resolve/cria a fonte real. Nunca
+  // marca isMaster aqui: quem decide isso é
+  // CvMasterPromotionService#syncResumeIsMaster, atômico com a
+  // CvMasterDesignation, dentro do CvProcessingWorker — nunca antes.
+  private async ensureResumeForMasterPromotion(
+    userId: string,
+    cvText: string,
+  ): Promise<{ id: string }> {
+    const textSha256 = createHash("sha256").update(cvText).digest("hex");
+
+    const existingSource = await this.database.cvSource.findUnique({
+      where: { userId_textSha256: { userId, textSha256 } },
+    });
+
+    if (existingSource) {
+      const existingResume = await this.database.resume.findFirst({
+        where: { userId, cvSourceId: existingSource.id },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (existingResume) return { id: existingResume.id };
+    }
+
+    const created = await this.database.resume.create({
+      data: {
+        userId,
+        title: "CV enviado para análise",
+        kind: "master",
+        status: "uploaded",
+        isMaster: false,
+        cvSourceId: existingSource?.id ?? null,
+      },
+    });
+    return { id: created.id };
   }
 
   private async resolveCanonicalMasterIntent(
@@ -1801,11 +1899,17 @@ export class CvAdaptationService {
       throw new NoValidMasterCvForProfileAnalysisError(userId);
     }
 
+    // Mesma causa raiz do achado #1 (piloto 3B): materializar just-in-time
+    // um Master legado (Resume.isMaster=true sem designação canônica ainda)
+    // sem passar resumeId deixaria a CvMasterDesignation recém-criada sem
+    // resumeId — viola a integridade estrutural nova (Fase 3C item 5).
+    // masterResume.id já é exatamente o Resume que está virando Master.
     const enqueued = await this.cvProcessingEntrypoint.enqueueFromUserText({
       userId,
       text: this.normalizeSnapshotText(masterResume.rawText),
       masterIntent: "PROMOTE_IF_FIRST",
       submission: { origin: "PASTED_TEXT" },
+      resumeId: masterResume.id,
     });
     return enqueued.job.id;
   }
@@ -3278,6 +3382,7 @@ export class CvAdaptationService {
           masterIntent:
             dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
           file,
+          resumeId: created.id,
         });
       }
     } else if (existingMaster) {
@@ -3318,6 +3423,7 @@ export class CvAdaptationService {
         userId,
         rawText: dto.masterCvText,
         masterIntent: "PROMOTE_IF_FIRST",
+        resumeId: created.id,
       });
     }
 

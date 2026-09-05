@@ -630,6 +630,21 @@ export class ClaimSourceGrantService {
           (structuredProfile.confidenceJson as Record<string, number> | null) ??
           {},
         cvSourceId: source.id,
+        // Fase 3C item 1/5 — correção da premissa antiga de ensureResume
+        // (comentário abaixo, mantido pra contexto histórico): a invariante
+        // formalizada nesta fase (schema.prisma, comentário de
+        // CvMasterDesignation) exige que o Resume da designação ativa
+        // SEMPRE tenha isMaster=true — sem exceção pra claim. Sem
+        // syncResumeIsMaster aqui, um claim que promove o primeiro Master
+        // do usuário deixava CvMasterDesignation e Resume.isMaster
+        // divergentes (a mesma classe de bug do achado #2 do piloto 3B),
+        // e violaria a nova defesa estrutural (migration
+        // 20260905_cv_master_designation_integrity_defense) que exige isso
+        // no banco. Seguro aqui: masterIntent é sempre PROMOTE_IF_FIRST
+        // neste caminho (só chega até aqui quando o usuário ainda não tem
+        // designação ativa — ver checagem de userActive acima), então o
+        // flip nunca compete com um Master de outra fonte.
+        syncResumeIsMaster: true,
       });
 
     return {
@@ -644,10 +659,18 @@ export class ClaimSourceGrantService {
   // senão cria um novo Resume + CvSubmission(origin: CLAIM) apontando
   // pra fonte à qual o usuário tem acesso válido — a própria (se colisão
   // de hash já existia), a do guest (via grant) caso contrário. Nunca
-  // copia/realoca o CvSource. isMaster deliberadamente false: quem
-  // representa "é o Master" no pipeline novo é CvMasterDesignation, não
-  // o campo legado Resume.isMaster (mesma decisão já tomada pelo
-  // CvProcessingWorker, que também nunca toca Resume.isMaster).
+  // copia/realoca o CvSource.
+  //
+  // isMaster: false aqui é só o valor INICIAL na criação — nunca o valor
+  // final quando este Resume vira o Master. Correção Fase 3C item 1/5
+  // (substitui a premissa antiga desta nota, que dizia "deliberadamente
+  // false pra sempre"): essa premissa dependia do bug #1 do piloto 3B
+  // (CvProcessingWorker nunca recebia resumeId, então nunca rodava
+  // syncResumeIsMaster) — corrigido nesta fase. resolveMasterAndResume
+  // (chamador) agora passa syncResumeIsMaster: true, então, quando este
+  // Resume efetivamente se torna o Master (promotion.changed === true), o
+  // flip pra isMaster: true acontece atômico com a CvMasterDesignation, na
+  // MESMA transação — nunca fica divergente.
   private async ensureResume(
     tx: Prisma.TransactionClient,
     userId: string,

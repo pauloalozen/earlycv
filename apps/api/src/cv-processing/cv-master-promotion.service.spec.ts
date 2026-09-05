@@ -59,27 +59,51 @@ async function createReadyStructuredProfile(cvSourceId: string) {
   });
 }
 
+// Fase 3C item 5 — a defesa estrutural nova (migration 20260905160000_
+// cv_master_designation_integrity_defense) exige resumeId em toda
+// designação ativa de USER, checado no COMMIT (trigger deferred). Todo
+// teste deste arquivo que promove um USER precisa de um Resume real +
+// syncResumeIsMaster: true (mesmo padrão de todo chamador de produção
+// desde a Fase 3C), senão o COMMIT falha.
+async function createResumeForSource(userId: string, cvSourceId: string) {
+  return prisma.resume.create({
+    data: {
+      userId,
+      title: "Master de teste",
+      isMaster: false,
+      cvSourceId,
+      rawText: "conteudo de teste",
+    },
+  });
+}
+
 test("PROMOTE_IF_FIRST concorrente: nenhuma designação prévia — exatamente uma ativa ao final", async () => {
   const user = await createUser();
   const sourceA = await createCvSourceForUser(user.id);
   const sourceB = await createCvSourceForUser(user.id);
   const profileA = await createReadyStructuredProfile(sourceA.id);
   const profileB = await createReadyStructuredProfile(sourceB.id);
+  const resumeA = await createResumeForSource(user.id, sourceA.id);
+  const resumeB = await createResumeForSource(user.id, sourceB.id);
 
   const [resultA, resultB] = await Promise.all([
     service.promote({
       ownerType: "USER",
       userId: user.id,
       cvStructuredProfileId: profileA.id,
+      resumeId: resumeA.id,
       masterIntent: "PROMOTE_IF_FIRST",
       promotedReason: "FIRST_EVER",
+      syncResumeIsMaster: true,
     }),
     service.promote({
       ownerType: "USER",
       userId: user.id,
       cvStructuredProfileId: profileB.id,
+      resumeId: resumeB.id,
       masterIntent: "PROMOTE_IF_FIRST",
       promotedReason: "FIRST_EVER",
+      syncResumeIsMaster: true,
     }),
   ]);
 
@@ -103,14 +127,19 @@ test("PROMOTE_EXPLICIT concorrente com designação ativa prévia: quem COMMITA 
   const profileInitial = await createReadyStructuredProfile(sourceInitial.id);
   const profileLate = await createReadyStructuredProfile(sourceLate.id);
   const profileEarly = await createReadyStructuredProfile(sourceEarly.id);
+  const resumeInitial = await createResumeForSource(user.id, sourceInitial.id);
+  const resumeLate = await createResumeForSource(user.id, sourceLate.id);
+  const resumeEarly = await createResumeForSource(user.id, sourceEarly.id);
 
   // Designação inicial já ativa.
   await service.promote({
     ownerType: "USER",
     userId: user.id,
     cvStructuredProfileId: profileInitial.id,
+    resumeId: resumeInitial.id,
     masterIntent: "PROMOTE_IF_FIRST",
     promotedReason: "FIRST_EVER",
+    syncResumeIsMaster: true,
   });
 
   // Controla a ordem de commit explicitamente: a promoção "early" pega o
@@ -130,15 +159,19 @@ test("PROMOTE_EXPLICIT concorrente com designação ativa prévia: quem COMMITA 
     ownerType: "USER",
     userId: user.id,
     cvStructuredProfileId: profileEarly.id,
+    resumeId: resumeEarly.id,
     masterIntent: "PROMOTE_EXPLICIT",
     promotedReason: "EXPLICIT_FLAG",
+    syncResumeIsMaster: true,
   });
   const late = await service.promote({
     ownerType: "USER",
     userId: user.id,
     cvStructuredProfileId: profileLate.id,
+    resumeId: resumeLate.id,
     masterIntent: "PROMOTE_EXPLICIT",
     promotedReason: "EXPLICIT_FLAG",
+    syncResumeIsMaster: true,
   });
 
   assert.equal(early.changed, true);
@@ -160,13 +193,16 @@ test("promoteAndProject: cria MonitorProjectionJob só quando o Master de fato m
   const user = await createUser();
   const source = await createCvSourceForUser(user.id);
   const profile = await createReadyStructuredProfile(source.id);
+  const resume = await createResumeForSource(user.id, source.id);
 
   const result = await service.promoteAndProject({
     ownerType: "USER",
     userId: user.id,
     cvStructuredProfileId: profile.id,
+    resumeId: resume.id,
     masterIntent: "PROMOTE_IF_FIRST",
     promotedReason: "FIRST_EVER",
+    syncResumeIsMaster: true,
   });
 
   assert.equal(result.changed, true);
@@ -188,8 +224,10 @@ test("promoteAndProject: cria MonitorProjectionJob só quando o Master de fato m
     ownerType: "USER",
     userId: user.id,
     cvStructuredProfileId: profile.id,
+    resumeId: resume.id,
     masterIntent: "PROMOTE_IF_FIRST",
     promotedReason: "FIRST_EVER",
+    syncResumeIsMaster: true,
   });
   assert.equal(noop.changed, false);
   assert.equal(noop.monitorProjectionJobId, null);
@@ -206,6 +244,21 @@ test("trigger deferred de subject-match: violação vira MasterDesignationSubjec
   // ClaimSourceGrant, a trigger deve rejeitar no commit.
   const source = await createCvSourceForUser(sourceOwner.id);
   const profile = await createReadyStructuredProfile(source.id);
+  // Fase 3C item 5: precisa de um Resume PRÓPRIO do promotingUser (não do
+  // sourceOwner — a checagem de cross-owner é justamente o que a trigger de
+  // subject-match cobre; a trigger de integridade nova cobre resumeId
+  // presente/mesmo dono, independente). Criado FORA da transação de
+  // promoção (sobrevive mesmo quando ela é revertida pela trigger de
+  // subject-match) — só existe pra satisfazer a trigger de integridade
+  // nova, nunca vira Master de fato nesta chamada que falha.
+  const ownResumeForPromotingUser = await prisma.resume.create({
+    data: {
+      userId: promotingUser.id,
+      title: "Resume do usuário promovendo (sem acesso à fonte)",
+      isMaster: false,
+      rawText: "conteudo irrelevante",
+    },
+  });
 
   await assert.rejects(
     () =>
@@ -213,8 +266,10 @@ test("trigger deferred de subject-match: violação vira MasterDesignationSubjec
         ownerType: "USER",
         userId: promotingUser.id,
         cvStructuredProfileId: profile.id,
+        resumeId: ownResumeForPromotingUser.id,
         masterIntent: "PROMOTE_IF_FIRST",
         promotedReason: "FIRST_EVER",
+        syncResumeIsMaster: true,
       }),
     (error: unknown) => {
       assert.ok(error instanceof MasterDesignationSubjectMismatchError);
@@ -249,8 +304,10 @@ test("trigger deferred de subject-match: violação vira MasterDesignationSubjec
     ownerType: "USER",
     userId: promotingUser.id,
     cvStructuredProfileId: profile.id,
+    resumeId: ownResumeForPromotingUser.id,
     masterIntent: "PROMOTE_IF_FIRST",
     promotedReason: "FIRST_EVER",
+    syncResumeIsMaster: true,
   });
 
   assert.equal(retried.changed, true);

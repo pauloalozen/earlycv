@@ -14,6 +14,7 @@ import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-en
 import { CvProcessingFlagResolverService } from "../cv-processing/cv-processing-flag-resolver.service";
 import { DatabaseService } from "../database/database.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
+import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { StorageService } from "../storage/storage.service";
 import type { CreateResumeDto } from "./dto/create-resume.dto";
 import type {
@@ -48,7 +49,21 @@ export class ResumesService {
     @Inject(CvMasterPromotionService)
     private readonly cvMasterPromotion?: Pick<
       CvMasterPromotionService,
-      "promoteAndProject" | "getActiveDesignation"
+      "promoteAndProject" | "getActiveDesignation" | "supersedeIfResumeMatches"
+    >,
+    // Fase 3C item 4 — exclusão do Master: depois de supersedir a
+    // designação ativa e limpar os campos derivados de CV do UserProfile
+    // (dentro da transação de exclusão), o UserRadarProfile (projeção do
+    // Monitor) também precisa refletir isso. @Optional() pelo mesmo motivo
+    // dos demais: nunca referenciado pelos testes que instanciam
+    // ResumesService diretamente com poucos argumentos; ausência só
+    // desativa a reconciliação síncrona do radar (o MonitorProjectionJob
+    // durável ainda fica persistido pra um consumidor futuro).
+    @Optional()
+    @Inject(UserRadarProfileService)
+    private readonly userRadarProfile?: Pick<
+      UserRadarProfileService,
+      "refresh"
     >,
     // Fase 3 (pré-rollout) — resolução centralizada de ativação granular
     // (admin/allowlist), ver cv-processing-flag-resolver.service.ts.
@@ -211,6 +226,27 @@ export class ResumesService {
           where: { userId, kind: ResumeKind.master },
           select: { id: true },
         });
+        // Correção Fase 3C item 5 (achado escrevendo os testes da defesa
+        // estrutural nova, migration 20260905160000_cv_master_designation_
+        // integrity_defense): apagar um destes Resumes SEM antes supersedir
+        // uma CvMasterDesignation ativa que ainda aponte pra ele violava a
+        // invariante formal (designação ativa órfã) — o trigger
+        // trg_prevent_delete_active_master_resume agora bloqueia isso no
+        // banco, mas o caminho CERTO é nunca deixar acontecer: supersede
+        // ANTES de apagar, na MESMA transação, reusando exatamente o método
+        // já usado por ResumesService#remove() (mesmo advisory lock,
+        // serializa com qualquer promoção concorrente pro mesmo usuário).
+        // No-op quando não há designação ativa ainda, ou quando ela aponta
+        // pra outro Resume (nada a fazer).
+        if (this.cvMasterPromotion) {
+          for (const old of oldMasterResumes) {
+            await this.cvMasterPromotion.supersedeIfResumeMatches(
+              tx,
+              userId,
+              old.id,
+            );
+          }
+        }
         for (const old of oldMasterResumes) {
           // Resumes "adaptados" derivados do master antigo (basedOnResumeId)
           // também precisam ser apagados aqui: a constraint
@@ -270,6 +306,18 @@ export class ResumesService {
             masterIntent: dto.isPrimary
               ? "PROMOTE_EXPLICIT"
               : "PROMOTE_IF_FIRST",
+            // Bug #1 do piloto Fase 3B: este chamador nunca passava
+            // resumeId, então CvMasterDesignation.resumeId ficava sempre
+            // null pra todo Master promovido via upload direto (só era
+            // corrigido se o usuário chamasse set-primary depois sobre o
+            // mesmo Resume). createdResume.id já existe nesse ponto (criado
+            // na transação acima) — passar aqui faz o CvProcessingWorker
+            // (job.resumeId) rodar syncResumeIsMaster e a designação nascer
+            // já com resumeId apontando pro Resume certo, mesmo quando o
+            // CvSource é reaproveitado por hash (dedup) e quando o job é
+            // reaproveitado por retry/concorrência (CvProcessingJobService
+            // #enqueue já tem lógica de "upgrade" pra isso).
+            resumeId: createdResume.id,
             submission: file
               ? {
                   origin: "FILE_UPLOAD",
@@ -669,8 +717,31 @@ export class ResumesService {
     res.send(text);
   }
 
+  // Fase 3C item 4 (correção do bug #3 do piloto 3B): quando o Resume
+  // excluído é exatamente o Resume da CvMasterDesignation ATIVA do
+  // usuário, a designação nunca pode ficar ativa e órfã (apontando pra um
+  // Resume que não existe mais). Dentro da MESMA transação de exclusão
+  // (CvMasterPromotionService#supersedeIfResumeMatches trava por advisory
+  // lock, serializando com qualquer promoção concorrente):
+  //  1. supersede a designação ativa (se e só se ela apontar pra este
+  //     Resume — excluir um Resume comum nunca mexe em CvMasterDesignation);
+  //  2. limpa SÓ os campos do UserProfile derivados de CV (mesmo escopo
+  //     exato de dto.clearExistingProfile em create() acima) — preferências
+  //     (remotePreference/relocationPreference/targetSalaryMin/Max/
+  //     preferredLanguage/radarAreas/radarSeniority) e overrides manuais
+  //     (profileFieldMetaJson) são preservados, nunca tocados aqui;
+  //  3. persiste um MonitorProjectionJob(MASTER_REMOVED) durável — mesmo
+  //     quando ainda não existe worker consumidor dele (registro/auditoria
+  //     prontos pra quando existir, plano seção 17).
+  // Depois que a transação (rápida — só updates de banco, sem IA) commita,
+  // reconcilia o UserRadarProfile de forma síncrona best-effort — ele só lê
+  // UserProfile (sem IA), então não compromete a velocidade da exclusão, e
+  // evita deixar a projeção do Monitor visivelmente desatualizada até um
+  // worker futuro processar o MonitorProjectionJob.
   async remove(userId: string, resumeId: string) {
     await this.getById(userId, resumeId);
+
+    let masterDesignationSuperseded = false;
 
     await this.database.$transaction(async (tx) => {
       // Deletar um resume não "resgata"/promove outro a master — qualquer
@@ -682,6 +753,44 @@ export class ResumesService {
         where: { userId, basedOnResumeId: resumeId },
       });
 
+      if (this.cvMasterPromotion) {
+        const superseded =
+          await this.cvMasterPromotion.supersedeIfResumeMatches(
+            tx,
+            userId,
+            resumeId,
+          );
+
+        if (superseded) {
+          masterDesignationSuperseded = true;
+
+          await tx.userProfile.updateMany({
+            where: { userId },
+            data: {
+              fullName: null,
+              contactEmail: null,
+              phone: null,
+              linkedinUrl: null,
+              headline: null,
+              city: null,
+              state: null,
+              country: null,
+              professionalSummary: null,
+              experiencesJson: [],
+              educationJson: [],
+              skillsJson: { technical: [], business: [], soft: [] },
+              languagesJson: [],
+              certificationsJson: [],
+              profileReadinessStatus: "empty",
+            },
+          });
+
+          await tx.monitorProjectionJob.create({
+            data: { userId, reason: "MASTER_REMOVED" },
+          });
+        }
+      }
+
       const deleteResult = await tx.resume.deleteMany({
         where: { id: resumeId, userId },
       });
@@ -690,6 +799,21 @@ export class ResumesService {
         throw new NotFoundException("resume not found");
       }
     });
+
+    if (masterDesignationSuperseded && this.userRadarProfile) {
+      try {
+        await this.userRadarProfile.refresh(userId);
+      } catch (error) {
+        console.error(
+          "[resumes] failed to refresh radar profile after master removal",
+          {
+            error: error instanceof Error ? error.message : String(error),
+            resumeId,
+            userId,
+          },
+        );
+      }
+    }
 
     return { ok: true } as const;
   }
