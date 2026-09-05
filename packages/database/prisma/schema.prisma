@@ -2453,7 +2453,19 @@ model TalentProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user            User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // onDelete: Cascade (corrigido na Fase 2F — era SetNull): a checagem
+  // talent_profile_requires_owner (migration 20260904222812) passou a
+  // rejeitar qualquer linha sem userId NEM talentSubjectId a partir daquela
+  // migration — inclusive a que o SetNull produzia ao apagar um usuário com
+  // TalentProfile (achado real rodando a suíte completa nesta fase: exclusão
+  // de conta de um usuário com TalentProfile passou a estourar violação de
+  // CHECK no banco, quebrando auth.service.ts#deleteCurrentUser e
+  // admin-users.service.ts, ambos fluxos reais em produção). Cascade
+  // preserva a garantia de dono único e evita o registro órfão — apagar a
+  // conta apaga também o TalentProfile e seus dados dependentes (mesmo
+  // padrão de privacidade de "excluir minha conta apaga meus dados"),
+  // nunca deixa um TalentProfile sem dono para trás.
+  user            User?                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   identitySignals TalentIdentitySignal[]
   competencies    TalentCompetency[]
   languages       TalentLanguageSkill[]
@@ -2913,6 +2925,14 @@ enum TalentSubjectMergeReason {
   CLAIM_FULL
   CLAIM_PARTIAL_COPY
   MANUAL_ADMIN_REVIEW
+  // Correção da migration 20260904222812 (talent-identity-resolver.ts):
+  // adoção automática, em tempo real, de um TalentProfile legado sem
+  // NENHUM dono (userId/talentSubjectId nulos) quando o resolver o toca de
+  // novo. Não é STRONG_SIGNAL_MATCH (não é merge cross-sessão por sinal
+  // forte) nem MANUAL_ADMIN_REVIEW (não é revisão humana nem backfill
+  // offline, é tráfego real de produção) — ver talent-subject.service.ts
+  // #adoptLegacyOwnerlessProfile.
+  LEGACY_PROFILE_ADOPTED
 }
 
 // Trilha de auditoria de todo merge sujeito↔sujeito ou sujeito↔usuário —

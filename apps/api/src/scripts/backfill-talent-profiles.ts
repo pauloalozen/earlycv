@@ -20,6 +20,7 @@
 
 import { PrismaClient } from "@prisma/client";
 
+import { DatabaseService } from "../database/database.service";
 import { StorageService } from "../storage/storage.service";
 import {
   extractContactSignalsFromText,
@@ -31,6 +32,7 @@ import {
   type CandidateSignal,
   TalentIdentityResolver,
 } from "../talent-profiles/talent-identity-resolver";
+import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
 
 const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
@@ -311,11 +313,12 @@ async function processGuestSnapshots(
   prisma: PrismaClient,
   storage: StorageService,
   resolver: TalentIdentityResolver,
+  talentSubjectService: TalentSubjectService,
   counters: Counters,
 ) {
   const snapshots = await prisma.analysisCvSnapshot.findMany({
     where: { userId: null },
-    select: { id: true, textStorageKey: true },
+    select: { id: true, textStorageKey: true, guestSessionHash: true },
     orderBy: { createdAt: "asc" },
     ...(LIMIT ? { take: LIMIT } : {}),
   });
@@ -333,7 +336,24 @@ async function processGuestSnapshots(
     const signals = buildExtractedSignals(snapshot.id, extracted);
     if (signals.length === 0) continue;
 
-    const outcome = await resolver.resolveForGuest(signals);
+    // Correção Fase 2F-corretiva: todo TalentProfile NOVO exige um dono
+    // (talent_profile_requires_owner) — em --dry-run isso nunca grava
+    // nada de verdade (resolveOrCreateAnonymousSubject só cria em modo
+    // --apply, mas aqui está sempre em modo real porque este script já
+    // controla dry-run via DRY_RUN acima em resolveForGuest/toOutcome).
+    // Como este script roda uma vez por processo (nunca reprocessa o
+    // mesmo snapshot na mesma execução), não há necessidade de
+    // idempotência entre chamadas além da já garantida por
+    // guestSessionHash quando presente.
+    const talentSubjectId = DRY_RUN
+      ? `dry-run-subject-${snapshot.id}`
+      : (
+          await talentSubjectService.resolveOrCreateAnonymousSubject(
+            snapshot.guestSessionHash,
+          )
+        ).talentSubjectId;
+
+    const outcome = await resolver.resolveForGuest(signals, talentSubjectId);
     counters.signalsAttached += outcome.attachedSignals;
     counters.conflictsDetected += outcome.conflicts;
 
@@ -359,6 +379,9 @@ async function main() {
   const prisma = new PrismaClient();
   const storage = new StorageService();
   const resolver = new TalentIdentityResolver(prisma, DRY_RUN);
+  const talentSubjectService = new TalentSubjectService(
+    new DatabaseService(prisma),
+  );
   const counters = emptyCounters();
 
   console.log(
@@ -373,7 +396,13 @@ async function main() {
     await processLinkedSnapshots(prisma, storage, resolver, counters);
 
     console.log("[talent-backfill] fase C — snapshots de guest (anônimos)");
-    await processGuestSnapshots(prisma, storage, resolver, counters);
+    await processGuestSnapshots(
+      prisma,
+      storage,
+      resolver,
+      talentSubjectService,
+      counters,
+    );
 
     console.log("[talent-backfill] concluído:");
     console.table(counters);

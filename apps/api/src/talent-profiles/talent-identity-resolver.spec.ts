@@ -25,6 +25,32 @@ function emailSignal(
   };
 }
 
+async function makeSubject() {
+  const subject = await prisma.talentSubject.create({ data: {} });
+  return subject.id;
+}
+
+// talent_profile_requires_owner (migration 20260904222812) é NOT VALID —
+// não escaneia linhas EXISTENTES, mas passa a valer pra todo INSERT/UPDATE
+// novo a partir dali, inclusive via SQL cru. Não há mais nenhum jeito de
+// criar uma linha legada sem dono no banco depois dessa migration — as 187
+// linhas reais só existem porque foram criadas ANTES dela. Pra simular esse
+// estado histórico em teste, remove a constraint, insere a linha "legada",
+// e recoloca a constraint (mesmo texto da migration original) — nunca deixa
+// o banco de teste sem a constraint entre testes (bloco try/finally).
+async function withoutOwnerConstraint<T>(fn: () => Promise<T>): Promise<T> {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TalentProfile" DROP CONSTRAINT "talent_profile_requires_owner"`,
+  );
+  try {
+    return await fn();
+  } finally {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "TalentProfile" ADD CONSTRAINT "talent_profile_requires_owner" CHECK ("userId" IS NOT NULL OR "talentSubjectId" IS NOT NULL) NOT VALID`,
+    );
+  }
+}
+
 async function makeUser() {
   return prisma.user.create({
     data: {
@@ -48,20 +74,24 @@ test("resolveForGuest creates a new profile when no signal matches anything", as
   const resolver = new TalentIdentityResolver(prisma, false);
   const email = `guest-new+${randomUUID()}@example.com`;
   const sourceRecordId = randomUUID();
+  const talentSubjectId = await makeSubject();
 
-  const outcome = await resolver.resolveForGuest([
-    emailSignal(email, sourceRecordId),
-  ]);
+  const outcome = await resolver.resolveForGuest(
+    [emailSignal(email, sourceRecordId)],
+    talentSubjectId,
+  );
 
   assert.equal(outcome.createdProfile, true);
   assert.equal(outcome.promotedToUser, false);
   assert.equal(outcome.conflicts, 0);
+  assert.equal(outcome.requiresLegacyAdoption, false);
 
   const profile = await prisma.talentProfile.findUnique({
     where: { id: outcome.talentProfileId },
   });
   assert.equal(profile?.identityConfidence, "STRONG_MATCH");
   assert.equal(profile?.userId, null);
+  assert.equal(profile?.talentSubjectId, talentSubjectId);
   assert.equal(profile?.originSourceRecordType, "AnalysisCvSnapshot");
   assert.equal(profile?.originSourceRecordId, sourceRecordId);
 
@@ -72,10 +102,14 @@ test("resolveForGuest re-run with the same email attaches to the same profile (i
   const resolver = new TalentIdentityResolver(prisma, false);
   const email = `guest-repeat+${randomUUID()}@example.com`;
 
-  const first = await resolver.resolveForGuest([emailSignal(email)]);
-  const second = await resolver.resolveForGuest([
-    emailSignal(email, randomUUID()),
-  ]);
+  const first = await resolver.resolveForGuest(
+    [emailSignal(email)],
+    await makeSubject(),
+  );
+  const second = await resolver.resolveForGuest(
+    [emailSignal(email, randomUUID())],
+    await makeSubject(),
+  );
 
   assert.equal(second.talentProfileId, first.talentProfileId);
   assert.equal(second.createdProfile, false);
@@ -88,12 +122,86 @@ test("resolveForGuest re-run with the same email attaches to the same profile (i
   await cleanupProfile(first.talentProfileId);
 });
 
+test("resolveForGuest never creates a TalentProfile without an owner (talent_profile_requires_owner)", async () => {
+  const resolver = new TalentIdentityResolver(prisma, false);
+  // Sem NENHUM sinal (nem NAME_COMPOSITE) — o caso que quebrava antes da
+  // correção (CHECK talent_profile_requires_owner).
+  const outcome = await resolver.resolveForGuest([], await makeSubject());
+
+  assert.equal(outcome.createdProfile, true);
+  const profile = await prisma.talentProfile.findUnique({
+    where: { id: outcome.talentProfileId },
+  });
+  assert.ok(
+    profile?.talentSubjectId,
+    "talentSubjectId deveria estar preenchido",
+  );
+  assert.equal(profile?.userId, null);
+
+  await cleanupProfile(outcome.talentProfileId);
+});
+
+test("resolveForGuest adopts a legacy ownerless profile matched by strong signal (sinaliza requiresLegacyAdoption, nunca adota sozinho)", async () => {
+  const resolver = new TalentIdentityResolver(prisma, false);
+  const email = `guest-legacy+${randomUUID()}@example.com`;
+
+  // Simula uma das 187 linhas legadas: TalentProfile sem NENHUM dono,
+  // criado direto (bypassando o resolver), com um sinal já anexado. Só é
+  // possível criar essa linha em teste suspendendo temporariamente a
+  // constraint (ver withoutOwnerConstraint) — depois da migration
+  // 20260904222812, nenhum INSERT novo consegue ficar sem dono, nem por
+  // SQL cru.
+  const legacyProfile = await withoutOwnerConstraint(() =>
+    prisma.talentProfile.create({
+      data: { identityConfidence: "STRONG_MATCH" },
+    }),
+  );
+  await prisma.talentIdentitySignal.create({
+    data: {
+      talentProfileId: legacyProfile.id,
+      signalType: "EMAIL",
+      normalizedValue: email,
+      confidence: "STRONG_MATCH",
+      provenance: "EXTRACTED_REGEX",
+      sourceRecordType: "AnalysisCvSnapshot",
+      sourceRecordId: randomUUID(),
+    },
+  });
+
+  const talentSubjectId = await makeSubject();
+  const outcome = await resolver.resolveForGuest(
+    [emailSignal(email, randomUUID())],
+    talentSubjectId,
+  );
+
+  assert.equal(outcome.talentProfileId, legacyProfile.id);
+  assert.equal(outcome.createdProfile, false);
+  assert.equal(
+    outcome.requiresLegacyAdoption,
+    true,
+    "resolver deveria sinalizar que o profile legado precisa de adoção",
+  );
+
+  // resolveForGuest sozinho NUNCA adota — só sinaliza. A linha continua
+  // sem dono até o chamador (TalentSubjectService) agir.
+  const stillOwnerless = await prisma.talentProfile.findUnique({
+    where: { id: legacyProfile.id },
+  });
+  assert.equal(stillOwnerless?.userId, null);
+  assert.equal(stillOwnerless?.talentSubjectId, null);
+
+  await cleanupProfile(legacyProfile.id);
+});
+
 test("resolveForUser promotes an existing guest profile instead of creating a duplicate", async () => {
   const resolver = new TalentIdentityResolver(prisma, false);
   const email = `guest-to-user+${randomUUID()}@example.com`;
   const user = await makeUser();
 
-  const guestOutcome = await resolver.resolveForGuest([emailSignal(email)]);
+  const guestOutcome = await resolver.resolveForGuest(
+    [emailSignal(email)],
+    await makeSubject(),
+  );
   const userOutcome = await resolver.resolveForUser(user.id, [
     emailSignal(email, randomUUID()),
   ]);
@@ -197,7 +305,10 @@ test("dry run never writes to the database", async () => {
   const resolver = new TalentIdentityResolver(prisma, true);
   const email = `dry-run+${randomUUID()}@example.com`;
 
-  const outcome = await resolver.resolveForGuest([emailSignal(email)]);
+  const outcome = await resolver.resolveForGuest(
+    [emailSignal(email)],
+    `dry-run-subject-${randomUUID()}`,
+  );
 
   assert.equal(outcome.createdProfile, true);
   assert.equal(outcome.attachedSignals, 1);

@@ -4,6 +4,14 @@ import type {
   TalentIdentityConfidence,
   TalentIdentitySignalType,
 } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
+}
 
 // Resolução/deduplicação de identidade — fase 1 da Base de Talentos (ver
 // AGENTS.md "v3.2"). Regra de merge:
@@ -47,6 +55,17 @@ export type ResolutionOutcome = {
   conflicts: number;
 };
 
+// resolveForGuest só — sinaliza pro chamador que o profile ao qual esta
+// chamada acabou de anexar sinais é um TalentProfile LEGADO sem NENHUM
+// dono (userId/talentSubjectId nulos, das 187 linhas pré-migration
+// 20260904222812). A adoção em si (UPDATE + auditoria) NÃO acontece aqui —
+// fica a cargo do chamador via
+// TalentSubjectService#adoptLegacyOwnerlessProfile, que é o único lugar
+// que sabe gravar TalentSubjectMergeEvent sem duplicar.
+export type GuestResolutionOutcome = ResolutionOutcome & {
+  requiresLegacyAdoption: boolean;
+};
+
 type PendingConflict = {
   otherProfileId: string;
   signal: CandidateSignal;
@@ -54,7 +73,10 @@ type PendingConflict = {
 
 type PrismaLike = Pick<
   PrismaClient,
-  "talentProfile" | "talentIdentitySignal" | "talentIdentityConflict"
+  | "talentProfile"
+  | "talentIdentitySignal"
+  | "talentIdentityConflict"
+  | "talentSubjectMergeEvent"
 >;
 
 export class TalentIdentityResolver {
@@ -83,20 +105,42 @@ export class TalentIdentityResolver {
     // criar um novo) — conflito por sinal é responsabilidade única de
     // attachSignals abaixo, pra não logar o mesmo conflito duas vezes.
     let promotedProfileId: string | null = null;
+    let promotedFromTalentSubjectId: string | null = null;
     for (const signal of this.orderedStrongSignals(signals)) {
       const match = await this.findSignalOwner(signal);
       if (match?.userId === null) {
         promotedProfileId = match.id;
+        promotedFromTalentSubjectId = match.talentSubjectId;
         break;
       }
     }
 
     if (promotedProfileId) {
       if (!this.dryRun) {
+        // Correção da migration 20260904222812/talent_profile_owner_xor: um
+        // guest resolvido pelo caminho novo (Fase 2F-corretiva) já tem
+        // talentSubjectId preenchido. Promover pra CONFIRMED_USER exige
+        // limpar talentSubjectId (dono é exatamente um, nunca os dois) —
+        // grava a auditoria formal do merge sujeito→usuário (mesmo padrão
+        // do plano, seção 3: sinal STRONG concordante -> merge automático
+        // com evento).
         await this.prisma.talentProfile.update({
           where: { id: promotedProfileId },
-          data: { userId, identityConfidence: "CONFIRMED_USER" },
+          data: {
+            userId,
+            identityConfidence: "CONFIRMED_USER",
+            talentSubjectId: null,
+          },
         });
+        if (promotedFromTalentSubjectId) {
+          await this.prisma.talentSubjectMergeEvent.create({
+            data: {
+              talentSubjectId: promotedFromTalentSubjectId,
+              targetUserId: userId,
+              reason: "STRONG_SIGNAL_MATCH",
+            },
+          });
+        }
       }
       const attached = await this.attachSignals(promotedProfileId, signals);
       return this.toOutcome(promotedProfileId, false, true, attached);
@@ -123,23 +167,40 @@ export class TalentIdentityResolver {
   // forte que já bate com QUALQUER profile existente — guest ou já
   // registrado — anexa nele. Nunca cria/funde a partir de NAME_COMPOSITE
   // sozinho.
+  //
+  // `talentSubjectId` (correção da migration 20260904222812 — ver
+  // talent-subject.service.ts#resolveOrCreateAnonymousSubject): todo
+  // TalentProfile NOVO criado aqui precisa de exatamente um dono
+  // (talent_profile_requires_owner). O chamador resolve/cria o
+  // TalentSubject ANTES de chamar este método (sempre disponível, mesmo
+  // sem guestSessionHash) e passa o id aqui — usado só quando este método
+  // efetivamente cria uma linha nova. Quando em vez disso ele encontra um
+  // profile LEGADO sem dono por match de sinal, este método só sinaliza
+  // (`requiresLegacyAdoption`) — a adoção de fato é feita pelo chamador via
+  // TalentSubjectService, reusando este mesmo talentSubjectId.
   async resolveForGuest(
     signals: CandidateSignal[],
-  ): Promise<ResolutionOutcome> {
+    talentSubjectId: string,
+  ): Promise<GuestResolutionOutcome> {
     // Mesma lógica de resolveForUser: só decide o profile alvo aqui,
     // conflito por sinal é sempre responsabilidade de attachSignals.
     let resolvedProfileId: string | null = null;
+    let requiresLegacyAdoption = false;
     for (const signal of this.orderedStrongSignals(signals)) {
       const match = await this.findSignalOwner(signal);
       if (match) {
         resolvedProfileId = match.id;
+        requiresLegacyAdoption = !match.userId && !match.talentSubjectId;
         break;
       }
     }
 
     if (resolvedProfileId) {
       const attached = await this.attachSignals(resolvedProfileId, signals);
-      return this.toOutcome(resolvedProfileId, false, false, attached);
+      return {
+        ...this.toOutcome(resolvedProfileId, false, false, attached),
+        requiresLegacyAdoption: requiresLegacyAdoption && !this.dryRun,
+      };
     }
 
     const hasStrongSignal = this.orderedStrongSignals(signals).length > 0;
@@ -147,23 +208,61 @@ export class TalentIdentityResolver {
       ? "STRONG_MATCH"
       : "UNVERIFIED";
 
-    const profileId = this.dryRun
-      ? `dry-run-guest-${signals[0]?.sourceRecordId ?? "unknown"}`
-      : (
-          await this.prisma.talentProfile.create({
-            data: { identityConfidence, ...this.originFields(signals) },
-          })
-        ).id;
+    const { id: profileId, created } = this.dryRun
+      ? {
+          id: `dry-run-guest-${signals[0]?.sourceRecordId ?? "unknown"}`,
+          created: true,
+        }
+      : await this.createOrReuseByTalentSubject(
+          talentSubjectId,
+          identityConfidence,
+          signals,
+        );
 
     const attached = await this.attachSignals(profileId, signals);
 
-    return this.toOutcome(profileId, true, false, attached);
+    return {
+      ...this.toOutcome(profileId, created, false, attached),
+      requiresLegacyAdoption: false,
+    };
   }
 
   // Todo sinal de uma mesma chamada vem do MESMO registro de origem (um
   // CV/análise) — basta o primeiro. Gravado uma vez na criação,
   // independente de o sinal em si sobreviver ou colidir com outro profile
   // (ver comentário do campo no schema).
+  // Concorrência real: duas capturas do MESMO guest (mesmo talentSubjectId,
+  // vindo da mesma sessão resolvida por TalentSubjectService) sem nenhum
+  // profile existente ainda podem chegar aqui ao mesmo tempo — nenhuma
+  // delas encontra o profile via findSignalOwner (não há sinal ainda), as
+  // duas tentam criar. TalentProfile.talentSubjectId é @unique, então a
+  // perdedora recebe P2002 — mesmo padrão create+catch(P2002)+reread já
+  // usado em talent-subject.service.ts#resolveForGuestSession, aqui
+  // aplicado ao TalentProfile em vez do TalentSubject.
+  private async createOrReuseByTalentSubject(
+    talentSubjectId: string,
+    identityConfidence: TalentIdentityConfidence,
+    signals: CandidateSignal[],
+  ): Promise<{ id: string; created: boolean }> {
+    try {
+      const created = await this.prisma.talentProfile.create({
+        data: {
+          identityConfidence,
+          talentSubjectId,
+          ...this.originFields(signals),
+        },
+      });
+      return { id: created.id, created: true };
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+
+      const winner = await this.prisma.talentProfile.findUniqueOrThrow({
+        where: { talentSubjectId },
+      });
+      return { id: winner.id, created: false };
+    }
+  }
+
   private originFields(signals: CandidateSignal[]) {
     const origin = signals[0];
     if (!origin) return {};
@@ -194,9 +293,11 @@ export class TalentIdentityResolver {
     );
   }
 
-  private async findSignalOwner(
-    signal: CandidateSignal,
-  ): Promise<{ id: string; userId: string | null } | null> {
+  private async findSignalOwner(signal: CandidateSignal): Promise<{
+    id: string;
+    userId: string | null;
+    talentSubjectId: string | null;
+  } | null> {
     const match = await this.prisma.talentIdentitySignal.findUnique({
       where: {
         signalType_normalizedValue: {
@@ -210,7 +311,13 @@ export class TalentIdentityResolver {
     const profile = await this.prisma.talentProfile.findUnique({
       where: { id: match.talentProfileId },
     });
-    return profile ? { id: profile.id, userId: profile.userId } : null;
+    return profile
+      ? {
+          id: profile.id,
+          userId: profile.userId,
+          talentSubjectId: profile.talentSubjectId,
+        }
+      : null;
   }
 
   private async attachSignals(

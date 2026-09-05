@@ -27,6 +27,7 @@ import {
   getAiModel,
 } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
+import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
 import { protectConfirmedCacheFields } from "./talent-cache-protection";
 import {
   type CanonicalProfile,
@@ -55,6 +56,12 @@ export type SnapshotCaptureInput = {
   userId: string | null;
   sourceType: AnalysisCvSourceType;
   text: string;
+  // Só relevante pro caminho guest (userId null) — sinal de LOCALIZAÇÃO de
+  // sessão (plano, seção 3), nunca a identidade em si. Pode ser null (ex.:
+  // caminho de texto colado sem cookie de sessão) — ver
+  // TalentSubjectService#resolveOrCreateAnonymousSubject, que garante um
+  // TalentSubject mesmo sem ele.
+  guestSessionHash?: string | null;
 };
 
 function buildAccountSignals(
@@ -191,6 +198,8 @@ export class TalentProfileCaptureService {
   constructor(
     @Inject(DatabaseService)
     private readonly database: DatabaseService,
+    @Inject(TalentSubjectService)
+    private readonly talentSubjectService: TalentSubjectService,
   ) {
     this.aiClient = createAiClientFromEnv(OPERATION);
     this.aiModel = getAiModel(OPERATION);
@@ -199,12 +208,35 @@ export class TalentProfileCaptureService {
   // Fire-and-forget: NUNCA aguardado pelo chamador, e qualquer falha fica
   // só em log — a captura de talent profile não pode derrubar nem atrasar
   // a resposta de uma análise de CV de verdade.
+  //
+  // IMPORTANTE (correção Fase 2F-corretiva): este caminho é best-effort por
+  // natureza (sem retry, sem persistência de estado de tentativa) — a
+  // garantia FORMAL de "nenhuma análise de CV é perdida" é responsabilidade
+  // exclusiva do pipeline novo (CvProcessingJob/CvProcessingWorker, plano
+  // seção 1). Esta correção só faz esse caminho legado parar de VIOLAR a
+  // invariante de dono do TalentProfile — não lhe dá as garantias de
+  // retry/recuperação do pipeline novo.
   captureFromSnapshot(input: SnapshotCaptureInput): void {
     void this.run(input).catch((error) => {
+      const isOwnerConstraintViolation =
+        error instanceof Error &&
+        error.message.includes("talent_profile_requires_owner");
+      // Nunca engole silenciosamente uma violação da invariante de dono —
+      // isso precisa ficar visível mesmo que o resto da captura seja
+      // best-effort. `event` é o campo grepável (não há um mecanismo de
+      // métrica/counter dedicado pra eventos assíncronos deste tipo no
+      // projeto hoje — log estruturado é a opção aceita, ver relatório da
+      // Fase 2F-corretiva).
       this.logger.error(
         `falha ao capturar talent profile do snapshot ${input.snapshotId}: ${
           error instanceof Error ? error.message : String(error)
-        }`,
+        } ${JSON.stringify({
+          event: "talent_profile_capture_failed",
+          snapshotId: input.snapshotId,
+          userId: input.userId,
+          sourceType: input.sourceType,
+          ownerConstraintViolation: isOwnerConstraintViolation,
+        })}`,
       );
     });
   }
@@ -248,9 +280,38 @@ export class TalentProfileCaptureService {
         });
       }
     } else {
-      if (extractedSignals.length === 0) return; // nada pra identificar/anexar
-      const outcome = await resolver.resolveForGuest(extractedSignals);
+      // Correção do bug real (Fase 2F-corretiva): antes desta correção, um
+      // guest sem NENHUM sinal extraído fazia este método retornar sem
+      // criar nada (perda silenciosa de dado — nem constraint violada, nem
+      // captura acontecia); e um guest com só NAME_COMPOSITE (sem sinal
+      // FORTE) chegava a criar um TalentProfile sem talentSubjectId,
+      // violando talent_profile_requires_owner. Toda análise de visitante
+      // agora sempre resolve/cria um TalentSubject primeiro (plano, seção
+      // 2: "toda análise alimenta a Base de Talentos") — com ou sem sinal
+      // extraído, com ou sem guestSessionHash disponível.
+      const { talentSubjectId } =
+        await this.talentSubjectService.resolveOrCreateAnonymousSubject(
+          input.guestSessionHash ?? null,
+        );
+
+      const outcome = await resolver.resolveForGuest(
+        extractedSignals,
+        talentSubjectId,
+      );
       talentProfileId = outcome.talentProfileId;
+
+      if (outcome.requiresLegacyAdoption) {
+        // Perfil legado (pré-migration 20260904222812) sem NENHUM dono,
+        // encontrado por match de sinal forte — adota a MESMA linha
+        // (preserva id/fatos já vinculados) e grava a auditoria. Reusa o
+        // talentSubjectId já resolvido acima (nunca cria um segundo
+        // TalentSubject candidato à toa). Idempotente por construção
+        // (guarded WHERE + no-op se outra chamada concorrente já adotou).
+        await this.talentSubjectService.adoptLegacyOwnerlessProfile({
+          talentProfileId,
+          talentSubjectId,
+        });
+      }
 
       if (outcome.createdProfile) {
         await this.seedProfileCache(talentProfileId, {

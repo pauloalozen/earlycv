@@ -6145,6 +6145,7 @@ export class CvAdaptationService {
       userId: snapshot.userId,
       sourceType: snapshot.sourceType,
       text: normalizedText,
+      guestSessionHash: snapshot.guestSessionHash,
     });
 
     return snapshot;
