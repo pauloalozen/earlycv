@@ -178,6 +178,18 @@ export class CvUserProfileSyncService {
     return { areas, seniority };
   }
 
+  // Wrapper público (Fase 2C): CvAnalysisWorker precisa transformar o
+  // canonicalJson de um CvStructuredProfile (mesma forma de
+  // CanonicalProfileForSync) no shape de CanonicalProfileData pra poder
+  // reaproveitar cv-adaptation.service#renderCanonicalProfileToText — sem
+  // duplicar essa lógica de mapeamento. Puro alias, nenhuma mudança de
+  // comportamento na síntese de UserProfile em si.
+  toCanonicalProfileData(
+    canonical: CanonicalProfileForSync,
+  ): Partial<CanonicalProfileData> {
+    return this.mapCanonicalToData(canonical);
+  }
+
   private mapCanonicalToData(
     canonical: CanonicalProfileForSync,
   ): Partial<CanonicalProfileData> {

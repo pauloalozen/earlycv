@@ -33,6 +33,14 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
     ProfileReadinessService,
     IngestionLockRepository,
   ],
-  exports: [CvProcessingEntrypointService, CvProcessingJobService],
+  // CvMasterPromotionService exportado a partir da Fase 2C: cv-adaptation.service
+  // (análise autenticada) precisa consultar a designação ativa de Master
+  // (getActiveDesignation) pra decidir masterIntent/reusar extração já READY,
+  // sem duplicar a lógica de concorrência da seção 10 do plano.
+  exports: [
+    CvProcessingEntrypointService,
+    CvProcessingJobService,
+    CvMasterPromotionService,
+  ],
 })
 export class CvProcessingModule {}

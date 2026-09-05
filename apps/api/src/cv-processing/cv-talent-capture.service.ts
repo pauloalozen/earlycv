@@ -21,9 +21,17 @@ import { createHash } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
 import type { TalentCompetencyCategory, TalentProfile } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { CanonicalProfileForSync } from "./cv-user-profile-sync.service";
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
+}
 
 export type CaptureOwnerRef =
   | { ownerType: "USER"; userId: string; talentSubjectId?: undefined }
@@ -88,26 +96,41 @@ export class CvTalentCaptureService {
     return { talentProfileId: talentProfile.id };
   }
 
+  // create() + catch P2002 (não find-then-create, nem upsert puro): dois
+  // CvProcessingJob do MESMO usuário processados por workers de fato
+  // concorrentes (Fase 2C expõe esse caminho pela primeira vez — antes só
+  // um CvProcessingJob por vez batia aqui) podiam ambos observar "não
+  // existe" e colidir no @@unique([userId]) do segundo create(). Mesmo
+  // padrão já usado em cv-processing-entrypoint.service.ts#createSourceOrReuse
+  // e no INSERT de CvMasterDesignation (cv-master-promotion.service.ts):
+  // tenta criar, se perder a corrida (violação de unicidade) relê a linha
+  // vencedora — nunca lança pro chamador, nunca duplica.
   private async findOrCreateTalentProfile(
     owner: CaptureOwnerRef,
   ): Promise<TalentProfile> {
     if (owner.ownerType === "USER") {
-      const existing = await this.database.talentProfile.findUnique({
-        where: { userId: owner.userId },
-      });
-      if (existing) return existing;
-      return this.database.talentProfile.create({
-        data: { userId: owner.userId },
-      });
+      try {
+        return await this.database.talentProfile.create({
+          data: { userId: owner.userId },
+        });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        return this.database.talentProfile.findUniqueOrThrow({
+          where: { userId: owner.userId },
+        });
+      }
     }
 
-    const existing = await this.database.talentProfile.findUnique({
-      where: { talentSubjectId: owner.talentSubjectId },
-    });
-    if (existing) return existing;
-    return this.database.talentProfile.create({
-      data: { talentSubjectId: owner.talentSubjectId },
-    });
+    try {
+      return await this.database.talentProfile.create({
+        data: { talentSubjectId: owner.talentSubjectId },
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      return this.database.talentProfile.findUniqueOrThrow({
+        where: { talentSubjectId: owner.talentSubjectId },
+      });
+    }
   }
 
   private async captureEducation(

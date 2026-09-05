@@ -25,6 +25,12 @@ type ProtectedAnalyzeInput<TPayload> = {
   loadMasterCvText: () => Promise<string>;
   payload: TPayload;
   turnstileToken?: string | null;
+  // Fase 2C (pipeline canônico): a análise passa a rodar num worker
+  // separado, depois da resposta HTTP original — o turnstile já foi
+  // verificado uma única vez no entrypoint (precheckTurnstile), então o
+  // token (de uso único/curto) não pode ser reapresentado aqui. Mesmo
+  // padrão já usado por executeProtectedBuildPaidCvOutputFromGuest.
+  skipTurnstile?: boolean;
 };
 
 type ProtectedAnalyzeOutput = {
@@ -91,6 +97,7 @@ export class CvAdaptationProtectedAnalyzeService {
     return this.analysisProtectionFacade.executeProtectedAnalysis(
       {
         payload: input.payload,
+        skipTurnstile: input.skipTurnstile ?? false,
         turnstileToken: input.turnstileToken,
       },
       input.context,
