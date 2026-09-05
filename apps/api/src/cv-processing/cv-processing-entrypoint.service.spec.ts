@@ -143,3 +143,69 @@ test("entrypoint (Fase 2B): metadados de arquivo preservados na CvSubmission (FI
   assert.equal(cvSubmission.mimeType, "application/pdf");
   assert.equal(cvSubmission.fileSizeBytes, 12345);
 });
+
+// Fase 2D — enqueueFromGuestText: mesmo comportamento de enqueueFromUserText,
+// trocando userId por talentSubjectId (dono GUEST). Reusa enqueueCommon
+// internamente — cobre dedup real e preservação de metadados igual ao dono
+// USER, sem duplicar a suíte inteira.
+async function createTalentSubject() {
+  return prisma.talentSubject.create({ data: {} });
+}
+
+test("entrypoint (Fase 2D): enqueueFromGuestText grava CvSource com ownerType GUEST e talentSubjectId, sem userId", async () => {
+  const subject = await createTalentSubject();
+  const storage = new FakeStorage();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  const text = "Visitante Anônimo\nExperiência com React.";
+  const { cvSource } = await entrypoint.enqueueFromGuestText({
+    talentSubjectId: subject.id,
+    text,
+    masterIntent: "NONE",
+    submission: { origin: "PASTED_TEXT" },
+  });
+
+  assert.equal(cvSource.ownerType, "GUEST");
+  assert.equal(cvSource.talentSubjectId, subject.id);
+  assert.equal(cvSource.userId, null);
+  assert.equal(
+    cvSource.textSha256,
+    createHash("sha256").update(text).digest("hex"),
+  );
+});
+
+test("entrypoint (Fase 2D): enqueueFromGuestText deduplica por (talentSubjectId, textSha256) igual ao dono USER", async () => {
+  const subject = await createTalentSubject();
+  const storage = new FakeStorage();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  const text = "Conteúdo idêntico de visitante para deduplicação.";
+  const first = await entrypoint.enqueueFromGuestText({
+    talentSubjectId: subject.id,
+    text,
+    masterIntent: "NONE",
+    submission: { origin: "PASTED_TEXT" },
+  });
+  const second = await entrypoint.enqueueFromGuestText({
+    talentSubjectId: subject.id,
+    text,
+    masterIntent: "NONE",
+    submission: { origin: "PASTED_TEXT" },
+  });
+
+  assert.equal(first.cvSource.id, second.cvSource.id);
+  assert.equal(storage.puts.length, 1);
+
+  const submissionsCount = await prisma.cvSubmission.count({
+    where: { cvSourceId: first.cvSource.id },
+  });
+  assert.equal(submissionsCount, 2);
+});

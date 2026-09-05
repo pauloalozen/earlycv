@@ -319,6 +319,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.talentSubject;
   }
 
+  get talentSubjectSessionSignal() {
+    return this.prisma.talentSubjectSessionSignal;
+  }
+
   get talentProfileSource() {
     return this.prisma.talentProfileSource;
   }

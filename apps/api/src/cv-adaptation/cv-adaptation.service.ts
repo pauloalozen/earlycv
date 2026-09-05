@@ -47,6 +47,7 @@ import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merg
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
 import { StorageService } from "../storage/storage.service";
 import { TalentProfileCaptureService } from "../talent-profiles/talent-profile-capture.service";
+import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import {
@@ -233,13 +234,23 @@ export class CvAdaptationService {
     @Inject(CvProcessingEntrypointService)
     private readonly cvProcessingEntrypoint?: Pick<
       CvProcessingEntrypointService,
-      "enqueueFromUserText"
+      "enqueueFromUserText" | "enqueueFromGuestText"
     >,
     @Optional()
     @Inject(CvMasterPromotionService)
     private readonly cvMasterPromotionForAnalysis?: Pick<
       CvMasterPromotionService,
       "getActiveDesignation"
+    >,
+    // Fase 2D: resolve o TalentSubject (sujeito anônimo) dono do
+    // CvSource/CvProcessingJob de uma análise de visitante, quando
+    // CV_STRUCTURED_PROFILE_PIPELINE_ENABLED=true. Mesmo padrão @Optional
+    // dos dois acima — nunca referenciado com a flag desligada.
+    @Optional()
+    @Inject(TalentSubjectService)
+    private readonly talentSubjectService?: Pick<
+      TalentSubjectService,
+      "resolveForGuestSession"
     >,
   ) {}
 
@@ -994,6 +1005,22 @@ export class CvAdaptationService {
     guestSessionPublicToken: string | null;
     guestPossessionToken: string;
   }> {
+    // Fase 2D: liga o entrypoint de visitante ao pipeline canônico de CV
+    // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md), espelho
+    // exato de startAuthenticatedAnalysisJob/startAuthenticatedAnalysisJobCanonical
+    // (Fase 2C) — com a flag desligada (default), esta condição nunca é
+    // verdadeira e o resto do método roda exatamente como antes, bit a bit.
+    if (isCvStructuredProfilePipelineEnabled()) {
+      return this.startGuestAnalysisJobCanonical(
+        jobDescriptionText,
+        file,
+        masterCvText,
+        turnstileToken,
+        analysisContext,
+        radarJobId,
+      );
+    }
+
     const turnstilePrecheck =
       await this.protectedAnalyzeService.precheckTurnstile(
         { turnstileToken },
@@ -1067,6 +1094,170 @@ export class CvAdaptationService {
       this.logger.error(
         `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
       );
+    });
+
+    return {
+      jobId: job.id,
+      status: "pending",
+      guestSessionPublicToken: analysisContext?.sessionPublicToken ?? null,
+      guestPossessionToken,
+    };
+  }
+
+  // Fase 2D — entrypoint de visitante do pipeline canônico
+  // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md, seções 1,
+  // 2, 3 e 11), espelho de startAuthenticatedAnalysisJobCanonical (Fase 2C)
+  // trocando userId por talentSubjectId. Único trabalho aqui é resolver o
+  // TalentSubject da sessão, PERSISTIR (CvSource/CvSubmission via
+  // CvProcessingEntrypointService#enqueueFromGuestText, AnalysisJob
+  // apontando cvProcessingJobId) e responder — nenhuma chamada de IA
+  // acontece dentro deste método nem de nada que ele aguarda. Guest nunca
+  // tem inputMode "profile" nem masterResumeId (não existe Resume de
+  // visitante) — sempre conteúdo novo (arquivo ou texto colado).
+  private async startGuestAnalysisJobCanonical(
+    jobDescriptionText: string,
+    file: FileUpload | undefined,
+    masterCvText: string | undefined,
+    turnstileToken: string | undefined,
+    analysisContext: AnalysisRequestContext | undefined,
+    radarJobId: string | undefined,
+  ): Promise<{
+    jobId: string;
+    status: "pending";
+    guestSessionPublicToken: string | null;
+    guestPossessionToken: string;
+  }> {
+    if (!this.cvProcessingEntrypoint || !this.talentSubjectService) {
+      throw new Error(
+        "CV_STRUCTURED_PROFILE_PIPELINE_ENABLED está ligado, mas " +
+          "CvProcessingEntrypointService/TalentSubjectService não foram " +
+          "injetados em CvAdaptationService — verifique cv-adaptation.module.ts.",
+      );
+    }
+
+    const turnstilePrecheck =
+      await this.protectedAnalyzeService.precheckTurnstile(
+        { turnstileToken },
+        this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+      );
+    if (!turnstilePrecheck.ok) {
+      throw new BadRequestException("Turnstile verification failed");
+    }
+
+    if (!file && !masterCvText?.trim()) {
+      throw new BadRequestException("PDF file or CV text is required.");
+    }
+
+    // guestSessionHash é null quando o cliente não mandou nenhum token de
+    // sessão (ex.: chamada avulsa sem cookie/local storage ainda gravado).
+    // Sem sessão nenhuma pra correlacionar, cada chamada assim vira seu
+    // próprio TalentSubject — correto por construção, já que não há
+    // nenhuma identidade de sessão real pra reaproveitar.
+    const guestSessionHash =
+      this.hashGuestSessionToken(analysisContext?.sessionPublicToken) ??
+      `no-session:${randomUUID()}`;
+
+    const { talentSubjectId } =
+      await this.talentSubjectService.resolveForGuestSession(guestSessionHash);
+
+    const guestPossessionToken = randomBytes(32).toString("hex");
+    const guestPossessionTokenHash =
+      hashGuestPossessionToken(guestPossessionToken);
+
+    const resolved = await this.resolveAnalysisJobDescription({
+      radarJobId,
+      jobDescriptionText,
+    });
+
+    let cvText: string;
+    let submission:
+      | {
+          origin: "FILE_UPLOAD";
+          fileName: string;
+          mimeType: string;
+          fileSizeBytes: number;
+        }
+      | { origin: "PASTED_TEXT" };
+
+    if (masterCvText?.trim()) {
+      cvText = this.validateCvTextInput(
+        this.normalizeSnapshotText(masterCvText),
+      );
+      submission = { origin: "PASTED_TEXT" };
+    } else if (file) {
+      try {
+        validateCvFileEnvelope(file);
+      } catch (error) {
+        await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            null,
+            "cv-adaptation/analyze-guest",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze-guest",
+        });
+      }
+
+      let extracted: string;
+      try {
+        extracted = await extractTextFromCvFile(file);
+      } catch (error) {
+        return (await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            null,
+            "cv-adaptation/analyze-guest",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze-guest",
+        })) as never;
+      }
+
+      cvText = this.normalizeSnapshotText(extracted);
+      submission = {
+        fileName: file.originalname,
+        fileSizeBytes: file.buffer.length,
+        mimeType: file.mimetype,
+        origin: "FILE_UPLOAD",
+      };
+    } else {
+      throw new BadRequestException("PDF file or CV text is required.");
+    }
+
+    // Guest nunca tem "saveAsMaster" explícito (não existe esse conceito no
+    // fluxo anônimo hoje) — a única forma de virar Master provisório é ser
+    // a primeira análise deste TalentSubject (plano, seção "Master
+    // provisório" da Fase 2D). Análises seguintes do mesmo TalentSubject
+    // nunca substituem automaticamente.
+    const activeDesignation =
+      await this.cvMasterPromotionForAnalysis?.getActiveDesignation({
+        ownerType: "GUEST",
+        talentSubjectId,
+      });
+    const masterIntent = activeDesignation ? "NONE" : "PROMOTE_IF_FIRST";
+
+    const enqueued = await this.cvProcessingEntrypoint.enqueueFromGuestText({
+      talentSubjectId,
+      text: cvText,
+      masterIntent,
+      submission,
+    });
+
+    const job = await this.database.analysisJob.create({
+      data: {
+        ownerKind: "guest",
+        status: "pending",
+        cvProcessingJobId: enqueued.job.id,
+        cvSubmissionId: enqueued.cvSubmission.id,
+        guestSessionHash,
+        guestPossessionTokenHash,
+        jobDescriptionText: resolved.text,
+      },
     });
 
     return {
@@ -1606,6 +1797,112 @@ export class CvAdaptationService {
       sourceType: "master_resume",
       text: input.canonicalCvText,
       userId: input.userId,
+    });
+
+    return {
+      ...protectionResult.result,
+      analysisCvSnapshotId: snapshot.id,
+      masterCvText: input.canonicalCvText,
+    };
+  }
+
+  // Fase 2D — espelho de runCanonicalAuthenticatedAnalysis pro caminho de
+  // visitante (userId null, guestSessionHash em vez de userId em todo
+  // lugar que builda contexto/payload/snapshot). Chamado exclusivamente
+  // por CvAnalysisWorker, nunca dentro de um request HTTP — roda depois
+  // que o CvProcessingJob já está READY (extração + Base de Talentos +
+  // Master provisório, se aplicável, já persistidos). Lê o texto do CV
+  // exclusivamente do CvStructuredProfile.canonicalJson (nunca texto
+  // bruto/arquivo) e nunca decide Master (isso já aconteceu antes deste
+  // método ser chamado).
+  async runCanonicalGuestAnalysis(input: {
+    guestSessionHash: string | null;
+    jobDescriptionText: string;
+    canonicalCvText: string;
+  }): Promise<{
+    adaptedContentJson: unknown;
+    previewText: string;
+    masterCvText: string;
+    analysisCvSnapshotId: string;
+  }> {
+    const normalizedJobDescriptionText = this.validateJobDescription(
+      input.jobDescriptionText,
+      {
+        context: this.buildProtectionContext(
+          undefined,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        routeKey: "cv-adaptation/analyze-guest",
+      },
+    );
+    const canonicalJob = await this.resolveCanonicalJob(
+      normalizedJobDescriptionText,
+      "runCanonicalGuestAnalysis",
+    );
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
+    const effectiveRequirements = await this.resolveEffectiveRequirements(
+      existingRequirementSet,
+    );
+    const existingKeywordRule = await this.resolveExistingKeywordRule({
+      jobRequirementSetId: existingRequirementSet?.id ?? null,
+      userId: null,
+    });
+
+    const protectionResult =
+      await this.protectedAnalyzeService.executeProtectedAnalyze({
+        canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
+          description: normalizedJobDescriptionText,
+        },
+        context: this.buildProtectionContext(
+          undefined,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        existingKeywordRule,
+        existingRequirements: effectiveRequirements ?? undefined,
+        jobDescriptionText: normalizedJobDescriptionText,
+        loadMasterCvText: async () => input.canonicalCvText,
+        payload: {
+          cvFingerprint: null,
+          hasFile: false,
+          hasTextInput: true,
+          jobDescriptionText: normalizedJobDescriptionText,
+          masterResumeId: null,
+          profileUpdatedAt: null,
+          route: "cv-adaptation/analyze-guest",
+          saveAsMaster: false,
+          textFingerprint: this.buildFileFingerprint(
+            Buffer.from(input.canonicalCvText),
+          ),
+          userId: null,
+        },
+        skipTurnstile: true,
+        turnstileToken: null,
+      });
+
+    if (!protectionResult.ok) {
+      throw new BadRequestException(
+        this.toProtectedBoundaryMessage(protectionResult),
+      );
+    }
+
+    if (!existingRequirementSet) {
+      await this.persistRequirementSetFromAnalysis({
+        analysisModel: protectionResult.result.analysisModel,
+        analysisPromptVersion: protectionResult.result.analysisPromptVersion,
+        canonicalJob,
+        structuredRequirements: protectionResult.result.structuredRequirements,
+      });
+    }
+
+    const snapshot = await this.createAnalysisCvSnapshot({
+      file: undefined,
+      guestSessionHash: input.guestSessionHash,
+      sourceType: "master_resume",
+      text: input.canonicalCvText,
+      userId: null,
     });
 
     return {

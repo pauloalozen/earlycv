@@ -53,6 +53,7 @@ export class CvAnalysisWorker {
       CvAdaptationService,
       | "renderCanonicalProfileTextForPipeline"
       | "runCanonicalAuthenticatedAnalysis"
+      | "runCanonicalGuestAnalysis"
       | "extractAnalysisJobSignalsForPipeline"
     >,
   ) {}
@@ -196,18 +197,22 @@ export class CvAnalysisWorker {
           skills: mapped.skills ?? { technical: [], business: [], soft: [] },
         });
 
-      if (!job.userId) {
-        throw new Error(
-          "AnalysisJob do pipeline canônico sem userId — só suporta análise autenticada nesta fase",
-        );
-      }
-
-      const result =
-        await this.cvAdaptationService.runCanonicalAuthenticatedAnalysis({
-          canonicalCvText: canonicalText,
-          jobDescriptionText: job.jobDescriptionText,
-          userId: job.userId,
-        });
+      // Fase 2D: AnalysisJob do pipeline canônico agora também cobre o
+      // caminho de visitante (ownerKind "guest", userId null,
+      // guestSessionHash preenchido pelo entrypoint) — mesma claim/estado
+      // READY, mesma garantia da seção 11, só troca qual análise real
+      // (autenticada x guest) roda no fim.
+      const result = job.userId
+        ? await this.cvAdaptationService.runCanonicalAuthenticatedAnalysis({
+            canonicalCvText: canonicalText,
+            jobDescriptionText: job.jobDescriptionText,
+            userId: job.userId,
+          })
+        : await this.cvAdaptationService.runCanonicalGuestAnalysis({
+            canonicalCvText: canonicalText,
+            jobDescriptionText: job.jobDescriptionText,
+            guestSessionHash: job.guestSessionHash,
+          });
 
       const signals =
         this.cvAdaptationService.extractAnalysisJobSignalsForPipeline(

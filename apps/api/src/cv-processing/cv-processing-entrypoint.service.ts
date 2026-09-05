@@ -38,18 +38,29 @@ export function buildCvSourceTextStorageKey(
   return `cv-processing/${namespace}/${ownerId}/${textSha256}.txt`;
 }
 
+type CvProcessingSubmissionInput =
+  | {
+      origin: "FILE_UPLOAD";
+      fileName: string;
+      mimeType: string;
+      fileSizeBytes: number;
+    }
+  | { origin: "PASTED_TEXT" };
+
 export type EnqueueCvProcessingInput = {
   userId: string;
   text: string;
   masterIntent: CvProcessingMasterIntent;
-  submission:
-    | {
-        origin: "FILE_UPLOAD";
-        fileName: string;
-        mimeType: string;
-        fileSizeBytes: number;
-      }
-    | { origin: "PASTED_TEXT" };
+  submission: CvProcessingSubmissionInput;
+};
+
+// Fase 2D — sibling de EnqueueCvProcessingInput pro dono GUEST
+// (talentSubjectId em vez de userId). Ver enqueueFromGuestText.
+export type EnqueueCvProcessingGuestInput = {
+  talentSubjectId: string;
+  text: string;
+  masterIntent: CvProcessingMasterIntent;
+  submission: CvProcessingSubmissionInput;
 };
 
 @Injectable()
@@ -63,47 +74,87 @@ export class CvProcessingEntrypointService {
   ) {}
 
   async enqueueFromUserText(input: EnqueueCvProcessingInput) {
-    const textSha256 = createHash("sha256").update(input.text).digest("hex");
+    return this.enqueueCommon(
+      { ownerType: "USER", userId: input.userId },
+      input.text,
+      input.masterIntent,
+      input.submission,
+    );
+  }
+
+  // Fase 2D — sibling de enqueueFromUserText pro caminho de visitante
+  // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md, escopo
+  // "Fase 2D"). talentSubjectId já deve estar resolvido pelo chamador
+  // (TalentSubjectService#resolveForGuestSession) — este método nunca
+  // resolve/cria TalentSubject sozinho, só usa o dono já decidido. Reusa
+  // 100% da lógica de dedup/storage/job de enqueueFromUserText via
+  // enqueueCommon — a única diferença real é o tipo de dono.
+  async enqueueFromGuestText(input: EnqueueCvProcessingGuestInput) {
+    return this.enqueueCommon(
+      { ownerType: "GUEST", talentSubjectId: input.talentSubjectId },
+      input.text,
+      input.masterIntent,
+      input.submission,
+    );
+  }
+
+  private async enqueueCommon(
+    owner:
+      | { ownerType: "USER"; userId: string }
+      | { ownerType: "GUEST"; talentSubjectId: string },
+    text: string,
+    masterIntent: CvProcessingMasterIntent,
+    submission: CvProcessingSubmissionInput,
+  ) {
+    const textSha256 = createHash("sha256").update(text).digest("hex");
+    const ownerId =
+      owner.ownerType === "USER" ? owner.userId : owner.talentSubjectId;
     const textStorageKey = buildCvSourceTextStorageKey(
-      "USER",
-      input.userId,
+      owner.ownerType,
+      ownerId,
       textSha256,
     );
 
-    // Dedup real: se já existe um CvSource com este (userId, textSha256),
-    // o objeto já foi gravado por uma submissão anterior — não faz sentido
+    // Dedup real: se já existe um CvSource com este (dono, textSha256), o
+    // objeto já foi gravado por uma submissão anterior — não faz sentido
     // gravar de novo no storage (a chave é determinística pelo hash, então
     // o conteúdo seria idêntico byte a byte). Só escreve no storage quando
     // é conteúdo genuinamente novo para este dono.
-    const existingSource = await this.database.cvSource.findUnique({
-      where: { userId_textSha256: { userId: input.userId, textSha256 } },
-    });
+    const existingSource =
+      owner.ownerType === "USER"
+        ? await this.database.cvSource.findUnique({
+            where: { userId_textSha256: { userId: owner.userId, textSha256 } },
+          })
+        : await this.database.cvSource.findUnique({
+            where: {
+              talentSubjectId_textSha256: {
+                talentSubjectId: owner.talentSubjectId,
+                textSha256,
+              },
+            },
+          });
 
     if (!existingSource) {
       await this.storage.putObject(
         textStorageKey,
-        Buffer.from(input.text, "utf-8"),
+        Buffer.from(text, "utf-8"),
         "text/plain; charset=utf-8",
       );
     }
 
     const cvSource =
       existingSource ??
-      (await this.createSourceOrReuse(
-        { ownerType: "USER", userId: input.userId },
-        textStorageKey,
-        textSha256,
-      ));
+      (await this.createSourceOrReuse(owner, textStorageKey, textSha256));
 
     const cvSubmission = await this.database.cvSubmission.create({
       data: {
         cvSourceId: cvSource.id,
-        origin: input.submission.origin as CvSubmissionOrigin,
-        ...(input.submission.origin === "FILE_UPLOAD"
+        origin: submission.origin as CvSubmissionOrigin,
+        ...(submission.origin === "FILE_UPLOAD"
           ? {
-              fileName: input.submission.fileName,
-              mimeType: input.submission.mimeType,
-              fileSizeBytes: input.submission.fileSizeBytes,
+              fileName: submission.fileName,
+              mimeType: submission.mimeType,
+              fileSizeBytes: submission.fileSizeBytes,
             }
           : {}),
       },
@@ -112,7 +163,7 @@ export class CvProcessingEntrypointService {
     const job = await this.jobService.enqueue({
       cvSourceId: cvSource.id,
       cvSubmissionId: cvSubmission.id,
-      masterIntent: input.masterIntent,
+      masterIntent,
     });
 
     return { cvSource, cvSubmission, job };
