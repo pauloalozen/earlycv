@@ -15,6 +15,8 @@ import { CompaniesModule } from "./companies/companies.module";
 import { EnvModule } from "./config/env.module";
 import { CvAdaptationModule } from "./cv-adaptation/cv-adaptation.module";
 import { CvBenchmarkAdminModule } from "./cv-benchmark-admin/cv-benchmark-admin.module";
+import { isCvStructuredProfilePipelineEnabled } from "./cv-processing/cv-processing.flags";
+import { CvProcessingModule } from "./cv-processing/cv-processing.module";
 import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
 import { Ga4Module } from "./ga4/ga4.module";
@@ -65,6 +67,12 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
       ? [MasterCvCanonicalExtractionModule]
       : []),
+    // Pipeline de perfil canônico de CV (Fase 2) — atrás de flag, mesmo
+    // padrão do MasterCvCanonicalExtractionModule acima. Desligado por
+    // padrão: CvProcessingEntrypointService fica indisponível e os
+    // entrypoints legados (resumes.service.ts/cv-adaptation.service.ts)
+    // seguem o caminho de sempre via @Optional().
+    ...(isCvStructuredProfilePipelineEnabled() ? [CvProcessingModule] : []),
     RadarModule,
     AnalysisProtectionModule,
     AnalysisObservabilityModule,

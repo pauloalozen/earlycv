@@ -8,6 +8,8 @@ import {
 import { type Prisma, ResumeKind } from "@prisma/client";
 import type { Response } from "express";
 import type { FileUpload } from "../cv-adaptation/dto/create-cv-adaptation.dto";
+import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
+import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
 import { DatabaseService } from "../database/database.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
 import { StorageService } from "../storage/storage.service";
@@ -29,6 +31,12 @@ export class ResumesService {
     private readonly masterCvCanonicalExtractionService?: Pick<
       MasterCvCanonicalExtractionService,
       "enqueueFromMasterResumeUpload"
+    >,
+    @Optional()
+    @Inject(CvProcessingEntrypointService)
+    private readonly cvProcessingEntrypoint?: Pick<
+      CvProcessingEntrypointService,
+      "enqueueFromUserText"
     >,
   ) {}
 
@@ -210,7 +218,51 @@ export class ResumesService {
       return createdResume;
     });
 
-    if (createdResume.isMaster && this.masterCvCanonicalExtractionService) {
+    // Fase 2 (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md):
+    // atrás de CV_STRUCTURED_PROFILE_PIPELINE_ENABLED. Ligada, substitui o
+    // caminho legado ABAIXO para este entrypoint (nunca os dois — rodar os
+    // dois pagaria a extração de IA em dobro); desligada, comportamento
+    // inalterado. O enqueue novo é AWAITED (persiste CvSource/CvSubmission/
+    // CvProcessingJob antes da resposta HTTP) — a extração de IA em si só
+    // roda depois, no CvProcessingWorker (cron separado), nunca aqui.
+    if (
+      createdResume.isMaster &&
+      isCvStructuredProfilePipelineEnabled() &&
+      this.cvProcessingEntrypoint
+    ) {
+      const text = extractedRawText?.trim();
+      if (text) {
+        try {
+          await this.cvProcessingEntrypoint.enqueueFromUserText({
+            userId,
+            text,
+            masterIntent: dto.isPrimary
+              ? "PROMOTE_EXPLICIT"
+              : "PROMOTE_IF_FIRST",
+            submission: file
+              ? {
+                  origin: "FILE_UPLOAD",
+                  fileName: file.originalname,
+                  mimeType: file.mimetype,
+                  fileSizeBytes: file.size,
+                }
+              : { origin: "PASTED_TEXT" },
+          });
+        } catch (error) {
+          console.error(
+            "[resumes] failed to enqueue cv processing job (new pipeline)",
+            {
+              error: error instanceof Error ? error.message : String(error),
+              resumeId: createdResume.id,
+              userId,
+            },
+          );
+        }
+      }
+    } else if (
+      createdResume.isMaster &&
+      this.masterCvCanonicalExtractionService
+    ) {
       try {
         await this.masterCvCanonicalExtractionService.enqueueFromMasterResumeUpload(
           {

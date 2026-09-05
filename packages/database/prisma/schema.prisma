@@ -460,6 +460,11 @@ model User {
   monitorProfileMatchJob       MonitorProfileMatchJob?
   monitorAlertPreference       MonitorAlertPreference?
   monitorDigests               MonitorDigest[]
+
+  // Pipeline de perfil canônico de CV (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
+  // Fase 1: só schema aditivo, nenhum código lê/escreve nestas relações ainda.
+  cvSources         CvSource[]
+  claimSourceGrants ClaimSourceGrant[]
 }
 
 model UserDailyAnalysisUsage {
@@ -763,10 +768,18 @@ model Resume {
   masterCvCanonicalExtractions MasterCvCanonicalExtraction[]
   jobApplicationsAsResumeUsed  JobApplication[]              @relation("JobApplicationResume")
 
+  // Pipeline de perfil canônico de CV (Fase 1, aditivo, sem uso ainda).
+  cvSourceId         String?
+  cvSubmissionId     String?               @unique
+  cvSource           CvSource?             @relation(fields: [cvSourceId], references: [id], onDelete: SetNull)
+  cvSubmission       CvSubmission?         @relation(fields: [cvSubmissionId], references: [id], onDelete: SetNull)
+  masterDesignations CvMasterDesignation[]
+
   @@index([userId])
   @@index([basedOnResumeId])
   @@index([templateId])
   @@index([targetJobId])
+  @@index([cvSourceId])
 }
 
 model CanonicalJob {
@@ -937,6 +950,10 @@ model CvAdaptation {
   jobApplication     JobApplication?     @relation(fields: [jobApplicationId], references: [id], onDelete: SetNull)
   originAnalysisJob  AnalysisJob?
 
+  // Pipeline de perfil canônico de CV (Fase 1, aditivo, sem uso ainda).
+  cvStructuredProfileId String?
+  cvStructuredProfile   CvStructuredProfile? @relation(fields: [cvStructuredProfileId], references: [id], onDelete: SetNull)
+
   @@index([userId, createdAt])
   @@index([masterResumeId])
   @@index([paymentReference])
@@ -944,6 +961,7 @@ model CvAdaptation {
   @@index([analysisCvSnapshotId])
   @@index([jobApplicationId])
   @@index([canonicalJobId])
+  @@index([cvStructuredProfileId])
 }
 
 model CvUnlock {
@@ -994,11 +1012,19 @@ model AnalysisCvSnapshot {
   cvAdaptation  CvAdaptation?
   analysisJob   AnalysisJob?
 
+  // Pipeline de perfil canônico de CV (Fase 1, aditivo, sem uso ainda).
+  cvSubmissionId        String?
+  cvStructuredProfileId String?
+  cvSubmission          CvSubmission?        @relation(fields: [cvSubmissionId], references: [id], onDelete: SetNull)
+  cvStructuredProfile   CvStructuredProfile? @relation(fields: [cvStructuredProfileId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([guestSessionHash])
   @@index([expiresAt])
   @@index([textSha256])
   @@index([professionalProfileFingerprint])
+  @@index([cvSubmissionId])
+  @@index([cvStructuredProfileId])
 }
 
 // Assíncrono desde a criação (item 3 do plano de LLM síncronas → assíncronas):
@@ -1042,11 +1068,24 @@ model AnalysisJob {
   convertedCvAdaptation CvAdaptation?       @relation(fields: [convertedCvAdaptationId], references: [id], onDelete: SetNull)
   oauthAttempts         OAuthAttempt[]
 
+  // Pipeline de perfil canônico de CV (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // seção 1.2). Fase 1: só schema aditivo — AnalysisJob passa a poder depender
+  // de um CvProcessingJob, mas nada ainda cria/lê essa dependência.
+  cvProcessingJobId     String?
+  cvSubmissionId        String?
+  cvStructuredProfileId String?
+  cvProcessingJob       CvProcessingJob?     @relation(fields: [cvProcessingJobId], references: [id], onDelete: SetNull)
+  cvSubmission          CvSubmission?        @relation(fields: [cvSubmissionId], references: [id], onDelete: SetNull)
+  cvStructuredProfile   CvStructuredProfile? @relation(fields: [cvStructuredProfileId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([guestSessionHash])
   @@index([status])
   @@index([createdAt])
   @@index([convertedAt])
+  @@index([cvProcessingJobId])
+  @@index([cvSubmissionId])
+  @@index([cvStructuredProfileId])
 }
 
 // Correlação por tentativa de OAuth (Fase 3 do gate de autenticação guest —
@@ -2425,6 +2464,20 @@ model TalentProfile {
   conflictsAsA    TalentIdentityConflict[]   @relation("ConflictProfileA")
   conflictsAsB    TalentIdentityConflict[]   @relation("ConflictProfileB")
 
+  // Pipeline de perfil canônico de CV (Fase 1, aditivo, sem uso ainda).
+  // talentSubjectId é o sujeito anônimo (visitante) dono deste perfil quando
+  // userId é null — ver TalentSubject. mergedIntoTalentProfileId é preenchido
+  // só quando este perfil foi fundido em outro perfil de usuário via claim
+  // (nunca apagado, só marcado).
+  talentSubjectId           String?                          @unique
+  mergedIntoTalentProfileId String?
+  talentSubject             TalentSubject?                   @relation(fields: [talentSubjectId], references: [id], onDelete: SetNull)
+  sources                   TalentProfileSource[]
+  educationObservations     TalentEducationObservation[]
+  competencyObservations    TalentCompetencyObservation[]
+  languageObservations      TalentLanguageObservation[]
+  certificationObservations TalentCertificationObservation[]
+
   @@index([identityConfidence])
   @@index([lastInteractionAt])
   @@index([b2bExposureStatus])
@@ -2595,4 +2648,422 @@ model TalentInteractionHistory {
   @@unique([sourceType, sourceRecordId])
   @@index([talentProfileId, analyzedAt])
   @@index([companyName])
+}
+
+// =============================================================================
+// Pipeline de perfil canônico de CV — Fase 1 (schema aditivo)
+// docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md (v3, aprovado)
+//
+// Nada neste bloco é lido/escrito por código de produção ainda. As colunas
+// aditivas nos modelos existentes (Resume, AnalysisJob, AnalysisCvSnapshot,
+// CvAdaptation, TalentProfile) e as relações abaixo existem só para permitir
+// a migration ser aplicada sem quebrar nada — o caminho antigo (Resume 1:1,
+// MasterCvCanonicalExtraction, TalentProfile por sessão implícita) continua
+// funcionando exatamente como hoje. As CHECK constraints e triggers de
+// integridade (seções 7, 9 e 10 do plano) são adicionadas na migration SQL,
+// não são expressáveis no Prisma DSL.
+// =============================================================================
+
+enum CvSourceOwnerType {
+  USER
+  GUEST
+}
+
+// Conteúdo deduplicado, escopado ao dono (usuário OU sujeito anônimo).
+// Nunca guarda metadado de envio (isso é CvSubmission) e nunca muda de dono
+// depois de criado — nem em colisão de hash no claim (plano, seção 4.3).
+model CvSource {
+  id String @id @default(cuid())
+
+  ownerType       CvSourceOwnerType
+  userId          String?
+  talentSubjectId String?
+
+  textStorageKey String
+  textSha256     String
+
+  createdAt DateTime @default(now())
+
+  user          User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Restrict, não Cascade: um TalentSubject consolidado (merged) nunca deve
+  // levar seus CvSource junto por efeito colateral de uma exclusão em outro
+  // lugar. Exclusão integral por privacidade é um fluxo próprio, auditado,
+  // que lida explicitamente com toda a árvore (CvSource, extrações,
+  // observações) — nunca uma cascade incidental.
+  talentSubject TalentSubject? @relation(fields: [talentSubjectId], references: [id], onDelete: Restrict)
+
+  submissions              CvSubmission[]
+  resumes                  Resume[]
+  processingJobs           CvProcessingJob[]
+  structuredProfiles       CvStructuredProfile[]
+  profileSources           TalentProfileSource[]
+  claimGrants              ClaimSourceGrant[]
+  equivalencesAsPrimary    CvSourceEquivalence[] @relation("CvSourceEquivalencePrimary")
+  equivalencesAsEquivalent CvSourceEquivalence[] @relation("CvSourceEquivalenceEquivalent")
+
+  @@unique([userId, textSha256])
+  @@unique([talentSubjectId, textSha256])
+  @@index([userId])
+  @@index([talentSubjectId])
+}
+
+enum CvSubmissionOrigin {
+  FILE_UPLOAD
+  PASTED_TEXT
+  CLAIM
+}
+
+// Ocorrência real de ingestão (um envio específico) — preserva metadados de
+// arquivo/texto colado sem misturá-los com a identidade de conteúdo do
+// CvSource. Um CvSource pode ter N CvSubmission (mesmo conteúdo enviado mais
+// de uma vez, por upload ou texto colado).
+model CvSubmission {
+  id String @id @default(cuid())
+
+  cvSourceId String
+  cvSource   CvSource @relation(fields: [cvSourceId], references: [id], onDelete: Cascade)
+
+  origin CvSubmissionOrigin
+
+  fileStorageKey String?
+  fileSha256     String?
+  fileName       String?
+  mimeType       String?
+  fileSizeBytes  Int?
+
+  submittedAt DateTime @default(now())
+
+  resume              Resume?
+  processingJobs      CvProcessingJob[]
+  analysisJobs        AnalysisJob[]
+  analysisCvSnapshots AnalysisCvSnapshot[]
+
+  @@index([cvSourceId])
+}
+
+enum CvStructuredProfileStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+// Extração canônica versionada de um CvSource. Imutável após READY (trigger
+// na migration SQL) — nova versão de extrator/schema gera linha nova, nunca
+// sobrescreve.
+model CvStructuredProfile {
+  id String @id @default(cuid())
+
+  cvSourceId String
+  cvSource   CvSource @relation(fields: [cvSourceId], references: [id], onDelete: Cascade)
+
+  extractorVersion String
+  schemaVersion    String
+
+  status    CvStructuredProfileStatus @default(PENDING)
+  attempts  Int                       @default(0)
+  lastError String?
+
+  canonicalJson  Json?
+  coverageJson   Json?
+  confidenceJson Json?
+  evidenceJson   Json?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  analysisCvSnapshots       AnalysisCvSnapshot[]
+  analysisJobs              AnalysisJob[]
+  cvAdaptations             CvAdaptation[]
+  masterDesignations        CvMasterDesignation[]
+  educationObservations     TalentEducationObservation[]
+  competencyObservations    TalentCompetencyObservation[]
+  languageObservations      TalentLanguageObservation[]
+  certificationObservations TalentCertificationObservation[]
+
+  @@unique([cvSourceId, extractorVersion, schemaVersion])
+  @@index([status])
+}
+
+enum CvProcessingJobStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum CvProcessingMasterIntent {
+  NONE
+  PROMOTE_IF_FIRST
+  PROMOTE_EXPLICIT
+}
+
+// Processamento genérico de um CV (extração + Base de Talentos + Master
+// opcional) — separado de AnalysisJob (que é só análise CV × vaga e, quando
+// existe, depende de um CvProcessingJob). Plano, seção 1.
+model CvProcessingJob {
+  id String @id @default(cuid())
+
+  cvSourceId     String
+  cvSubmissionId String
+
+  masterIntent CvProcessingMasterIntent @default(NONE)
+
+  status    CvProcessingJobStatus @default(PENDING)
+  attempts  Int                   @default(0)
+  claimedAt DateTime?
+  workerId  String?
+  lastError String?
+
+  cvStructuredProfileId String?
+  masterDesignationId   String?
+
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  cvSource     CvSource      @relation(fields: [cvSourceId], references: [id])
+  cvSubmission CvSubmission  @relation(fields: [cvSubmissionId], references: [id])
+  analysisJobs AnalysisJob[]
+
+  @@index([status])
+  @@index([cvSourceId])
+}
+
+enum CvMasterPromotionReason {
+  FIRST_EVER
+  EXPLICIT_FLAG
+  CLAIM_PROMOTION
+}
+
+// Referência formal de "quem é o Master", inclusive antes de existir conta
+// (talentSubjectId). Histórico completo — nunca apaga, só marca
+// supersededAt. "Só uma ativa por dono" é garantida por índice único parcial
+// na migration SQL (Prisma DSL não expressa índice parcial).
+model CvMasterDesignation {
+  id String @id @default(cuid())
+
+  ownerType       CvSourceOwnerType
+  userId          String?
+  talentSubjectId String?
+
+  cvStructuredProfileId String
+  cvStructuredProfile   CvStructuredProfile @relation(fields: [cvStructuredProfileId], references: [id])
+
+  resumeId String?
+  resume   Resume? @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
+  promotedAt     DateTime                @default(now())
+  promotedReason CvMasterPromotionReason
+  supersededAt   DateTime?
+
+  @@index([userId])
+  @@index([talentSubjectId])
+}
+
+// Sujeito anônimo formal — a identidade do visitante, nunca a sessão em si.
+// guestSessionHash localiza o sujeito via TalentSubjectSessionSignal, mas N
+// sessões podem apontar pro mesmo sujeito. Plano, seção 3.
+model TalentSubject {
+  id String @id @default(cuid())
+
+  createdAt DateTime @default(now())
+
+  mergedIntoUserId          String?
+  mergedIntoTalentProfileId String?
+  mergedAt                  DateTime?
+
+  sessionSignals TalentSubjectSessionSignal[]
+  cvSources      CvSource[]
+  talentProfile  TalentProfile?
+
+  @@index([mergedIntoUserId])
+}
+
+model TalentSubjectSessionSignal {
+  id               String   @id @default(cuid())
+  talentSubjectId  String
+  guestSessionHash String   @unique
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+
+  talentSubject TalentSubject @relation(fields: [talentSubjectId], references: [id], onDelete: Cascade)
+
+  @@index([talentSubjectId])
+}
+
+// Relação formal entre um TalentProfile e TODAS as fontes que contribuíram
+// pra ele (substitui a leitura implícita via originSourceRecordId, que
+// continua existindo só como "qual foi a primeira fonte").
+model TalentProfileSource {
+  id              String   @id @default(cuid())
+  talentProfileId String
+  cvSourceId      String
+  contributedAt   DateTime @default(now())
+
+  talentProfile TalentProfile @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+  cvSource      CvSource      @relation(fields: [cvSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, cvSourceId])
+}
+
+enum TalentSubjectMergeReason {
+  STRONG_SIGNAL_MATCH
+  CLAIM_FULL
+  CLAIM_PARTIAL_COPY
+  MANUAL_ADMIN_REVIEW
+}
+
+// Trilha de auditoria de todo merge sujeito↔sujeito ou sujeito↔usuário —
+// nunca existe merge silencioso só por sinal inferido (plano, seção 3).
+model TalentSubjectMergeEvent {
+  id                      String                   @id @default(cuid())
+  talentSubjectId         String
+  targetUserId            String?
+  targetTalentSubjectId   String?
+  reason                  TalentSubjectMergeReason
+  triggeringAnalysisJobId String?
+  createdAt               DateTime                 @default(now())
+
+  @@index([talentSubjectId])
+}
+
+// "Este usuário tem acesso comprovado a esta fonte" — independente de quem
+// é o dono formal do CvSource. Primitiva única do claim (plano, seção 4):
+// resolve o caso de colisão de hash e o caso geral sem transferir CvSource.
+model ClaimSourceGrant {
+  id                    String   @id @default(cuid())
+  cvSourceId            String
+  userId                String
+  grantedAt             DateTime @default(now())
+  provenByAnalysisJobId String
+
+  cvSource CvSource @relation(fields: [cvSourceId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cvSourceId, userId])
+}
+
+// Equivalência leve entre duas fontes com o mesmo hash detectada num claim
+// (usuário já possuía CvSource próprio) — só navegação/auditoria, nunca uma
+// fusão real (plano, seção 4.3).
+model CvSourceEquivalence {
+  id                   String   @id @default(cuid())
+  primaryCvSourceId    String
+  equivalentCvSourceId String
+  detectedAt           DateTime @default(now())
+
+  primaryCvSource    CvSource @relation("CvSourceEquivalencePrimary", fields: [primaryCvSourceId], references: [id], onDelete: Cascade)
+  equivalentCvSource CvSource @relation("CvSourceEquivalenceEquivalent", fields: [equivalentCvSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([primaryCvSourceId, equivalentCvSourceId])
+}
+
+// Observações por documento com identidade por fingerprint determinístico
+// (nunca campo nullable cru na chave — Postgres não colide NULL=NULL, o que
+// quebraria a idempotência do backfill). Plano, seção 8. Coexistem com as
+// tabelas de fato consolidado já existentes (TalentEducation etc.), que
+// passam a ser documentadas como "visão recomputável", não fonte primária.
+model TalentEducationObservation {
+  id                    String   @id @default(cuid())
+  talentProfileId       String
+  cvStructuredProfileId String
+  itemFingerprint       String
+  itemIndex             Int
+  institutionRaw        String
+  degreeRaw             String?
+  fieldOfStudyRaw       String?
+  periodRaw             String?
+  observedAt            DateTime @default(now())
+
+  talentProfile       TalentProfile       @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+  cvStructuredProfile CvStructuredProfile @relation(fields: [cvStructuredProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, cvStructuredProfileId, itemFingerprint, itemIndex])
+  @@index([talentProfileId])
+}
+
+model TalentCompetencyObservation {
+  id                    String                   @id @default(cuid())
+  talentProfileId       String
+  cvStructuredProfileId String
+  category              TalentCompetencyCategory
+  itemFingerprint       String
+  itemIndex             Int
+  valueRaw              String
+  proficiencyLevelRaw   String?
+  observedAt            DateTime                 @default(now())
+
+  talentProfile       TalentProfile       @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+  cvStructuredProfile CvStructuredProfile @relation(fields: [cvStructuredProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, cvStructuredProfileId, itemFingerprint, itemIndex])
+  @@index([talentProfileId, category])
+}
+
+model TalentLanguageObservation {
+  id                    String   @id @default(cuid())
+  talentProfileId       String
+  cvStructuredProfileId String
+  itemFingerprint       String
+  itemIndex             Int
+  languageRaw           String
+  proficiencyLevelRaw   String?
+  observedAt            DateTime @default(now())
+
+  talentProfile       TalentProfile       @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+  cvStructuredProfile CvStructuredProfile @relation(fields: [cvStructuredProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, cvStructuredProfileId, itemFingerprint, itemIndex])
+  @@index([talentProfileId])
+}
+
+model TalentCertificationObservation {
+  id                    String   @id @default(cuid())
+  talentProfileId       String
+  cvStructuredProfileId String
+  itemFingerprint       String
+  itemIndex             Int
+  nameRaw               String
+  issuerRaw             String?
+  yearRaw               Int?
+  observedAt            DateTime @default(now())
+
+  talentProfile       TalentProfile       @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+  cvStructuredProfile CvStructuredProfile @relation(fields: [cvStructuredProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, cvStructuredProfileId, itemFingerprint, itemIndex])
+  @@index([talentProfileId])
+}
+
+enum MonitorProjectionJobReason {
+  MASTER_CREATED
+  MASTER_REPLACED
+  MASTER_REMOVED
+  PREFERENCES_CHANGED
+}
+
+enum MonitorProjectionJobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+// Job durável de rematching do Monitor — criado só quando o Master muda de
+// fato ou há alteração manual relevante nas preferências monitoradas (plano,
+// seção 17). Nunca criado por análise de CV não-Master.
+model MonitorProjectionJob {
+  id         String                     @id @default(cuid())
+  userId     String
+  reason     MonitorProjectionJobReason
+  status     MonitorProjectionJobStatus @default(PENDING)
+  attempts   Int                        @default(0)
+  lastError  String?
+  createdAt  DateTime                   @default(now())
+  finishedAt DateTime?
+
+  @@index([userId])
+  @@index([status])
 }

@@ -289,8 +289,66 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.talentInteractionHistory;
   }
 
+  // Pipeline de perfil canônico de CV (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
+  // Fase 2: getters usados pelo módulo cv-processing/.
+  get cvSource() {
+    return this.prisma.cvSource;
+  }
+
+  get cvSubmission() {
+    return this.prisma.cvSubmission;
+  }
+
+  get cvStructuredProfile() {
+    return this.prisma.cvStructuredProfile;
+  }
+
+  get cvProcessingJob() {
+    return this.prisma.cvProcessingJob;
+  }
+
+  get cvMasterDesignation() {
+    return this.prisma.cvMasterDesignation;
+  }
+
+  get monitorProjectionJob() {
+    return this.prisma.monitorProjectionJob;
+  }
+
+  get talentSubject() {
+    return this.prisma.talentSubject;
+  }
+
+  get talentProfileSource() {
+    return this.prisma.talentProfileSource;
+  }
+
+  get talentEducationObservation() {
+    return this.prisma.talentEducationObservation;
+  }
+
+  get talentCompetencyObservation() {
+    return this.prisma.talentCompetencyObservation;
+  }
+
+  get talentLanguageObservation() {
+    return this.prisma.talentLanguageObservation;
+  }
+
+  get talentCertificationObservation() {
+    return this.prisma.talentCertificationObservation;
+  }
+
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);
+  }
+
+  get $queryRaw() {
+    return this.prisma.$queryRaw.bind(this.prisma);
+  }
+
+  get $executeRaw() {
+    return this.prisma.$executeRaw.bind(this.prisma);
   }
 
   async onModuleInit() {
