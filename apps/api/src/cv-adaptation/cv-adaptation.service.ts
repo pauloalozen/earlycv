@@ -1130,13 +1130,24 @@ export class CvAdaptationService {
     // Fase 2D: liga o entrypoint de visitante ao pipeline canônico de CV
     // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md), espelho
     // exato de startAuthenticatedAnalysisJob/startAuthenticatedAnalysisJobCanonical
-    // (Fase 2C) — com a flag desligada (default), esta condição nunca é
-    // verdadeira e o resto do método roda exatamente como antes, bit a bit.
-    // Guest (sem userId resolvido ainda neste ponto): a resolução central
-    // (Fase 3) nunca liga o pipeline pra guest fora da flag global — ver
-    // cv-processing-flag-resolver.service.ts. Contexto vazio é
-    // intencional aqui, não uma omissão.
-    if (await this.isPipelineEnabledFor({})) {
+    // (Fase 2C) — com a flag desligada e fora da allowlist de guest
+    // (default), esta condição nunca é verdadeira e o resto do método
+    // roda exatamente como antes, bit a bit.
+    // Fase 3C, item 6: guest (sem userId resolvido ainda neste ponto) só
+    // liga o pipeline novo quando o hash desta sessão específica está na
+    // allowlist de guest (CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES)
+    // — nunca pela flag global sozinha (cv-processing-flag-resolver.service.ts).
+    // Por isso o hash precisa ser calculado e passado aqui, antes da
+    // checagem — um contexto vazio faria todo guest cair sempre no legado,
+    // mesmo com o hash na allowlist.
+    const guestSessionHashForFlagCheck = this.hashGuestSessionToken(
+      analysisContext?.sessionPublicToken,
+    );
+    if (
+      await this.isPipelineEnabledFor({
+        guestSessionHash: guestSessionHashForFlagCheck ?? undefined,
+      })
+    ) {
       return this.startGuestAnalysisJobCanonical(
         jobDescriptionText,
         file,
@@ -2504,6 +2515,14 @@ export class CvAdaptationService {
     userId: string,
     jobId: string,
     guestPossessionToken?: string,
+    // Fase 3C, item 6 — corrige o gap descrito no controller: sem isto,
+    // saveGuestPreview (chamado abaixo) sempre calculava guestSessionHash a
+    // partir de um contexto vazio, então validateAndClaimSnapshot rejeitava
+    // qualquer AnalysisCvSnapshot de guest criada com uma sessão real.
+    // Opcional (nunca quebra os ~90 testes legados que chamam este método
+    // sem contexto, ex. via OAuth) — quando ausente, comportamento idêntico
+    // a antes desta fase.
+    analysisContext?: AnalysisRequestContext,
   ): Promise<
     | { status: "pending" | "processing" | "failed" }
     | { status: "succeeded"; cvAdaptationId: string }
@@ -2604,7 +2623,12 @@ export class CvAdaptationService {
       companyName: job.companyName ?? undefined,
     };
 
-    const adaptation = await this.saveGuestPreview(userId, dto);
+    const adaptation = await this.saveGuestPreview(
+      userId,
+      dto,
+      undefined,
+      analysisContext,
+    );
 
     return { status: "succeeded", cvAdaptationId: adaptation.id };
   }

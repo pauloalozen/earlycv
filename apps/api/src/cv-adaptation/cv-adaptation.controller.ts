@@ -116,13 +116,29 @@ export class CvAdaptationController {
   @Post("analysis-jobs/:jobId/claim")
   claimAnalysisJob(
     @AuthenticatedUser() user: { id: string },
+    @Req() req: Request,
     @Param("jobId") jobId: string,
     @Body("guestPossessionToken") guestPossessionToken?: string,
   ) {
+    // Fase 3C, item 6 — correção de um gap pré-existente descoberto ao
+    // exercitar o claim guest->conta via HTTP real pela primeira vez
+    // (docs/specs/2026-09-05-cv-canonical-profile-pipeline-piloto-interno-fase3b.md
+    // não conseguiu chegar até aqui, pois guest nunca era elegível ao
+    // pipeline novo antes desta fase). Sem passar req.analysisContext
+    // adiante, claimGuestAnalysisJob->saveGuestPreview calculava
+    // guestSessionHash=null e validateAndClaimSnapshot rejeitava
+    // (UnauthorizedException "Snapshot guest session mismatch") toda
+    // AnalysisCvSnapshot de guest que tivesse sido criada com uma sessão
+    // real (o caso comum: qualquer guest que passou por analyze-guest com
+    // o cookie analysis_session_token presente). guestPossessionToken já
+    // prova posse da AnalysisJob; passar o contexto aqui só permite que a
+    // MESMA sessão que originou o snapshot também feche o claim, sem
+    // enfraquecer nenhuma checagem existente.
     return this.cvAdaptationService.claimGuestAnalysisJob(
       user.id,
       jobId,
       guestPossessionToken,
+      req.analysisContext,
     );
   }
 
