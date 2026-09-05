@@ -327,6 +327,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.talentProfileSource;
   }
 
+  // Fase 2E (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // seção 4) — primitivas do claim granular por fonte.
+  get claimSourceGrant() {
+    return this.prisma.claimSourceGrant;
+  }
+
+  get cvSourceEquivalence() {
+    return this.prisma.cvSourceEquivalence;
+  }
+
+  get talentSubjectMergeEvent() {
+    return this.prisma.talentSubjectMergeEvent;
+  }
+
   get talentEducationObservation() {
     return this.prisma.talentEducationObservation;
   }

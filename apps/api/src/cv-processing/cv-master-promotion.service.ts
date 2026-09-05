@@ -116,37 +116,9 @@ export class CvMasterPromotionService {
     input: PromoteMasterAndProjectInput,
   ): Promise<PromoteMasterAndProjectResult> {
     try {
-      return await this.database.$transaction(async (tx) => {
-        const promotion = await this.runPromotionCore(tx, input);
-
-        let monitorProjectionJobId: string | null = null;
-
-        // MonitorProjectionJob.userId é obrigatório no schema — só faz
-        // sentido pra ownerType USER (guest não é monitorado). E só quando
-        // o Master de fato mudou nesta passada (seção 17): nunca em toda
-        // análise/promoção, nunca em no-op.
-        if (promotion.changed && input.ownerType === "USER") {
-          if (input.canonicalProfile && input.cvSourceId) {
-            await this.userProfileSync.syncWithinTransaction(tx, {
-              userId: input.userId,
-              canonicalProfile: input.canonicalProfile,
-              confidence: input.confidence ?? {},
-              cvSourceId: input.cvSourceId,
-              extractedAt: new Date().toISOString(),
-            });
-          }
-
-          const job = await tx.monitorProjectionJob.create({
-            data: {
-              userId: input.userId,
-              reason: promotion.reason ?? "MASTER_REPLACED",
-            },
-          });
-          monitorProjectionJobId = job.id;
-        }
-
-        return { ...promotion, monitorProjectionJobId };
-      });
+      return await this.database.$transaction((tx) =>
+        this.promoteAndProjectWithinTransaction(tx, input),
+      );
     } catch (error) {
       if (isSubjectMismatchError(error)) {
         throw new MasterDesignationSubjectMismatchError(
@@ -162,6 +134,51 @@ export class CvMasterPromotionService {
       }
       throw error;
     }
+  }
+
+  // Fase 2E (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // seção 4.2 item 6): extraído de promoteAndProject pra permitir que o
+  // claim granular (ClaimSourceGrantService) rode a promoção de Master +
+  // sync de UserProfile + MonitorProjectionJob DENTRO da MESMA transação
+  // que já criou o ClaimSourceGrant/resolveu o sujeito — nunca em uma
+  // segunda transação separada (isso quebraria a garantia de "tudo
+  // commita ou nada commita" do claim). O chamador é responsável por
+  // envolver esta chamada na própria $transaction e por tratar
+  // isSubjectMismatchError no catch em torno dela (promoteAndProject
+  // continua fazendo isso sozinho pro caso de uso avulso, sem claim).
+  async promoteAndProjectWithinTransaction(
+    tx: Prisma.TransactionClient,
+    input: PromoteMasterAndProjectInput,
+  ): Promise<PromoteMasterAndProjectResult> {
+    const promotion = await this.runPromotionCore(tx, input);
+
+    let monitorProjectionJobId: string | null = null;
+
+    // MonitorProjectionJob.userId é obrigatório no schema — só faz
+    // sentido pra ownerType USER (guest não é monitorado). E só quando
+    // o Master de fato mudou nesta passada (seção 17): nunca em toda
+    // análise/promoção, nunca em no-op.
+    if (promotion.changed && input.ownerType === "USER") {
+      if (input.canonicalProfile && input.cvSourceId) {
+        await this.userProfileSync.syncWithinTransaction(tx, {
+          userId: input.userId,
+          canonicalProfile: input.canonicalProfile,
+          confidence: input.confidence ?? {},
+          cvSourceId: input.cvSourceId,
+          extractedAt: new Date().toISOString(),
+        });
+      }
+
+      const job = await tx.monitorProjectionJob.create({
+        data: {
+          userId: input.userId,
+          reason: promotion.reason ?? "MASTER_REPLACED",
+        },
+      });
+      monitorProjectionJobId = job.id;
+    }
+
+    return { ...promotion, monitorProjectionJobId };
   }
 
   private async runPromotionCore(

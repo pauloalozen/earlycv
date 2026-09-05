@@ -6,6 +6,7 @@ import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merg
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
 import { StorageModule } from "../storage/storage.module";
 import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
+import { ClaimSourceGrantService } from "./claim-source-grant.service";
 import { CvMasterPromotionService } from "./cv-master-promotion.service";
 import { CvProcessingWorker } from "./cv-processing.worker";
 import { CvProcessingEntrypointService } from "./cv-processing-entrypoint.service";
@@ -34,16 +35,22 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
     ProfileReadinessService,
     IngestionLockRepository,
     TalentSubjectService,
+    ClaimSourceGrantService,
   ],
   // CvMasterPromotionService exportado a partir da Fase 2C: cv-adaptation.service
   // (análise autenticada) precisa consultar a designação ativa de Master
   // (getActiveDesignation) pra decidir masterIntent/reusar extração já READY,
   // sem duplicar a lógica de concorrência da seção 10 do plano.
+  // ClaimSourceGrantService exportado a partir da Fase 2E: cv-adaptation.service
+  // (claimGuestAnalysisJob) o usa condicionalmente (flag ligada + AnalysisJob
+  // com cvProcessingJobId) pra rodar o claim granular por fonte, sem duplicar
+  // a lógica de verificação de token/ownership do claim legado.
   exports: [
     CvProcessingEntrypointService,
     CvProcessingJobService,
     CvMasterPromotionService,
     TalentSubjectService,
+    ClaimSourceGrantService,
   ],
 })
 export class CvProcessingModule {}

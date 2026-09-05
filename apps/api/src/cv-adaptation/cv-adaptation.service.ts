@@ -34,6 +34,7 @@ import {
   hashGuestPossessionToken,
   possessionTokenMatchesHash,
 } from "../common/guest-possession-token";
+import { ClaimSourceGrantService } from "../cv-processing/claim-source-grant.service";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
 import { NoValidMasterCvForProfileAnalysisError } from "../cv-processing/cv-processing.errors";
 import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
@@ -251,6 +252,20 @@ export class CvAdaptationService {
     private readonly talentSubjectService?: Pick<
       TalentSubjectService,
       "resolveForGuestSession"
+    >,
+    // Fase 2E: claim granular por fonte (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+    // seção 4). Usado só dentro de claimGuestAnalysisJob, quando a flag
+    // está ligada E a AnalysisJob reivindicada tem cvProcessingJobId
+    // preenchido (passou pelo pipeline novo) — nesses casos, ALÉM do
+    // claim legado abaixo (que continua materializando o CvAdaptation via
+    // saveGuestPreview, inalterado). Mesmo padrão @Optional dos serviços
+    // acima — nunca referenciado com a flag desligada, mantendo os ~90
+    // testes legados de claim intocados.
+    @Optional()
+    @Inject(ClaimSourceGrantService)
+    private readonly claimSourceGrantService?: Pick<
+      ClaimSourceGrantService,
+      "claim"
     >,
   ) {}
 
@@ -2353,6 +2368,28 @@ export class CvAdaptationService {
       throw new BadRequestException(
         "Succeeded analysis job is missing its snapshot reference.",
       );
+    }
+
+    // Fase 2E (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+    // seção 4): quando a flag está ligada E esta AnalysisJob passou pelo
+    // pipeline novo (cvProcessingJobId preenchido), roda o claim granular
+    // por fonte (grant + resolução de sujeito + Master/Resume/UserProfile/
+    // projeção, tudo numa única transação) ALÉM do claim legado abaixo —
+    // nunca em vez dele, já que saveGuestPreview continua sendo o único
+    // caminho que materializa o CvAdaptation exibido no dashboard. Job
+    // sem cvProcessingJobId (nunca passou pelo pipeline novo), ou flag
+    // desligada: pula este bloco inteiro, comportamento idêntico ao de
+    // antes da Fase 2E.
+    if (
+      isCvStructuredProfilePipelineEnabled() &&
+      job.cvProcessingJobId &&
+      this.claimSourceGrantService
+    ) {
+      await this.claimSourceGrantService.claim({
+        userId,
+        analysisJobId: job.id,
+        cvProcessingJobId: job.cvProcessingJobId,
+      });
     }
 
     const dto: SaveGuestPreviewDto = {
