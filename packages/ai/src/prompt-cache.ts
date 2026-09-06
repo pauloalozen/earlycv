@@ -1,4 +1,5 @@
 import type OpenAI from "openai";
+import type { AIProvider } from "./types.js";
 
 type SystemMessage = OpenAI.Chat.Completions.ChatCompletionSystemMessageParam;
 
@@ -41,4 +42,55 @@ export function stripJsonCodeFence(content: string): string {
 // Desligado via extra_body; outros supliers ignoram esse campo se enviado.
 export function buildDeepSeekExtraBody(model: string): Record<string, unknown> {
   return model.startsWith("deepseek") ? { thinking: { type: "disabled" } } : {};
+}
+
+// Capacidade de limite de saída por provider/modelo, exposta pelo adapter —
+// nunca decidida pelos services de negócio (eles só pedem "quero até N
+// tokens de saída", nunca sabem o nome do parâmetro).
+//
+// Achado real (auditoria 2026-09-05): a família "reasoning" da OpenAI
+// acessada via Chat Completions (o1, o3, o4, e a série gpt-5) REJEITA
+// max_tokens com erro 400 explícito pedindo max_completion_tokens — um
+// parâmetro que substitui, não complementa, max_tokens (nunca os dois
+// juntos). Isso é uma particularidade documentada da OpenAI, não do
+// endpoint Chat Completions em si: DeepSeek, Gemini, xAI, Anthropic (direto
+// ou via OpenRouter) e a própria OpenRouter (que normaliza o parâmetro por
+// trás, mesmo quando a rota aponta pra um modelo "openai/gpt-5*") continuam
+// aceitando max_tokens normalmente no mesmo endpoint. Por isso o escopo da
+// checagem abaixo é estritamente `provider === "openai"` — nunca por nome
+// de modelo isolado, que apareceria de novo (com significado diferente) em
+// rotas OpenRouter.
+//
+// Nenhum código deste projeto usa a Responses API (client.responses.create)
+// hoje — só Chat Completions, em todo lugar. Se isso mudar no futuro,
+// max_output_tokens (o parâmetro da Responses API) entra como um terceiro
+// branch aqui, no mesmo lugar central — nunca espalhado pelos services.
+const OPENAI_REQUIRES_MAX_COMPLETION_TOKENS = /^(o1|o3|o4|gpt-5)/;
+
+export type MaxOutputTokensParam =
+  | { max_tokens: number }
+  | { max_completion_tokens: number };
+
+export function buildMaxOutputTokensParam(
+  provider: AIProvider,
+  model: string,
+  maxOutputTokens: number,
+): MaxOutputTokensParam {
+  if (
+    !Number.isFinite(maxOutputTokens) ||
+    !Number.isInteger(maxOutputTokens) ||
+    maxOutputTokens <= 0
+  ) {
+    // Falha explícita, nunca um payload ambíguo: um limite inválido não
+    // deveria silenciosamente virar "sem limite" nem um valor arbitrário.
+    throw new Error(
+      `buildMaxOutputTokensParam: maxOutputTokens inválido (${maxOutputTokens}) — precisa ser um inteiro positivo`,
+    );
+  }
+
+  if (provider === "openai" && OPENAI_REQUIRES_MAX_COMPLETION_TOKENS.test(model)) {
+    return { max_completion_tokens: maxOutputTokens };
+  }
+
+  return { max_tokens: maxOutputTokens };
 }

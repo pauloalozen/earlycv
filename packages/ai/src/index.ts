@@ -71,6 +71,8 @@ export type {
 } from "./types.js";
 export {
   buildDeepSeekExtraBody,
+  buildMaxOutputTokensParam,
   buildSystemMessage,
   stripJsonCodeFence,
 } from "./prompt-cache.js";
+export type { MaxOutputTokensParam } from "./prompt-cache.js";
