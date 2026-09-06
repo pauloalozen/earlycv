@@ -17,7 +17,15 @@ import {
 import { parseMasterCvCanonicalExtractionPayload } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.schema";
 import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
 
-const OPERATION = "CV_STRUCTURED_PROFILE";
+// Reaproveita o MESMO identificador de operação do escritor legado
+// (master-cv-canonical-extraction.service.ts#getAiModel("MASTERCV")) — nunca
+// "CV_STRUCTURED_PROFILE" (identificador inventado nesta fase que nunca
+// correspondeu a nenhuma AI_SUPPLIER_* configurada, causando fallback
+// silencioso para o AI_SUPPLIER genérico em vez de AI_SUPPLIER_MASTERCV).
+// As duas extrações são a mesma operação de negócio (extrair o
+// CvStructuredProfile canônico de um CV) só que por dois escritores
+// diferentes durante a transição — ver plano, seção 5.
+const OPERATION = "MASTERCV";
 
 export type StructuredProfileExtractionInput = {
   text: string;
