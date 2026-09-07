@@ -165,30 +165,44 @@ export class GoogleIndexingBackfillService {
     const pendingSlugs = await this.getPendingSlugs();
     const batch = pendingSlugs.slice(0, remainingToday);
     const runStartedAt = new Date();
+    let processed = 0;
 
+    // Achado real: quando a cota DIARIA da Indexing API estoura no meio do
+    // lote (ver comentario em getNotifiedTodayCount — nosso "dia" vira 3h
+    // antes do dia de cota do Google), continuar batendo nos itens
+    // restantes so gera falha garantida item a item, sem chance de
+    // recuperar nessa mesma execucao. Corta o lote assim que detecta isso
+    // em vez de gastar o resto em chamadas inuteis.
     for (const slug of batch) {
-      await this.googleIndexingService.notifyIndexing(slug);
+      processed += 1;
+      const result = await this.googleIndexingService.notifyIndexing(slug);
+      if (result.quotaExceeded) {
+        this.logger.warn(
+          `backfill batch interrompido: cota diaria da Indexing API estourada apos ${processed}/${batch.length} itens`,
+        );
+        break;
+      }
     }
 
     const succeeded = await this.database.googleIndexingLog.count({
       where: {
-        slug: { in: batch },
+        slug: { in: batch.slice(0, processed) },
         type: "URL_UPDATED",
         status: "SUCCESS",
         createdAt: { gte: runStartedAt },
       },
     });
-    const failed = batch.length - succeeded;
+    const failed = processed - succeeded;
 
     this.logger.log(
-      `backfill batch complete: processed=${batch.length} succeeded=${succeeded} failed=${failed} notifiedToday=${notifiedToday + succeeded}/${dailyLimit} remainingAfter=${pendingSlugs.length - batch.length}`,
+      `backfill batch complete: processed=${processed} succeeded=${succeeded} failed=${failed} notifiedToday=${notifiedToday + succeeded}/${dailyLimit} remainingAfter=${pendingSlugs.length - succeeded}`,
     );
 
     return {
       dailyLimit,
       failed,
       notifiedToday,
-      processed: batch.length,
+      processed,
       succeeded,
     };
   }

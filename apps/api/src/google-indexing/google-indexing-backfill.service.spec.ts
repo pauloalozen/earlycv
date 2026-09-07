@@ -86,16 +86,22 @@ function createFixture() {
   };
 
   // Espelha o comportamento real de GoogleIndexingService.notify: sempre
-  // grava um GoogleIndexingLog, sucesso ou erro, nunca lança.
-  const notifyOutcomes = new Map<string, "SUCCESS" | "ERROR">();
+  // grava um GoogleIndexingLog, sucesso ou erro, nunca lança, e devolve
+  // {ok, quotaExceeded} pro chamador decidir se para o lote.
+  const notifyOutcomes = new Map<string, "SUCCESS" | "ERROR" | "QUOTA">();
   const googleIndexingService = {
     notifyIndexing: async (slug: string) => {
+      const outcome = notifyOutcomes.get(slug) ?? "SUCCESS";
       logs.push({
         slug,
         type: "URL_UPDATED",
-        status: notifyOutcomes.get(slug) ?? "SUCCESS",
+        status: outcome === "SUCCESS" ? "SUCCESS" : "ERROR",
         createdAt: new Date(),
       });
+      return {
+        ok: outcome === "SUCCESS",
+        quotaExceeded: outcome === "QUOTA",
+      };
     },
   };
 
@@ -213,6 +219,33 @@ describe("GoogleIndexingBackfillService", () => {
 
     const result = await service.runBackfillBatch();
 
+    assert.equal(result.processed, 2);
+    assert.equal(result.succeeded, 1);
+    assert.equal(result.failed, 1);
+  });
+
+  test("runBackfillBatch para o lote assim que a cota diaria do Google estoura, em vez de continuar tentando os itens restantes", async () => {
+    // Achado real: quando o job agendado roda antes do reset da cota do
+    // Google (ver GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT), TODOS os itens do
+    // lote falham com "Quota exceeded ... per day" — continuar tentando é
+    // desperdício garantido. O lote deve parar no primeiro sinal disso.
+    const { jobs, notifyOutcomes, database, googleIndexingService } =
+      createFixture();
+    addJob(jobs, { slug: "vaga-a", firstSeenAt: new Date("2026-03-01") });
+    addJob(jobs, { slug: "vaga-b", firstSeenAt: new Date("2026-02-01") });
+    addJob(jobs, { slug: "vaga-c", firstSeenAt: new Date("2026-01-01") });
+    notifyOutcomes.set("vaga-b", "QUOTA");
+
+    const service = new GoogleIndexingBackfillService(
+      database as never,
+      googleIndexingService as never,
+    );
+
+    const result = await service.runBackfillBatch();
+
+    // vaga-a (mais recente, processada primeiro) tem sucesso, vaga-b
+    // estoura a cota e interrompe o lote — vaga-c nunca chega a ser
+    // tentada.
     assert.equal(result.processed, 2);
     assert.equal(result.succeeded, 1);
     assert.equal(result.failed, 1);
