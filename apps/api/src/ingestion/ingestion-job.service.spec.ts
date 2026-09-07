@@ -199,6 +199,47 @@ test("create com scheduleType MANUAL nao define nextRunAt", async () => {
   assert.equal(job.nextRunAt, null);
 });
 
+test("create aceita GOOGLE_INDEXING_BACKFILL sem escopo quando nao existe outro", async () => {
+  const { service } = createFixture();
+  const job = await service.create(
+    baseDto({
+      jobType: "GOOGLE_INDEXING_BACKFILL",
+      scheduleHour: 7,
+      scheduleType: "DAILY",
+      scopeType: undefined,
+    }),
+  );
+
+  assert.equal(job.jobType, "GOOGLE_INDEXING_BACKFILL");
+});
+
+test("create recusa um segundo GOOGLE_INDEXING_BACKFILL — job global e assumido como singleton em todo o resto do sistema (getStatus/dispatch usam findFirst por jobType)", async () => {
+  const { service } = createFixture();
+  await service.create(
+    baseDto({
+      jobType: "GOOGLE_INDEXING_BACKFILL",
+      name: "Indexação de vagas (Google)",
+      scheduleHour: 7,
+      scheduleType: "DAILY",
+      scopeType: undefined,
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      service.create(
+        baseDto({
+          jobType: "GOOGLE_INDEXING_BACKFILL",
+          name: "outro job de indexação",
+          scheduleHour: 7,
+          scheduleType: "DAILY",
+          scopeType: undefined,
+        }),
+      ),
+    /já existe um job de indexação Google/,
+  );
+});
+
 test("toggle ativa/desativa e recalcula nextRunAt", async () => {
   const { service } = createFixture();
   const created = await service.create(

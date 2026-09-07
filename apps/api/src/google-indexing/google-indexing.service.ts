@@ -33,12 +33,20 @@ export class GoogleIndexingService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
-  async notifyIndexing(slug: string): Promise<void> {
-    await this.notify(slug, "URL_UPDATED");
+  // quotaExceeded avisa quem chama que a cota DIARIA da Indexing API
+  // estourou (ver GoogleIndexingBackfillService.runBackfillBatch, que para
+  // o lote assim que ve isso em vez de continuar gastando o resto do lote
+  // em chamadas que sabidamente vao falhar do mesmo jeito).
+  async notifyIndexing(
+    slug: string,
+  ): Promise<{ ok: boolean; quotaExceeded: boolean }> {
+    return this.notify(slug, "URL_UPDATED");
   }
 
-  async notifyRemoval(slug: string): Promise<void> {
-    await this.notify(slug, "URL_DELETED");
+  async notifyRemoval(
+    slug: string,
+  ): Promise<{ ok: boolean; quotaExceeded: boolean }> {
+    return this.notify(slug, "URL_DELETED");
   }
 
   private getAuthClient(): GoogleAuth {
@@ -63,8 +71,8 @@ export class GoogleIndexingService {
   private async notify(
     slug: string,
     type: IndexingNotificationType,
-  ): Promise<void> {
-    if (!this.enabled) return;
+  ): Promise<{ ok: boolean; quotaExceeded: boolean }> {
+    if (!this.enabled) return { ok: false, quotaExceeded: false };
 
     const url = buildJobUrl(slug);
 
@@ -79,6 +87,7 @@ export class GoogleIndexingService {
       await this.database.googleIndexingLog.create({
         data: { slug, type, status: "SUCCESS" },
       });
+      return { ok: true, quotaExceeded: false };
     } catch (error) {
       const errorMsg =
         error instanceof Error ? error.message.slice(0, 500) : "unknown error";
@@ -93,6 +102,14 @@ export class GoogleIndexingService {
             `Failed to persist GoogleIndexingLog for slug=${slug}: ${logError instanceof Error ? logError.message : "unknown error"}`,
           );
         });
+
+      // Mensagem exata da Indexing API pra cota diaria estourada (achado
+      // real: "Quota exceeded for quota metric 'Publish requests' and
+      // limit 'Publish requests per day'...") — distingue de outros erros
+      // (403 transitorio, URL invalida) que nao justificam parar o lote.
+      const quotaExceeded =
+        /quota exceeded/i.test(errorMsg) && /per day/i.test(errorMsg);
+      return { ok: false, quotaExceeded };
     }
   }
 }

@@ -66,6 +66,23 @@ export class IngestionJobService {
       }
     }
 
+    // GOOGLE_INDEXING_BACKFILL e um job global, sem escopo — o resto do
+    // sistema (GoogleIndexingBackfillService.getStatus, "Rodar agora" no
+    // admin) assume que existe no maximo 1 (busca por findFirst({where:
+    // {jobType}}), nao por id fixo). Duas instancias ativas dobrariam as
+    // notificacoes contra a mesma cota diaria do Google sem avisar
+    // ninguem — bloqueado aqui em vez de deixar a UI criar um segundo.
+    if (dto.jobType === "GOOGLE_INDEXING_BACKFILL") {
+      const existing = await this.database.ingestionJob.findFirst({
+        where: { jobType: "GOOGLE_INDEXING_BACKFILL" },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `já existe um job de indexação Google ("${existing.name}") — exclua-o antes de criar outro`,
+        );
+      }
+    }
+
     const scheduleFields = {
       scheduleDaysOfWeek: dto.scheduleDaysOfWeek ?? [],
       scheduleHour: dto.scheduleHour ?? null,

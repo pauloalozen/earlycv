@@ -189,6 +189,9 @@ function CreateJobModal({
   // mecanismo real de enriquecimento continuo). CRAWL e LOGO_FETCH usam o
   // mesmo escopo ADAPTER/SOURCE/ALL (LOGO_FETCH so nao oferece SOURCE, ver
   // abaixo — logo e por Company, nao por JobSource individual).
+  // GOOGLE_INDEXING_BACKFILL, como DISCOVERY_VALIDATE, nao tem escopo —
+  // roda global (backend recusa criar um segundo, ver
+  // IngestionJobService.create).
   const [jobType, setJobType] = useState<JobType>("CRAWL");
   const [scopeType, setScopeType] = useState<ScopeType>(
     initialSourceId ? "SOURCE" : "ALL",
@@ -421,8 +424,35 @@ function CreateJobModal({
                 />
                 Descoberta ATS
               </label>
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  fontSize: 12.5,
+                  gap: 8,
+                }}
+              >
+                <input
+                  checked={jobType === "GOOGLE_INDEXING_BACKFILL"}
+                  name="jobType"
+                  onChange={() =>
+                    handleJobTypeChange("GOOGLE_INDEXING_BACKFILL")
+                  }
+                  type="radio"
+                />
+                Indexação Google
+              </label>
             </div>
           </div>
+
+          {jobType === "GOOGLE_INDEXING_BACKFILL" && (
+            <p style={{ color: AT.muted, fontSize: 11.5 }}>
+              Só pode existir 1 job desse tipo — notifica o Google Indexing
+              API pra vagas que ainda não foram notificadas, respeitando a
+              cota diária. Sem escopo: sempre roda contra todas as vagas
+              elegíveis.
+            </p>
+          )}
 
           {jobType === "DISCOVERY_VALIDATE" && (
             <div>
