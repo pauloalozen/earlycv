@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics-tracking";
 import type {
-  MonitorAlertFrequency,
+  MonitorDigestFrequency,
   MonitorRecommendationFeedback,
   MonitorRecommendationFeedbackReason,
   MonitorRecommendationItem,
@@ -80,7 +80,7 @@ export type MonitorNotificationGroupProps = {
   // sempre veio de um MonitorDigest real.
   digestId?: string;
   sentAt?: string;
-  frequency?: MonitorAlertFrequency;
+  frequency?: MonitorDigestFrequency;
   items: MonitorRecommendationItem[];
   open: boolean;
   onToggle: () => void;

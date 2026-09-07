@@ -608,18 +608,18 @@ function restoreGhostMode() {
   }
 }
 
-test("trackAlertUser creates a MonitorAlertPreference with the default frequency for a user who never configured one", async () => {
+test("trackAlertUser creates a MonitorAlertPreference with emailEnabled=true for a user who never configured one", async () => {
   const user = await seedUser();
   try {
     const result = await service.trackAlertUser("admin-1", user.id);
     assert.equal(result.tracked, true);
-    assert.equal(result.frequency, "DAILY");
+    assert.equal(result.emailEnabled, true);
 
     const preference = await prisma.monitorAlertPreference.findUnique({
       where: { userId: user.id },
     });
     assert.ok(preference);
-    assert.equal(preference?.frequency, "DAILY");
+    assert.equal(preference?.emailEnabled, true);
   } finally {
     await prisma.monitorAdminActionLog
       .deleteMany({ where: { entityId: user.id } })
@@ -628,16 +628,16 @@ test("trackAlertUser creates a MonitorAlertPreference with the default frequency
   }
 });
 
-test("trackAlertUser is idempotent — never overwrites a frequency the user already configured", async () => {
+test("trackAlertUser is idempotent — never overwrites an emailEnabled the user already configured", async () => {
   const user = await seedUser();
   try {
     await prisma.monitorAlertPreference.create({
-      data: { userId: user.id, frequency: "WEEKLY" },
+      data: { userId: user.id, emailEnabled: false },
     });
 
     const result = await service.trackAlertUser("admin-1", user.id);
 
-    assert.equal(result.frequency, "WEEKLY");
+    assert.equal(result.emailEnabled, false);
   } finally {
     await prisma.monitorAdminActionLog
       .deleteMany({ where: { entityId: user.id } })
@@ -671,13 +671,13 @@ test("listTrackedAlertUsers only returns users who already have a MonitorAlertPr
   }
 });
 
-test("sendDigestNow rejects (422-equivalent) when the user has no MonitorAlertPreference or it is OFF", async () => {
+test("sendDigestNow rejects (422-equivalent) when the user has no MonitorAlertPreference or email is disabled", async () => {
   const user = await seedUser();
   try {
     await assert.rejects(() => service.sendDigestNow("admin-1", user.id));
 
     await prisma.monitorAlertPreference.create({
-      data: { userId: user.id, frequency: "OFF" },
+      data: { userId: user.id, emailEnabled: false },
     });
     await assert.rejects(() => service.sendDigestNow("admin-1", user.id));
   } finally {
@@ -828,18 +828,56 @@ test("getDigestSchedule / updateDigestSchedule roundtrip through the singleton r
     const updated = await service.updateDigestSchedule("admin-1", {
       dailyHour: 8,
       dailyMinute: 15,
+      frequency: "WEEKLY",
       weeklyDayOfWeek: 3,
     });
     assert.equal(updated.dailyHour, 8);
     assert.equal(updated.dailyMinute, 15);
+    assert.equal(updated.frequency, "WEEKLY");
     assert.equal(updated.weeklyDayOfWeek, 3);
 
     const reread = await service.getDigestSchedule();
     assert.equal(reread.dailyHour, 8);
+    assert.equal(reread.frequency, "WEEKLY");
   } finally {
     await service.updateDigestSchedule("admin-1", {
       dailyHour: original.dailyHour,
       dailyMinute: original.dailyMinute,
+      frequency: original.frequency,
+      weeklyDayOfWeek: original.weeklyDayOfWeek,
+    });
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityType: "MonitorDigestScheduleConfig" } })
+      .catch(() => undefined);
+  }
+});
+
+test("updateDigestSchedule sets intervalAnchorDate to now when switching into an EVERY_N_DAYS mode, and leaves it alone on a same-mode update", async () => {
+  const original = await service.getDigestSchedule();
+  try {
+    const switched = await service.updateDigestSchedule("admin-1", {
+      dailyHour: original.dailyHour,
+      dailyMinute: original.dailyMinute,
+      frequency: "EVERY_3_DAYS",
+      weeklyDayOfWeek: original.weeklyDayOfWeek,
+    });
+    assert.ok(switched.intervalAnchorDate);
+    const anchorAfterSwitch = switched.intervalAnchorDate;
+
+    // Só mudou o horário, continua EVERY_3_DAYS — âncora do ciclo não deve
+    // ser recalculada (senão o ciclo em andamento reiniciaria à toa).
+    const sameMode = await service.updateDigestSchedule("admin-1", {
+      dailyHour: original.dailyHour,
+      dailyMinute: 45,
+      frequency: "EVERY_3_DAYS",
+      weeklyDayOfWeek: original.weeklyDayOfWeek,
+    });
+    assert.deepEqual(sameMode.intervalAnchorDate, anchorAfterSwitch);
+  } finally {
+    await service.updateDigestSchedule("admin-1", {
+      dailyHour: original.dailyHour,
+      dailyMinute: original.dailyMinute,
+      frequency: original.frequency,
       weeklyDayOfWeek: original.weeklyDayOfWeek,
     });
     await prisma.monitorAdminActionLog

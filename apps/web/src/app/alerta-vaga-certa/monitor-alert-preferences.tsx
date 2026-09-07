@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  type MonitorAlertFrequency,
   type MonitorAlertPreference,
   updateMonitorAlertPreferences,
 } from "@/lib/monitor-api";
@@ -10,16 +9,10 @@ import {
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
 
-const FREQUENCY_OPTIONS: { value: MonitorAlertFrequency; label: string }[] = [
-  { value: "DAILY", label: "Diariamente" },
-  { value: "WEEKLY", label: "Semanalmente" },
-  { value: "OFF", label: "Desativado" },
-];
-
 // Seção "Alertas" — deliberadamente pequena (spec da Fase 3: não virar uma
-// central de preferências). Só o essencial: e-mail ligado/desligado e
-// frequência. Sem modal — a troca de frequência já é a própria ação,
-// aplicada otimisticamente.
+// central de preferências). A cadência de envio agora é definida pelo
+// admin (ver /admin/alerta-vagas), não mais escolha do usuário — aqui só
+// resta ligar/desligar o e-mail, aplicado otimisticamente.
 export function MonitorAlertPreferences({
   initialPreference,
 }: {
@@ -30,21 +23,20 @@ export function MonitorAlertPreferences({
 
   if (!preference) return null;
 
-  async function handleFrequencyChange(frequency: MonitorAlertFrequency) {
-    if (frequency === preference?.frequency || pending) return;
+  async function handleToggle() {
+    if (pending || !preference) return;
     const previous = preference;
-    setPreference((current) => (current ? { ...current, frequency } : current));
+    const emailEnabled = !preference.emailEnabled;
+    setPreference((current) =>
+      current ? { ...current, emailEnabled } : current,
+    );
     setPending(true);
-    const updated = await updateMonitorAlertPreferences({ frequency });
+    const updated = await updateMonitorAlertPreferences({ emailEnabled });
     setPending(false);
     if (!updated) {
       setPreference(previous);
     }
   }
-
-  const frequencyLabel =
-    FREQUENCY_OPTIONS.find((option) => option.value === preference.frequency)
-      ?.label ?? preference.frequency;
 
   return (
     <div
@@ -75,62 +67,30 @@ export function MonitorAlertPreferences({
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
-          marginBottom: 10,
           fontSize: 13,
           color: "#3a3a38",
         }}
       >
         <span>E-mail</span>
-        <strong
+        <button
+          type="button"
+          aria-pressed={preference.emailEnabled}
+          disabled={pending}
+          onClick={handleToggle}
           style={{
-            color: preference.frequency === "OFF" ? "#8a8a85" : "#1f7a34",
+            padding: "6px 11px",
+            borderRadius: 99,
+            border: `1px solid ${preference.emailEnabled ? "#0a0a0a" : "rgba(10,10,10,0.12)"}`,
+            background: preference.emailEnabled ? "#0a0a0a" : "#fff",
+            color: preference.emailEnabled ? "#fafaf6" : "#3a3a38",
+            fontSize: 11.5,
+            fontFamily: GEIST,
+            cursor: pending ? "default" : "pointer",
+            opacity: pending ? 0.7 : 1,
           }}
         >
-          {preference.frequency === "OFF" ? "Desativado" : "Ativado"}
-        </strong>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 12,
-          fontSize: 13,
-          color: "#3a3a38",
-        }}
-      >
-        <span>Frequência</span>
-        <strong>{frequencyLabel}</strong>
-      </div>
-
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {FREQUENCY_OPTIONS.map((option) => {
-          const active = option.value === preference.frequency;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={active}
-              disabled={pending}
-              onClick={() => handleFrequencyChange(option.value)}
-              style={{
-                padding: "6px 11px",
-                borderRadius: 99,
-                border: `1px solid ${active ? "#0a0a0a" : "rgba(10,10,10,0.12)"}`,
-                background: active ? "#0a0a0a" : "#fff",
-                color: active ? "#fafaf6" : "#3a3a38",
-                fontSize: 11.5,
-                fontFamily: GEIST,
-                cursor: pending ? "default" : "pointer",
-                opacity: pending ? 0.7 : 1,
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
+          {preference.emailEnabled ? "Ativado" : "Desativado"}
+        </button>
       </div>
     </div>
   );

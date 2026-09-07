@@ -12,7 +12,7 @@ function keyOf(userId: string, frequency: string, scheduledFor: Date) {
 function createFixture() {
   const preferences = new Map<
     string,
-    { userId: string; emailEnabled: boolean; frequency: string }
+    { userId: string; emailEnabled: boolean }
   >();
   const digests = new Map<
     DigestKey,
@@ -29,15 +29,9 @@ function createFixture() {
 
   const database = {
     monitorAlertPreference: {
-      findMany: async ({
-        where,
-      }: {
-        where: { emailEnabled: boolean; frequency: string };
-      }) =>
+      findMany: async ({ where }: { where: { emailEnabled: boolean } }) =>
         Array.from(preferences.values()).filter(
-          (p) =>
-            p.emailEnabled === where.emailEnabled &&
-            p.frequency === where.frequency,
+          (p) => p.emailEnabled === where.emailEnabled,
         ),
     },
     monitorDigest: {
@@ -108,12 +102,11 @@ function createFixture() {
     },
     seedPreference(
       userId: string,
-      overrides: Partial<{ emailEnabled: boolean; frequency: string }> = {},
+      overrides: Partial<{ emailEnabled: boolean }> = {},
     ) {
       preferences.set(userId, {
         userId,
         emailEnabled: true,
-        frequency: "DAILY",
         ...overrides,
       });
     },
@@ -126,31 +119,38 @@ function createFixture() {
   };
 }
 
-test("DAILY user with eligible recommendations gets a PENDING digest for today", async () => {
+// Cadência é global agora (MonitorDigestScheduleConfig.frequency) — todos
+// os usuários com email ligado são descobertos juntos, numa única
+// passada. Não existe mais granularidade por usuário (ver
+// MonitorAlertPreference, que só guarda emailEnabled).
+
+test("DAILY: user with eligible recommendations gets a PENDING digest for today", async () => {
   const fixture = createFixture();
   fixture.seedPreference("user-1");
   fixture.seedEligible("user-1", 3);
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY" },
   );
 
-  assert.equal(result.daily, 1);
+  assert.equal(result.created, 1);
   const [digest] = Array.from(fixture.digests.values());
   assert.equal(digest.status, "PENDING");
   assert.equal(digest.frequency, "DAILY");
 });
 
-test("DAILY user with no eligible recommendations gets a SKIPPED digest, not PENDING", async () => {
+test("DAILY: user with no eligible recommendations gets a SKIPPED digest, not PENDING", async () => {
   const fixture = createFixture();
   fixture.seedPreference("user-1");
   // sem seedEligible — zero elegíveis
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY" },
   );
 
-  assert.equal(result.daily, 0);
+  assert.equal(result.created, 0);
   const [digest] = Array.from(fixture.digests.values());
   assert.equal(digest.status, "SKIPPED");
 });
@@ -160,55 +160,67 @@ test("running discoverDue twice for the same day never creates a second digest f
   fixture.seedPreference("user-1");
   fixture.seedEligible("user-1", 2);
 
-  await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"));
+  await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"), {
+    frequency: "DAILY",
+  });
   // Segunda "vaga" aparece depois — não deveria gerar um segundo digest
   // pro mesmo dia mesmo assim.
   fixture.seedEligible("user-1", 5);
-  await fixture.scheduler.discoverDue(new Date("2026-08-27T14:00:00Z"));
+  await fixture.scheduler.discoverDue(new Date("2026-08-27T14:00:00Z"), {
+    frequency: "DAILY",
+  });
 
   assert.equal(fixture.digests.size, 1);
 });
 
-test("WEEKLY users are only processed on the weekly anchor day (Monday)", async () => {
+test("WEEKLY: creates a digest scoped to the Monday of the ISO week (scheduledForNow)", async () => {
   const fixture = createFixture();
-  fixture.seedPreference("user-weekly", { frequency: "WEEKLY" });
+  fixture.seedPreference("user-weekly");
   fixture.seedEligible("user-weekly", 2);
 
-  // Quinta-feira — não é dia de WEEKLY.
-  const notMonday = await fixture.scheduler.discoverDue(
+  // Quinta-feira — MonitorDigestScheduler.tick() já teria filtrado por
+  // isFrequencyDueToday antes de chegar aqui; discoverDue por si só só
+  // decide o scheduledFor, não se hoje é dia de WEEKLY.
+  const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
+    { frequency: "WEEKLY" },
   );
-  assert.equal(notMonday.weekly, 0);
-  assert.equal(fixture.digests.size, 0);
 
-  // Segunda-feira — processa.
-  const monday = await fixture.scheduler.discoverDue(
-    new Date("2026-08-24T13:00:00Z"),
-  );
-  assert.equal(monday.weekly, 1);
+  assert.equal(result.created, 1);
+  const [digest] = Array.from(fixture.digests.values());
+  assert.equal(digest.frequency, "WEEKLY");
+  assert.equal(digest.scheduledFor.toISOString(), "2026-08-24T00:00:00.000Z");
 });
 
-test("a user with frequency OFF is never picked up (not in either DAILY or WEEKLY query)", async () => {
+test("EVERY_3_DAYS: creates a digest scoped to the current UTC day, same as DAILY", async () => {
   const fixture = createFixture();
-  fixture.seedPreference("user-off", { frequency: "OFF" });
-  fixture.seedEligible("user-off", 3);
+  fixture.seedPreference("user-1");
+  fixture.seedEligible("user-1", 1);
 
-  await fixture.scheduler.discoverDue(new Date("2026-08-24T13:00:00Z"));
+  const result = await fixture.scheduler.discoverDue(
+    new Date("2026-08-27T13:00:00Z"),
+    { frequency: "EVERY_3_DAYS" },
+  );
 
-  assert.equal(fixture.digests.size, 0);
+  assert.equal(result.created, 1);
+  const [digest] = Array.from(fixture.digests.values());
+  assert.equal(digest.frequency, "EVERY_3_DAYS");
+  assert.equal(digest.scheduledFor.toISOString(), "2026-08-27T00:00:00.000Z");
 });
 
-test("a user with emailEnabled=false is never picked up even with frequency=DAILY", async () => {
+test("a user with emailEnabled=false is never picked up, regardless of the global frequency", async () => {
   const fixture = createFixture();
   fixture.seedPreference("user-disabled", { emailEnabled: false });
   fixture.seedEligible("user-disabled", 3);
 
-  await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"));
+  await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"), {
+    frequency: "DAILY",
+  });
 
   assert.equal(fixture.digests.size, 0);
 });
 
-test("a user without Monitor entitlement is never picked up, even with DAILY + eligible recommendations", async () => {
+test("a user without Monitor entitlement is never picked up, even with eligible recommendations", async () => {
   const fixture = createFixture();
   fixture.seedPreference("user-1");
   fixture.seedEligible("user-1", 3);
@@ -216,8 +228,25 @@ test("a user without Monitor entitlement is never picked up, even with DAILY + e
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY" },
   );
 
-  assert.equal(result.daily, 0);
+  assert.equal(result.created, 0);
   assert.equal(fixture.digests.size, 0);
+});
+
+test("multiple enabled users are all discovered together under the same global frequency", async () => {
+  const fixture = createFixture();
+  fixture.seedPreference("user-1");
+  fixture.seedPreference("user-2");
+  fixture.seedEligible("user-1", 2);
+  fixture.seedEligible("user-2", 1);
+
+  const result = await fixture.scheduler.discoverDue(
+    new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY" },
+  );
+
+  assert.equal(result.created, 2);
+  assert.equal(fixture.digests.size, 2);
 });

@@ -7,10 +7,9 @@ import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { MonitorDigestContentService } from "./monitor-digest-content.service";
 import {
+  isFrequencyDueToday,
   isScheduledDailyMoment,
-  isWeeklyDigestDay,
-  startOfIsoWeekUtc,
-  startOfUtcDay,
+  scheduledForNow,
 } from "./monitor-digest-schedule.util";
 import { MonitorEntitlementService } from "./monitor-entitlement.service";
 
@@ -23,6 +22,8 @@ const LOCK_TTL_MS = 5 * 60_000;
 const DEFAULT_SCHEDULE_CONFIG = {
   dailyHour: 11,
   dailyMinute: 0,
+  frequency: "DAILY" as MonitorDigestFrequency,
+  intervalAnchorDate: null as Date | null,
   weeklyDayOfWeek: 1,
   timezone: "America/Sao_Paulo",
 };
@@ -67,7 +68,10 @@ export class MonitorDigestScheduler {
     if (!isScheduledDailyMoment(now, config)) {
       return;
     }
-    await this.discoverDue(now, config.weeklyDayOfWeek);
+    if (!isFrequencyDueToday(now, config)) {
+      return;
+    }
+    await this.discoverDue(now, config);
   }
 
   private async loadScheduleConfig() {
@@ -77,10 +81,15 @@ export class MonitorDigestScheduler {
     return config ?? DEFAULT_SCHEDULE_CONFIG;
   }
 
+  // Cadência é global agora (MonitorDigestScheduleConfig.frequency) —
+  // todos os usuários com e-mail ativado são descobertos juntos, numa
+  // única passada, sob a mesma cadência. Não existe mais "um usuário em
+  // DAILY, outro em WEEKLY" — essa granularidade por usuário foi removida
+  // (ver MonitorAlertPreference, que só guarda emailEnabled agora).
   async discoverDue(
     now: Date,
-    weeklyDayOfWeek = 1,
-  ): Promise<{ daily: number; weekly: number }> {
+    config: { frequency: MonitorDigestFrequency },
+  ): Promise<{ created: number }> {
     const owner = `monitor-digest-scheduler-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -88,24 +97,16 @@ export class MonitorDigestScheduler {
       LOCK_TTL_MS,
     );
     if (!acquired) {
-      return { daily: 0, weekly: 0 };
+      return { created: 0 };
     }
 
     try {
-      const daily = await this.discoverForFrequency(
-        "DAILY",
-        startOfUtcDay(now),
+      const scheduledFor = scheduledForNow(now, config.frequency);
+      const created = await this.discoverForFrequency(
+        config.frequency,
+        scheduledFor,
       );
-
-      let weekly = 0;
-      if (isWeeklyDigestDay(now, weeklyDayOfWeek)) {
-        weekly = await this.discoverForFrequency(
-          "WEEKLY",
-          startOfIsoWeekUtc(now),
-        );
-      }
-
-      return { daily, weekly };
+      return { created };
     } finally {
       await this.lockRepository.release(LOCK_ID, owner);
     }
@@ -116,7 +117,7 @@ export class MonitorDigestScheduler {
     scheduledFor: Date,
   ): Promise<number> {
     const preferences = await this.database.monitorAlertPreference.findMany({
-      where: { emailEnabled: true, frequency },
+      where: { emailEnabled: true },
     });
 
     const entitledUserIds = await this.entitlementService.filterEntitledUserIds(

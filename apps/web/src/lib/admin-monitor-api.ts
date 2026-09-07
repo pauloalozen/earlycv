@@ -463,7 +463,7 @@ export type TrackedAlertUser = {
   name: string;
   internalRole: "none" | "admin" | "superadmin";
   entitledToday: boolean;
-  frequency: "DAILY" | "WEEKLY" | "OFF";
+  emailEnabled: boolean;
 };
 
 export type SendDigestNowResult = {
@@ -475,9 +475,19 @@ export type SendDigestNowResult = {
 
 export type DigestHistorySource = "SCHEDULER" | "ADMIN_MANUAL";
 
+// Cadência dos digests — global agora (MonitorDigestScheduleConfig), não
+// mais escolha por usuário. Sem OFF: um MonitorDigest só existe pra
+// cadências ativas (ver MonitorDigestFrequency no schema).
+export type DigestFrequency =
+  | "DAILY"
+  | "EVERY_2_DAYS"
+  | "EVERY_3_DAYS"
+  | "EVERY_4_DAYS"
+  | "WEEKLY";
+
 export type DigestHistoryItem = {
   id: string;
-  frequency: "DAILY" | "WEEKLY" | "OFF";
+  frequency: DigestFrequency;
   status: MonitorDigestStatus;
   scheduledFor: string;
   sentAt: string | null;
@@ -488,9 +498,11 @@ export type DigestHistoryItem = {
 };
 
 export type DigestSchedule = {
+  frequency: DigestFrequency;
   dailyHour: number;
   dailyMinute: number;
   weeklyDayOfWeek: number;
+  intervalAnchorDate: string | null;
   timezone: string;
 };
 
@@ -536,7 +548,7 @@ export function listTrackedAlertUsers(
 }
 
 export function trackAlertUser(userId: string, token?: string) {
-  return apiRequest<{ tracked: boolean; frequency: string }>(
+  return apiRequest<{ tracked: boolean; emailEnabled: boolean }>(
     "/admin/monitor/alert-preference/track",
     token,
     {
@@ -591,7 +603,12 @@ export function getMonitorDigestSchedule(token?: string) {
 }
 
 export function updateMonitorDigestSchedule(
-  dto: { dailyHour: number; dailyMinute: number; weeklyDayOfWeek: number },
+  dto: {
+    frequency: DigestFrequency;
+    dailyHour: number;
+    dailyMinute: number;
+    weeklyDayOfWeek: number;
+  },
   token?: string,
 ) {
   return apiRequest<DigestSchedule>("/admin/monitor/digest/schedule", token, {

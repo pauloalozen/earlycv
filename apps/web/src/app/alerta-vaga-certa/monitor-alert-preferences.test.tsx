@@ -20,7 +20,6 @@ function buildPreference(
   return {
     userId: "user-1",
     emailEnabled: true,
-    frequency: "DAILY",
     unsubscribedAt: null,
     ...overrides,
   };
@@ -40,75 +39,62 @@ describe("MonitorAlertPreferences", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the current frequency and marks the matching chip as pressed", () => {
+  it("shows Ativado when emailEnabled is true", () => {
     render(
       <MonitorAlertPreferences
-        initialPreference={buildPreference({ frequency: "WEEKLY" })}
+        initialPreference={buildPreference({ emailEnabled: true })}
       />,
     );
 
-    expect(
-      screen.getByText("Semanalmente", { selector: "strong" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Semanalmente" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Diariamente" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    const button = screen.getByRole("button", { name: "Ativado" });
+    expect(button).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("shows E-mail as Desativado when frequency is OFF", () => {
+  it("shows Desativado when emailEnabled is false", () => {
     render(
       <MonitorAlertPreferences
-        initialPreference={buildPreference({ frequency: "OFF" })}
+        initialPreference={buildPreference({ emailEnabled: false })}
       />,
     );
 
-    expect(
-      screen.getAllByText("Desativado", { selector: "strong" }).length,
-    ).toBeGreaterThan(0);
+    const button = screen.getByRole("button", { name: "Desativado" });
+    expect(button).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("clicking a different frequency applies it optimistically and persists via updateMonitorAlertPreferences", async () => {
+  it("clicking the toggle applies it optimistically and persists via updateMonitorAlertPreferences", async () => {
     mocks.updateMonitorAlertPreferences.mockResolvedValue(
-      buildPreference({ frequency: "WEEKLY" }),
+      buildPreference({ emailEnabled: false }),
     );
 
-    render(<MonitorAlertPreferences initialPreference={buildPreference()} />);
+    render(
+      <MonitorAlertPreferences
+        initialPreference={buildPreference({ emailEnabled: true })}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Semanalmente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ativado" }));
 
     expect(
-      screen.getByRole("button", { name: "Semanalmente" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      await screen.findByRole("button", { name: "Desativado" }),
+    ).toHaveAttribute("aria-pressed", "false");
     expect(mocks.updateMonitorAlertPreferences).toHaveBeenCalledWith({
-      frequency: "WEEKLY",
+      emailEnabled: false,
     });
   });
 
   it("reverts the optimistic update when the API call fails", async () => {
     mocks.updateMonitorAlertPreferences.mockResolvedValue(null);
 
-    render(<MonitorAlertPreferences initialPreference={buildPreference()} />);
+    render(
+      <MonitorAlertPreferences
+        initialPreference={buildPreference({ emailEnabled: true })}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Desativado" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ativado" }));
 
     expect(
-      await screen.findByText("Diariamente", { selector: "strong" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Diariamente" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-  });
-
-  it("clicking the already-active frequency does not call the API again", () => {
-    render(<MonitorAlertPreferences initialPreference={buildPreference()} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Diariamente" }));
-
-    expect(mocks.updateMonitorAlertPreferences).not.toHaveBeenCalled();
+      await screen.findByRole("button", { name: "Ativado" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });
