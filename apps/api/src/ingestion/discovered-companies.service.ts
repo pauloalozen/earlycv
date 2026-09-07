@@ -142,6 +142,16 @@ export class DiscoveredCompaniesService {
   // VALIDATED sumiram atrás de PENDINGs criados minutos depois). Por isso os
   // status promovíveis pedidos nunca são truncados; só o restante (ex.
   // PENDING) disputa o espaço remanescente do corte.
+  //
+  // Ordenação por updatedAt (não createdAt): a aba Histórico (IMPORTED/
+  // INVALID/DISMISSED) usa esse mesmo corte de 500, e createdAt desc
+  // enterrava candidatos antigos que só viraram INVALID/IMPORTED agora —
+  // achado real: BLUMA (importada em 20/08) revalidada hoje virou INVALID
+  // mas sumia do Histórico, porque createdAt continuava sendo 20/08 e mais
+  // de 500 outros registros foram CRIADOS depois dela nesse meio tempo.
+  // updatedAt reflete quando o candidato foi processado de verdade, então
+  // um item revalidado agora sempre sobe pro topo, não importa quando foi
+  // importado originalmente.
   async list(status?: DiscoveredCompanyStatus[]) {
     const requestedPromotable = (
       status && status.length > 0 ? status : PROMOTABLE_STATUSES
@@ -149,7 +159,7 @@ export class DiscoveredCompaniesService {
 
     if (requestedPromotable.length === 0) {
       return this.database.discoveredCompany.findMany({
-        orderBy: { createdAt: "desc" },
+        orderBy: { updatedAt: "desc" },
         take: 500,
         where:
           status && status.length > 0 ? { status: { in: status } } : undefined,
@@ -157,7 +167,7 @@ export class DiscoveredCompaniesService {
     }
 
     const promotableRows = await this.database.discoveredCompany.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { updatedAt: "desc" },
       where: { status: { in: requestedPromotable } },
     });
 
@@ -172,7 +182,7 @@ export class DiscoveredCompaniesService {
     const remainingRows =
       remainingTake > 0
         ? await this.database.discoveredCompany.findMany({
-            orderBy: { createdAt: "desc" },
+            orderBy: { updatedAt: "desc" },
             take: remainingTake,
             where: { status: { in: remainingStatuses } },
           })

@@ -66,11 +66,11 @@ function createFixture(options?: {
     discoveredCompany: {
       findMany: async ({
         where,
-        orderBy: _orderBy,
+        orderBy,
         take,
       }: {
         where?: { status?: { in?: string[] } | string };
-        orderBy?: unknown;
+        orderBy?: { createdAt?: "asc" | "desc"; updatedAt?: "asc" | "desc" };
         take?: number;
       } = {}) => {
         let items = [...candidates.values()];
@@ -81,8 +81,14 @@ function createFixture(options?: {
             items = items.filter((c) => where.status.in?.includes(c.status));
           }
         }
+        // Espelha o Prisma de verdade: respeita o campo/direção pedidos em
+        // orderBy, em vez de sempre ordenar por createdAt asc — senão um
+        // teste que combina orderBy+take (ex: corte de 500) não pega
+        // regressão nenhuma, já que o mock nunca corta os itens certos.
+        const field = orderBy?.updatedAt ? "updatedAt" : "createdAt";
+        const direction = orderBy?.[field] === "asc" ? 1 : -1;
         items = items.sort(
-          (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+          (a, b) => direction * (a[field].getTime() - b[field].getTime()),
         );
         return typeof take === "number" ? items.slice(0, take) : items;
       },
@@ -241,6 +247,46 @@ test("list() nunca trunca candidatos promovíveis mesmo com PENDING mais recente
 
   const validatedRows = rows.filter((r) => r.status === "VALIDATED");
   assert.equal(validatedRows.length, 139);
+});
+
+test("list() (aba Histórico) ordena por updatedAt, não createdAt — candidato antigo revalidado agora aparece no topo mesmo com 500+ registros mais novos", async () => {
+  // Achado real: BLUMA (importada em 20/08, status INVALID) foi revalidada
+  // hoje e sumiu da aba Histórico, porque createdAt continuava sendo
+  // 20/08 e mais de 500 outros candidatos foram CRIADOS depois — o corte
+  // de 500 ordenado por createdAt desc enterrava ela. updatedAt reflete
+  // quando o candidato foi processado de verdade.
+  const { service, candidates } = createFixture();
+  const oldDate = new Date("2026-08-20T19:43:08.000Z");
+  const recentBase = new Date("2026-09-01T00:00:00.000Z").getTime();
+
+  candidates.set("bluma", {
+    createdAt: oldDate,
+    id: "bluma",
+    industry: null,
+    jobCount: 0,
+    name: "BLUMA SERVICOS DE BELEZA E TECNOLOGIA SA",
+    normalizedName: "bluma servicos de beleza e tecnologia sa",
+    status: "INVALID",
+    // Revalidada agora, bem depois dos 500 IMPORTED abaixo.
+    updatedAt: new Date(recentBase + 1_000_000),
+  });
+
+  for (let i = 0; i < 500; i++) {
+    candidates.set(`imported-${i}`, {
+      createdAt: new Date(recentBase + i),
+      id: `imported-${i}`,
+      industry: null,
+      jobCount: 1,
+      name: `Empresa Importada ${i}`,
+      normalizedName: `empresa importada ${i}`,
+      status: "IMPORTED",
+      updatedAt: new Date(recentBase + i),
+    });
+  }
+
+  const rows = await service.list(["IMPORTED", "INVALID", "DISMISSED"] as never);
+
+  assert.ok(rows.some((r) => r.id === "bluma"));
 });
 
 test("importCandidatesCsv (formato simples) cria PENDING sem URL/adapter", async () => {
