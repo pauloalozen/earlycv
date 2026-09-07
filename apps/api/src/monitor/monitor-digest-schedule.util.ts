@@ -36,7 +36,9 @@ export function isWeeklyDigestDay(now: Date, weeklyDayOfWeek = 1): boolean {
 // reiniciar o serviço. Compara hora/minuto NO FUSO configurado (não UTC
 // direto) — é isso que permite o admin configurar "11:00" e ter o
 // significado de sempre 11h em America/Sao_Paulo, independente de
-// horário de verão.
+// horário de verão. Vale pra qualquer cadência (DAILY/EVERY_N_DAYS/WEEKLY)
+// — dailyHour/dailyMinute é só o horário de envio, não implica frequência
+// diária.
 export function isScheduledDailyMoment(
   now: Date,
   config: { dailyHour: number; dailyMinute: number; timezone: string },
@@ -50,4 +52,55 @@ export function isScheduledDailyMoment(
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "-1");
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "-1");
   return hour === config.dailyHour && minute === config.dailyMinute;
+}
+
+// "Hoje é um dia do ciclo de N dias?" — conta dias corridos (UTC,
+// granularidade de dia, mesmo padrão de startOfUtcDay) desde a âncora do
+// ciclo. anchorDate null (nunca configurado) trata hoje como o próprio dia
+// 0, então o primeiro tick após ligar EVERY_N_DAYS sempre dispara.
+export function isEveryNDaysDue(
+  now: Date,
+  anchorDate: Date | null,
+  intervalDays: number,
+): boolean {
+  const anchor = startOfUtcDay(anchorDate ?? now);
+  const today = startOfUtcDay(now);
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((today.getTime() - anchor.getTime()) / ONE_DAY_MS);
+  return diffDays >= 0 && diffDays % intervalDays === 0;
+}
+
+const INTERVAL_DAYS_BY_FREQUENCY: Partial<Record<string, number>> = {
+  EVERY_2_DAYS: 2,
+  EVERY_3_DAYS: 3,
+  EVERY_4_DAYS: 4,
+};
+
+// "Hoje é um dia devido pra cadência configurada?" — unifica DAILY (todo
+// dia), WEEKLY (isWeeklyDigestDay) e EVERY_N_DAYS (isEveryNDaysDue) num
+// único ponto de decisão usado pelo MonitorDigestScheduler.
+export function isFrequencyDueToday(
+  now: Date,
+  config: {
+    frequency: string;
+    weeklyDayOfWeek: number;
+    intervalAnchorDate: Date | null;
+  },
+): boolean {
+  if (config.frequency === "DAILY") return true;
+  if (config.frequency === "WEEKLY") {
+    return isWeeklyDigestDay(now, config.weeklyDayOfWeek);
+  }
+  const intervalDays = INTERVAL_DAYS_BY_FREQUENCY[config.frequency];
+  if (!intervalDays) return false;
+  return isEveryNDaysDue(now, config.intervalAnchorDate, intervalDays);
+}
+
+// Início (UTC) do período que o digest representa, pra chave de
+// idempotência @@unique([userId, frequency, scheduledFor]) — WEEKLY usa a
+// segunda-feira ISO da semana corrente, qualquer outra cadência usa o dia
+// corrente (mesma granularidade de DAILY, inclusive pra EVERY_N_DAYS: o
+// digest representa "o dia em que foi gerado", não uma janela de N dias).
+export function scheduledForNow(now: Date, frequency: string): Date {
+  return frequency === "WEEKLY" ? startOfIsoWeekUtc(now) : startOfUtcDay(now);
 }

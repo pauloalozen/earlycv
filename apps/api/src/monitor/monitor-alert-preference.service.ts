@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { MonitorDigestFrequency } from "@prisma/client";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
@@ -35,10 +34,7 @@ export class MonitorAlertPreferenceService {
     });
   }
 
-  async update(
-    userId: string,
-    input: { emailEnabled?: boolean; frequency?: MonitorDigestFrequency },
-  ) {
+  async update(userId: string, input: { emailEnabled?: boolean }) {
     const previous = await this.getOrCreate(userId);
 
     const updated = await this.database.monitorAlertPreference.update({
@@ -47,53 +43,37 @@ export class MonitorAlertPreferenceService {
         ...(input.emailEnabled !== undefined
           ? { emailEnabled: input.emailEnabled }
           : {}),
-        ...(input.frequency !== undefined
-          ? { frequency: input.frequency }
-          : {}),
       },
     });
 
-    // Cobre DAILY<->WEEKLY<->OFF nas duas direções — é a mesma comparação
-    // de enum pra qualquer transição. Nunca dispara se só emailEnabled
-    // mudou sem frequency junto (ex.: unsubscribe por token não passa por
-    // aqui — ver recordUnsubscribed — e não deve ser confundido com isto).
     if (
-      input.frequency !== undefined &&
-      input.frequency !== previous.frequency
+      input.emailEnabled !== undefined &&
+      input.emailEnabled !== previous.emailEnabled
     ) {
-      await this.recordFrequencyChanged(
-        userId,
-        previous.frequency,
-        updated.frequency,
-      );
+      await this.recordEnabledChanged(userId, updated.emailEnabled);
     }
 
     return updated;
   }
 
-  private async recordFrequencyChanged(
-    userId: string,
-    previousFrequency: MonitorDigestFrequency,
-    newFrequency: MonitorDigestFrequency,
-  ) {
+  private async recordEnabledChanged(userId: string, emailEnabled: boolean) {
     const { reason: accessType } =
       await this.entitlementService.canUseMonitor(userId);
     await this.funnelEvents
       .record(
         {
-          eventName: "monitor_alert_frequency_changed",
+          eventName: "monitor_alert_enabled_changed",
           eventVersion: 1,
           metadata: {
-            previous_frequency: previousFrequency,
-            new_frequency: newFrequency,
+            email_enabled: emailEnabled,
             product_origin: "monitor",
             monitor_access_type: accessType,
           },
         },
         {
-          correlationId: `monitor-frequency:${userId}:${Date.now()}`,
+          correlationId: `monitor-enabled:${userId}:${Date.now()}`,
           ip: null,
-          requestId: `monitor-frequency:${userId}:${Date.now()}`,
+          requestId: `monitor-enabled:${userId}:${Date.now()}`,
           routePath: "/api/monitor/alert-preferences",
           sessionInternalId: null,
           sessionPublicToken: null,
@@ -104,7 +84,7 @@ export class MonitorAlertPreferenceService {
       )
       .catch((err: unknown) => {
         this.logger.warn(
-          `[monitor] failed to record monitor_alert_frequency_changed: ${err}`,
+          `[monitor] failed to record monitor_alert_enabled_changed: ${err}`,
         );
       });
   }
@@ -127,8 +107,7 @@ export class MonitorAlertPreferenceService {
   // estado final e nunca falha por "já estava cancelado" — token inválido
   // -> null, pro controller devolver "link inválido" sem vazar detalhe.
   // Desativa e-mail e marca unsubscribedAt — NUNCA desliga o Monitor
-  // in-app, NUNCA apaga recomendações, NUNCA muda frequency (só o
-  // interruptor emailEnabled).
+  // in-app, NUNCA apaga recomendações. Só mexe no interruptor emailEnabled.
   async unsubscribeByToken(token: string) {
     const userId = verifyMonitorUnsubscribeToken(token);
     if (!userId) return null;

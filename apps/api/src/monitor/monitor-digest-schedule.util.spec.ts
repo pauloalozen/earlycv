@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  isEveryNDaysDue,
+  isFrequencyDueToday,
   isScheduledDailyMoment,
   isWeeklyDigestDay,
+  scheduledForNow,
   startOfIsoWeekUtc,
   startOfUtcDay,
 } from "./monitor-digest-schedule.util";
@@ -78,5 +81,89 @@ test("isScheduledDailyMoment reflects an edited dailyHour/dailyMinute", () => {
   assert.equal(
     isScheduledDailyMoment(new Date("2026-08-27T11:30:00Z"), config),
     true,
+  );
+});
+
+test("isEveryNDaysDue is true on the anchor day itself and every Nth day after, false otherwise", () => {
+  const anchor = new Date("2026-08-24T00:00:00Z");
+
+  assert.equal(isEveryNDaysDue(new Date("2026-08-24T15:00:00Z"), anchor, 3), true);
+  assert.equal(isEveryNDaysDue(new Date("2026-08-25T15:00:00Z"), anchor, 3), false);
+  assert.equal(isEveryNDaysDue(new Date("2026-08-26T15:00:00Z"), anchor, 3), false);
+  assert.equal(isEveryNDaysDue(new Date("2026-08-27T15:00:00Z"), anchor, 3), true);
+});
+
+test("isEveryNDaysDue treats a null anchor as today (first tick after enabling always fires)", () => {
+  const today = new Date("2026-08-27T15:00:00Z");
+  assert.equal(isEveryNDaysDue(today, null, 4), true);
+});
+
+test("isEveryNDaysDue is false for days before the anchor (never fires retroactively)", () => {
+  const anchor = new Date("2026-08-27T00:00:00Z");
+  assert.equal(isEveryNDaysDue(new Date("2026-08-26T15:00:00Z"), anchor, 2), false);
+});
+
+test("isFrequencyDueToday: DAILY is always due", () => {
+  assert.equal(
+    isFrequencyDueToday(new Date("2026-08-25T12:00:00Z"), {
+      frequency: "DAILY",
+      weeklyDayOfWeek: 1,
+      intervalAnchorDate: null,
+    }),
+    true,
+  );
+});
+
+test("isFrequencyDueToday: WEEKLY delegates to isWeeklyDigestDay", () => {
+  const config = {
+    frequency: "WEEKLY",
+    weeklyDayOfWeek: 3,
+    intervalAnchorDate: null,
+  };
+  // 2026-08-26 é uma quarta-feira.
+  assert.equal(
+    isFrequencyDueToday(new Date("2026-08-26T12:00:00Z"), config),
+    true,
+  );
+  assert.equal(
+    isFrequencyDueToday(new Date("2026-08-27T12:00:00Z"), config),
+    false,
+  );
+});
+
+test("isFrequencyDueToday: EVERY_2_DAYS/EVERY_3_DAYS/EVERY_4_DAYS delegate to isEveryNDaysDue with the right interval", () => {
+  const anchor = new Date("2026-08-24T00:00:00Z");
+  assert.equal(
+    isFrequencyDueToday(new Date("2026-08-26T12:00:00Z"), {
+      frequency: "EVERY_2_DAYS",
+      weeklyDayOfWeek: 1,
+      intervalAnchorDate: anchor,
+    }),
+    true,
+  );
+  assert.equal(
+    isFrequencyDueToday(new Date("2026-08-25T12:00:00Z"), {
+      frequency: "EVERY_2_DAYS",
+      weeklyDayOfWeek: 1,
+      intervalAnchorDate: anchor,
+    }),
+    false,
+  );
+});
+
+test("scheduledForNow: WEEKLY uses the Monday of the ISO week, everything else uses the current UTC day", () => {
+  // 2026-08-27 é uma quinta-feira.
+  const thursday = new Date("2026-08-27T15:00:00Z");
+  assert.equal(
+    scheduledForNow(thursday, "WEEKLY").toISOString(),
+    "2026-08-24T00:00:00.000Z",
+  );
+  assert.equal(
+    scheduledForNow(thursday, "DAILY").toISOString(),
+    "2026-08-27T00:00:00.000Z",
+  );
+  assert.equal(
+    scheduledForNow(thursday, "EVERY_3_DAYS").toISOString(),
+    "2026-08-27T00:00:00.000Z",
   );
 });

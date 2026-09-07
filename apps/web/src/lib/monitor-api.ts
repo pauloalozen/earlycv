@@ -68,7 +68,7 @@ export type MonitorFeed = {
 export type MonitorNotificationGroup = {
   digestId: string;
   sentAt: string;
-  frequency: MonitorAlertFrequency;
+  frequency: MonitorDigestFrequency;
   items: MonitorRecommendationItem[];
   total: number;
 };
@@ -270,14 +270,24 @@ export async function submitRecommendationFeedback(
   }
 }
 
-// Seção "Alertas" do Meu Monitor — preferência de e-mail, conceito
-// distinto do perfil de matching (GET/PUT /monitor/profile acima).
-export type MonitorAlertFrequency = "DAILY" | "WEEKLY" | "OFF";
+// Cadência dos digests — global agora (definida pelo admin em
+// /admin/alerta-vagas), não mais escolha do usuário. Usado só pra
+// rotular o grupo de notificações no histórico (MonitorNotificationGroup
+// abaixo), nunca editável por aqui.
+export type MonitorDigestFrequency =
+  | "DAILY"
+  | "EVERY_2_DAYS"
+  | "EVERY_3_DAYS"
+  | "EVERY_4_DAYS"
+  | "WEEKLY";
 
+// Seção "Alertas" do Meu Monitor — preferência de e-mail, conceito
+// distinto do perfil de matching (GET/PUT /monitor/profile acima). Só o
+// interruptor de e-mail: a cadência de envio é global (ver
+// MonitorDigestFrequency), não é mais escolha do usuário.
 export type MonitorAlertPreference = {
   userId: string;
   emailEnabled: boolean;
-  frequency: MonitorAlertFrequency;
   unsubscribedAt: string | null;
 };
 
@@ -293,7 +303,6 @@ export async function getMonitorAlertPreferences(): Promise<MonitorAlertPreferen
 
 export async function updateMonitorAlertPreferences(input: {
   emailEnabled?: boolean;
-  frequency?: MonitorAlertFrequency;
 }): Promise<MonitorAlertPreference | null> {
   try {
     const response = await apiRequest(

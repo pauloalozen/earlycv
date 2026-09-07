@@ -1902,15 +1902,26 @@ model MonitorProfileMatchJob {
   @@index([status, createdAt])
 }
 
+// Cadência dos digests — antes era escolha por usuário (MonitorAlertPreference.frequency),
+// agora é decisão global do admin (MonitorDigestScheduleConfig.frequency,
+// ver /admin/alerta-vagas) pra controlar o volume de e-mail no agregado.
+// EVERY_2_DAYS/EVERY_3_DAYS/EVERY_4_DAYS usam MonitorDigestScheduleConfig.intervalAnchorDate
+// como "dia 0" do ciclo. Sem OFF: pausar globalmente é um caso raro o
+// bastante pra não precisar de um estado dedicado agora — cada usuário já
+// controla o próprio email via MonitorAlertPreference.emailEnabled.
 enum MonitorDigestFrequency {
   DAILY
+  EVERY_2_DAYS
+  EVERY_3_DAYS
+  EVERY_4_DAYS
   WEEKLY
-  OFF
 }
 
 // Preferência de comunicação do Monitor — deliberadamente separada de
 // UserRadarProfile (que é sobre O QUE monitorar, não SOBRE COMO avisar).
-// Default DAILY+enabled: alerta é o próprio valor do produto (o usuário já
+// Só o interruptor de e-mail: a cadência de envio é global, definida pelo
+// admin em MonitorDigestScheduleConfig (não é mais escolha do usuário).
+// Default enabled: alerta é o próprio valor do produto (o usuário já
 // configurou o Monitor de propósito), não é e-mail de marketing/aquisição
 // — unsubscribe sempre funcional, um clique, sem exigir login (ver
 // MonitorDigestUnsubscribeToken em monitor-unsubscribe-token.service.ts).
@@ -1919,8 +1930,7 @@ model MonitorAlertPreference {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  emailEnabled Boolean                @default(true)
-  frequency    MonitorDigestFrequency @default(DAILY)
+  emailEnabled Boolean @default(true)
 
   unsubscribedAt DateTime?
 
@@ -2077,10 +2087,18 @@ model MonitorAdminActionLog {
 model MonitorDigestScheduleConfig {
   id String @id @default("default")
 
-  dailyHour       Int    @default(11)
-  dailyMinute     Int    @default(0)
-  weeklyDayOfWeek Int    @default(1) // 0=domingo..6=sábado (getUTCDay())
-  timezone        String @default("America/Sao_Paulo")
+  // Cadência global de todos os usuários (ver MonitorDigestFrequency) —
+  // dailyHour/dailyMinute continuam sendo o horário de envio pra qualquer
+  // cadência (nome mantido por ser o campo mais antigo, não só "diário").
+  frequency       MonitorDigestFrequency @default(DAILY)
+  dailyHour       Int                    @default(11)
+  dailyMinute     Int                    @default(0)
+  weeklyDayOfWeek Int                    @default(1) // 0=domingo..6=sábado (getUTCDay())
+  // "Dia 0" do ciclo EVERY_2_DAYS/EVERY_3_DAYS/EVERY_4_DAYS — recalculada
+  // (setada pra "hoje") toda vez que o admin muda pra um desses modos, pra
+  // sempre disparar no mesmo dia da troca. Ignorada pras outras cadências.
+  intervalAnchorDate DateTime?
+  timezone           String              @default("America/Sao_Paulo")
 
   updatedAt        DateTime @updatedAt
   updatedByAdminId String?

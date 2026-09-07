@@ -27,10 +27,10 @@ async function main() {
       process.exit(1);
     }
 
-    const preference = await prisma.monitorAlertPreference.findUnique({
-      where: { userId: user.id },
+    const schedule = await prisma.monitorDigestScheduleConfig.findUnique({
+      where: { id: "default" },
     });
-    const frequency = preference?.frequency === "WEEKLY" ? "WEEKLY" : "DAILY";
+    const frequency = schedule?.frequency ?? "DAILY";
     const now = new Date();
     const scheduledFor =
       frequency === "WEEKLY" ? startOfIsoWeekUtc(now) : startOfUtcDay(now);
