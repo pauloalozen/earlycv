@@ -31,9 +31,17 @@ import type { DigestHistorySourceFilter } from "./dto/list-digest-history.dto";
 import type { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
 import type { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
 
+const INTERVAL_FREQUENCIES = new Set([
+  "EVERY_2_DAYS",
+  "EVERY_3_DAYS",
+  "EVERY_4_DAYS",
+]);
+
 const DEFAULT_SCHEDULE_CONFIG = {
   dailyHour: 11,
   dailyMinute: 0,
+  frequency: "DAILY" as const,
+  intervalAnchorDate: null as Date | null,
   weeklyDayOfWeek: 1,
   timezone: "America/Sao_Paulo",
 };
@@ -1009,7 +1017,7 @@ export class AdminMonitorService {
           name: true,
           internalRole: true,
           monitorAlertPreference: {
-            select: { frequency: true, emailEnabled: true },
+            select: { emailEnabled: true },
           },
         },
         orderBy: [{ createdAt: "desc" }],
@@ -1033,14 +1041,13 @@ export class AdminMonitorService {
         name: user.name,
         internalRole: user.internalRole,
         entitledToday: entitledIds.has(user.id),
-        frequency: user.monitorAlertPreference?.frequency ?? "OFF",
+        emailEnabled: user.monitorAlertPreference?.emailEnabled ?? false,
       })),
     };
   }
 
   // Idempotente por natureza (MonitorAlertPreferenceService.getOrCreate já
-  // é upsert) — chamar duas vezes pro mesmo usuário nunca altera uma
-  // frequência que ele já tenha configurado sozinho.
+  // é upsert) — chamar duas vezes pro mesmo usuário é inofensivo.
   async trackAlertUser(adminId: string, userId: string) {
     const user = await this.database.user.findUnique({
       where: { id: userId },
@@ -1058,19 +1065,19 @@ export class AdminMonitorService {
       "MonitorAlertPreference",
       userId,
       "ok",
-      { frequency: preference.frequency },
+      { emailEnabled: preference.emailEnabled },
     );
 
-    return { tracked: true, frequency: preference.frequency };
+    return { tracked: true, emailEnabled: preference.emailEnabled };
   }
 
   // Disparo síncrono: a requisição só retorna depois que o e-mail foi de
   // fato enviado (ou definitivamente pulado) — nunca enfileira pro
   // MonitorDigestWorker. Reaproveita a mesma sequência do script
   // apps/api/src/scripts/trigger-monitor-digest.ts, agora como endpoint
-  // admin. userId (nunca e-mail solto) e frequência sempre lida do
-  // MonitorAlertPreference do próprio usuário — nunca escolhida avulsa
-  // nesta chamada (ver decisão de design no doc do plano).
+  // admin. userId (nunca e-mail solto); a cadência (frequency) sempre
+  // vem da configuração global (MonitorDigestScheduleConfig) — não é mais
+  // escolha por usuário.
   async sendDigestNow(adminId: string, userId: string) {
     const user = await this.database.user.findUnique({
       where: { id: userId },
@@ -1083,9 +1090,9 @@ export class AdminMonitorService {
     const preference = await this.database.monitorAlertPreference.findUnique({
       where: { userId },
     });
-    if (!preference || preference.frequency === "OFF") {
+    if (!preference || !preference.emailEnabled) {
       throw new UnprocessableEntityException(
-        "user has no active alert frequency (OFF or never configured)",
+        "user has monitor email disabled (or never configured)",
       );
     }
 
@@ -1102,7 +1109,8 @@ export class AdminMonitorService {
       return { sent: false, skippedReason: "not_entitled" as const };
     }
 
-    const frequency = preference.frequency;
+    const schedule = await this.getDigestSchedule();
+    const frequency = schedule.frequency;
     const now = new Date();
     const scheduledFor =
       frequency === "WEEKLY" ? startOfIsoWeekUtc(now) : startOfUtcDay(now);
@@ -1304,10 +1312,34 @@ export class AdminMonitorService {
   }
 
   async updateDigestSchedule(adminId: string, dto: UpdateDigestScheduleDto) {
+    const existing = await this.database.monitorDigestScheduleConfig.findUnique(
+      { where: { id: "default" } },
+    );
+
+    // Recalcula a âncora do ciclo (dia 0) toda vez que a cadência muda PRA
+    // um modo EVERY_N_DAYS (troca de DAILY/WEEKLY pra ele, ou de um
+    // intervalo pra outro) — sempre dispara no mesmo dia da troca, em vez
+    // de herdar uma âncora de um intervalo diferente ou ficar sem nenhuma.
+    // Nunca mexe se já estava no mesmo modo (ex.: admin só mudou o
+    // horário) — preserva o ciclo em andamento.
+    const isIntervalMode = INTERVAL_FREQUENCIES.has(dto.frequency);
+    const frequencyChanged = existing?.frequency !== dto.frequency;
+    const intervalAnchorDate =
+      isIntervalMode && frequencyChanged ? new Date() : undefined;
+
     const updated = await this.database.monitorDigestScheduleConfig.upsert({
       where: { id: "default" },
-      create: { id: "default", ...dto, updatedByAdminId: adminId },
-      update: { ...dto, updatedByAdminId: adminId },
+      create: {
+        id: "default",
+        ...dto,
+        intervalAnchorDate: intervalAnchorDate ?? null,
+        updatedByAdminId: adminId,
+      },
+      update: {
+        ...dto,
+        ...(intervalAnchorDate ? { intervalAnchorDate } : {}),
+        updatedByAdminId: adminId,
+      },
     });
 
     await this.logAction(

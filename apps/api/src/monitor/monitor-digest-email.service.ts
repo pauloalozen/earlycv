@@ -5,7 +5,7 @@ import {
   EMAIL_DELIVERY_PORT,
   type EmailDeliveryPort,
 } from "../email/email-delivery.port";
-import { MAX_RECOMMENDATIONS_IN_BODY } from "./monitor-digest-content.service";
+import { MAX_RECOMMENDATIONS_PER_DIGEST } from "./monitor-digest-content.service";
 import {
   buildMonitorDigestLink,
   buildMonitorLogoUrl,
@@ -59,13 +59,13 @@ export class MonitorDigestEmailService {
               include: { job: { include: { company: true } } },
             },
           },
-          // Vaga mais recente primeiro — mesmo critério de
+          // Maior aderência primeiro — mesmo critério de
           // monitor-digest-content.service.ts, aplicado explicitamente
           // aqui (não confiar na ordem de inserção implícita do join
           // MonitorDigestRecommendation.createdAt).
           orderBy: [
-            { recommendation: { recommendedAt: "desc" } },
             { recommendation: { opportunityLevel: "desc" } },
+            { recommendation: { recommendedAt: "desc" } },
           ],
         },
       },
@@ -102,10 +102,14 @@ export class MonitorDigestEmailService {
       return { sent: false, skippedReason: "not_entitled" };
     }
 
+    // digest.recommendations já vem com no máximo
+    // MAX_RECOMMENDATIONS_PER_DIGEST itens em operação normal (é o teto
+    // aplicado na criação do digest, ver monitor-digest-content.service.ts)
+    // — o slice aqui é defesa em profundidade, não o caminho esperado.
     const total = digest.recommendations.length;
     const preview = digest.recommendations.slice(
       0,
-      MAX_RECOMMENDATIONS_IN_BODY,
+      MAX_RECOMMENDATIONS_PER_DIGEST,
     );
     const remaining = total - preview.length;
 

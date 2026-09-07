@@ -36,7 +36,6 @@ function createFixture() {
     {
       userId: string;
       emailEnabled: boolean;
-      frequency: string;
       unsubscribedAt: Date | null;
     }
   >();
@@ -57,7 +56,6 @@ function createFixture() {
         const next = {
           userId: where.userId,
           emailEnabled: true,
-          frequency: "DAILY",
           unsubscribedAt: null,
           ...create,
         };
@@ -83,7 +81,7 @@ function createFixture() {
   return { db, preferences };
 }
 
-test("getOrCreate defaults a new user to DAILY + emailEnabled", async () => {
+test("getOrCreate defaults a new user to emailEnabled=true", async () => {
   const { db } = createFixture();
   const service = new MonitorAlertPreferenceServiceCtor(
     db,
@@ -94,7 +92,6 @@ test("getOrCreate defaults a new user to DAILY + emailEnabled", async () => {
   const preference = await service.getOrCreate("user-1");
 
   assert.equal(preference.emailEnabled, true);
-  assert.equal(preference.frequency, "DAILY");
 });
 
 test("getOrCreate returns the existing row unchanged on subsequent calls", async () => {
@@ -102,7 +99,6 @@ test("getOrCreate returns the existing row unchanged on subsequent calls", async
   preferences.set("user-1", {
     userId: "user-1",
     emailEnabled: false,
-    frequency: "WEEKLY",
     unsubscribedAt: new Date("2026-01-01T00:00:00Z"),
   });
   const service = new MonitorAlertPreferenceServiceCtor(
@@ -114,7 +110,6 @@ test("getOrCreate returns the existing row unchanged on subsequent calls", async
   const preference = await service.getOrCreate("user-1");
 
   assert.equal(preference.emailEnabled, false);
-  assert.equal(preference.frequency, "WEEKLY");
 });
 
 test("update only touches the fields provided", async () => {
@@ -126,10 +121,9 @@ test("update only touches the fields provided", async () => {
   );
   await service.getOrCreate("user-1");
 
-  const updated = await service.update("user-1", { frequency: "OFF" as never });
+  const updated = await service.update("user-1", { emailEnabled: false });
 
-  assert.equal(updated.frequency, "OFF");
-  assert.equal(updated.emailEnabled, true);
+  assert.equal(updated.emailEnabled, false);
 });
 
 function createFunnelEventsCapture() {
@@ -148,7 +142,7 @@ function createFunnelEventsCapture() {
   return { funnelEvents, recordedEvents, recordedMetadata };
 }
 
-test("update records monitor_alert_frequency_changed with previous/new frequency when frequency actually changes", async () => {
+test("update records monitor_alert_enabled_changed when emailEnabled actually changes", async () => {
   const { db } = createFixture();
   const { funnelEvents, recordedEvents, recordedMetadata } =
     createFunnelEventsCapture();
@@ -159,16 +153,15 @@ test("update records monitor_alert_frequency_changed with previous/new frequency
   );
   await service.getOrCreate("user-1");
 
-  await service.update("user-1", { frequency: "WEEKLY" as never });
+  await service.update("user-1", { emailEnabled: false });
 
-  assert.deepEqual(recordedEvents, ["monitor_alert_frequency_changed"]);
-  assert.equal(recordedMetadata[0]?.previous_frequency, "DAILY");
-  assert.equal(recordedMetadata[0]?.new_frequency, "WEEKLY");
+  assert.deepEqual(recordedEvents, ["monitor_alert_enabled_changed"]);
+  assert.equal(recordedMetadata[0]?.email_enabled, false);
   assert.equal(recordedMetadata[0]?.product_origin, "monitor");
   assert.equal(recordedMetadata[0]?.monitor_access_type, "internal_access");
 });
 
-test("update covers every transition direction, including into and out of OFF", async () => {
+test("update covers both toggle directions", async () => {
   const { db } = createFixture();
   const { funnelEvents, recordedMetadata } = createFunnelEventsCapture();
   const service = new MonitorAlertPreferenceServiceCtor(
@@ -178,21 +171,16 @@ test("update covers every transition direction, including into and out of OFF", 
   );
   await service.getOrCreate("user-1");
 
-  await service.update("user-1", { frequency: "OFF" as never });
-  await service.update("user-1", { frequency: "DAILY" as never });
-  await service.update("user-1", { frequency: "WEEKLY" as never });
+  await service.update("user-1", { emailEnabled: false });
+  await service.update("user-1", { emailEnabled: true });
 
   assert.deepEqual(
-    recordedMetadata.map((m) => [m.previous_frequency, m.new_frequency]),
-    [
-      ["DAILY", "OFF"],
-      ["OFF", "DAILY"],
-      ["DAILY", "WEEKLY"],
-    ],
+    recordedMetadata.map((m) => m.email_enabled),
+    [false, true],
   );
 });
 
-test("update does not record monitor_alert_frequency_changed when only emailEnabled changes, without frequency", async () => {
+test("update does not record monitor_alert_enabled_changed when emailEnabled is sent but unchanged", async () => {
   const { db } = createFixture();
   const { funnelEvents, recordedEvents } = createFunnelEventsCapture();
   const service = new MonitorAlertPreferenceServiceCtor(
@@ -202,12 +190,12 @@ test("update does not record monitor_alert_frequency_changed when only emailEnab
   );
   await service.getOrCreate("user-1");
 
-  await service.update("user-1", { emailEnabled: false });
+  await service.update("user-1", { emailEnabled: true });
 
   assert.deepEqual(recordedEvents, []);
 });
 
-test("update does not record monitor_alert_frequency_changed when frequency is sent but unchanged", async () => {
+test("update does not record monitor_alert_enabled_changed when emailEnabled isn't provided at all", async () => {
   const { db } = createFixture();
   const { funnelEvents, recordedEvents } = createFunnelEventsCapture();
   const service = new MonitorAlertPreferenceServiceCtor(
@@ -217,7 +205,7 @@ test("update does not record monitor_alert_frequency_changed when frequency is s
   );
   await service.getOrCreate("user-1");
 
-  await service.update("user-1", { frequency: "DAILY" as never });
+  await service.update("user-1", {});
 
   assert.deepEqual(recordedEvents, []);
 });
@@ -250,26 +238,6 @@ test("unsubscribeByToken disables email, sets unsubscribedAt, and records monito
   assert.ok(updated?.unsubscribedAt instanceof Date);
   assert.deepEqual(recordedEvents, ["monitor_digest_unsubscribed"]);
   assert.equal(recordedMetadata[0]?.monitor_access_type, "internal_access");
-});
-
-test("unsubscribeByToken never touches frequency, only the emailEnabled switch", async () => {
-  const { db, preferences } = createFixture();
-  preferences.set("user-1", {
-    userId: "user-1",
-    emailEnabled: true,
-    frequency: "WEEKLY",
-    unsubscribedAt: null,
-  });
-  const service = new MonitorAlertPreferenceServiceCtor(
-    db,
-    NOOP_FUNNEL_EVENTS,
-    ALLOW_ENTITLEMENT,
-  );
-  const token = createMonitorUnsubscribeToken("user-1");
-
-  const updated = await service.unsubscribeByToken(token);
-
-  assert.equal(updated?.frequency, "WEEKLY");
 });
 
 test("unsubscribeByToken with an invalid token returns null and records nothing", async () => {

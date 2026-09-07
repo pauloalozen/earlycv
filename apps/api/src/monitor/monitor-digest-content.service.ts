@@ -2,15 +2,12 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 
-// Teto de recomendações incluídas por digest — generoso (o pool de
-// entrada já é pré-filtrado a nível 3+ pelo Monitor) e limita o custo de
-// um usuário com backlog grande acumulado (ex: reativou o Monitor depois
-// de muito tempo com o e-mail desligado).
-export const MAX_RECOMMENDATIONS_PER_DIGEST = 30;
-// Quantas vagas aparecem de fato no corpo do e-mail — o resto só é
-// contado ("+N no seu Monitor"), nunca listado, pra manter o e-mail
-// enxuto (spec explícita da Fase 3).
-export const MAX_RECOMMENDATIONS_IN_BODY = 5;
+// Teto de recomendações por digest — reduzido de 30 pra 5 (decisão de
+// produto: e-mail diário poluído com 30 vagas). O que passa do teto não é
+// perdido: continua elegível (digestInclusions vazio) pro próximo digest,
+// e o usuário sempre vê a fila inteira dentro do produto (GET /monitor),
+// não só o que já foi mandado por e-mail.
+export const MAX_RECOMMENDATIONS_PER_DIGEST = 5;
 
 @Injectable()
 export class MonitorDigestContentService {
@@ -26,9 +23,12 @@ export class MonitorDigestContentService {
   // scheduler nunca é perdida, e o critério de idempotência já garante que
   // nada é reenviado — ver monitor-digest.scheduler.ts.
   //
-  // Ordem: vaga mais recente primeiro (recommendedAt desc) — regra de
-  // negócio explícita, prioridade é a novidade da vaga, não o nível de
-  // aderência. opportunityLevel só desempata vagas descobertas juntas.
+  // Ordem: maior aderência primeiro (opportunityLevel desc) — com o teto
+  // caindo pra 5, é preciso ser criterioso e priorizar as vagas que
+  // realmente importam, não só as mais recentes; recommendedAt desc só
+  // desempata vagas de mesmo nível. Isso vale só pra seleção do e-mail —
+  // a fila completa que o usuário vê em GET /monitor continua ordenada
+  // por novidade (monitor-recommendations.service.ts), sem mudança ali.
   async getEligibleRecommendations(userId: string) {
     return this.database.userJobRecommendation.findMany({
       where: {
@@ -38,7 +38,7 @@ export class MonitorDigestContentService {
         digestInclusions: { none: {} },
       },
       include: { job: { include: { company: true } } },
-      orderBy: [{ recommendedAt: "desc" }, { opportunityLevel: "desc" }],
+      orderBy: [{ opportunityLevel: "desc" }, { recommendedAt: "desc" }],
       take: MAX_RECOMMENDATIONS_PER_DIGEST,
     });
   }

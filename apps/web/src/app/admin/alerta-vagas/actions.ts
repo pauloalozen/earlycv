@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { buildAdminRedirect } from "@/lib/admin-ingestion-flow";
 import {
+  type DigestSchedule,
   resendAdminMonitorDigest,
   searchAdminMonitorUsers,
   sendMonitorDigestNow,
@@ -103,6 +104,7 @@ export async function updateDigestScheduleAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? ROOT_REDIRECT_PATH,
   );
+  const frequency = String(formData.get("frequency") ?? "DAILY");
   const dailyHour = Number(formData.get("dailyHour"));
   const dailyMinute = Number(formData.get("dailyMinute"));
   const weeklyDayOfWeek = Number(formData.get("weeklyDayOfWeek"));
@@ -111,6 +113,7 @@ export async function updateDigestScheduleAction(formData: FormData) {
     await updateMonitorDigestSchedule({
       dailyHour,
       dailyMinute,
+      frequency: frequency as DigestSchedule["frequency"],
       weeklyDayOfWeek,
     });
   } catch (error) {

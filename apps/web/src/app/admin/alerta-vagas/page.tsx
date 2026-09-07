@@ -15,6 +15,7 @@ import { AdminTokenState } from "@/app/admin/_components/admin-token-state";
 import {
   type DigestContent,
   type DigestEmailStats,
+  type DigestFrequency,
   type DigestHistoryItem,
   type DigestSchedule,
   getMonitorDigestContent,
@@ -43,9 +44,19 @@ const ROOT_PATH = "/admin/alerta-vagas";
 
 const FREQUENCY_LABEL: Record<string, string> = {
   DAILY: "diária",
+  EVERY_2_DAYS: "a cada 2 dias",
+  EVERY_3_DAYS: "a cada 3 dias",
+  EVERY_4_DAYS: "a cada 4 dias",
   WEEKLY: "semanal",
-  OFF: "desligado",
 };
+
+const FREQUENCY_OPTIONS: { value: DigestFrequency; label: string }[] = [
+  { value: "DAILY", label: "Diário" },
+  { value: "EVERY_2_DAYS", label: "A cada 2 dias" },
+  { value: "EVERY_3_DAYS", label: "A cada 3 dias" },
+  { value: "EVERY_4_DAYS", label: "A cada 4 dias" },
+  { value: "WEEKLY", label: "Semanal" },
+];
 
 const WEEKDAY_OPTIONS = [
   { value: 0, label: "Domingo" },
@@ -194,7 +205,7 @@ export default async function AdminAlertaVagasPage({
         <SectionHeading
           title="Elegibilidade e disparo manual"
           description={
-            'Hoje o acesso ao Alerta depende só do papel interno (ghost mode). Frequência é a preferência que o próprio usuário configurou. "Liberação manual" ainda não decide nada — a coluna já está pronta pra quando essa regra existir. "Disparar agora" envia o digest desse usuário na hora, na frequência dele, de forma síncrona.'
+            'Hoje o acesso ao Alerta depende só do papel interno (ghost mode). E-mail é o interruptor que o próprio usuário controla — a cadência é global, definida no Agendamento abaixo. "Liberação manual" ainda não decide nada — a coluna já está pronta pra quando essa regra existir. "Disparar agora" envia o digest desse usuário na hora, na cadência global configurada, de forma síncrona.'
           }
         />
 
@@ -231,14 +242,14 @@ export default async function AdminAlertaVagasPage({
               <AdminTh>Usuário</AdminTh>
               <AdminTh>Papel</AdminTh>
               <AdminTh>Elegível hoje</AdminTh>
-              <AdminTh>Frequência</AdminTh>
+              <AdminTh>E-mail</AdminTh>
               <AdminTh>Liberação manual</AdminTh>
               <AdminTh align="right">Ação</AdminTh>
             </tr>
           </thead>
           <tbody>
             {trackedUsers.users.map((user) => {
-              const canSend = user.entitledToday && user.frequency !== "OFF";
+              const canSend = user.entitledToday && user.emailEnabled;
               return (
                 <tr key={user.id}>
                   <AdminTd>
@@ -270,8 +281,8 @@ export default async function AdminAlertaVagasPage({
                     </AdminPill>
                   </AdminTd>
                   <AdminTd>
-                    <AdminPill mono>
-                      {FREQUENCY_LABEL[user.frequency]}
+                    <AdminPill tone={user.emailEnabled ? "ok" : "neutral"}>
+                      {user.emailEnabled ? "ativado" : "desativado"}
                     </AdminPill>
                   </AdminTd>
                   <AdminTd>
@@ -486,7 +497,7 @@ export default async function AdminAlertaVagasPage({
       <section style={{ marginBottom: 40 }}>
         <SectionHeading
           title="Agendamento dos disparos automáticos"
-          description="Define quando os digests são gerados. O worker que efetivamente envia roda continuamente, independente do horário abaixo."
+          description="Define a cadência e o horário de envio pra todos os usuários — não é mais escolha individual (a tela do usuário só liga/desliga o e-mail). O worker que efetivamente envia roda continuamente, independente do horário abaixo."
         />
 
         <form action={updateDigestScheduleAction}>
@@ -507,6 +518,20 @@ export default async function AdminAlertaVagasPage({
               alignItems: "flex-end",
             }}
           >
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, color: AT.muted }}>Cadência</span>
+              <select
+                name="frequency"
+                defaultValue={schedule.frequency}
+                style={{ ...inputStyle, minWidth: 150 }}
+              >
+                {FREQUENCY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ fontSize: 12, color: AT.muted }}>Hora (0-23)</span>
               <input
@@ -552,7 +577,7 @@ export default async function AdminAlertaVagasPage({
             </span>
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ fontSize: 12, color: AT.muted }}>
-                Dia do digest semanal
+                Dia do digest semanal (só usado quando Cadência = Semanal)
               </span>
               <select
                 name="weeklyDayOfWeek"
@@ -587,7 +612,9 @@ export default async function AdminAlertaVagasPage({
             }}
           >
             Fila de envio: varredura a cada 30s · lote de 10 · até 3 tentativas
-            por digest.
+            por digest · máximo de 5 vagas por e-mail (as demais continuam
+            elegíveis pro próximo digest e visíveis na fila completa do
+            usuário).
           </span>
         </div>
       </section>
