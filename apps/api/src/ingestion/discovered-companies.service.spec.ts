@@ -627,6 +627,28 @@ test("validatePending(limit) processa só os N primeiros candidatos pendentes e 
   assert.equal(statuses.filter((s) => s === "PENDING").length, 2);
 });
 
+test("validatePending (nome longo) não trava em PENDING quando as combinações passam do orçamento fixo antigo (60)", async () => {
+  // "BLUMA SERVICOS DE BELEZA E TECNOLOGIA SA" gera 9 variantes de slug x 7
+  // adapters = 63 combos — passava do teto fixo antigo (60) e a empresa
+  // nunca saía da fila (achado real em produção). O orçamento agora é
+  // dinâmico por candidato, então o chute de slug tem que terminar de
+  // verdade em vez de ser cortado no meio.
+  const { service, candidates } = createFixture({
+    probeImpl: async () => ({ inconclusive: false, jobCount: 0, ok: true, rawJobCount: 0 }),
+    webSearch: { searchImpl: async () => [] },
+  });
+  await service.importCandidatesCsv({
+    csvText: "nome\nBLUMA SERVICOS DE BELEZA E TECNOLOGIA SA",
+  });
+
+  const report = await service.validatePending(1);
+
+  assert.equal(report.stillPendingCount, 0);
+  assert.equal(report.invalidCount, 1);
+  const candidate = [...candidates.values()][0];
+  assert.equal(candidate?.status, "INVALID");
+});
+
 test("validatePending (só nome) marca INVALID com o histórico de tentativas quando nada bate", async () => {
   const { service, candidates } = createFixture({
     probeImpl: async () => ({ inconclusive: false, jobCount: 0, ok: true }),
