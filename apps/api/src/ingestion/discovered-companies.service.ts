@@ -133,52 +133,75 @@ export class DiscoveredCompaniesService {
     private readonly webSearchService: WebSearchService,
   ) {}
 
-  // O corte de 500 linhas existe pra proteger a página da fila de listas
-  // patologicamente grandes — mas PENDING cresce muito mais rápido que os
-  // status promovíveis (VALIDATED/NO_TECH_JOBS/NO_ACTIVE_JOBS). Ordenar só
-  // por createdAt desc deixa candidatos promovíveis mais antigos fora do
-  // corte assim que entram PENDINGs mais novos, ficando invisíveis na fila
-  // mesmo já validados (foi o que aconteceu com o batch de 16/08: 139
-  // VALIDATED sumiram atrás de PENDINGs criados minutos depois). Por isso os
-  // status promovíveis pedidos nunca são truncados; só o restante (ex.
-  // PENDING) disputa o espaço remanescente do corte.
-  async list(status?: DiscoveredCompanyStatus[]) {
-    const requestedPromotable = (
-      status && status.length > 0 ? status : PROMOTABLE_STATUSES
-    ).filter((s) => PROMOTABLE_STATUSES.includes(s));
-
-    if (requestedPromotable.length === 0) {
-      return this.database.discoveredCompany.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 500,
-        where:
-          status && status.length > 0 ? { status: { in: status } } : undefined,
-      });
-    }
-
-    const promotableRows = await this.database.discoveredCompany.findMany({
-      orderBy: { createdAt: "desc" },
-      where: { status: { in: requestedPromotable } },
-    });
-
-    const remainingStatuses = status?.filter(
-      (s) => !requestedPromotable.includes(s),
+  // Antes disso, a fila usava um corte fixo de 500 linhas sem paginação —
+  // com prioridade artificial pra status promovíveis não sumirem atrás de
+  // PENDINGs mais recentes (achado real: 139 VALIDATED sumiram atrás de
+  // PENDINGs criados minutos depois, batch de 16/08). Isso escondia
+  // qualquer coisa além do corte sem nenhum sinal pra quem tava olhando a
+  // tela. Com paginação de verdade (total visível, dá pra virar página) e
+  // busca por nome, nada fica invisível — só em outra página — então a
+  // prioridade artificial não é mais necessária.
+  //
+  // Ordenação por updatedAt (não createdAt): achado real — BLUMA
+  // (importada em 20/08) foi revalidada e virou INVALID, mas sumia da aba
+  // Histórico porque createdAt continuava sendo 20/08 e centenas de
+  // outros registros foram CRIADOS depois dela nesse meio tempo. updatedAt
+  // reflete quando o candidato foi processado de verdade, então um item
+  // revalidado agora sempre sobe pro topo, não importa quando foi
+  // importado originalmente.
+  async list(params?: {
+    status?: DiscoveredCompanyStatus[];
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{
+    rows: DiscoveredCompany[];
+    total: number;
+    page: number;
+    pageSize: number;
+    statusCounts: Partial<Record<DiscoveredCompanyStatus, number>>;
+  }> {
+    const page = params?.page && params.page > 0 ? Math.floor(params.page) : 1;
+    // pageSize sempre 50 na tela (só o CSV export do admin pede um valor
+    // maior, pra conseguir exportar tudo sem paginar manualmente) — teto
+    // de segurança evita puxar um número patológico numa chamada só.
+    const pageSize = Math.min(
+      Math.max(params?.pageSize && params.pageSize > 0 ? params.pageSize : 50, 1),
+      1000,
     );
-    if (!remainingStatuses || remainingStatuses.length === 0) {
-      return promotableRows;
+    const search = params?.search?.trim();
+
+    const where = {
+      name: search
+        ? { contains: search, mode: "insensitive" as const }
+        : undefined,
+      status:
+        params?.status && params.status.length > 0
+          ? { in: params.status }
+          : undefined,
+    };
+
+    const [rows, total, statusGroups] = await Promise.all([
+      this.database.discoveredCompany.findMany({
+        orderBy: { updatedAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        where,
+      }),
+      this.database.discoveredCompany.count({ where }),
+      this.database.discoveredCompany.groupBy({
+        _count: true,
+        by: ["status"],
+        where,
+      }),
+    ]);
+
+    const statusCounts: Partial<Record<DiscoveredCompanyStatus, number>> = {};
+    for (const group of statusGroups) {
+      statusCounts[group.status] = group._count;
     }
 
-    const remainingTake = Math.max(0, 500 - promotableRows.length);
-    const remainingRows =
-      remainingTake > 0
-        ? await this.database.discoveredCompany.findMany({
-            orderBy: { createdAt: "desc" },
-            take: remainingTake,
-            where: { status: { in: remainingStatuses } },
-          })
-        : [];
-
-    return [...promotableRows, ...remainingRows];
+    return { page, pageSize, rows, statusCounts, total };
   }
 
   // Aceita dois formatos de header:

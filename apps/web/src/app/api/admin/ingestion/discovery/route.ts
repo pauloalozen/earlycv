@@ -17,8 +17,12 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get("status");
-  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const forwarded = new URLSearchParams();
+  for (const key of ["status", "search", "page", "pageSize"]) {
+    const value = searchParams.get(key);
+    if (value) forwarded.set(key, value);
+  }
+  const qs = forwarded.toString() ? `?${forwarded.toString()}` : "";
 
   const res = await fetch(`${getApiBaseUrl()}/admin/discovery${qs}`, {
     cache: "no-store",

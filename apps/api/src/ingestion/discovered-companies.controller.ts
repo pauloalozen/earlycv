@@ -47,12 +47,30 @@ export class DiscoveredCompaniesController {
   ) {}
 
   @Get()
-  list(@Query("status") statusParam?: string) {
+  list(
+    @Query("status") statusParam?: string,
+    @Query("search") search?: string,
+    @Query("page") pageParam?: string,
+    @Query("pageSize") pageSizeParam?: string,
+  ) {
     const status = statusParam
       ?.split(",")
       .map((value) => value.trim())
       .filter(isDiscoveredCompanyStatus);
-    return this.discoveredCompaniesService.list(status);
+    const page = pageParam ? Number.parseInt(pageParam, 10) : undefined;
+    const pageSize = pageSizeParam
+      ? Number.parseInt(pageSizeParam, 10)
+      : undefined;
+
+    return this.discoveredCompaniesService.list({
+      page: page !== undefined && Number.isFinite(page) ? page : undefined,
+      pageSize:
+        pageSize !== undefined && Number.isFinite(pageSize)
+          ? pageSize
+          : undefined,
+      search,
+      status,
+    });
   }
 
   @Post("import")
