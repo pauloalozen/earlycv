@@ -93,10 +93,31 @@ const PROMOTABLE_STATUSES: DiscoveredCompanyStatus[] = [
 ];
 
 // Orçamento de probes por candidato (validação pontual OU dentro de um
-// lote de "Validar pendentes") — cobre o pior caso do chute de slug (6
-// adapters x variantes do nome). É por candidato, não compartilhado entre
+// lote de "Validar pendentes"). É por candidato, não compartilhado entre
 // candidatos do mesmo lote — ver validatePending.
-const PER_CANDIDATE_PROBE_BUDGET = 60;
+//
+// Antes era uma constante fixa (60), dimensionada pra "6 adapters x
+// variantes do nome". GUESSABLE_ADAPTERS cresceu pra 7 (pandape) sem
+// atualizar esse número, e nomes de empresa com muitas palavras geram 9+
+// variantes de slug (ex: "BLUMA SERVICOS DE BELEZA E TECNOLOGIA SA" = 9
+// variantes x 7 adapters = 63 combos), estourando o teto de 60 ANTES do
+// loop de chute terminar. O probe cortado no meio devolve PENDING sem
+// persistir nada (nem tentativa, nem erro) — e como a ordem dos combos é
+// sempre a mesma, toda nova execução batia na mesma parede, no mesmo
+// ponto, pra sempre: a empresa nunca saía da fila (achado real: 66 de 174
+// PENDING em produção travadas assim, incluindo BLUMA).
+//
+// Corrigido calculando o orçamento por candidato (computeProbeBudget),
+// garantindo que o chute de slug sempre tenha combos suficientes pra
+// terminar de verdade — achando um match ou esgotando todas as tentativas
+// e virando INVALID, nunca mais parando no meio.
+function computeProbeBudget(name: string): number {
+  const variantCount = generateSlugVariants(name).length;
+  // +2: 1 pro probe da careersUrl já conhecida (quando existir) e 1 pro
+  // probe do resultado da busca web — nenhum dos dois consome do chute de
+  // slug, mas dividem o mesmo teto.
+  return variantCount * GUESSABLE_ADAPTERS.length + 2;
+}
 
 @Injectable()
 export class DiscoveredCompaniesService {
@@ -344,7 +365,7 @@ export class DiscoveredCompaniesService {
       };
       const { outcome } = await this.validateCandidate(
         candidate,
-        PER_CANDIDATE_PROBE_BUDGET,
+        computeProbeBudget(candidate.name),
         searchBudget,
       );
       summary.checkedCount += 1;
@@ -779,7 +800,7 @@ export class DiscoveredCompaniesService {
     };
     const { outcome } = await this.validateCandidate(
       candidate,
-      PER_CANDIDATE_PROBE_BUDGET,
+      computeProbeBudget(candidate.name),
       searchBudget,
     );
 
