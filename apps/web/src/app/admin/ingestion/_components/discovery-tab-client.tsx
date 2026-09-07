@@ -456,27 +456,37 @@ export function DiscoveryTabClient() {
       {message && <p style={{ color: AT.ok, fontSize: 12.5 }}>{message}</p>}
       {error && <p style={{ color: "#b91c1c", fontSize: 12.5 }}>{error}</p>}
 
-      <div style={{ display: "inline-flex", gap: 2 }}>
-        <button
-          className={buttonVariants({
-            size: "sm",
-            variant: view === "fila" ? "default" : "outline",
-          })}
-          onClick={() => setView("fila")}
-          type="button"
-        >
-          Fila
-        </button>
-        <button
-          className={buttonVariants({
-            size: "sm",
-            variant: view === "historico" ? "default" : "outline",
-          })}
-          onClick={() => setView("historico")}
-          type="button"
-        >
-          Histórico
-        </button>
+      <div style={{ alignItems: "center", display: "inline-flex", gap: 8 }}>
+        <div style={{ display: "inline-flex", gap: 2 }}>
+          <button
+            className={buttonVariants({
+              size: "sm",
+              variant: view === "fila" ? "default" : "outline",
+            })}
+            onClick={() => setView("fila")}
+            type="button"
+          >
+            Fila
+          </button>
+          <button
+            className={buttonVariants({
+              size: "sm",
+              variant: view === "historico" ? "default" : "outline",
+            })}
+            onClick={() => setView("historico")}
+            type="button"
+          >
+            Histórico
+          </button>
+        </div>
+        {!loading && view === "fila" && (
+          <span style={{ color: AT.muted, fontSize: 12.5 }}>
+            <strong style={{ color: AT.ink }}>
+              {rows.filter((r) => r.status === "PENDING").length}
+            </strong>{" "}
+            pendente(s) na fila
+          </span>
+        )}
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
