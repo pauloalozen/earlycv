@@ -62,25 +62,47 @@ function createFixture(options?: {
   >();
   let nextId = 1;
 
+  type ListWhere = {
+    status?: { in?: string[] } | string;
+    name?: { contains?: string; mode?: string };
+  };
+
+  function matchesWhere(candidate: Candidate, where?: ListWhere): boolean {
+    if (where?.status) {
+      if (typeof where.status === "string") {
+        if (candidate.status !== where.status) return false;
+      } else if (where.status.in && !where.status.in.includes(candidate.status)) {
+        return false;
+      }
+    }
+    if (where?.name?.contains) {
+      if (
+        !candidate.name
+          .toLowerCase()
+          .includes(where.name.contains.toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   const database = {
     discoveredCompany: {
       findMany: async ({
         where,
         orderBy,
+        skip,
         take,
       }: {
-        where?: { status?: { in?: string[] } | string };
+        where?: ListWhere;
         orderBy?: { createdAt?: "asc" | "desc"; updatedAt?: "asc" | "desc" };
+        skip?: number;
         take?: number;
       } = {}) => {
-        let items = [...candidates.values()];
-        if (where?.status) {
-          if (typeof where.status === "string") {
-            items = items.filter((c) => c.status === where.status);
-          } else if (where.status.in) {
-            items = items.filter((c) => where.status.in?.includes(c.status));
-          }
-        }
+        let items = [...candidates.values()].filter((c) =>
+          matchesWhere(c, where),
+        );
         // Espelha o Prisma de verdade: respeita o campo/direção pedidos em
         // orderBy, em vez de sempre ordenar por createdAt asc — senão um
         // teste que combina orderBy+take (ex: corte de 500) não pega
@@ -90,7 +112,23 @@ function createFixture(options?: {
         items = items.sort(
           (a, b) => direction * (a[field].getTime() - b[field].getTime()),
         );
-        return typeof take === "number" ? items.slice(0, take) : items;
+        const start = skip ?? 0;
+        return typeof take === "number"
+          ? items.slice(start, start + take)
+          : items.slice(start);
+      },
+      count: async ({ where }: { where?: ListWhere } = {}) =>
+        [...candidates.values()].filter((c) => matchesWhere(c, where)).length,
+      groupBy: async ({ where }: { where?: ListWhere } = {}) => {
+        const counts = new Map<string, number>();
+        for (const candidate of candidates.values()) {
+          if (!matchesWhere(candidate, where)) continue;
+          counts.set(candidate.status, (counts.get(candidate.status) ?? 0) + 1);
+        }
+        return [...counts.entries()].map(([status, count]) => ({
+          _count: count,
+          status,
+        }));
       },
       findUnique: async ({
         where,
@@ -205,7 +243,7 @@ function createFixture(options?: {
   };
 }
 
-test("list() nunca trunca candidatos promovíveis mesmo com PENDING mais recente lotando o corte de 500", async () => {
+test("list() pagina 50 por vez e devolve total + statusCounts precisos, mesmo com centenas de candidatos", async () => {
   const { service, candidates } = createFixture();
   const base = new Date("2026-08-16T22:16:18.000Z").getTime();
 
@@ -224,7 +262,6 @@ test("list() nunca trunca candidatos promovíveis mesmo com PENDING mais recente
       updatedAt: new Date(base + i),
     });
   }
-  // PENDINGs criados minutos depois — em volume bem maior que o corte de 500.
   for (let i = 0; i < 600; i++) {
     candidates.set(`pending-${i}`, {
       createdAt: new Date(base + 1_000 + i),
@@ -238,15 +275,88 @@ test("list() nunca trunca candidatos promovíveis mesmo com PENDING mais recente
     });
   }
 
-  const rows = await service.list([
-    "PENDING",
-    "VALIDATED",
-    "NO_ACTIVE_JOBS",
-    "NO_TECH_JOBS",
-  ] as never);
+  const result = await service.list({
+    status: ["PENDING", "VALIDATED", "NO_ACTIVE_JOBS", "NO_TECH_JOBS"] as never,
+  });
 
-  const validatedRows = rows.filter((r) => r.status === "VALIDATED");
-  assert.equal(validatedRows.length, 139);
+  // Paginação real (50 por página) em vez do corte fixo de 500 sem
+  // paginação — nada fica invisível, só em outra página: total e
+  // statusCounts refletem TODOS os candidatos, não só a página atual.
+  assert.equal(result.pageSize, 50);
+  assert.equal(result.rows.length, 50);
+  assert.equal(result.total, 139 + 600);
+  assert.equal(result.statusCounts.VALIDATED, 139);
+  assert.equal(result.statusCounts.PENDING, 600);
+});
+
+test("list() filtra por nome (case-insensitive, substring) e pagina o restante", async () => {
+  const { service, candidates } = createFixture();
+  const base = new Date("2026-08-16T22:16:18.000Z").getTime();
+
+  candidates.set("match-1", {
+    createdAt: new Date(base),
+    id: "match-1",
+    industry: null,
+    jobCount: 0,
+    name: "Banco Agibank",
+    normalizedName: "banco agibank",
+    status: "PENDING",
+    updatedAt: new Date(base),
+  });
+  candidates.set("match-2", {
+    createdAt: new Date(base + 1),
+    id: "match-2",
+    industry: null,
+    jobCount: 0,
+    name: "AGIBANK HOLDING",
+    normalizedName: "agibank holding",
+    status: "PENDING",
+    updatedAt: new Date(base + 1),
+  });
+  candidates.set("no-match", {
+    createdAt: new Date(base + 2),
+    id: "no-match",
+    industry: null,
+    jobCount: 0,
+    name: "Outra Empresa",
+    normalizedName: "outra empresa",
+    status: "PENDING",
+    updatedAt: new Date(base + 2),
+  });
+
+  const result = await service.list({ search: "agibank" });
+
+  assert.equal(result.total, 2);
+  assert.deepEqual(
+    result.rows.map((r) => r.id).sort(),
+    ["match-1", "match-2"],
+  );
+});
+
+test("list() pagina de verdade: page 2 traz os próximos itens, sem repetir a page 1", async () => {
+  const { service, candidates } = createFixture();
+  const base = new Date("2026-08-16T22:16:18.000Z").getTime();
+
+  for (let i = 0; i < 120; i++) {
+    candidates.set(`c-${i}`, {
+      createdAt: new Date(base + i),
+      id: `c-${i}`,
+      industry: null,
+      jobCount: 0,
+      name: `Empresa ${i}`,
+      normalizedName: `empresa ${i}`,
+      status: "PENDING",
+      updatedAt: new Date(base + i),
+    });
+  }
+
+  const page1 = await service.list({ page: 1 });
+  const page2 = await service.list({ page: 2 });
+
+  assert.equal(page1.rows.length, 50);
+  assert.equal(page2.rows.length, 50);
+  const page1Ids = new Set(page1.rows.map((r) => r.id));
+  assert.ok(page2.rows.every((r) => !page1Ids.has(r.id)));
 });
 
 test("list() (aba Histórico) ordena por updatedAt, não createdAt — candidato antigo revalidado agora aparece no topo mesmo com 500+ registros mais novos", async () => {
@@ -284,9 +394,11 @@ test("list() (aba Histórico) ordena por updatedAt, não createdAt — candidato
     });
   }
 
-  const rows = await service.list(["IMPORTED", "INVALID", "DISMISSED"] as never);
+  const result = await service.list({
+    status: ["IMPORTED", "INVALID", "DISMISSED"] as never,
+  });
 
-  assert.ok(rows.some((r) => r.id === "bluma"));
+  assert.ok(result.rows.some((r) => r.id === "bluma"));
 });
 
 test("importCandidatesCsv (formato simples) cria PENDING sem URL/adapter", async () => {

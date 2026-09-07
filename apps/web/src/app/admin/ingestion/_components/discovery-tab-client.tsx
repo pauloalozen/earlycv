@@ -10,6 +10,7 @@ import {
 } from "react";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import {
+  AdminPagination,
   AdminPill,
   AdminTable,
   AdminTd,
@@ -44,6 +45,16 @@ type PromoteAllReport = {
   promotedCount: number;
   totalCount: number;
 };
+
+type ListResponse = {
+  rows: DiscoveredCompanyRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  statusCounts: Partial<Record<DiscoveredCompanyStatus, number>>;
+};
+
+const PAGE_SIZE = 50;
 
 const MANUAL_ADAPTER_TYPES = [
   "gupy",
@@ -95,6 +106,10 @@ const STATUS_TONE: Record<
 
 export function DiscoveryTabClient() {
   const [rows, setRows] = useState<DiscoveredCompanyRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<
+    Partial<Record<DiscoveredCompanyStatus, number>>
+  >({});
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"fila" | "historico">("fila");
   const [importing, setImporting] = useState(false);
@@ -113,16 +128,33 @@ export function DiscoveryTabClient() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [adapterFilter, setAdapterFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [sortField, setSortField] = useState<"adapterType" | "status" | null>(
     null,
   );
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const statuses = view === "fila" ? QUEUE_STATUSES : HISTORY_STATUSES;
+  // String (não array) de propósito: usada em dependência de useCallback —
+  // um array novo a cada render dispararia fetchRows em loop.
+  const activeStatusesParam = statusFilter ? statusFilter : statuses.join(",");
 
   useEffect(() => {
     setStatusFilter("");
   }, [view]);
+
+  // Debounce: espera 300ms sem digitar antes de buscar, senão cada tecla
+  // dispara uma query no banco.
+  useEffect(() => {
+    const timeout = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(timeout);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [view, statusFilter, search]);
 
   function toggleSort(field: "adapterType" | "status") {
     if (sortField !== field) {
@@ -137,13 +169,13 @@ export function DiscoveryTabClient() {
     setSortField(null);
   }
 
+  // statusFilter e search já vão pro backend (ver fetchRows/activeStatuses)
+  // — o corte de 50 por página vem de lá. adapterFilter e a ordenação só
+  // se aplicam dentro da página atual (secundário, não afeta paginação).
   const displayedRows = useMemo(() => {
     let result = rows;
     if (adapterFilter) {
       result = result.filter((r) => r.adapterType === adapterFilter);
-    }
-    if (statusFilter) {
-      result = result.filter((r) => r.status === statusFilter);
     }
     if (sortField) {
       result = [...result].sort((a, b) => {
@@ -154,9 +186,43 @@ export function DiscoveryTabClient() {
       });
     }
     return result;
-  }, [rows, adapterFilter, statusFilter, sortField, sortDir]);
+  }, [rows, adapterFilter, sortField, sortDir]);
 
-  function handleExportCsv() {
+  // Exporta TODOS os candidatos que batem com os filtros atuais (status +
+  // busca), não só a página de 50 exibida na tela — pagina por baixo dos
+  // panos até juntar tudo (limite de segurança pra não puxar um número
+  // patológico numa exportação só).
+  const EXPORT_SAFETY_MAX_ROWS = 20_000;
+  async function handleExportCsv() {
+    setError(null);
+    const allRows: DiscoveredCompanyRow[] = [];
+    let exportPage = 1;
+    for (;;) {
+      const qs = new URLSearchParams({
+        page: String(exportPage),
+        pageSize: "1000",
+        status: activeStatusesParam,
+      });
+      if (search) qs.set("search", search);
+      const res = await fetch(`/api/admin/ingestion/discovery?${qs}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        setError("Falha ao exportar CSV.");
+        return;
+      }
+      const data: ListResponse = await res.json();
+      allRows.push(...data.rows);
+      if (
+        allRows.length >= data.total ||
+        data.rows.length === 0 ||
+        allRows.length >= EXPORT_SAFETY_MAX_ROWS
+      ) {
+        break;
+      }
+      exportPage += 1;
+    }
+
     const header = [
       "nome",
       "adapter",
@@ -170,7 +236,7 @@ export function DiscoveryTabClient() {
     const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
     const lines = [
       header.join(","),
-      ...rows.map((row) =>
+      ...allRows.map((row) =>
         [
           row.name,
           row.adapterType ?? "",
@@ -199,15 +265,25 @@ export function DiscoveryTabClient() {
   const fetchRows = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/admin/ingestion/discovery?status=${statuses.join(",")}`,
-        { cache: "no-store" },
-      );
-      if (res.ok) setRows(await res.json());
+      const qs = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        status: activeStatusesParam,
+      });
+      if (search) qs.set("search", search);
+      const res = await fetch(`/api/admin/ingestion/discovery?${qs}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data: ListResponse = await res.json();
+        setRows(data.rows);
+        setTotal(data.total);
+        setStatusCounts(data.statusCounts);
+      }
     } finally {
       setLoading(false);
     }
-  }, [statuses]);
+  }, [activeStatusesParam, page, search]);
 
   useEffect(() => {
     fetchRows();
@@ -436,7 +512,7 @@ export function DiscoveryTabClient() {
           </button>
           <button
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            disabled={rows.length === 0}
+            disabled={total === 0}
             onClick={handleExportCsv}
             type="button"
           >
@@ -479,10 +555,10 @@ export function DiscoveryTabClient() {
             Histórico
           </button>
         </div>
-        {!loading && view === "fila" && (
+        {!loading && view === "fila" && !statusFilter && (
           <span style={{ color: AT.muted, fontSize: 12.5 }}>
             <strong style={{ color: AT.ink }}>
-              {rows.filter((r) => r.status === "PENDING").length}
+              {statusCounts.PENDING ?? 0}
             </strong>{" "}
             pendente(s) na fila
           </span>
@@ -490,6 +566,18 @@ export function DiscoveryTabClient() {
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <input
+          className="h-9 w-56 rounded-md border px-3 text-[12.5px]"
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="Buscar por nome..."
+          style={{
+            background: AT.card,
+            borderColor: AT.border,
+            color: AT.ink2,
+          }}
+          type="text"
+          value={searchInput}
+        />
         <select
           className="h-9 rounded-md border px-3 text-[12.5px]"
           onChange={(event) => setAdapterFilter(event.target.value)}
@@ -528,18 +616,13 @@ export function DiscoveryTabClient() {
 
       {view === "fila" &&
         !loading &&
+        !statusFilter &&
         (() => {
-          const counts = QUEUE_STATUSES.reduce<
-            Record<DiscoveredCompanyStatus, number>
-          >(
-            (acc, status) => {
-              acc[status] = rows.filter((r) => r.status === status).length;
-              return acc;
-            },
-            {} as Record<DiscoveredCompanyStatus, number>,
-          );
+          const counts = statusCounts;
           const promotableCount =
-            counts.VALIDATED + counts.NO_TECH_JOBS + counts.NO_ACTIVE_JOBS;
+            (counts.VALIDATED ?? 0) +
+            (counts.NO_TECH_JOBS ?? 0) +
+            (counts.NO_ACTIVE_JOBS ?? 0);
 
           if (promotableCount === 0) return null;
 
@@ -563,9 +646,9 @@ export function DiscoveryTabClient() {
                 {promotableCount === 1
                   ? "candidato validado pronto"
                   : "candidatos validados prontos"}{" "}
-                pra criar fonte ({counts.VALIDATED} validada,{" "}
-                {counts.NO_TECH_JOBS} sem vaga de tech,{" "}
-                {counts.NO_ACTIVE_JOBS} sem vaga ativa).
+                pra criar fonte ({counts.VALIDATED ?? 0} validada,{" "}
+                {counts.NO_TECH_JOBS ?? 0} sem vaga de tech,{" "}
+                {counts.NO_ACTIVE_JOBS ?? 0} sem vaga ativa).
               </span>
               <button
                 className={buttonVariants({ size: "sm" })}
@@ -813,6 +896,31 @@ export function DiscoveryTabClient() {
           )}
         </tbody>
       </AdminTable>
+
+      {!loading && total > 0 && (
+        <AdminPagination
+          summary={`página ${page} de ${Math.max(1, Math.ceil(total / PAGE_SIZE))} · ${total} resultado(s)`}
+        >
+          {page > 1 && (
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              onClick={() => setPage((p) => p - 1)}
+              type="button"
+            >
+              Anterior
+            </button>
+          )}
+          {page < Math.ceil(total / PAGE_SIZE) && (
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              onClick={() => setPage((p) => p + 1)}
+              type="button"
+            >
+              Próxima
+            </button>
+          )}
+        </AdminPagination>
+      )}
 
       {showValidateModal && (
         <div
