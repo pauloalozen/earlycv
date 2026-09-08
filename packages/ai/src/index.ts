@@ -25,6 +25,7 @@ export function createOpenAIClient(config: OpenAIClientConfig) {
 }
 
 export type {
+  CanonicalCvProfileData,
   CvAdaptationInput,
   CvAdaptationOutput,
   CvAnalysisOutput,

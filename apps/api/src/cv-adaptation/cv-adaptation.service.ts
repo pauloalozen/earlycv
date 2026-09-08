@@ -51,6 +51,7 @@ import { StorageService } from "../storage/storage.service";
 import { TalentProfileCaptureService } from "../talent-profiles/talent-profile-capture.service";
 import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
+import type { CanonicalCvProfileData } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import {
   CvAdaptationPaymentService,
@@ -420,7 +421,27 @@ export class CvAdaptationService {
     }
   }
 
+  // Auditoria de 2026-09-08 (seção 3 do relatório de fechamento do pipeline
+  // canônico): confirmado código morto — sem caller real em apps/web/src
+  // (createCvAdaptation/createCvAdaptationFromMaster nunca são importados
+  // em nenhuma página/componente), já documentado assim desde a Fase 2G
+  // (commit b87e0eb). A rota HTTP continua tecnicamente acessível
+  // (POST /cv-adaptation -> CvAdaptationController), e internamente chama
+  // #analyzeAndAdapt -> adaptCv() com masterCvText bruto, INCONDICIONALMENTE
+  // — nunca checou a flag pra decidir a fonte da análise/geração em si (só
+  // usa enqueueCanonicalMasterProcessing como efeito colateral do upload de
+  // Master, igual claimGuest/saveGuestPreview). Isso violaria a invariante
+  // "pipeline novo nunca usa texto bruto" se algum caller externo
+  // desconhecido ainda existir. Em vez de só confiar na ausência de caller
+  // conhecido, rejeita explicitamente quando o pipeline está ativo pro
+  // usuário — fail-safe barato até a remoção formal na Fase 5.
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
+    if (await this.isPipelineEnabledFor({ userId })) {
+      throw new BadRequestException(
+        "POST /cv-adaptation (create) está descontinuado para contas com o pipeline canônico ativo — use /cv-adaptation/analyze. Marcado para remoção na Fase 5 (código morto, sem caller em produção).",
+      );
+    }
+
     const normalizedJobDescriptionText = this.validateJobDescription(
       dto.jobDescriptionText,
       {
@@ -1936,6 +1957,8 @@ export class CvAdaptationService {
   async runCanonicalAuthenticatedAnalysis(input: {
     userId: string;
     jobDescriptionText: string;
+    canonicalCvProfile: CanonicalCvProfileData;
+    cvStructuredProfileId: string;
     canonicalCvText: string;
     analysisContext?: AnalysisRequestContext;
   }): Promise<{
@@ -1979,6 +2002,7 @@ export class CvAdaptationService {
           input.userId,
           "cv-adaptation/analyze",
         ),
+        canonicalCvProfile: input.canonicalCvProfile,
         existingKeywordRule,
         existingRequirements: effectiveRequirements ?? undefined,
         jobDescriptionText: normalizedJobDescriptionText,
@@ -2022,6 +2046,7 @@ export class CvAdaptationService {
       sourceType: "master_resume",
       text: input.canonicalCvText,
       userId: input.userId,
+      cvStructuredProfileId: input.cvStructuredProfileId,
     });
 
     return {
@@ -2043,6 +2068,8 @@ export class CvAdaptationService {
   async runCanonicalGuestAnalysis(input: {
     guestSessionHash: string | null;
     jobDescriptionText: string;
+    canonicalCvProfile: CanonicalCvProfileData;
+    cvStructuredProfileId: string;
     canonicalCvText: string;
   }): Promise<{
     adaptedContentJson: unknown;
@@ -2085,6 +2112,7 @@ export class CvAdaptationService {
           null,
           "cv-adaptation/analyze-guest",
         ),
+        canonicalCvProfile: input.canonicalCvProfile,
         existingKeywordRule,
         existingRequirements: effectiveRequirements ?? undefined,
         jobDescriptionText: normalizedJobDescriptionText,
@@ -2128,6 +2156,7 @@ export class CvAdaptationService {
       sourceType: "master_resume",
       text: input.canonicalCvText,
       userId: null,
+      cvStructuredProfileId: input.cvStructuredProfileId,
     });
 
     return {
@@ -2628,6 +2657,7 @@ export class CvAdaptationService {
       dto,
       undefined,
       analysisContext,
+      job.cvStructuredProfileId ?? undefined,
     );
 
     return { status: "succeeded", cvAdaptationId: adaptation.id };
@@ -3308,6 +3338,13 @@ export class CvAdaptationService {
     dto: SaveGuestPreviewDto,
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
+    // Nunca exposto no DTO público (SaveGuestPreviewDto é o corpo de um
+    // endpoint HTTP real — client nunca pode escolher isso). Só o chamador
+    // interno (claimGuestAnalysisJob, que já tem job.cvStructuredProfileId
+    // de um AnalysisJob do pipeline canônico) preenche. Materializa o
+    // vínculo que a geração (ensureLegacyStructuredOutput) depois usa pra
+    // achar o MESMO CvStructuredProfile usado na análise.
+    cvStructuredProfileId?: string,
   ) {
     // Mesma reconciliação de processAnalysisJob — dto.jobTitle/companyName
     // já chegam confiáveis (ver analyze-master-cv-flow.ts/
@@ -3533,6 +3570,7 @@ export class CvAdaptationService {
         jobApplicationId: linkedJobApplicationId,
         status: "pending",
         paymentStatus: "none",
+        cvStructuredProfileId: cvStructuredProfileId ?? null,
       },
       include: {
         template: { select: { id: true, name: true, slug: true } },
@@ -5002,6 +5040,7 @@ export class CvAdaptationService {
     userId: string;
     createdAt: Date;
     analysisCvSnapshotId: string | null;
+    cvStructuredProfileId?: string | null;
     masterResumeId?: string | null;
     adaptationSource?: "uploaded_content" | "user_profile";
     inputMode?: "file_upload" | "text_paste" | "profile";
@@ -5028,16 +5067,19 @@ export class CvAdaptationService {
     this.cvGenerationInProgress.add(adaptation.id);
 
     try {
-      const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
+      const cvSource = await this.resolveGenerationCvSource(adaptation);
 
-      if (!masterCvText) {
+      if (!cvSource) {
         this.logger.warn(
-          `No master CV text available for adaptation ${adaptation.id}`,
+          `No CV source available for adaptation ${adaptation.id}`,
         );
         return null;
       }
 
-      await this.persistGenerationSnapshotIfMissing(adaptation, masterCvText);
+      await this.persistGenerationSnapshotIfMissing(
+        adaptation,
+        cvSource.fingerprintSource,
+      );
 
       const requirementCoverage = this.extractRequirementCoverageFromAnalysis(
         adaptation.adaptedContentJson,
@@ -5057,7 +5099,11 @@ export class CvAdaptationService {
             ),
             jobDescriptionText: adaptation.jobDescriptionText,
             jobTitle: adaptation.jobTitle ?? undefined,
-            masterCvText,
+            // Nunca os dois — mesma regra da análise (ver
+            // resolveGenerationCvSource).
+            ...("canonicalCvProfile" in cvSource
+              ? { canonicalCvProfile: cvSource.canonicalCvProfile }
+              : { masterCvText: cvSource.masterCvText }),
             requirementCoverage,
             ajustesConteudo,
             selectedMissingKeywords: this.mergeKeywordsForGeneration(
@@ -5102,6 +5148,15 @@ export class CvAdaptationService {
         `CV generation failed for adaptation ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
+      // Inconsistência de linhagem (resolveGenerationCvSource) precisa
+      // "falhar explicitamente" pro chamador (download retorna erro HTTP em
+      // vez de gerar um PDF com dado errado) — nunca ser engolida como as
+      // demais falhas transitórias (rede/IA) que este catch trata como
+      // "tenta de novo depois". BadRequestException é o sinal usado por
+      // resolveGenerationCvSource pra essa categoria especificamente.
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
       return null;
     } finally {
       this.cvGenerationInProgress.delete(adaptation.id);
@@ -6323,6 +6378,12 @@ export class CvAdaptationService {
       | "user_profile";
     text: string;
     file?: FileUpload;
+    // Pipeline canônico: quando a análise que gerou este snapshot usou um
+    // CvStructuredProfile READY, o id vai junto — é o que permite a
+    // geração (ensureLegacyStructuredOutput/resolveGenerationCvSource)
+    // achar o MESMO perfil estruturado usado na análise, em vez de reler
+    // texto achatado do snapshot.
+    cvStructuredProfileId?: string;
   }) {
     const normalizedText = this.normalizeSnapshotText(input.text);
     const professionalProfile =
@@ -6374,6 +6435,7 @@ export class CvAdaptationService {
         professionalProfileFingerprint: professionalProfile.fingerprint,
         professionalProfileJson: professionalProfile.profile,
         expiresAt,
+        cvStructuredProfileId: input.cvStructuredProfileId ?? null,
       },
     });
 
@@ -6459,6 +6521,83 @@ export class CvAdaptationService {
     }
 
     return snapshot;
+  }
+
+  // Achado da auditoria do pipeline canônico (2026-09-08): a geração do CV
+  // adaptado (ensureLegacyStructuredOutput, chamada no download/claim, pós-
+  // desbloqueio) sempre lia texto achatado de AnalysisCvSnapshot, mesmo
+  // quando a análise original já tinha rodado sobre um CvStructuredProfile
+  // READY.
+  //
+  // Correção de 2ª rodada (mesmo dia): NÃO decidir "legado" só por
+  // cvStructuredProfileId ser null — isso deixaria uma ausência ACIDENTAL
+  // da FK (ex.: um bug de propagação, como o que corrigimos hoje mesmo)
+  // travestida de análise legada, sem erro nenhum. A linhagem real é o
+  // AnalysisJob de origem (AnalysisJob.convertedCvAdaptationId ->
+  // CvAdaptation.originAnalysisJob, FK já existente, sem migration nova):
+  // se esse AnalysisJob existe e tem cvProcessingJobId preenchido, esta
+  // adaptação NASCEU do pipeline novo — cvStructuredProfileId é
+  // OBRIGATÓRIO nesse caso, sua ausência é uma inconsistência que precisa
+  // falhar explicitamente, nunca cair pro texto. Só adaptações sem
+  // AnalysisJob de origem, ou cujo AnalysisJob nunca teve cvProcessingJobId
+  // (o caminho create()/analyzeAndAdapt legado, que nunca passa pelo
+  // pipeline canônico — ver seção 3 do relatório), são legitimamente
+  // legadas. A flag atual (CV_STRUCTURED_PROFILE_PIPELINE_ENABLED) NUNCA
+  // decide isso — só o que foi gravado no momento da análise.
+  private async resolveGenerationCvSource(adaptation: {
+    id: string;
+    cvStructuredProfileId?: string | null;
+    adaptedContentJson: unknown;
+    analysisCvSnapshotId: string | null;
+    createdAt: Date;
+    masterResume: { rawText: string | null } | null;
+  }): Promise<
+    | { canonicalCvProfile: CanonicalCvProfileData; fingerprintSource: string }
+    | { masterCvText: string; fingerprintSource: string }
+    | null
+  > {
+    const originAnalysisJob = await this.database.analysisJob.findUnique({
+      where: { convertedCvAdaptationId: adaptation.id },
+      select: { cvProcessingJobId: true },
+    });
+    const pipelineExpected = Boolean(originAnalysisJob?.cvProcessingJobId);
+
+    if (pipelineExpected && !adaptation.cvStructuredProfileId) {
+      throw new BadRequestException(
+        `Adaptation ${adaptation.id} originated from a canonical-pipeline AnalysisJob (cvProcessingJobId set) but has no cvStructuredProfileId — lineage inconsistency, refusing to fall back to legacy text.`,
+      );
+    }
+
+    if (adaptation.cvStructuredProfileId) {
+      const structuredProfile =
+        await this.database.cvStructuredProfile.findUnique({
+          where: { id: adaptation.cvStructuredProfileId },
+        });
+
+      if (
+        !structuredProfile ||
+        structuredProfile.status !== "READY" ||
+        !structuredProfile.canonicalJson
+      ) {
+        throw new BadRequestException(
+          `Adaptation ${adaptation.id} references CvStructuredProfile ${adaptation.cvStructuredProfileId}, but it is missing or not READY — refusing to fall back to legacy text.`,
+        );
+      }
+
+      const canonicalCvProfile =
+        structuredProfile.canonicalJson as CanonicalCvProfileData;
+      return {
+        canonicalCvProfile,
+        fingerprintSource: JSON.stringify(canonicalCvProfile),
+      };
+    }
+
+    // Só alcançável aqui quando pipelineExpected é false E
+    // cvStructuredProfileId é null — legado de verdade, comprovado pela
+    // linhagem (nunca pelo estado atual da flag).
+    const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
+    if (!masterCvText) return null;
+    return { masterCvText, fingerprintSource: masterCvText };
   }
 
   private async resolveGenerationMasterCvText(adaptation: {

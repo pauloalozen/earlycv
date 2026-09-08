@@ -18,9 +18,14 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import type { AnalysisJob } from "@prisma/client";
 
+import {
+  CV_PROCESSING_JOB_READY,
+  cvProcessingDispatchSignal,
+} from "../cv-processing/cv-processing-dispatch.signal";
 import { CvUserProfileSyncService } from "../cv-processing/cv-user-profile-sync.service";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
+import type { CanonicalCvProfileData } from "./cv-adaptation-ai.service";
 import { CvAdaptationService } from "./cv-adaptation.service";
 
 const LOCK_ID = "cv-analysis-worker";
@@ -56,12 +61,36 @@ export class CvAnalysisWorker {
       | "runCanonicalGuestAnalysis"
       | "extractAnalysisJobSignalsForPipeline"
     >,
-  ) {}
+  ) {
+    // Mesmo raciocínio de CvProcessingWorker: nunca se inscreve durante
+    // testes (evita listener acumulando entre as várias instâncias
+    // efêmeras que cada e2e-spec cria contra o mesmo EventEmitter
+    // singleton do processo).
+    if (process.env.NODE_ENV !== "test") {
+      cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_READY, () =>
+        this.kick(),
+      );
+    }
+  }
 
   @Cron(BASE_TICK_CRON)
   async tick() {
     if (process.env.NODE_ENV === "test") return;
     await this.processPendingBatch();
+  }
+
+  // Kick imediato (seção 5) — mesma garantia de CvProcessingWorker#kick:
+  // erro aqui nunca propaga (o emit que dispara isto vem de dentro do
+  // outro worker, síncrono, sem quem aguardar), job fica pending/claimable,
+  // cron recupera.
+  kick(): void {
+    this.processPendingBatch().catch((err) => {
+      this.logger.error(
+        `cv analysis kick falhou (job permanece pending, cron recupera): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
   }
 
   async processPendingBatch(): Promise<number> {
@@ -184,6 +213,23 @@ export class CvAnalysisWorker {
         );
       }
 
+      // canonicalJson é o dado real que vai pro PROMPT da IA de análise
+      // (nunca achatado em texto — ver runCanonicalAuthenticatedAnalysis/
+      // runCanonicalGuestAnalysis). Guarda defensiva: READY sem canonicalJson
+      // é estado inconsistente (nunca deveria acontecer — o worker do
+      // pipeline só marca READY depois de gravar canonicalJson), mas o job
+      // não pode seguir pra análise sem ele.
+      if (!structuredProfile.canonicalJson) {
+        throw new Error(
+          "CvStructuredProfile READY sem canonicalJson — estado inconsistente",
+        );
+      }
+      const canonicalCvProfile =
+        structuredProfile.canonicalJson as CanonicalCvProfileData;
+
+      // canonicalText continua existindo só pra trilha de auditoria/
+      // histórico (AnalysisCvSnapshot.text, AnalysisJob.masterCvText) —
+      // NUNCA vai pro prompt da IA (isso agora é canonicalCvProfile acima).
       const mapped = this.userProfileSync.toCanonicalProfileData(
         structuredProfile.canonicalJson as never,
       );
@@ -204,11 +250,15 @@ export class CvAnalysisWorker {
       // (autenticada x guest) roda no fim.
       const result = job.userId
         ? await this.cvAdaptationService.runCanonicalAuthenticatedAnalysis({
+            canonicalCvProfile,
+            cvStructuredProfileId: structuredProfile.id,
             canonicalCvText: canonicalText,
             jobDescriptionText: job.jobDescriptionText,
             userId: job.userId,
           })
         : await this.cvAdaptationService.runCanonicalGuestAnalysis({
+            canonicalCvProfile,
+            cvStructuredProfileId: structuredProfile.id,
             canonicalCvText: canonicalText,
             jobDescriptionText: job.jobDescriptionText,
             guestSessionHash: job.guestSessionHash,

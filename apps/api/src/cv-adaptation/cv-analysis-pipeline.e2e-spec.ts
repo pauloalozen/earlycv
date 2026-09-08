@@ -28,6 +28,10 @@ import { BadRequestException } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
 import { CvProcessingWorker } from "../cv-processing/cv-processing.worker";
+import {
+  CV_PROCESSING_JOB_CREATED,
+  cvProcessingDispatchSignal,
+} from "../cv-processing/cv-processing-dispatch.signal";
 import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
 import { CvProcessingJobService } from "../cv-processing/cv-processing-job.service";
 import { CvTalentCaptureService } from "../cv-processing/cv-talent-capture.service";
@@ -144,6 +148,12 @@ class FakeProtectedAnalyzeService {
   computeCalls = 0;
   private readonly cache = new Map<string, unknown>();
   private failNextCompute = false;
+  // Achado da auditoria do pipeline canônico (2026-09-08): a análise
+  // achatava o CvStructuredProfile.canonicalJson em texto antes de mandar
+  // pra IA. Captura o canonicalCvProfile efetivamente recebido aqui pra
+  // provar, nos testes abaixo, que quem chama este fake está mandando o
+  // perfil estruturado real — nunca só o texto achatado.
+  lastCanonicalCvProfile: unknown;
 
   async precheckTurnstile() {
     this.turnstileCalls += 1;
@@ -157,7 +167,9 @@ class FakeProtectedAnalyzeService {
   async executeProtectedAnalyze(input: {
     payload: unknown;
     loadMasterCvText: () => Promise<string>;
+    canonicalCvProfile?: unknown;
   }) {
+    this.lastCanonicalCvProfile = input.canonicalCvProfile;
     const key = JSON.stringify(input.payload);
     const cached = this.cache.get(key);
     if (cached) {
@@ -190,6 +202,35 @@ class FakeProtectedAnalyzeService {
     };
     this.cache.set(key, result);
     return { ok: true as const, cached: false, canonicalHash: key, result };
+  }
+
+  // Captura o que ensureLegacyStructuredOutput (geração pós-desbloqueio)
+  // efetivamente manda pro gateway de proteção — prova, com Postgres real,
+  // que resolveGenerationCvSource decide certo entre canonicalCvProfile e
+  // masterCvText conforme a linhagem real (AnalysisJob.cvProcessingJobId),
+  // nunca só por cvStructuredProfileId ser null.
+  generationCalls = 0;
+  lastGenerationCanonicalCvProfile: unknown;
+  lastGenerationMasterCvText: string | undefined;
+
+  async executeProtectedBuildPaidCvOutputFromGuest(input: {
+    canonicalCvProfile?: unknown;
+    masterCvText?: string;
+  }) {
+    this.generationCalls += 1;
+    this.lastGenerationCanonicalCvProfile = input.canonicalCvProfile;
+    this.lastGenerationMasterCvText = input.masterCvText;
+    return {
+      ok: true as const,
+      cached: false,
+      canonicalHash: "gen-hash",
+      result: {
+        summary: "resumo gerado (fake)",
+        sections: [],
+        highlightedSkills: [],
+        removedSections: [],
+      },
+    };
   }
 }
 
@@ -375,6 +416,601 @@ test("1) análise reusa Master já processado — sem nova extração", async ()
   assert.equal(finalSecond.status, "succeeded");
   assert.equal(protectedAnalyze.computeCalls, 1);
   assert.equal(extractCalls, 1);
+});
+
+// Achado da auditoria do pipeline canônico (2026-09-08): mesmo com
+// CV_STRUCTURED_PROFILE_PIPELINE_ENABLED e CvStructuredProfile READY, a
+// análise sempre recebia texto achatado (renderCanonicalProfileTextForPipeline)
+// no lugar do perfil estruturado. Prova de wiring real (fim a fim, banco
+// Postgres real, worker real): o objeto que chega no gateway de proteção
+// (o que de fato vira o prompt da IA em produção) é o
+// CvStructuredProfile.canonicalJson gravado pela extração — nunca undefined,
+// nunca um texto.
+test("1b) análise canônica envia canonicalCvProfile estruturado (CvStructuredProfile.canonicalJson), nunca undefined", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Fulano Canonical Profile"),
+    storage,
+  );
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+  const analysisWorker = buildAnalysisWorker(service);
+
+  const setup = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterCvText: buildCvText("Fulano Canonical Profile", "dados"),
+  });
+  const setupJob = await database.analysisJob.findUniqueOrThrow({
+    where: { id: setup.jobId },
+  });
+  await processOneCvJob(cvWorker, setupJob.cvProcessingJobId as string);
+
+  const finalJob = await processOneAnalysisJob(analysisWorker, setup.jobId);
+  assert.equal(finalJob.status, "succeeded");
+
+  const structuredProfile =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: finalJob.cvStructuredProfileId as string },
+    });
+
+  assert.ok(
+    protectedAnalyze.lastCanonicalCvProfile,
+    "canonicalCvProfile não deveria ser undefined — pipeline canônico ligado e CvStructuredProfile READY",
+  );
+  assert.deepEqual(
+    protectedAnalyze.lastCanonicalCvProfile,
+    structuredProfile.canonicalJson,
+    "o perfil enviado ao gateway de proteção (que vira o prompt da IA) deve ser EXATAMENTE o canonicalJson gravado pela extração, não uma derivação/achatamento dele",
+  );
+
+  // Achado da auditoria de GERAÇÃO do CV adaptado (2026-09-08): o vínculo
+  // com o CvStructuredProfile se perdia na materialização do CvAdaptation
+  // (saveGuestPreview/claimGuestAnalysisJob nunca carregavam
+  // AnalysisJob.cvStructuredProfileId pro CvAdaptation criado) — a geração
+  // (ensureLegacyStructuredOutput, chamada no download/claim) então nunca
+  // tinha como achar o perfil estruturado, mesmo a análise já tendo usado
+  // um. Prova de ponta a ponta: materializar via claimGuestAnalysisJob (o
+  // único caminho real de AnalysisJob -> CvAdaptation) preserva o mesmo
+  // cvStructuredProfileId.
+  const claimResult = await service.claimGuestAnalysisJob(user.id, setup.jobId);
+  assert.equal(claimResult.status, "succeeded");
+  if (claimResult.status !== "succeeded") return; // narrowing pro TS
+
+  const materializedAdaptation = await database.cvAdaptation.findUniqueOrThrow(
+    { where: { id: claimResult.cvAdaptationId } },
+  );
+  assert.equal(
+    materializedAdaptation.cvStructuredProfileId,
+    finalJob.cvStructuredProfileId,
+    "CvAdaptation.cvStructuredProfileId deve preservar EXATAMENTE o mesmo id usado pela análise — é o que a geração (pós-desbloqueio) usa pra achar o perfil certo, nunca reler texto achatado",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Seção 1 do relatório de fechamento (2026-09-08): a decisão de fonte da
+// GERAÇÃO nunca pode ser "cvStructuredProfileId null = legado" — precisa
+// olhar a LINHAGEM real (AnalysisJob.cvProcessingJobId, via
+// AnalysisJob.convertedCvAdaptationId -> CvAdaptation.originAnalysisJob).
+// Os 5 cenários abaixo provam isso com Postgres real.
+// ---------------------------------------------------------------------------
+
+// Monta uma análise canônica completa (READY) já materializada como
+// CvAdaptation — ponto de partida comum pros 5 cenários de linhagem.
+async function setupReadyCanonicalAdaptation(nameSuffix: string) {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput(`Linhagem ${nameSuffix}`),
+    storage,
+  );
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+  const analysisWorker = buildAnalysisWorker(service);
+
+  const setup = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterCvText: buildCvText(`Linhagem ${nameSuffix}`, "dados"),
+  });
+  const setupJob = await database.analysisJob.findUniqueOrThrow({
+    where: { id: setup.jobId },
+  });
+  await processOneCvJob(cvWorker, setupJob.cvProcessingJobId as string);
+  const finalJob = await processOneAnalysisJob(analysisWorker, setup.jobId);
+  assert.equal(finalJob.status, "succeeded");
+
+  const claimResult = await service.claimGuestAnalysisJob(user.id, setup.jobId);
+  assert.equal(claimResult.status, "succeeded");
+  if (claimResult.status !== "succeeded") throw new Error("unreachable");
+
+  return { user, service, protectedAnalyze, finalJob, claimResult };
+}
+
+async function loadAdaptationForGeneration(cvAdaptationId: string) {
+  return database.cvAdaptation.findUniqueOrThrow({
+    where: { id: cvAdaptationId },
+    include: { masterResume: { select: { rawText: true } } },
+  });
+}
+
+test("linhagem 1) pipeline novo com FK completa — geração usa canonicalCvProfile, nunca masterCvText", async () => {
+  const { protectedAnalyze, service, claimResult, finalJob } =
+    await setupReadyCanonicalAdaptation("FK completa");
+  const adaptation = await loadAdaptationForGeneration(
+    claimResult.cvAdaptationId,
+  );
+
+  // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado pra testar resolveGenerationCvSource
+  const output = await (service as any).ensureLegacyStructuredOutput(
+    adaptation,
+  );
+
+  assert.ok(output);
+  assert.equal(protectedAnalyze.generationCalls, 1);
+  assert.equal(protectedAnalyze.lastGenerationMasterCvText, undefined);
+  const structuredProfile = await database.cvStructuredProfile.findUniqueOrThrow(
+    { where: { id: finalJob.cvStructuredProfileId as string } },
+  );
+  assert.deepEqual(
+    protectedAnalyze.lastGenerationCanonicalCvProfile,
+    structuredProfile.canonicalJson,
+  );
+});
+
+test("linhagem 2) pipeline novo com cvStructuredProfileId removido artificialmente — falha explícita, nunca cai pro texto", async () => {
+  const { service, claimResult } = await setupReadyCanonicalAdaptation(
+    "FK removida",
+  );
+
+  // Simula a FK se perdendo (o próprio bug que corrigimos hoje, ou qualquer
+  // outra causa) — o AnalysisJob de origem AINDA tem cvProcessingJobId, só a
+  // CvAdaptation perdeu a referência.
+  await database.cvAdaptation.update({
+    where: { id: claimResult.cvAdaptationId },
+    data: { cvStructuredProfileId: null },
+  });
+  const adaptation = await loadAdaptationForGeneration(
+    claimResult.cvAdaptationId,
+  );
+
+  await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado
+    () => (service as any).ensureLegacyStructuredOutput(adaptation),
+    /lineage inconsistency|missing or not READY/,
+  );
+});
+
+test("linhagem 3) pipeline novo com CvStructuredProfile FAILED — falha explícita, nunca cai pro texto", async () => {
+  const { service, claimResult, finalJob } =
+    await setupReadyCanonicalAdaptation("perfil FAILED");
+
+  await database.cvStructuredProfile.update({
+    where: { id: finalJob.cvStructuredProfileId as string },
+    data: { status: "FAILED" },
+  });
+  const adaptation = await loadAdaptationForGeneration(
+    claimResult.cvAdaptationId,
+  );
+
+  await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado
+    () => (service as any).ensureLegacyStructuredOutput(adaptation),
+    /missing or not READY/,
+  );
+});
+
+test("linhagem 4) análise legada (sem AnalysisJob de origem) — geração usa masterCvText, comportamento intacto", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  // Constrói com storage REAL (FakeStorage) em vez do default no-op de
+  // buildCvAdaptationService — este cenário precisa ler texto de verdade de
+  // volta do snapshot pra provar que a fonte é mesmo o texto, não vazio.
+  const service = new CvAdaptationServiceCtor(
+    database,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    protectedAnalyze,
+    storage,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    entrypoint,
+    masterPromotion,
+  );
+
+  // CvAdaptation sem NENHUM AnalysisJob apontando pra ela via
+  // convertedCvAdaptationId — simula o caminho legado create()/
+  // analyzeAndAdapt (nunca cria AnalysisJob) ou qualquer adaptação anterior
+  // a esta feature. AnalysisCvSnapshot (sem cvStructuredProfileId) é a fonte
+  // real, exatamente como resolveGenerationMasterCvText sempre leu.
+  const resume = await prisma.resume.create({
+    data: {
+      userId: user.id,
+      title: "Master legado",
+      isMaster: true,
+      rawText: buildCvText("Legado puro", "vendas"),
+    },
+  });
+  const snapshotText = buildCvText("Legado puro", "vendas");
+  const textStorageKey = `analysis-cv-snapshots/text/${randomUUID()}.md`;
+  await storage.putObject(textStorageKey, Buffer.from(snapshotText, "utf8"));
+  const snapshot = await prisma.analysisCvSnapshot.create({
+    data: {
+      userId: user.id,
+      sourceType: "master_resume",
+      textStorageKey,
+      textSha256: createHash("sha256").update(snapshotText).digest("hex"),
+      textSizeBytes: Buffer.byteLength(snapshotText),
+      professionalProfileFingerprint: "fp-legado",
+      professionalProfileJson: {},
+      cvStructuredProfileId: null,
+    },
+  });
+  const legacyAdaptation = await prisma.cvAdaptation.create({
+    data: {
+      userId: user.id,
+      masterResumeId: resume.id,
+      jobDescriptionText: JOB_DESCRIPTION,
+      analysisCvSnapshotId: snapshot.id,
+      status: "pending",
+      paymentStatus: "none",
+    },
+  });
+
+  const adaptation = await loadAdaptationForGeneration(legacyAdaptation.id);
+  // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado
+  const output = await (service as any).ensureLegacyStructuredOutput(
+    adaptation,
+  );
+
+  assert.ok(output);
+  assert.equal(protectedAnalyze.generationCalls, 1);
+  assert.equal(protectedAnalyze.lastGenerationCanonicalCvProfile, undefined);
+  assert.match(
+    protectedAnalyze.lastGenerationMasterCvText ?? "",
+    /Legado puro/,
+  );
+});
+
+test("linhagem 5) flag desligada entre análise e geração — a fonte é a linhagem gravada, nunca a flag atual", async () => {
+  const { protectedAnalyze, service, claimResult, finalJob } =
+    await setupReadyCanonicalAdaptation("flag muda depois");
+  const adaptation = await loadAdaptationForGeneration(
+    claimResult.cvAdaptationId,
+  );
+
+  const previousFlag = process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED;
+  process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "false";
+  try {
+    // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado
+    const output = await (service as any).ensureLegacyStructuredOutput(
+      adaptation,
+    );
+    assert.ok(output);
+    assert.equal(protectedAnalyze.generationCalls, 1);
+    assert.equal(protectedAnalyze.lastGenerationMasterCvText, undefined);
+    const structuredProfile =
+      await database.cvStructuredProfile.findUniqueOrThrow({
+        where: { id: finalJob.cvStructuredProfileId as string },
+      });
+    assert.deepEqual(
+      protectedAnalyze.lastGenerationCanonicalCvProfile,
+      structuredProfile.canonicalJson,
+      "flag desligada DEPOIS da análise não pode fazer a geração reler texto — a decisão é pela linhagem gravada, não pela flag atual",
+    );
+  } finally {
+    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = previousFlag;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Seção 5 do relatório de fechamento (2026-09-08): disparo imediato — job
+// persistido -> commit -> kick imediato -> polling, cron de 15s vira só
+// recuperação. As instâncias de worker deste arquivo NUNCA se inscrevem
+// sozinhas no sinal (NODE_ENV=test, ver constructor de CvProcessingWorker/
+// CvAnalysisWorker) — cada teste abaixo controla a inscrição explicitamente,
+// pra nunca vazar entre os ~30 outros testes deste arquivo que também
+// emitem o sinal via CvProcessingEntrypointService.
+// ---------------------------------------------------------------------------
+
+async function waitUntil(
+  check: () => Promise<boolean>,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`waitUntil: condição não satisfeita em ${timeoutMs}ms`);
+}
+
+test("kick 1) processamento começa sem esperar o tick — kick imediato processa o job sem chamar o cron manualmente", async () => {
+  const user = await createUser();
+  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
+  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
+  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Kick Imediato"),
+    storage,
+  );
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  let kicks = 0;
+  const listener = () => {
+    kicks += 1;
+    cvWorker.kick();
+  };
+  cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
+  try {
+    const { job } = await entrypoint.enqueueFromUserText({
+      userId: user.id,
+      text: buildCvText("Kick Imediato", "produto"),
+      masterIntent: "NONE",
+      submission: { origin: "PASTED_TEXT" },
+    });
+
+    assert.equal(kicks, 1, "enqueue deveria emitir exatamente um kick");
+
+    // Nunca chama processOneCvJob/processPendingBatch manualmente aqui — só
+    // espera o kick fire-and-forget terminar, provando que o processamento
+    // já começou sem esperar os 15s do cron.
+    await waitUntil(async () => {
+      const row = await database.cvProcessingJob.findUniqueOrThrow({
+        where: { id: job.id },
+      });
+      return row.status === "READY";
+    });
+  } finally {
+    cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
+  }
+});
+
+test("kick 2) resposta do enqueue não espera o processamento — emit é síncrono e barato, kick roda depois", async () => {
+  const user = await createUser();
+  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
+  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
+  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
+  const storage = new FakeStorage();
+  const SLOW_MS = 300;
+  const cvWorker = buildProcessingWorker(async () => {
+    await new Promise((resolve) => setTimeout(resolve, SLOW_MS));
+    return fakeCanonicalOutput("Kick Nao Bloqueia");
+  }, storage);
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  const listener = () => cvWorker.kick();
+  cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
+  try {
+    const start = Date.now();
+    const { job } = await entrypoint.enqueueFromUserText({
+      userId: user.id,
+      text: buildCvText("Kick Nao Bloqueia", "engenharia"),
+      masterIntent: "NONE",
+      submission: { origin: "PASTED_TEXT" },
+    });
+    const enqueueMs = Date.now() - start;
+
+    assert.ok(
+      enqueueMs < SLOW_MS,
+      `enqueueFromUserText levou ${enqueueMs}ms — não pode chegar perto dos ${SLOW_MS}ms da extração (kick é fire-and-forget, nunca aguardado)`,
+    );
+
+    const rowRightAfter = await database.cvProcessingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    assert.equal(
+      rowRightAfter.status,
+      "PENDING",
+      "logo após o enqueue retornar, o job ainda não terminou de processar — prova que o kick roda depois, não durante",
+    );
+
+    await waitUntil(async () => {
+      const row = await database.cvProcessingJob.findUniqueOrThrow({
+        where: { id: job.id },
+      });
+      return row.status === "READY";
+    });
+  } finally {
+    cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
+  }
+});
+
+test("kick 3) queda antes do kick é recuperada pelo cron — sem NENHUM listener, processPendingBatch (cron) ainda processa", async () => {
+  const user = await createUser();
+  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
+  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
+  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Cron Recupera"),
+    storage,
+  );
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  // Nenhum listener inscrito — simula o kick nunca tendo acontecido
+  // (processo morreu entre o commit e o emit, ou o emit não teve ouvinte
+  // por qualquer motivo). O job precisa continuar PENDING e claimable.
+  const { job } = await entrypoint.enqueueFromUserText({
+    userId: user.id,
+    text: buildCvText("Cron Recupera", "vendas"),
+    masterIntent: "NONE",
+    submission: { origin: "PASTED_TEXT" },
+  });
+
+  const rowBeforeCron = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  assert.equal(rowBeforeCron.status, "PENDING");
+
+  // Simula o tick do cron — exatamente o mesmo processPendingBatch que
+  // @Cron(BASE_TICK_CRON) chamaria.
+  const processed = await cvWorker.processPendingBatch();
+  assert.ok(processed >= 1);
+
+  const rowAfterCron = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  assert.equal(rowAfterCron.status, "READY");
+});
+
+test("kick 4) kick e cron concorrentes processam o job exatamente uma vez", async () => {
+  const user = await createUser();
+  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
+  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
+  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    // Segura um pouco pra garantir sobreposição real entre kick e cron.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return fakeCanonicalOutput("Kick e Cron Concorrentes");
+  }, storage);
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  const listener = () => cvWorker.kick();
+  cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
+  try {
+    const { job } = await entrypoint.enqueueFromUserText({
+      userId: user.id,
+      text: buildCvText("Kick e Cron Concorrentes", "dados"),
+      masterIntent: "NONE",
+      submission: { origin: "PASTED_TEXT" },
+    });
+
+    // "Cron" concorrente disparado logo em seguida, sobrepondo o kick que
+    // o listener acima já iniciou — a claim atômica (UPDATE ... WHERE
+    // status='pending') garante que só um dos dois processa de fato.
+    await cvWorker.processPendingBatch();
+
+    await waitUntil(async () => {
+      const row = await database.cvProcessingJob.findUniqueOrThrow({
+        where: { id: job.id },
+      });
+      return row.status === "READY";
+    });
+
+    assert.equal(
+      extractCalls,
+      1,
+      "kick e cron concorrentes nunca podem rodar a extração duas vezes pro mesmo job",
+    );
+  } finally {
+    cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
+  }
+});
+
+test("kick 5) erro no kick mantém o job pending e recuperável pelo cron", async () => {
+  const user = await createUser();
+  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
+  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
+  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Kick Falha Recupera"),
+    storage,
+  );
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  // Simula o kick falhando por completo (ex.: erro inesperado antes mesmo
+  // de conseguir chamar processPendingBatch) — kick() nunca deixa o erro
+  // escapar pro emissor (ver CvProcessingWorker#kick, catch interno).
+  const brokenWorker = {
+    kick: () => {
+      throw new Error("falha simulada no kick");
+    },
+  };
+  const listener = () => {
+    try {
+      brokenWorker.kick();
+    } catch {
+      // O próprio kick() de produção já engole isso internamente (catch +
+      // log) — aqui simulamos o pior caso (exceção síncrona no listener)
+      // pra provar que mesmo assim nada corrompe o job.
+    }
+  };
+  cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
+  let job: { id: string };
+  try {
+    ({ job } = await entrypoint.enqueueFromUserText({
+      userId: user.id,
+      text: buildCvText("Kick Falha Recupera", "financas"),
+      masterIntent: "NONE",
+      submission: { origin: "PASTED_TEXT" },
+    }));
+  } finally {
+    cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
+  }
+
+  const rowAfterFailedKick = await database.cvProcessingJob.findUniqueOrThrow(
+    { where: { id: job.id } },
+  );
+  assert.equal(
+    rowAfterFailedKick.status,
+    "PENDING",
+    "kick falho não pode deixar o job em nenhum estado além de pending/claimable",
+  );
+
+  // Cron real recupera normalmente.
+  await cvWorker.processPendingBatch();
+  const rowAfterCron = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  assert.equal(rowAfterCron.status, "READY");
 });
 
 // ---------------------------------------------------------------------------

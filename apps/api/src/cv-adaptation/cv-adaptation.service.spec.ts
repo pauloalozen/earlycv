@@ -1924,6 +1924,7 @@ test("ensureLegacyStructuredOutput uses protected boundary for paid guest output
           return {};
         },
       },
+      analysisJob: { findUnique: async () => null },
     },
     {
       analyzeAndAdapt: async () => {},
@@ -2058,6 +2059,7 @@ test("ensureLegacyStructuredOutput returns null when protected boundary blocks",
           throw new Error("cvAdaptation.update should not be called");
         },
       },
+      analysisJob: { findUnique: async () => null },
     },
     {
       analyzeAndAdapt: async () => {},
@@ -2132,6 +2134,7 @@ test("ensureLegacyStructuredOutput persists immutable generation snapshot with n
         },
         update: async () => ({}),
       },
+      analysisJob: { findUnique: async () => null },
     },
     {
       analyzeAndAdapt: async () => {},

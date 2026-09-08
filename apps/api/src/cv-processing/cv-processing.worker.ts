@@ -3,12 +3,19 @@
 // de Master opcional (com UserProfile sync + MonitorProjectionJob na MESMA
 // transação Prisma da promoção — nunca depois), markReady/markFailed.
 //
-// Roda em ciclo de cron separado (mesmo padrão do Monitor —
-// MonitorProfileMatchingWorker), nunca como Promise fire-and-forget dentro
-// de um request HTTP: todo trabalho que precisa sobreviver ao request já
-// está representado pela linha de CvProcessingJob persistida pelo
-// entrypoint (resumes.service.ts/cv-adaptation.service.ts) ANTES da
-// resposta HTTP.
+// O trabalho de IA em si NUNCA roda dentro de um request HTTP: todo
+// trabalho que precisa sobreviver ao request já está representado pela
+// linha de CvProcessingJob persistida pelo entrypoint
+// (resumes.service.ts/cv-adaptation.service.ts) ANTES da resposta HTTP.
+// Dois gatilhos processam essa fila, nunca um só (seção 5 do relatório de
+// fechamento, 2026-09-08): o cron de 15s (@Cron abaixo, sempre existiu) e um
+// "kick" imediato — cvProcessingDispatchSignal, emitido pelo entrypoint
+// logo após o commit do job — que só acelera o primeiro processamento
+// (chama exatamente o mesmo processPendingBatch()/claim atômico do cron,
+// nunca um caminho separado). Se o processo morrer entre o commit e o kick,
+// ou o kick falhar por qualquer motivo, o job continua PENDING e o próximo
+// tick do cron o recupera normalmente — o cron nunca deixou de ser a rede
+// de segurança.
 import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable, Logger } from "@nestjs/common";
@@ -20,6 +27,11 @@ import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository"
 import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
 import { StorageService } from "../storage/storage.service";
 import { CvMasterPromotionService } from "./cv-master-promotion.service";
+import {
+  CV_PROCESSING_JOB_CREATED,
+  CV_PROCESSING_JOB_READY,
+  cvProcessingDispatchSignal,
+} from "./cv-processing-dispatch.signal";
 import {
   CvSourceTextObjectMissingError,
   MasterDesignationSubjectMismatchError,
@@ -59,12 +71,41 @@ export class CvProcessingWorker {
     private readonly masterPromotion: CvMasterPromotionService,
     @Inject(StorageService)
     private readonly storage: Pick<StorageService, "getObject">,
-  ) {}
+  ) {
+    // Mesmo guard de NODE_ENV do @Cron abaixo — nunca se inscreve durante
+    // testes: cada arquivo de e2e-spec cria várias instâncias efêmeras
+    // deste worker (sem container do Nest, sem OnModuleDestroy) contra o
+    // MESMO EventEmitter singleton do processo; inscrição incondicional
+    // aqui vazaria listener por instância e faria workers de testes
+    // antigos reagirem a jobs de testes seguintes. Em produção (um único
+    // worker de longa duração por processo) isso nunca é um problema. A
+    // emissão em si (cv-processing-entrypoint.service.ts) e o kick() em si
+    // são testados diretamente, sem depender desta inscrição automática.
+    if (process.env.NODE_ENV !== "test") {
+      cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, () =>
+        this.kick(),
+      );
+    }
+  }
 
   @Cron(BASE_TICK_CRON)
   async tick() {
     if (process.env.NODE_ENV === "test") return;
     await this.processPendingBatch();
+  }
+
+  // Kick imediato (seção 5) — nunca lançado pro chamador (o emit que
+  // dispara isto é síncrono e não pode propagar falha pro request HTTP que
+  // criou o job). Erro aqui só loga; o job permanece PENDING/claimable e o
+  // próximo tick do cron o recupera normalmente.
+  kick(): void {
+    this.processPendingBatch().catch((err) => {
+      this.logger.error(
+        `cv processing kick falhou (job permanece pending, cron recupera): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
   }
 
   async processPendingBatch(): Promise<number> {
@@ -183,6 +224,11 @@ export class CvProcessingWorker {
         cvStructuredProfileId: structuredProfile.id,
         masterDesignationId,
       });
+      // Kick imediato da próxima etapa (seção 5): CvAnalysisWorker não
+      // precisa esperar até 15s pra notar que este CvProcessingJob virou
+      // READY — mesma garantia do kick de criação (emit depois do commit,
+      // nunca antes; falha do listener nunca afeta este worker).
+      cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_READY);
     } catch (error) {
       this.logger.warn(
         `cv processing job ${job.id} failed (attempt ${job.attempts}/${MAX_CV_PROCESSING_ATTEMPTS}): ${

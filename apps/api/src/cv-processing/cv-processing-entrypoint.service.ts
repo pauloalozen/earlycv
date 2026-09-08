@@ -20,6 +20,10 @@ import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { StorageService } from "../storage/storage.service";
+import {
+  CV_PROCESSING_JOB_CREATED,
+  cvProcessingDispatchSignal,
+} from "./cv-processing-dispatch.signal";
 import { CvProcessingJobService } from "./cv-processing-job.service";
 
 // Chave do objeto de texto no storage real (Fase 2B — substitui o base64
@@ -171,6 +175,14 @@ export class CvProcessingEntrypointService {
       masterIntent,
       resumeId,
     });
+
+    // Kick imediato (seção 5): emite DEPOIS do commit acima, nunca antes —
+    // se o processo morrer entre o commit e este emit, o job já está
+    // persistido e o próximo tick do cron (15s) o recupera normalmente,
+    // mesma garantia de sempre. O emit em si é síncrono e nunca lança (é só
+    // notificação — nenhum listener é aguardado aqui), então não pode
+    // atrasar nem quebrar a resposta HTTP deste método.
+    cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_CREATED);
 
     return { cvSource, cvSubmission, job };
   }

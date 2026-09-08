@@ -54,14 +54,145 @@ function wrapCvInput(
   return `<CV_CANDIDATO>\n${sanitizeUserInput(cvText, CV_MAX_CHARS)}\n</CV_CANDIDATO>\n\n<DESCRICAO_VAGA>\n${sanitizeUserInput(jobText, JOB_MAX_CHARS)}\n</DESCRICAO_VAGA>\n\n<KEYWORDS_SELECIONADAS>\n${keywordsBlock}\n</KEYWORDS_SELECIONADAS>`;
 }
 
+// Perfil canônico do CV (pipeline de extração estruturada — mesmo shape de
+// MasterCvCanonicalExtractionOutput["canonicalProfile"] em
+// apps/api/src/master-cv-canonical-extraction/master-cv-canonical-extraction.types.ts,
+// duplicado aqui deliberadamente: packages/ai é um pacote-folha e não deve
+// importar tipos de apps/api).
+export type CanonicalCvProfileData = {
+  fullName: string | null;
+  headline: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedinUrl: string | null;
+  location: {
+    city: string | null;
+    state: string | null;
+    country: string | null;
+  };
+  professionalSummary: string | null;
+  experiences: Array<{
+    role: string | null;
+    company: string | null;
+    location: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    bullets: string[];
+    technologies: string[];
+  }>;
+  education: Array<{
+    institution: string | null;
+    degree: string | null;
+    fieldOfStudy: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  }>;
+  skills: string[];
+  languages: Array<{ language: string; level: string | null }>;
+  certifications: Array<{
+    name: string;
+    issuer: string | null;
+    year: string | null;
+  }>;
+};
+
+// Sanitiza recursivamente toda string folha do perfil canônico com o mesmo
+// filtro anti-injeção usado no texto bruto (INJECTION_PATTERNS) — o perfil
+// veio de uma extração de IA sobre conteúdo enviado pelo usuário, então
+// carrega o mesmo risco de prompt injection que o texto bruto sempre
+// carregou; nunca sanitizado antes porque nunca tinha ido direto pro
+// prompt da IA de análise.
+function sanitizeCanonicalCvProfile(
+  profile: CanonicalCvProfileData,
+): CanonicalCvProfileData {
+  const sanitizeNullable = (value: string | null): string | null =>
+    value === null ? null : sanitizeUserInput(value, CV_MAX_CHARS);
+  const sanitizeList = (values: string[]): string[] =>
+    values.map((value) => sanitizeUserInput(value, CV_MAX_CHARS));
+
+  return {
+    fullName: sanitizeNullable(profile.fullName),
+    headline: sanitizeNullable(profile.headline),
+    email: sanitizeNullable(profile.email),
+    phone: sanitizeNullable(profile.phone),
+    linkedinUrl: sanitizeNullable(profile.linkedinUrl),
+    location: {
+      city: sanitizeNullable(profile.location.city),
+      state: sanitizeNullable(profile.location.state),
+      country: sanitizeNullable(profile.location.country),
+    },
+    professionalSummary: sanitizeNullable(profile.professionalSummary),
+    experiences: profile.experiences.map((exp) => ({
+      role: sanitizeNullable(exp.role),
+      company: sanitizeNullable(exp.company),
+      location: sanitizeNullable(exp.location),
+      startDate: sanitizeNullable(exp.startDate),
+      endDate: sanitizeNullable(exp.endDate),
+      bullets: sanitizeList(exp.bullets),
+      technologies: sanitizeList(exp.technologies),
+    })),
+    education: profile.education.map((edu) => ({
+      institution: sanitizeNullable(edu.institution),
+      degree: sanitizeNullable(edu.degree),
+      fieldOfStudy: sanitizeNullable(edu.fieldOfStudy),
+      startDate: sanitizeNullable(edu.startDate),
+      endDate: sanitizeNullable(edu.endDate),
+    })),
+    skills: sanitizeList(profile.skills),
+    languages: profile.languages.map((lang) => ({
+      language: sanitizeUserInput(lang.language, CV_MAX_CHARS),
+      level: sanitizeNullable(lang.level),
+    })),
+    certifications: profile.certifications.map((cert) => ({
+      name: sanitizeUserInput(cert.name, CV_MAX_CHARS),
+      issuer: sanitizeNullable(cert.issuer),
+      year: sanitizeNullable(cert.year),
+    })),
+  };
+}
+
+// Variante estruturada de wrapCvInput: o CV do candidato já foi extraído e
+// categorizado por uma etapa anterior (CvStructuredProfile) — manda o JSON
+// direto, nunca achata de volta em texto solto (é exatamente o problema que
+// esta função existe pra evitar: achatar destrói a categorização que já
+// pagamos uma chamada de IA pra produzir, obrigando a análise a reinferir
+// a estrutura a partir de texto livre). Nunca chamar junto com wrapCvInput
+// pro mesmo candidato — teria duas fontes de CV potencialmente divergentes
+// no mesmo prompt.
+function wrapCanonicalCvInput(
+  canonicalCvProfile: CanonicalCvProfileData,
+  jobText: string,
+  selectedKeywords?: string[],
+): string {
+  const sanitizedKeywords = sanitizeSelectedKeywords(selectedKeywords);
+  const keywordsBlock = sanitizedKeywords.length
+    ? sanitizedKeywords.map((keyword) => `- ${keyword}`).join("\n")
+    : "[]";
+  const sanitizedProfile = sanitizeCanonicalCvProfile(canonicalCvProfile);
+
+  return `<CV_CANDIDATO_CATEGORIZADO>
+Os dados do candidato abaixo já foram extraídos e categorizados. Avalie-os diretamente. Não tente reconstruir ou inferir novamente a estrutura do currículo a partir de texto livre.
+
+${JSON.stringify(sanitizedProfile)}
+</CV_CANDIDATO_CATEGORIZADO>\n\n<DESCRICAO_VAGA>\n${sanitizeUserInput(jobText, JOB_MAX_CHARS)}\n</DESCRICAO_VAGA>\n\n<KEYWORDS_SELECIONADAS>\n${keywordsBlock}\n</KEYWORDS_SELECIONADAS>`;
+}
+
 export type AjusteConteudoRef = {
   id: string;
   titulo: string;
   categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
 };
 
-export type CvAdaptationInput = {
-  masterCvText: string;
+// masterCvText (texto bruto/achatado) e canonicalCvProfile (perfil já
+// categorizado, do pipeline de extração estruturada) são MUTUAMENTE
+// EXCLUSIVOS — mesma garantia estrutural de CvAnalysisOutput/
+// analyzeAndAdaptCv, aplicada aqui à geração do CV adaptado (mesmo achado
+// de auditoria: a geração lia texto achatado mesmo quando um
+// CvStructuredProfile READY já existia).
+export type CvAdaptationInput = (
+  | { masterCvText: string; canonicalCvProfile?: undefined }
+  | { masterCvText?: undefined; canonicalCvProfile: CanonicalCvProfileData }
+) & {
   jobDescriptionText: string;
   selectedKeywords?: string[];
   jobTitle?: string;
@@ -1226,6 +1357,15 @@ export type CvAnalysisOutput = {
     subtexto: string;
   };
   sinais_referencia?: string[];
+  // Auditoria da checagem determinística de presença literal de keyword
+  // (seção 4 do relatório de fechamento, 2026-09-08) — só populado quando a
+  // entrada foi canonicalCvProfile: cada item aqui é uma keyword que o
+  // modelo classificou como "ausente" mas que aparece literalmente (após
+  // normalização) em skills/technologies/experiences/bullets/education/
+  // certifications/languages do perfil canônico, e por isso foi movida pra
+  // "presentes" antes do cálculo de score. Nunca infla o score por
+  // substring acidental (containsKeywordInText usa fronteira de palavra).
+  keywordPresenceDivergences?: Array<{ kw: string; reason: string }>;
   scoring?: {
     kind: "requirements_v2";
     coverage: RequirementScoringSummary["coverage"];
@@ -1250,18 +1390,27 @@ type KeywordBucket = {
   ausentes: Array<{ kw: string; pontos: number }>;
 };
 
-function buildAnalysisUserMessage(input: {
-  masterCvText: string;
-  jobDescriptionText: string;
-  canonicalJobJson: unknown;
-  existingRequirements?: StructuredJobRequirement[];
-}): string {
+function buildAnalysisUserMessage(
+  input: (
+    | { masterCvText: string; canonicalCvProfile?: undefined }
+    | { masterCvText?: undefined; canonicalCvProfile: CanonicalCvProfileData }
+  ) & {
+    jobDescriptionText: string;
+    canonicalJobJson: unknown;
+    existingRequirements?: StructuredJobRequirement[];
+  },
+): string {
   const mode =
     input.existingRequirements && input.existingRequirements.length > 0
       ? "use_existing_rule"
       : "create_rule";
 
-  return `${wrapCvInput(input.masterCvText, input.jobDescriptionText)}
+  const cvBlock =
+    input.canonicalCvProfile !== undefined
+      ? wrapCanonicalCvInput(input.canonicalCvProfile, input.jobDescriptionText)
+      : wrapCvInput(input.masterCvText, input.jobDescriptionText);
+
+  return `${cvBlock}
 
 <MODO_ANALISE>
 ${mode}
@@ -1894,11 +2043,18 @@ Antes de retornar o JSON, valide:
 14. Nada foi inventado a partir do CV.`;
 
 function buildAdaptationUserMessage(input: CvAdaptationInput): string {
-  const base = wrapCvInput(
-    input.masterCvText,
-    input.jobDescriptionText,
-    input.selectedKeywords,
-  );
+  const base =
+    input.canonicalCvProfile !== undefined
+      ? wrapCanonicalCvInput(
+          input.canonicalCvProfile,
+          input.jobDescriptionText,
+          input.selectedKeywords,
+        )
+      : wrapCvInput(
+          input.masterCvText,
+          input.jobDescriptionText,
+          input.selectedKeywords,
+        );
 
   const extraContext = [
     input.jobTitle
@@ -2203,6 +2359,84 @@ function containsKeywordInText(text: string, keyword: string): boolean {
     `(^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}([^a-z0-9]|$)`,
   );
   return pattern.test(normalizedText);
+}
+
+// Concatena todos os campos textuais relevantes do perfil canônico pra
+// checagem determinística de presença literal de keyword (seção 4 do
+// relatório de fechamento, 2026-09-08): skills, technologies de cada
+// experiência, bullets, cargo, formação (instituição/curso/área) e
+// certificações/idiomas — a mesma lista de campos que o usuário pediu
+// explicitamente pra cobrir.
+function buildCanonicalCvSearchText(profile: CanonicalCvProfileData): string {
+  const parts: string[] = [];
+  if (profile.professionalSummary) parts.push(profile.professionalSummary);
+  if (profile.headline) parts.push(profile.headline);
+  parts.push(...profile.skills);
+  for (const exp of profile.experiences) {
+    if (exp.role) parts.push(exp.role);
+    parts.push(...exp.technologies, ...exp.bullets);
+  }
+  for (const edu of profile.education) {
+    if (edu.institution) parts.push(edu.institution);
+    if (edu.degree) parts.push(edu.degree);
+    if (edu.fieldOfStudy) parts.push(edu.fieldOfStudy);
+  }
+  for (const cert of profile.certifications) {
+    parts.push(cert.name);
+    if (cert.issuer) parts.push(cert.issuer);
+  }
+  for (const lang of profile.languages) {
+    parts.push(lang.language);
+  }
+  return parts.join("\n");
+}
+
+// Reclassifica deterministicamente keywords que o modelo marcou "ausentes"
+// mas que aparecem literalmente (normalizado: sem acento, case-insensitive,
+// fronteira de palavra via containsKeywordInText — nunca substring
+// acidental, ex. "SQL" não bate dentro de "NoSQL") no perfil canônico. A IA
+// continua responsável por equivalência SEMÂNTICA (sinônimos, tecnologias
+// correlatas) — esta checagem só corrige o caso mais grosseiro: o termo
+// está lá, escrito, e o modelo disse que não está. Roda ANTES do cálculo de
+// score (applyRequirementDrivenOverlay), nunca depois — senão o score já
+// teria sido computado com o dado errado.
+function reconcileKeywordPresenceWithCanonicalProfile(
+  keywords: CvAnalysisOutput["keywords"],
+  canonicalCvProfile: CanonicalCvProfileData,
+): {
+  keywords: CvAnalysisOutput["keywords"];
+  divergences: Array<{ kw: string; reason: string }>;
+} {
+  const searchText = buildCanonicalCvSearchText(canonicalCvProfile);
+  const divergences: Array<{ kw: string; reason: string }> = [];
+  const stillAusentes: typeof keywords.ausentes = [];
+  const movedToPresentes: typeof keywords.presentes = [];
+
+  for (const item of keywords.ausentes ?? []) {
+    if (containsKeywordInText(searchText, item.kw)) {
+      divergences.push({
+        kw: item.kw,
+        reason:
+          "modelo classificou como ausente, mas o termo aparece literalmente no perfil canônico (skills/technologies/experiences/bullets/education/certifications/languages) — movido para presentes",
+      });
+      movedToPresentes.push(item);
+    } else {
+      stillAusentes.push(item);
+    }
+  }
+
+  if (divergences.length === 0) {
+    return { keywords, divergences };
+  }
+
+  return {
+    keywords: {
+      presentes: [...(keywords.presentes ?? []), ...movedToPresentes],
+      possiveis: keywords.possiveis,
+      ausentes: stillAusentes,
+    },
+    divergences,
+  };
 }
 
 function deriveKeywordMatchesFromEvidence(
@@ -3001,7 +3235,11 @@ function applyRequirementDrivenOverlay(
 export async function analyzeAndAdaptCv(
   client: OpenAI,
   model: string,
-  input: Pick<CvAdaptationInput, "masterCvText" | "jobDescriptionText"> & {
+  input: (
+    | { masterCvText: string; canonicalCvProfile?: undefined }
+    | { masterCvText?: undefined; canonicalCvProfile: CanonicalCvProfileData }
+  ) & {
+    jobDescriptionText: string;
     canonicalJobJson: unknown;
     existingRequirements?: StructuredJobRequirement[];
     existingKeywordRule?: KeywordBucket;
@@ -3033,6 +3271,23 @@ export async function analyzeAndAdaptCv(
     throw new Error(
       `Failed to parse AI response as JSON: ${content.slice(0, 200)}`,
     );
+  }
+
+  // Seção 4 do relatório de fechamento (2026-09-08): presença literal de
+  // keyword é checagem determinística, não julgamento do modelo — corre
+  // ANTES de qualquer cálculo de score (applyRequirementDrivenOverlay lê
+  // output.keywords). Só roda com canonicalCvProfile disponível (é a única
+  // fonte estruturada confiável pra essa busca); masterCvText legado
+  // continua 100% dependente do julgamento da IA, sem mudança.
+  if (input.canonicalCvProfile !== undefined && output.keywords) {
+    const reconciled = reconcileKeywordPresenceWithCanonicalProfile(
+      output.keywords,
+      input.canonicalCvProfile,
+    );
+    output.keywords = reconciled.keywords;
+    if (reconciled.divergences.length > 0) {
+      output.keywordPresenceDivergences = reconciled.divergences;
+    }
   }
 
   output.requirements = normalizeRequirementCoverage(
