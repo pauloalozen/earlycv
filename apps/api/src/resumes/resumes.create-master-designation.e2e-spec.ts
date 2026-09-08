@@ -437,18 +437,16 @@ test("create(): retry após falha na extração não duplica job nem perde o res
 // Cenário 6: concorrência — duas requisições simultâneas de create() para o
 // MESMO usuário (conexões reais de banco, sem mock de transação). A segunda
 // requisição usa isPrimary: false explícito (não compete pela eleição de
-// Master) — isolando a concorrência que É escopo desta correção (dedup de
-// CvSource/CvProcessingJob e ligação de resumeId sob requisições reais
-// simultâneas). NOTA: create() tem uma lacuna de concorrência PRÉ-EXISTENTE
-// e fora de escopo desta correção — duas chamadas concorrentes que ambas
-// tentam se tornar Master (ex.: ambas com isPrimary:true, ou ambas com
-// isPrimary omitido quando o usuário ainda não tem nenhum Resume) fazem
-// "contar Resumes, depois apagar o Master antigo, depois inserir o novo"
-// sem lock/serialização (diferente de setPrimary/CvMasterPromotionService,
-// que já usam advisory lock) — a segunda pode colidir no índice único
-// parcial resume_one_master_per_user e propagar um P2002 pro chamador HTTP.
-// Isso é uma falha de robustez pré-existente (não introduzida nem corrigida
-// por esta sessão) e é reportada separadamente, não coberta por este teste.
+// Master) — isolando a concorrência de dedup de CvSource/CvProcessingJob e
+// ligação de resumeId sob requisições reais simultâneas. A lacuna que
+// existia aqui — create() fazia "contar Resumes, decidir, apagar o Master
+// antigo, inserir o novo" sem lock quando o usuário ainda não tinha nenhum
+// Resume (o loop de supersedeIfResumeMatches, que hoje adquire o advisory
+// lock, só roda se já existir um Master antigo a suspender) — foi fechada:
+// create() agora adquire o mesmo advisory lock (cv-master-designation:
+// userId:<id>) logo no início da transação, antes de contar/decidir,
+// serializando com qualquer outra chamada concorrente de create()/setPrimary/
+// CvMasterPromotionService para o mesmo usuário.
 test("create(): duas requisições simultâneas de upload para o mesmo usuário — resumeId consistente sob concorrência real de banco", async () => {
   await withFlagEnabled(async () => {
     const user = await createUser();

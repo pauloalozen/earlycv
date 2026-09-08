@@ -208,6 +208,20 @@ export class ResumesService {
     }
 
     const createdResume = await this.database.$transaction(async (tx) => {
+      // Serializa por userId ANTES de contar/decidir: sem isso, duas
+      // chamadas concorrentes de create() para um usuário SEM nenhum Resume
+      // ainda (existingResumeCount === 0 nas duas) nunca passam pelo loop de
+      // supersedeIfResumeMatches abaixo (oldMasterResumes vazio nesse caso —
+      // é ele quem hoje adquire este mesmo lock), então nenhuma das duas
+      // serializa e ambas podem decidir shouldBecomeMaster=true ao mesmo
+      // tempo, colidindo no índice único parcial resume_one_master_per_user.
+      // Mesmo lockKey de CvMasterPromotionService (transacional, liberado no
+      // commit/rollback) — uma segunda chamada concorrente só prossegue
+      // depois que a primeira já commitou seu Resume/designação, então
+      // existingResumeCount já reflete a mudança dela.
+      const lockKey = `cv-master-designation:userId:${userId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
       const existingResumeCount = await tx.resume.count({ where: { userId } });
       const shouldBecomeMaster = dto.isPrimary ?? existingResumeCount === 0;
 

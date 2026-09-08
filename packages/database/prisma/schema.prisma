@@ -2868,8 +2868,8 @@ model CvProcessingJob {
   createdAt  DateTime  @default(now())
   finishedAt DateTime?
 
-  cvSource     CvSource      @relation(fields: [cvSourceId], references: [id])
-  cvSubmission CvSubmission  @relation(fields: [cvSubmissionId], references: [id])
+  cvSource     CvSource      @relation(fields: [cvSourceId], references: [id], onDelete: Cascade)
+  cvSubmission CvSubmission  @relation(fields: [cvSubmissionId], references: [id], onDelete: Cascade)
   analysisJobs AnalysisJob[]
 
   @@index([status])

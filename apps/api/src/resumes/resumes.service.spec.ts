@@ -24,6 +24,7 @@ test("create deletes the previous master resume (and its adapted dependents) ins
     {
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 1,
             updateMany: async (args: { where: Record<string, unknown> }) => {
@@ -99,6 +100,7 @@ test("create does not wait for master CV extraction to finish", async () => {
     {
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
@@ -165,6 +167,7 @@ test("create delegates master CV uploads to synchronous extraction without heuri
     {
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
@@ -222,6 +225,7 @@ test("create clears the existing profile before creating the replacement resume 
       },
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 1,
             updateMany: async () => ({ count: 0 }),
@@ -281,6 +285,7 @@ test("create does not touch the profile when clearExistingProfile is not set", a
       },
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
@@ -325,6 +330,7 @@ test("create requires a turnstile token for uploaded master CVs", async () => {
     {
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
@@ -373,6 +379,7 @@ test("create still succeeds when extraction enqueue fails", async () => {
     {
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
@@ -419,6 +426,7 @@ test("create succeeds when extraction service is not provided", async () => {
     {
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             count: async () => 0,
             updateMany: async () => ({ count: 0 }),
@@ -463,6 +471,7 @@ test("remove deletes dependent resumes instead of promoting a new master", async
       },
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
         fn({
+          $executeRaw: async () => undefined,
           resume: {
             deleteMany: async (args: { where: Record<string, unknown> }) => {
               deleteManyCalls.push(args.where);
