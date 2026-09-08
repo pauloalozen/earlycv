@@ -176,13 +176,14 @@ export class CvProcessingEntrypointService {
       resumeId,
     });
 
-    // Kick imediato (seção 5): emite DEPOIS do commit acima, nunca antes —
-    // se o processo morrer entre o commit e este emit, o job já está
-    // persistido e o próximo tick do cron (15s) o recupera normalmente,
-    // mesma garantia de sempre. O emit em si é síncrono e nunca lança (é só
-    // notificação — nenhum listener é aguardado aqui), então não pode
-    // atrasar nem quebrar a resposta HTTP deste método.
-    cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_CREATED);
+    // Kick imediato: emite DEPOIS do commit acima, nunca antes — se o
+    // processo morrer entre o commit e este emit, o job já está persistido
+    // e o próximo tick do cron (15s) o recupera normalmente, mesma garantia
+    // de sempre. O emit em si é síncrono e nunca lança (é só notificação —
+    // nenhum listener é aguardado aqui), então não pode atrasar nem quebrar
+    // a resposta HTTP deste método. job.id (não um sinal genérico) é o que
+    // permite o listener fazer claim atômico POR ID, não um scan de lote.
+    cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_CREATED, job.id);
 
     return { cvSource, cvSubmission, job };
   }

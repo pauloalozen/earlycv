@@ -79,11 +79,13 @@ export class CvProcessingWorker {
     // aqui vazaria listener por instância e faria workers de testes
     // antigos reagirem a jobs de testes seguintes. Em produção (um único
     // worker de longa duração por processo) isso nunca é um problema. A
-    // emissão em si (cv-processing-entrypoint.service.ts) e o kick() em si
-    // são testados diretamente, sem depender desta inscrição automática.
+    // emissão em si (cv-processing-entrypoint.service.ts) e o
+    // triggerProcessing() em si são testados diretamente, sem depender
+    // desta inscrição automática.
     if (process.env.NODE_ENV !== "test") {
-      cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, () =>
-        this.kick(),
+      cvProcessingDispatchSignal.on(
+        CV_PROCESSING_JOB_CREATED,
+        (jobId: string) => this.triggerProcessing(jobId),
       );
     }
   }
@@ -94,18 +96,43 @@ export class CvProcessingWorker {
     await this.processPendingBatch();
   }
 
-  // Kick imediato (seção 5) — nunca lançado pro chamador (o emit que
-  // dispara isto é síncrono e não pode propagar falha pro request HTTP que
-  // criou o job). Erro aqui só loga; o job permanece PENDING/claimable e o
-  // próximo tick do cron o recupera normalmente.
-  kick(): void {
-    this.processPendingBatch().catch((err) => {
+  // Disparo imediato (correção de UX de 2026-09-08 — job não pode depender
+  // só do cron de 15s). Contrato exigido:
+  // - nunca cria job (só processa o jobId recebido, que já existe/committed);
+  // - claim atômico POR ID (mesmo claimOne do cron/batch) — nunca um scan
+  //   de lote, nunca compete com backlog de outros jobs pending;
+  // - chama exatamente o mesmo processJob() do cron;
+  // - nunca lança pro chamador (o emit que dispara isto é síncrono, dentro
+  //   do mesmo call stack do request HTTP que criou o job — deixar escapar
+  //   quebraria a resposta já commitada);
+  // - nunca marca failed só porque o kick não rodou/perdeu a corrida — se
+  //   claimOne retornar null (outro worker/kick/cron já pegou, ou o job já
+  //   não está mais pending por qualquer motivo), simplesmente não faz
+  //   nada: o job continua no estado em que already estava, recuperável
+  //   pelo cron se ainda pending.
+  triggerProcessing(jobId: string): void {
+    this.processOneJob(jobId).catch((err) => {
       this.logger.error(
-        `cv processing kick falhou (job permanece pending, cron recupera): ${
+        `cv processing trigger(${jobId}) falhou (job permanece pending/claimable, cron recupera): ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
     });
+  }
+
+  private async processOneJob(jobId: string): Promise<void> {
+    // Sem lock global aqui de propósito: a atomicidade que importa é a do
+    // claim POR LINHA (UPDATE ... WHERE id=$1 AND status='pending', em
+    // CvProcessingJobService#claimOne) — dois triggers concorrentes pro
+    // MESMO jobId, ou um trigger disputando com o cron (que usa o lock
+    // global só pra serializar o SCAN de lote + recoverStaleProcessing,
+    // não o claim em si), nunca processam a mesma linha duas vezes graças
+    // a esse UPDATE atômico. Adquirir o lock global aqui só serializaria
+    // triggers de jobs DIFERENTES sem necessidade nenhuma.
+    const owner = `cv-processing-trigger-${randomUUID()}`;
+    const claimed = await this.jobService.claimOne(jobId, owner);
+    if (!claimed) return; // perdeu a corrida (cron/outro trigger), ou job não está mais pending
+    await this.processJob(claimed);
   }
 
   async processPendingBatch(): Promise<number> {
@@ -224,11 +251,14 @@ export class CvProcessingWorker {
         cvStructuredProfileId: structuredProfile.id,
         masterDesignationId,
       });
-      // Kick imediato da próxima etapa (seção 5): CvAnalysisWorker não
-      // precisa esperar até 15s pra notar que este CvProcessingJob virou
-      // READY — mesma garantia do kick de criação (emit depois do commit,
-      // nunca antes; falha do listener nunca afeta este worker).
-      cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_READY);
+      // Kick imediato da próxima etapa: CvAnalysisWorker não precisa
+      // esperar até 15s pra notar que este CvProcessingJob virou READY —
+      // mesma garantia do kick de criação (emit depois do commit, nunca
+      // antes; falha do listener nunca afeta este worker). job.id aqui é o
+      // id do CvProcessingJob — é o que AnalysisJob.cvProcessingJobId
+      // referencia, nunca um id de AnalysisJob (pode haver mais de um
+      // AnalysisJob pendente pro mesmo CvProcessingJob reusado).
+      cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_READY, job.id);
     } catch (error) {
       this.logger.warn(
         `cv processing job ${job.id} failed (attempt ${job.attempts}/${MAX_CV_PROCESSING_ATTEMPTS}): ${

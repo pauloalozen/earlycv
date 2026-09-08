@@ -18,8 +18,15 @@
 // zero risco de ciclo, zero dependência de infraestrutura não verificada.
 import { EventEmitter } from "node:events";
 
-export const CV_PROCESSING_JOB_CREATED = "cv-processing-job-created";
-export const CV_PROCESSING_JOB_READY = "cv-processing-job-ready";
+// Revisão de 2026-09-08 (correção de UX — job não pode depender só do cron
+// de 15s): os dois eventos agora carregam o id do job específico como
+// payload, nunca "algo mudou, vá escanear tudo". O listener chama
+// CvProcessingWorker#triggerProcessing(jobId)/CvAnalysisWorker#
+// triggerProcessingForCvProcessingJob(cvProcessingJobId) — claim atômico
+// POR ID, o mesmo processJob()/processReadyJob() do cron, nunca um scan de
+// lote (evita competir com backlog de outros jobs pending no sistema).
+export const CV_PROCESSING_JOB_CREATED = "cv-processing-job-created"; // payload: cvProcessingJobId: string
+export const CV_PROCESSING_JOB_READY = "cv-processing-job-ready"; // payload: cvProcessingJobId: string (o próprio CvProcessingJob, não um AnalysisJob)
 
 class CvProcessingDispatchSignal extends EventEmitter {}
 

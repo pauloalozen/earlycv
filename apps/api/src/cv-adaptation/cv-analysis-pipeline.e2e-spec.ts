@@ -736,13 +736,15 @@ test("linhagem 5) flag desligada entre análise e geração — a fonte é a lin
 });
 
 // ---------------------------------------------------------------------------
-// Seção 5 do relatório de fechamento (2026-09-08): disparo imediato — job
-// persistido -> commit -> kick imediato -> polling, cron de 15s vira só
-// recuperação. As instâncias de worker deste arquivo NUNCA se inscrevem
-// sozinhas no sinal (NODE_ENV=test, ver constructor de CvProcessingWorker/
-// CvAnalysisWorker) — cada teste abaixo controla a inscrição explicitamente,
-// pra nunca vazar entre os ~30 outros testes deste arquivo que também
-// emitem o sinal via CvProcessingEntrypointService.
+// Disparo imediato (correção de UX de 2026-09-08 — job persistido não pode
+// depender só do cron de 15s pra começar). CvProcessingWorker#
+// triggerProcessing(jobId) e CvAnalysisWorker#
+// triggerProcessingForCvProcessingJob(cvProcessingJobId) fazem claim
+// atômico POR ID — nunca um scan de lote — chamando exatamente o mesmo
+// processJob()/processReadyJob() que o cron usa. As instâncias de worker
+// deste arquivo NUNCA se inscrevem sozinhas no sinal (NODE_ENV=test, ver
+// constructor de CvProcessingWorker/CvAnalysisWorker) — cada teste abaixo
+// controla a inscrição explicitamente.
 // ---------------------------------------------------------------------------
 
 async function waitUntil(
@@ -757,14 +759,11 @@ async function waitUntil(
   throw new Error(`waitUntil: condição não satisfeita em ${timeoutMs}ms`);
 }
 
-test("kick 1) processamento começa sem esperar o tick — kick imediato processa o job sem chamar o cron manualmente", async () => {
+test("trigger 1) job começa imediatamente sem esperar o cron, e a latência persistido->processing fica próxima de zero", async () => {
   const user = await createUser();
-  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
-  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
-  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
-    async () => fakeCanonicalOutput("Kick Imediato"),
+    async () => fakeCanonicalOutput("Trigger Imediato"),
     storage,
   );
   const entrypoint = new CvProcessingEntrypointService(
@@ -773,46 +772,66 @@ test("kick 1) processamento começa sem esperar o tick — kick imediato process
     storage,
   );
 
-  let kicks = 0;
-  const listener = () => {
-    kicks += 1;
-    cvWorker.kick();
+  let triggers = 0;
+  const listener = (jobId: string) => {
+    triggers += 1;
+    cvWorker.triggerProcessing(jobId);
   };
   cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
   try {
+    const requestStart = Date.now();
     const { job } = await entrypoint.enqueueFromUserText({
       userId: user.id,
-      text: buildCvText("Kick Imediato", "produto"),
+      text: buildCvText("Trigger Imediato", "produto"),
       masterIntent: "NONE",
       submission: { origin: "PASTED_TEXT" },
     });
+    const persistedAt = Date.now();
 
-    assert.equal(kicks, 1, "enqueue deveria emitir exatamente um kick");
+    assert.equal(triggers, 1, "enqueue deveria emitir exatamente um trigger");
 
     // Nunca chama processOneCvJob/processPendingBatch manualmente aqui — só
-    // espera o kick fire-and-forget terminar, provando que o processamento
-    // já começou sem esperar os 15s do cron.
+    // espera o trigger fire-and-forget terminar, provando que o
+    // processamento já começou sem esperar os 15s do cron.
     await waitUntil(async () => {
       const row = await database.cvProcessingJob.findUniqueOrThrow({
         where: { id: job.id },
       });
       return row.status === "READY";
     });
+    const readyAt = Date.now();
+
+    const finalRow = await database.cvProcessingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    assert.ok(finalRow.claimedAt);
+    const persistedToProcessingMs =
+      finalRow.claimedAt!.getTime() - finalRow.createdAt.getTime();
+    const processingToReadyMs =
+      finalRow.finishedAt!.getTime() - finalRow.claimedAt!.getTime();
+
+    // Medidas separadas, per requisito da auditoria — nunca perto dos 15000ms
+    // do cron; a tolerância folgada evita flakiness de CI, o que importa é
+    // "ordens de grandeza abaixo do tick", não um número exato de ms.
+    assert.ok(
+      persistedToProcessingMs < 2000,
+      `persistido->processing levou ${persistedToProcessingMs}ms — deveria ser quase imediato via trigger, nunca perto dos 15000ms do cron`,
+    );
+    console.log(
+      `[trigger 1] request->persistido=${persistedAt - requestStart}ms persistido->processing=${persistedToProcessingMs}ms processing->READY=${processingToReadyMs}ms total_percebido=${readyAt - requestStart}ms`,
+    );
   } finally {
     cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
   }
 });
 
-test("kick 2) resposta do enqueue não espera o processamento — emit é síncrono e barato, kick roda depois", async () => {
+test("trigger 2) resposta do enqueue não espera o processamento — emit é síncrono e barato, trigger roda depois", async () => {
   const user = await createUser();
-  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
-  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
-  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
   const storage = new FakeStorage();
   const SLOW_MS = 300;
   const cvWorker = buildProcessingWorker(async () => {
     await new Promise((resolve) => setTimeout(resolve, SLOW_MS));
-    return fakeCanonicalOutput("Kick Nao Bloqueia");
+    return fakeCanonicalOutput("Trigger Nao Bloqueia");
   }, storage);
   const entrypoint = new CvProcessingEntrypointService(
     database,
@@ -820,13 +839,13 @@ test("kick 2) resposta do enqueue não espera o processamento — emit é síncr
     storage,
   );
 
-  const listener = () => cvWorker.kick();
+  const listener = (jobId: string) => cvWorker.triggerProcessing(jobId);
   cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
   try {
     const start = Date.now();
     const { job } = await entrypoint.enqueueFromUserText({
       userId: user.id,
-      text: buildCvText("Kick Nao Bloqueia", "engenharia"),
+      text: buildCvText("Trigger Nao Bloqueia", "engenharia"),
       masterIntent: "NONE",
       submission: { origin: "PASTED_TEXT" },
     });
@@ -834,7 +853,7 @@ test("kick 2) resposta do enqueue não espera o processamento — emit é síncr
 
     assert.ok(
       enqueueMs < SLOW_MS,
-      `enqueueFromUserText levou ${enqueueMs}ms — não pode chegar perto dos ${SLOW_MS}ms da extração (kick é fire-and-forget, nunca aguardado)`,
+      `enqueueFromUserText levou ${enqueueMs}ms — não pode chegar perto dos ${SLOW_MS}ms da extração (trigger é fire-and-forget, nunca aguardado — resposta HTTP não espera IA)`,
     );
 
     const rowRightAfter = await database.cvProcessingJob.findUniqueOrThrow({
@@ -843,7 +862,7 @@ test("kick 2) resposta do enqueue não espera o processamento — emit é síncr
     assert.equal(
       rowRightAfter.status,
       "PENDING",
-      "logo após o enqueue retornar, o job ainda não terminou de processar — prova que o kick roda depois, não durante",
+      "logo após o enqueue retornar, o job ainda não terminou de processar — prova que o trigger roda depois, não durante",
     );
 
     await waitUntil(async () => {
@@ -857,11 +876,8 @@ test("kick 2) resposta do enqueue não espera o processamento — emit é síncr
   }
 });
 
-test("kick 3) queda antes do kick é recuperada pelo cron — sem NENHUM listener, processPendingBatch (cron) ainda processa", async () => {
+test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, cron (processPendingBatch) ainda recupera", async () => {
   const user = await createUser();
-  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
-  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
-  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
     async () => fakeCanonicalOutput("Cron Recupera"),
@@ -873,7 +889,7 @@ test("kick 3) queda antes do kick é recuperada pelo cron — sem NENHUM listene
     storage,
   );
 
-  // Nenhum listener inscrito — simula o kick nunca tendo acontecido
+  // Nenhum listener inscrito — simula o trigger nunca tendo acontecido
   // (processo morreu entre o commit e o emit, ou o emit não teve ouvinte
   // por qualquer motivo). O job precisa continuar PENDING e claimable.
   const { job } = await entrypoint.enqueueFromUserText({
@@ -899,18 +915,76 @@ test("kick 3) queda antes do kick é recuperada pelo cron — sem NENHUM listene
   assert.equal(rowAfterCron.status, "READY");
 });
 
-test("kick 4) kick e cron concorrentes processam o job exatamente uma vez", async () => {
+test("trigger 4) erro no trigger mantém o job pending e recuperável pelo cron", async () => {
   const user = await createUser();
-  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
-  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
-  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Trigger Falha Recupera"),
+    storage,
+  );
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  // Simula o trigger falhando por completo (ex.: erro inesperado antes
+  // mesmo de conseguir chamar claimOne) — triggerProcessing() de produção
+  // nunca deixa o erro escapar pro emissor (catch interno); aqui simulamos
+  // o pior caso (exceção síncrona no próprio listener) pra provar que mesmo
+  // assim nada corrompe o job nem marca failed indevidamente.
+  const brokenWorker = {
+    triggerProcessing: () => {
+      throw new Error("falha simulada no trigger");
+    },
+  };
+  const listener = (jobId: string) => {
+    try {
+      brokenWorker.triggerProcessing(jobId);
+    } catch {
+      // engolido de propósito — mesma garantia do catch interno real.
+    }
+  };
+  cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
+  let job: { id: string };
+  try {
+    ({ job } = await entrypoint.enqueueFromUserText({
+      userId: user.id,
+      text: buildCvText("Trigger Falha Recupera", "financas"),
+      masterIntent: "NONE",
+      submission: { origin: "PASTED_TEXT" },
+    }));
+  } finally {
+    cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
+  }
+
+  const rowAfterFailedTrigger =
+    await database.cvProcessingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+  assert.equal(
+    rowAfterFailedTrigger.status,
+    "PENDING",
+    "trigger falho não pode deixar o job em nenhum estado além de pending/claimable — nunca marca failed só por não ter rodado",
+  );
+
+  // Cron real recupera normalmente.
+  await cvWorker.processPendingBatch();
+  const rowAfterCron = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  assert.equal(rowAfterCron.status, "READY");
+});
+
+test("trigger 5) trigger e cron concorrentes processam o job exatamente uma vez", async () => {
+  const user = await createUser();
   const storage = new FakeStorage();
   let extractCalls = 0;
   const cvWorker = buildProcessingWorker(async () => {
     extractCalls += 1;
-    // Segura um pouco pra garantir sobreposição real entre kick e cron.
+    // Segura um pouco pra garantir sobreposição real entre trigger e cron.
     await new Promise((resolve) => setTimeout(resolve, 50));
-    return fakeCanonicalOutput("Kick e Cron Concorrentes");
+    return fakeCanonicalOutput("Trigger e Cron Concorrentes");
   }, storage);
   const entrypoint = new CvProcessingEntrypointService(
     database,
@@ -918,18 +992,18 @@ test("kick 4) kick e cron concorrentes processam o job exatamente uma vez", asyn
     storage,
   );
 
-  const listener = () => cvWorker.kick();
+  const listener = (jobId: string) => cvWorker.triggerProcessing(jobId);
   cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
   try {
     const { job } = await entrypoint.enqueueFromUserText({
       userId: user.id,
-      text: buildCvText("Kick e Cron Concorrentes", "dados"),
+      text: buildCvText("Trigger e Cron Concorrentes", "dados"),
       masterIntent: "NONE",
       submission: { origin: "PASTED_TEXT" },
     });
 
-    // "Cron" concorrente disparado logo em seguida, sobrepondo o kick que
-    // o listener acima já iniciou — a claim atômica (UPDATE ... WHERE
+    // "Cron" concorrente disparado logo em seguida, sobrepondo o trigger
+    // que o listener acima já iniciou — a claim atômica (UPDATE ... WHERE
     // status='pending') garante que só um dos dois processa de fato.
     await cvWorker.processPendingBatch();
 
@@ -943,74 +1017,170 @@ test("kick 4) kick e cron concorrentes processam o job exatamente uma vez", asyn
     assert.equal(
       extractCalls,
       1,
-      "kick e cron concorrentes nunca podem rodar a extração duas vezes pro mesmo job",
+      "trigger e cron concorrentes nunca podem rodar a extração duas vezes pro mesmo job",
     );
   } finally {
     cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
   }
 });
 
-test("kick 5) erro no kick mantém o job pending e recuperável pelo cron", async () => {
+test("trigger 6) dois triggers simultâneos pro MESMO job processam exatamente uma vez", async () => {
   const user = await createUser();
-  // Backlog de PENDING de outros testes deste arquivo (batch scan real, não
-  // isolado por teste) atrasaria/confundiria as asserções de timing abaixo.
-  await database.cvProcessingJob.deleteMany({ where: { status: "PENDING" } });
   const storage = new FakeStorage();
-  const cvWorker = buildProcessingWorker(
-    async () => fakeCanonicalOutput("Kick Falha Recupera"),
-    storage,
-  );
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return fakeCanonicalOutput("Dois Triggers Simultaneos");
+  }, storage);
   const entrypoint = new CvProcessingEntrypointService(
     database,
     jobService,
     storage,
   );
 
-  // Simula o kick falhando por completo (ex.: erro inesperado antes mesmo
-  // de conseguir chamar processPendingBatch) — kick() nunca deixa o erro
-  // escapar pro emissor (ver CvProcessingWorker#kick, catch interno).
-  const brokenWorker = {
-    kick: () => {
-      throw new Error("falha simulada no kick");
-    },
-  };
-  const listener = () => {
-    try {
-      brokenWorker.kick();
-    } catch {
-      // O próprio kick() de produção já engole isso internamente (catch +
-      // log) — aqui simulamos o pior caso (exceção síncrona no listener)
-      // pra provar que mesmo assim nada corrompe o job.
+  // Sem inscrever no sinal — dispara os dois triggers manualmente pro
+  // MESMO jobId, deliberadamente sobrepostos (Promise.all), simulando dois
+  // gatilhos concorrentes reais (ex.: dois requests que resolveram o mesmo
+  // job por dedup de conteúdo).
+  const { job } = await entrypoint.enqueueFromUserText({
+    userId: user.id,
+    text: buildCvText("Dois Triggers Simultaneos", "operacoes"),
+    masterIntent: "NONE",
+    submission: { origin: "PASTED_TEXT" },
+  });
+
+  // triggerProcessing é void/fire-and-forget — as duas chamadas disparam
+  // sincronamente, uma logo após a outra, garantindo sobreposição real das
+  // duas tentativas de claimOne; a espera do resultado é por polling do
+  // estado final (não há Promise pra aguardar diretamente).
+  cvWorker.triggerProcessing(job.id);
+  cvWorker.triggerProcessing(job.id);
+
+  await waitUntil(async () => {
+    const row = await database.cvProcessingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    return row.status === "READY";
+  });
+
+  assert.equal(
+    extractCalls,
+    1,
+    "dois triggers simultâneos pro mesmo jobId nunca podem rodar a extração duas vezes",
+  );
+});
+
+test("trigger 7) request falha antes do commit — nenhum processamento começa, nenhum job/trigger é criado", async () => {
+  const user = await createUser();
+  class ThrowingStorage extends FakeStorage {
+    async putObject(): Promise<string> {
+      throw new Error("storage indisponível (simulado) — falha antes do commit");
     }
+  }
+  const storage = new ThrowingStorage();
+  let extractCalls = 0;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    return fakeCanonicalOutput("Nunca Deveria Rodar");
+  }, storage);
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+
+  let triggers = 0;
+  const listener = () => {
+    triggers += 1;
   };
   cvProcessingDispatchSignal.on(CV_PROCESSING_JOB_CREATED, listener);
-  let job: { id: string };
   try {
-    ({ job } = await entrypoint.enqueueFromUserText({
-      userId: user.id,
-      text: buildCvText("Kick Falha Recupera", "financas"),
-      masterIntent: "NONE",
-      submission: { origin: "PASTED_TEXT" },
-    }));
+    await assert.rejects(() =>
+      entrypoint.enqueueFromUserText({
+        userId: user.id,
+        text: buildCvText("Nunca Deveria Rodar", "juridico"),
+        masterIntent: "NONE",
+        submission: { origin: "PASTED_TEXT" },
+      }),
+    );
+
+    assert.equal(
+      triggers,
+      0,
+      "enqueue que falha antes do commit (storage indisponível) nunca pode emitir o sinal de trigger",
+    );
+
+    const jobsForUser = await database.cvProcessingJob.count({
+      where: { cvSource: { ownerType: "USER", userId: user.id } },
+    });
+    assert.equal(
+      jobsForUser,
+      0,
+      "nenhum CvProcessingJob deveria existir — o commit nunca aconteceu",
+    );
+    assert.equal(
+      extractCalls,
+      0,
+      "nenhuma chamada de IA pode acontecer quando o request falha antes de persistir o job",
+    );
   } finally {
     cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
   }
+});
 
-  const rowAfterFailedKick = await database.cvProcessingJob.findUniqueOrThrow(
-    { where: { id: job.id } },
-  );
-  assert.equal(
-    rowAfterFailedKick.status,
-    "PENDING",
-    "kick falho não pode deixar o job em nenhum estado além de pending/claimable",
+test("trigger 8) retry via trigger não duplica extração", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  let extractCalls = 0;
+  let failFirstAttempt = true;
+  const cvWorker = buildProcessingWorker(async () => {
+    extractCalls += 1;
+    if (failFirstAttempt) {
+      failFirstAttempt = false;
+      throw new Error("falha simulada na 1a tentativa");
+    }
+    return fakeCanonicalOutput("Retry Via Trigger");
+  }, storage);
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
   );
 
-  // Cron real recupera normalmente.
-  await cvWorker.processPendingBatch();
-  const rowAfterCron = await database.cvProcessingJob.findUniqueOrThrow({
+  const { job } = await entrypoint.enqueueFromUserText({
+    userId: user.id,
+    text: buildCvText("Retry Via Trigger", "atendimento"),
+    masterIntent: "NONE",
+    submission: { origin: "PASTED_TEXT" },
+  });
+
+  // 1a tentativa via trigger — falha, job volta pra PENDING (attempts < MAX).
+  await new Promise<void>((resolve) => {
+    cvWorker.triggerProcessing(job.id);
+    setTimeout(resolve, 300);
+  });
+  const afterFirst = await database.cvProcessingJob.findUniqueOrThrow({
     where: { id: job.id },
   });
-  assert.equal(rowAfterCron.status, "READY");
+  assert.equal(afterFirst.status, "PENDING");
+  assert.equal(extractCalls, 1);
+
+  // 2a tentativa via trigger (retry) — sucede, sem duplicar a extração da
+  // tentativa anterior (que já contou 1).
+  await new Promise<void>((resolve) => {
+    cvWorker.triggerProcessing(job.id);
+    setTimeout(resolve, 300);
+  });
+  const afterSecond = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  assert.equal(afterSecond.status, "READY");
+  assert.equal(
+    extractCalls,
+    2,
+    "retry deveria chamar extração de novo (1a falhou), mas nunca mais que isso — nenhuma duplicação por trigger repetido",
+  );
 });
 
 // ---------------------------------------------------------------------------
