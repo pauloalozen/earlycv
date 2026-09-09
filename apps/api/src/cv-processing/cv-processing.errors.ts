@@ -74,6 +74,64 @@ export class CvSourceTextObjectMissingError extends Error {
 // Erro de domínio puro (sem dependência de @nestjs/common), seguindo o
 // padrão já usado neste arquivo — o chamador HTTP (cv-adaptation.service.ts)
 // mapeia para BadRequestException no boundary.
+// CvStructuredProfileLineageMismatchError: violação da trigger
+// check_analysis_job_succeeded_requires_ready_profile (migration
+// 20260908211500) — o perfil referenciado não é o produzido pelo próprio
+// CvProcessingJob da análise, não está READY, ou o dono não bate (nem via
+// ClaimSourceGrant). Mesmo padrão DEFERRABLE INITIALLY DEFERRED de
+// MasterDesignationSubjectMismatchError: só é observável no COMMIT.
+export class CvStructuredProfileLineageMismatchError extends Error {
+  constructor(
+    message: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "CvStructuredProfileLineageMismatchError";
+  }
+}
+
+const LINEAGE_MISMATCH_MARKERS = [
+  "linhagem quebrada",
+  "não corresponde ao CvStructuredProfile produzido pelo seu CvProcessingJob",
+  "não é dono do CvSource",
+  "não corresponde ao TalentSubject dono do CvSource",
+  "referencia um CvProcessingJob inexistente",
+  "diverge do AnalysisJob",
+] as const;
+
+export function isLineageMismatchError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return LINEAGE_MISMATCH_MARKERS.some((marker) => message.includes(marker));
+}
+
+// CvStructuredProfileImmutableError: violação da trigger
+// reject_ready_profile_mutation (migration 20260908210000) — uma vez
+// READY, nem os campos canônicos nem o status em si podem mudar.
+export class CvStructuredProfileImmutableError extends Error {
+  constructor(
+    message: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "CvStructuredProfileImmutableError";
+  }
+}
+
+export function isProfileImmutableError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return message.includes("immutable once READY");
+}
+
 export class NoValidMasterCvForProfileAnalysisError extends Error {
   constructor(readonly userId: string) {
     super(

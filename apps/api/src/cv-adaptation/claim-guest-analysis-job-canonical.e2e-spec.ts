@@ -161,13 +161,6 @@ test("flag ligada + AnalysisJob COM cvProcessingJobId: roda o claim granular nov
   const cvSubmission = await prisma.cvSubmission.create({
     data: { cvSourceId: cvSource.id, origin: "PASTED_TEXT" },
   });
-  const cvProcessingJob = await prisma.cvProcessingJob.create({
-    data: {
-      cvSourceId: cvSource.id,
-      cvSubmissionId: cvSubmission.id,
-      status: "PENDING",
-    },
-  });
   const structuredProfile = await prisma.cvStructuredProfile.create({
     data: {
       cvSourceId: cvSource.id,
@@ -178,6 +171,33 @@ test("flag ligada + AnalysisJob COM cvProcessingJobId: roda o claim granular nov
       coverageJson: {},
       confidenceJson: {},
       evidenceJson: {},
+    },
+  });
+  // status READY + cvStructuredProfileId preenchido no PRÓPRIO
+  // CvProcessingJob (nunca só na AnalysisJob) — reflete o estado real que
+  // o worker deixa (cv-processing.worker.ts#processJob) e satisfaz a
+  // trigger de linhagem (migration 20260908211500): AnalysisJob.
+  // cvStructuredProfileId precisa bater com o do CvProcessingJob que a
+  // originou, não só existir isoladamente.
+  const cvProcessingJob = await prisma.cvProcessingJob.create({
+    data: {
+      cvSourceId: cvSource.id,
+      cvSubmissionId: cvSubmission.id,
+      status: "READY",
+      cvStructuredProfileId: structuredProfile.id,
+    },
+  });
+
+  // Ownership: a AnalysisJob abaixo já nasce com userId preenchido (como se
+  // o claim já tivesse transferido a posse) — a trigger de linhagem exige
+  // ou CvSource.userId bater, ou um ClaimSourceGrant válido (fonte é
+  // GUEST-owned aqui, então precisa do grant, mesmo padrão real de
+  // ClaimSourceGrantService#ensureGrant).
+  await prisma.claimSourceGrant.create({
+    data: {
+      cvSourceId: cvSource.id,
+      userId: user.id,
+      provenByAnalysisJobId: "seed",
     },
   });
 

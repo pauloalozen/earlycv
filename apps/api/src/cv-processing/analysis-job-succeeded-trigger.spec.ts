@@ -42,9 +42,19 @@ async function createCvSourceAndSubmission(userId: string) {
 async function createCvProcessingJob(
   cvSourceId: string,
   cvSubmissionId: string,
+  cvStructuredProfileId?: string,
 ) {
   return prisma.cvProcessingJob.create({
-    data: { cvSourceId, cvSubmissionId, status: "PENDING" },
+    data: {
+      cvSourceId,
+      cvSubmissionId,
+      // status/cvStructuredProfileId no PRÓPRIO CvProcessingJob (não só na
+      // AnalysisJob que o referencia) — a trigger de linhagem (migration
+      // 20260908211500) exige que AnalysisJob.cvStructuredProfileId bata
+      // com o do CvProcessingJob que a originou.
+      status: cvStructuredProfileId ? "READY" : "PENDING",
+      cvStructuredProfileId: cvStructuredProfileId ?? null,
+    },
   });
 }
 
@@ -121,11 +131,12 @@ test("AnalysisJob do pipeline novo (cvProcessingJobId preenchido) rejeita succee
 test("AnalysisJob do pipeline novo rejeita succeeded quando o CvStructuredProfile referenciado não está READY", async () => {
   const user = await createUser();
   const { cvSource, cvSubmission } = await createCvSourceAndSubmission(user.id);
+  const notReadyProfile = await createStructuredProfile(cvSource.id, "PENDING");
   const cvProcessingJob = await createCvProcessingJob(
     cvSource.id,
     cvSubmission.id,
+    notReadyProfile.id,
   );
-  const notReadyProfile = await createStructuredProfile(cvSource.id, "PENDING");
 
   const job = await prisma.analysisJob.create({
     data: {
@@ -153,11 +164,12 @@ test("AnalysisJob do pipeline novo rejeita succeeded quando o CvStructuredProfil
 test("AnalysisJob do pipeline novo aceita succeeded quando o CvStructuredProfile referenciado está READY (mesmo padrão de cv-analysis.worker.ts#processReadyJob)", async () => {
   const user = await createUser();
   const { cvSource, cvSubmission } = await createCvSourceAndSubmission(user.id);
+  const readyProfile = await createStructuredProfile(cvSource.id, "READY");
   const cvProcessingJob = await createCvProcessingJob(
     cvSource.id,
     cvSubmission.id,
+    readyProfile.id,
   );
-  const readyProfile = await createStructuredProfile(cvSource.id, "READY");
 
   const job = await prisma.analysisJob.create({
     data: {

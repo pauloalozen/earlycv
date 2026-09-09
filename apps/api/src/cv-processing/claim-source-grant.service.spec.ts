@@ -176,22 +176,34 @@ async function enqueueGuestJob(
 // cv-analysis.worker.ts#processReadyJob sempre grava na vida real. Os
 // chamadores passam readyJob.cvStructuredProfileId (do CvProcessingJob já
 // processado por processOne()), nunca um valor sintético.
+// Dois passos, na MESMA ordem real de cv-adaptation.service#claimGuestAnalysisJob:
+// (1) insere succeeded AINDA como guest (userId null) — momento em que a
+// trigger de linhagem (migration 20260908211500) valida ownership contra o
+// TalentSubject/CvSource guest, sempre coerente aqui; (2) só DEPOIS
+// transfere userId — update que não mexe em cvProcessingJobId/
+// cvStructuredProfileId, então a trigger não reavalia ownership nesse
+// passo (só o faria se a linhagem mudasse) — reproduz fielmente a janela
+// real entre updateMany(ownership) e claim() (grant ainda não existe).
 async function createClaimedAnalysisJob(
   userId: string,
   cvProcessingJobId: string,
   cvSubmissionId: string,
   cvStructuredProfileId: string,
 ) {
-  return prisma.analysisJob.create({
+  const created = await prisma.analysisJob.create({
     data: {
       ownerKind: "guest",
       status: "succeeded",
-      userId,
+      userId: null,
       cvProcessingJobId,
       cvSubmissionId,
       cvStructuredProfileId,
       jobDescriptionText: "Vaga de teste para claim granular.",
     },
+  });
+  return prisma.analysisJob.update({
+    where: { id: created.id },
+    data: { userId },
   });
 }
 
@@ -651,6 +663,18 @@ test("claim falha no meio: nada fica persistido — nem o grant, nem a resoluç�
   const readyJob = await processOne(worker, job.id);
   assert.ok(readyJob.masterDesignationId);
 
+  // AnalysisJob criado ANTES da corrupção — precisa da linhagem coerente
+  // (migration 20260908211500) no momento do próprio INSERT. A corrupção
+  // do CvProcessingJob abaixo acontece DEPOIS, não invalida retroativamente
+  // a linha da AnalysisJob já commitada.
+  const user = await createUser();
+  const analysisJob = await createClaimedAnalysisJob(
+    user.id,
+    readyJob.id,
+    cvSubmission.id,
+    readyJob.cvStructuredProfileId as string,
+  );
+
   // Corrompe deliberadamente o CvProcessingJob (sem FK — campo solto no
   // schema) pra forçar uma exceção DEPOIS que o grant e a resolução de
   // sujeito já rodaram dentro da MESMA transação: resolveMasterAndResume
@@ -660,14 +684,6 @@ test("claim falha no meio: nada fica persistido — nem o grant, nem a resoluç�
     where: { id: readyJob.id },
     data: { cvStructuredProfileId: "cuid-inexistente-de-teste" },
   });
-
-  const user = await createUser();
-  const analysisJob = await createClaimedAnalysisJob(
-    user.id,
-    readyJob.id,
-    cvSubmission.id,
-    readyJob.cvStructuredProfileId as string,
-  );
 
   await assert.rejects(() =>
     claimService.claim({
