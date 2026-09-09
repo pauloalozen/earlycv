@@ -799,33 +799,42 @@ export class ResumesService {
             },
           });
 
-          // Achado da 4ª rodada de auditoria adversarial: exclusão do
-          // Master SEM substituto (nenhum outro CV é promovido
-          // automaticamente aqui — supersedeIfResumeMatches só limpa a
-          // designação ativa) precisa limpar também os campos DERIVADOS de
-          // CV na Base de Talentos (TalentProfile) — mesmo escopo do
-          // UserProfile acima. currentTitle é fato consolidado (ver
-          // CvMasterPromotionService#promoteAndProjectWithinTransaction),
-          // não uma projeção recalculada; sem Master nenhum pra
-          // reconfirmar o fato, ele fica desatualizado/mentindo se não for
-          // limpo aqui. Preferências manuais (internalMatchingEnabled,
+          // Achado da 5ª rodada de auditoria adversarial, corrigindo um
+          // engano da 4ª: TalentProfile NUNCA deve perder identidade
+          // (fullName/primaryEmail/phone/linkedinUrl/city/state/country)
+          // só porque o Master foi excluído. Diferente de UserProfile
+          // (que É exclusivamente derivado do Master do usuário),
+          // TalentProfile na Base de Talentos é alimentado por TODA
+          // extração READY que aponta pra ele via TalentProfileSource —
+          // guest ou não, Master ou não (plano, seção 2: "toda extração
+          // que chega a READY alimenta a Base de Talentos, sempre"). A
+          // identidade pode estar sustentada por uma fonte NÃO-Master que
+          // sobrevive intacta a esta exclusão; apagá-la aqui destruiria um
+          // fato histórico correto sem necessidade. Apagar cegamente
+          // também violava a garantia mais básica da própria Base de
+          // Talentos (nunca perder o que já foi observado).
+          //
+          // Só currentTitle/seniority/yearsExperience/primaryAreas são
+          // limpos — são especificamente uma PROJEÇÃO do Master ativo
+          // (CvMasterPromotionService#promoteAndProjectWithinTransaction é
+          // o único lugar do pipeline novo que os escreve, sempre a partir
+          // do CV que É o Master no momento). Sem Master nenhum pra
+          // reconfirmá-los, ficam null (regra explícita — nunca recalculados
+          // automaticamente a partir de outra fonte aqui: se uma fonte
+          // não-Master também tiver capturado esses campos, uma futura
+          // recomputação explícita pode preenchê-los de novo, mas esta
+          // exclusão não tenta adivinhar). Observações
+          // (TalentExperienceObservation e as demais), TalentProfileSource,
+          // e preferências manuais (internalMatchingEnabled,
           // b2bExposureStatus, contactAuthorization, identityConfidence)
-          // NUNCA são tocadas — só campos de conteúdo derivado do CV.
+          // nunca são tocados por esta exclusão.
           await tx.talentProfile.updateMany({
             where: { userId },
             data: {
-              fullName: null,
-              primaryEmail: null,
-              phone: null,
-              linkedinUrl: null,
-              city: null,
-              state: null,
-              country: null,
               currentTitle: null,
               seniority: null,
               yearsExperience: null,
               primaryAreas: [],
-              completenessScore: 0,
             },
           });
 

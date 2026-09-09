@@ -18,6 +18,7 @@ import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { ClaimSourceGrantService } from "../cv-processing/claim-source-grant.service";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
+import { CvTalentCaptureService } from "../cv-processing/cv-talent-capture.service";
 import { CvUserProfileSyncService } from "../cv-processing/cv-user-profile-sync.service";
 import { DatabaseService } from "../database/database.service";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
@@ -443,7 +444,7 @@ async function cleanupUser(
   await prisma.user.deleteMany({ where: { id: userId } });
 }
 
-test("remove(): TalentProfile.currentTitle e campos derivados são limpos; preferências/metadados de matching preservados", async () => {
+test("remove(): TalentProfile — só a projeção do Master (currentTitle/seniority/yearsExperience/primaryAreas) é limpa; identidade e preferências preservadas", async () => {
   const user = await createUser();
   try {
     const { masterPromotion, resumesService } = buildServices();
@@ -459,11 +460,19 @@ test("remove(): TalentProfile.currentTitle e campos derivados são limpos; prefe
     });
     assert.equal(profileBeforeRemove.currentTitle, "Engenheiro de Dados Sênior");
 
-    // Preferências de matching — nunca derivadas de CV, nunca tocadas pela
-    // exclusão.
+    // Identidade (sustentada por resolução de identidade independente do
+    // Master — talent-profile-capture.service.ts, não pelo pipeline
+    // canônico) + preferências de matching — nenhuma das duas é derivada
+    // EXCLUSIVAMENTE do Master, nenhuma pode ser tocada pela exclusão.
     await prisma.talentProfile.update({
       where: { userId: user.id },
       data: {
+        fullName: "Nome Sustentado por Outra Fonte",
+        primaryEmail: "outra-fonte@example.com",
+        city: "São Paulo",
+        seniority: "SENIOR",
+        yearsExperience: 8,
+        primaryAreas: ["SOFTWARE_ENGINEERING"],
         internalMatchingEnabled: false,
         b2bExposureStatus: "OPT_IN_GRANTED",
         contactAuthorization: "GRANTED",
@@ -480,10 +489,24 @@ test("remove(): TalentProfile.currentTitle e campos derivados são limpos; prefe
       null,
       "sem Master ativo nenhum, currentTitle não pode continuar apontando pro cargo do Master apagado",
     );
-    assert.equal(profileAfterRemove.fullName, null);
-    assert.equal(profileAfterRemove.seniority, null);
+    assert.equal(
+      profileAfterRemove.seniority,
+      null,
+      "seniority é projeção do Master — limpa junto com currentTitle",
+    );
     assert.equal(profileAfterRemove.yearsExperience, null);
     assert.deepEqual(profileAfterRemove.primaryAreas, []);
+
+    // Identidade NUNCA apagada cegamente — pode estar sustentada por outra
+    // fonte, e mesmo quando não está, apagar um fato histórico correto sem
+    // necessidade seria pior do que deixá-lo desatualizado.
+    assert.equal(
+      profileAfterRemove.fullName,
+      "Nome Sustentado por Outra Fonte",
+      "identidade não pode ser apagada só porque o Master foi excluído",
+    );
+    assert.equal(profileAfterRemove.primaryEmail, "outra-fonte@example.com");
+    assert.equal(profileAfterRemove.city, "São Paulo");
 
     // Preferências de matching preservadas — a exclusão do Master nunca
     // pode desligar/reabrir a exposição B2B ou o matching interno do
@@ -677,3 +700,138 @@ test("remove(): exclusão do Master DEPOIS de um claim real (guest -> conta) lim
 // "exclusão sem substituto" equivalente à de resumes.service.ts#remove.
 // Documentado aqui como NÃO COBERTO por ausência de fluxo no produto,
 // conforme instrução explícita da 4ª rodada ("se esse fluxo existir").
+
+test("remove(): DUAS fontes alimentando o mesmo TalentProfile, uma é Master — excluir o Master preserva observações/TalentProfileSource/identidade sustentada pela outra fonte, só limpa a projeção do Master", async () => {
+  const user = await createUser();
+  try {
+    const { masterPromotion, resumesService } = buildServices();
+    const talentCapture = new CvTalentCaptureService(database);
+
+    // Fonte A: vira Master.
+    const { cvSource: cvSourceA, structuredProfile: structuredProfileA, resume: resumeA } =
+      await setupActiveMaster(user.id, masterPromotion, "Nome via Fonte A", "Cargo da Fonte A");
+
+    // Captura real (mesmo passo que o worker roda) — gera
+    // TalentExperienceObservation/TalentProfileSource de verdade pra A.
+    await talentCapture.capture({
+      owner: { ownerType: "USER", userId: user.id },
+      cvSourceId: cvSourceA.id,
+      cvStructuredProfileId: structuredProfileA.id,
+      canonicalProfile: {
+        ...minimalCanonicalProfile("Nome via Fonte A", "Cargo da Fonte A"),
+        experiences: [
+          {
+            role: "Cargo Histórico A",
+            company: "Empresa A",
+            location: null,
+            startDate: "2018-01",
+            endDate: "2020-01",
+            bullets: ["Bullet da fonte A"],
+            technologies: [],
+          },
+        ],
+      } as never,
+    });
+
+    // Fonte B: NUNCA vira Master (masterIntent NONE, análise avulsa) —
+    // mas alimenta o MESMO TalentProfile (mesmo userId) via capture()
+    // real, exatamente como o plano exige ("toda extração READY alimenta
+    // a Base de Talentos, sempre, independente de virar Master").
+    const cvSourceB = await prisma.cvSource.create({
+      data: {
+        ownerType: "USER",
+        userId: user.id,
+        textStorageKey: `inline:${randomUUID()}`,
+        textSha256: createHash("sha256").update(randomUUID()).digest("hex"),
+      },
+    });
+    const structuredProfileB = await prisma.cvStructuredProfile.create({
+      data: {
+        cvSourceId: cvSourceB.id,
+        extractorVersion: "v1",
+        schemaVersion: "v1",
+        status: "READY",
+        canonicalJson: minimalCanonicalProfile("Nome via Fonte A", "Cargo da Fonte A"),
+        finishedAt: new Date(),
+      },
+    });
+    await talentCapture.capture({
+      owner: { ownerType: "USER", userId: user.id },
+      cvSourceId: cvSourceB.id,
+      cvStructuredProfileId: structuredProfileB.id,
+      canonicalProfile: {
+        ...minimalCanonicalProfile("Nome via Fonte A", "Cargo da Fonte A"),
+        experiences: [
+          {
+            role: "Cargo Histórico B",
+            company: "Empresa B",
+            location: null,
+            startDate: "2020-02",
+            endDate: "2022-02",
+            bullets: ["Bullet da fonte B"],
+            technologies: [],
+          },
+        ],
+      } as never,
+    });
+
+    // Identidade sustentada por outra fonte (resolução de identidade é um
+    // mecanismo separado do capture() de experiências — simula aqui o
+    // resultado dela) — precisa sobreviver à exclusão do Master porque
+    // não depende exclusivamente dele.
+    await prisma.talentProfile.update({
+      where: { userId: user.id },
+      data: { fullName: "Identidade Sustentada", city: "Recife" },
+    });
+
+    const profile = await prisma.talentProfile.findUniqueOrThrow({ where: { userId: user.id } });
+    const observationsBefore = await prisma.talentExperienceObservation.findMany({
+      where: { talentProfileId: profile.id },
+    });
+    assert.equal(observationsBefore.length, 2, "as 2 experiências (uma por fonte) precisam existir antes da exclusão");
+    const sourcesBefore = await prisma.talentProfileSource.count({
+      where: { talentProfileId: profile.id },
+    });
+    assert.equal(sourcesBefore, 2, "TalentProfileSource de AMBAS as fontes precisa existir antes da exclusão");
+
+    // Exclui o Master (fonte A).
+    await resumesService.remove(user.id, resumeA.id);
+
+    // Observações e proveniência: intocadas, das DUAS fontes.
+    const observationsAfter = await prisma.talentExperienceObservation.findMany({
+      where: { talentProfileId: profile.id },
+    });
+    assert.equal(
+      observationsAfter.length,
+      2,
+      "excluir o Master NUNCA pode apagar experiências históricas — nem as da própria fonte excluída, nem as de outras fontes",
+    );
+    const sourcesAfter = await prisma.talentProfileSource.count({
+      where: { talentProfileId: profile.id },
+    });
+    assert.equal(sourcesAfter, 2, "TalentProfileSource também precisa sobreviver — é proveniência, não projeção");
+
+    // Identidade: sobrevive (sustentada por outra fonte/mecanismo).
+    const profileAfter = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(profileAfter.fullName, "Identidade Sustentada");
+    assert.equal(profileAfter.city, "Recife");
+
+    // Projeção do Master: limpa.
+    assert.equal(profileAfter.currentTitle, null);
+
+    // CvStructuredProfile/CvSource de AMBAS as fontes sobrevivem
+    // (histórico nunca apagado por esta exclusão).
+    const survivingA = await prisma.cvStructuredProfile.findUnique({
+      where: { id: structuredProfileA.id },
+    });
+    const survivingB = await prisma.cvStructuredProfile.findUnique({
+      where: { id: structuredProfileB.id },
+    });
+    assert.ok(survivingA);
+    assert.ok(survivingB);
+  } finally {
+    await cleanupUser(user.id);
+  }
+});
