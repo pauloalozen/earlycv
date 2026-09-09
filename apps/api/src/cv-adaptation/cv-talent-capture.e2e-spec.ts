@@ -162,10 +162,13 @@ function buildSyntheticCanonicalOutput(
   };
 }
 
-async function runGuestAllowlistedAnalysis(runId: string) {
+async function runGuestAllowlistedAnalysis(
+  runId: string,
+  outputBuilder: (runId: string) => MasterCvCanonicalExtractionOutput = buildSyntheticCanonicalOutput,
+) {
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
-    async () => buildSyntheticCanonicalOutput(runId),
+    async () => outputBuilder(runId),
     storage,
   );
   const entrypoint = buildEntrypoint(storage);
@@ -331,6 +334,132 @@ test("TALENTO 4: idiomas e certificações — dois de cada, campos corretos", a
   }
 });
 
+// CV sintético para o cenário de colisão exigido pela 3ª rodada de
+// auditoria: 5 experiências, 4 delas compartilhando company="Empresa A" /
+// role="Engenheiro" (duas passagens em períodos diferentes, uma coincidindo
+// período mas com bullets/projeto diferentes, e uma com cargo diferente na
+// mesma empresa), mais uma totalmente distinta.
+function buildCollisionCanonicalOutput(
+  runId: string,
+): MasterCvCanonicalExtractionOutput {
+  return {
+    canonicalProfile: {
+      fullName: null,
+      headline: null,
+      email: null,
+      phone: null,
+      linkedinUrl: null,
+      location: { city: null, state: null, country: null },
+      professionalSummary: `${runId} profissional com múltiplas passagens na mesma empresa.`,
+      experiences: [
+        {
+          role: "Engenheiro",
+          company: `${runId} Empresa A`,
+          location: null,
+          startDate: "2018-01",
+          endDate: "2020-01",
+          bullets: [`${runId} projeto Alpha`],
+          technologies: [`${runId}-tech-1`],
+        },
+        {
+          role: "Engenheiro",
+          company: `${runId} Empresa A`,
+          location: null,
+          startDate: "2022-01",
+          endDate: "2024-01",
+          bullets: [`${runId} projeto Beta`],
+          technologies: [`${runId}-tech-2`],
+        },
+        {
+          role: "Engenheiro",
+          company: `${runId} Empresa A`,
+          location: null,
+          startDate: "2022-01",
+          endDate: "2024-01",
+          bullets: [`${runId} projeto Gama (mesmo período, projeto diferente)`],
+          technologies: [`${runId}-tech-3`],
+        },
+        {
+          role: "Gerente",
+          company: `${runId} Empresa A`,
+          location: null,
+          startDate: "2020-06",
+          endDate: "2021-12",
+          bullets: [`${runId} projeto Delta (cargo intermediário)`],
+          technologies: [],
+        },
+        {
+          role: "Analista",
+          company: `${runId} Empresa B`,
+          location: null,
+          startDate: "2024-02",
+          endDate: null,
+          bullets: [`${runId} projeto Epsilon`],
+          technologies: [],
+        },
+      ],
+      education: [],
+      skills: [],
+      languages: [],
+      certifications: [],
+    },
+    extractionCoverage: { identifiedFields: [], missingFields: [], fieldStatus: {} },
+    confidence: {},
+    evidence: {},
+  };
+}
+
+test("TALENTO 5-COLISAO (achado da 3ª rodada): empresa+cargo NÃO identifica unicamente uma experiência — prova quantas linhas sobrevivem hoje na visão consolidada legada vs. na fonte de fidelidade total", async () => {
+  const runId = makeRunId("talento-5-colisao");
+  let cvSourceId: string | undefined;
+  try {
+    const { cvJobRow } = await runGuestAllowlistedAnalysis(
+      runId,
+      buildCollisionCanonicalOutput,
+    );
+    cvSourceId = cvJobRow.cvSourceId;
+    const cvStructuredProfileId = cvJobRow.cvStructuredProfileId as string;
+
+    // Visão consolidada legada (TalentExperience): DOCUMENTADAMENTE lossy —
+    // as 3 primeiras entradas (mesma empresa+cargo) colapsam numa única
+    // linha (a última upsert vence), sobrevivendo só 3 das 5 (Engenheiro
+    // colapsado, Gerente, Analista). Isto é um cache de conveniência, não a
+    // fonte de verdade — ver captureExperienceObservations.
+    const legacyRows = await prisma.talentExperience.findMany({
+      where: { sourceRecordId: cvStructuredProfileId },
+    });
+    assert.equal(
+      legacyRows.length,
+      3,
+      "documenta o comportamento ATUAL e aceito da visão consolidada legada: 3 das 5 experiências sobrevivem (empresa+cargo colide, cache é lossy por design)",
+    );
+    const engenheiroRow = legacyRows.find((r) => r.role === "Engenheiro");
+    assert.ok(engenheiroRow);
+    assert.equal(
+      engenheiroRow?.bulletsJson && (engenheiroRow.bulletsJson as string[])[0],
+      `${runId} projeto Gama (mesmo período, projeto diferente)`,
+      "documenta que a ÚLTIMA das 3 colisões é a que sobrevive no cache — as outras duas (Alpha, Beta) são perdidas ali",
+    );
+
+    // Fonte de verdade de fidelidade total (TalentExperienceObservation):
+    // as 5 experiências sobrevivem, cada uma com seus próprios bullets e
+    // período — este é o requisito real (nenhuma experiência descartada).
+    const observations = await prisma.talentExperienceObservation.findMany({
+      where: { cvStructuredProfileId },
+      orderBy: { itemIndex: "asc" },
+    });
+    assert.equal(observations.length, 5, "as 5 experiências precisam sobreviver na fonte de verdade — nenhuma descartada por colisão de empresa+cargo");
+    assert.equal(observations[0].bulletsJson && (observations[0].bulletsJson as string[])[0], `${runId} projeto Alpha`);
+    assert.equal(observations[1].bulletsJson && (observations[1].bulletsJson as string[])[0], `${runId} projeto Beta`);
+    assert.equal(observations[2].bulletsJson && (observations[2].bulletsJson as string[])[0], `${runId} projeto Gama (mesmo período, projeto diferente)`);
+    assert.equal(observations[2].periodRaw, observations[1].periodRaw, "item 2 e 3 têm o MESMO período — só os bullets diferem, ambos precisam sobreviver");
+    assert.equal(observations[3].roleRaw, "Gerente");
+    assert.equal(observations[4].companyRaw, `${runId} Empresa B`);
+  } finally {
+    if (cvSourceId) await cleanupTalentRun(runId, cvSourceId);
+  }
+});
+
 test("TALENTO 5 (corrigido nesta rodada): as 3 experiências do CV são persistidas campo a campo em TalentExperience", async () => {
   const runId = makeRunId("talento-5");
   let cvSourceId: string | undefined;
@@ -369,6 +498,20 @@ test("TALENTO 5 (corrigido nesta rodada): as 3 experiências do CV são persisti
       `${runId} Empresa 2`,
       `${runId} Empresa 3`,
     ].sort());
+
+    // Fonte de verdade de fidelidade total, campo a campo, na mesma ordem
+    // de itemIndex do array do CV.
+    const observations = await prisma.talentExperienceObservation.findMany({
+      where: { cvStructuredProfileId: cvJobRow.cvStructuredProfileId as string },
+      orderBy: { itemIndex: "asc" },
+    });
+    assert.equal(observations.length, 3);
+    assert.equal(observations[0].companyRaw, `${runId} Empresa 1`);
+    assert.equal(observations[0].roleRaw, `${runId} Analista de Dados`);
+    assert.equal(observations[0].periodRaw, "2018-01 - 2019-12");
+    assert.deepEqual(observations[0].bulletsJson, [`${runId} bullet 1a`, `${runId} bullet 1b`]);
+    assert.equal(observations[2].companyRaw, `${runId} Empresa 3`);
+    assert.equal(observations[2].periodRaw, "2022-01 - ");
   } finally {
     if (cvSourceId) await cleanupTalentRun(runId, cvSourceId);
   }
@@ -404,6 +547,11 @@ test("TALENTO 5b: retry (capture chamado de novo com o mesmo CvStructuredProfile
       where: { sourceRecordId: cvJobRow.cvStructuredProfileId as string },
     });
     assert.equal(after, 3, "retry não pode duplicar nem perder experiências");
+
+    const observationsAfter = await prisma.talentExperienceObservation.count({
+      where: { cvStructuredProfileId: cvJobRow.cvStructuredProfileId as string },
+    });
+    assert.equal(observationsAfter, 3, "retry não pode duplicar nem perder observações de experiência");
   } finally {
     if (cvSourceId) await cleanupTalentRun(runId, cvSourceId);
   }
@@ -488,6 +636,13 @@ test("TALENTO 5c: mesma experiência (empresa+cargo) em DOIS CVs do mesmo sujeit
       assert.equal(rows.length, 2, "a mesma experiência em 2 CVs precisa gerar 2 linhas, uma por documento");
       assert.notEqual(rows[0].sourceRecordId, rows[1].sourceRecordId);
       assert.equal(rows[0].talentProfileId, rows[1].talentProfileId, "mesmo sujeito/sessão — mesmo TalentProfile");
+
+      const observations = await prisma.talentExperienceObservation.findMany({
+        where: { companyRaw: sharedCompany },
+      });
+      assert.equal(observations.length, 2, "a fonte de fidelidade total também preserva 2 observações separadas, uma por CvStructuredProfile");
+      assert.notEqual(observations[0].cvStructuredProfileId, observations[1].cvStructuredProfileId);
+      assert.equal(observations[0].talentProfileId, observations[1].talentProfileId);
     } finally {
       process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
         previousAllowlist;

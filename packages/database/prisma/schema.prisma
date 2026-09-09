@@ -2508,6 +2508,7 @@ model TalentProfile {
   competencyObservations    TalentCompetencyObservation[]
   languageObservations      TalentLanguageObservation[]
   certificationObservations TalentCertificationObservation[]
+  experienceObservations    TalentExperienceObservation[]
 
   @@index([identityConfidence])
   @@index([lastInteractionAt])
@@ -2813,6 +2814,7 @@ model CvStructuredProfile {
   competencyObservations    TalentCompetencyObservation[]
   languageObservations      TalentLanguageObservation[]
   certificationObservations TalentCertificationObservation[]
+  experienceObservations    TalentExperienceObservation[]
 
   @@unique([cvSourceId, extractorVersion, schemaVersion])
   @@index([status])
@@ -3122,6 +3124,39 @@ model TalentCertificationObservation {
   nameRaw               String
   issuerRaw             String?
   yearRaw               Int?
+  observedAt            DateTime @default(now())
+
+  talentProfile       TalentProfile       @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)
+  cvStructuredProfile CvStructuredProfile @relation(fields: [cvStructuredProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([talentProfileId, cvStructuredProfileId, itemFingerprint, itemIndex])
+  @@index([talentProfileId])
+}
+
+// Achado da 3ª rodada de auditoria adversarial (2026-09-09): a tabela
+// legada TalentExperience é chaveada por (sourceRecordId, companyNormalized,
+// roleNormalized) — duas experiências REAIS no mesmo CV, mesma empresa e
+// mesmo cargo (ex.: duas passagens, ou o mesmo cargo em dois períodos
+// diferentes), colidem na mesma chave e uma sobrescreve a outra. Empresa+
+// cargo não identifica unicamente uma experiência. Mesmo padrão das demais
+// tabelas de observação (itemIndex — a posição no array do CV — sempre
+// distingue, mesmo quando o itemFingerprint de conteúdo colide) —
+// TalentExperience continua existindo como visão consolidada/cache legado
+// (aceitavelmente lossy, como qualquer cache), mas esta tabela é a fonte
+// de verdade de fidelidade total.
+model TalentExperienceObservation {
+  id                    String   @id @default(cuid())
+  talentProfileId       String
+  cvStructuredProfileId String
+  itemFingerprint       String
+  itemIndex             Int
+  companyRaw            String
+  roleRaw               String
+  locationRaw           String?
+  periodRaw             String?
+  isCurrent             Boolean  @default(false)
+  technologiesUsed      String[]
+  bulletsJson           Json?
   observedAt            DateTime @default(now())
 
   talentProfile       TalentProfile       @relation(fields: [talentProfileId], references: [id], onDelete: Cascade)

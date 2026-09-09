@@ -98,30 +98,86 @@ export class CvTalentCaptureService {
     await this.captureLanguages(talentProfile.id, input);
     await this.captureCertifications(talentProfile.id, input);
     await this.captureExperiences(talentProfile.id, input);
+    await this.captureExperienceObservations(talentProfile.id, input);
     await this.deriveCurrentTitle(talentProfile.id, input);
 
     return { talentProfileId: talentProfile.id };
   }
 
-  // Reaproveita TalentExperience (tabela legada, escrita por
-  // TalentProfileCaptureService) em vez de criar uma "Observation" nova —
-  // achado da auditoria da 2ª rodada: o modelo já é corretamente chaveado
-  // por documento (@@unique inclui sourceRecordType+sourceRecordId, o
-  // identificador do DOCUMENTO de origem, não só a pessoa), então múltiplas
-  // experiências do mesmo CV coexistem (discriminadas por
-  // companyNormalized+roleNormalized) e a mesma experiência em dois CVs
-  // gera duas linhas (sourceRecordId — o CvStructuredProfile — difere).
-  // sourceRecordType/sourceRecordId aqui seguem exatamente o mesmo padrão
-  // já usado pelo capturador legado com AnalysisCvSnapshot: um ponteiro de
-  // aplicação (não uma FK de banco) para o documento de origem — aqui,
-  // "CvStructuredProfile"/cvStructuredProfileId.
-  //
-  // Limitação conhecida, herdada do desenho existente (não introduzida
-  // aqui): duas experiências REAIS no mesmo CV com company+role idênticos
-  // (ex.: duas passagens pelo mesmo cargo na mesma empresa) colidem na
-  // mesma chave e a segunda sobrescreve a primeira — o mesmo já acontecia
-  // no capturador legado. Fora do escopo desta correção (o achado da
-  // auditoria era ausência total de captura, não este caso extremo).
+  // Fonte de verdade de fidelidade total (achado da 3ª rodada de auditoria
+  // adversarial): keyed por itemIndex — a posição real da experiência no
+  // array do CV — igual às demais tabelas de observação
+  // (TalentEducationObservation etc.). Duas experiências com o mesmo
+  // company+role (duas passagens, ou o mesmo cargo em dois períodos)
+  // SOBREVIVEM aqui porque o índice sempre distingue, mesmo quando o
+  // itemFingerprint de conteúdo colide entre elas — ao contrário de
+  // TalentExperience (abaixo), que cai na mesma chave nesse caso.
+  private async captureExperienceObservations(
+    talentProfileId: string,
+    input: CaptureTalentInput,
+  ): Promise<void> {
+    const entries = (input.canonicalProfile.experiences ?? []).filter(
+      (entry) => entry.company?.trim() && entry.role?.trim(),
+    );
+
+    for (const [itemIndex, entry] of entries.entries()) {
+      const company = entry.company as string;
+      const role = entry.role as string;
+      const periodRaw =
+        entry.startDate || entry.endDate
+          ? `${entry.startDate ?? ""} - ${entry.endDate ?? ""}`
+          : null;
+      const itemFingerprint = fingerprint([
+        company,
+        role,
+        periodRaw,
+        JSON.stringify(entry.bullets ?? []),
+      ]);
+      const isCurrent = /presente|atual|current|now/i.test(
+        entry.endDate ?? "",
+      );
+
+      await this.database.talentExperienceObservation.upsert({
+        where: {
+          talentProfileId_cvStructuredProfileId_itemFingerprint_itemIndex: {
+            talentProfileId,
+            cvStructuredProfileId: input.cvStructuredProfileId,
+            itemFingerprint,
+            itemIndex,
+          },
+        },
+        create: {
+          talentProfileId,
+          cvStructuredProfileId: input.cvStructuredProfileId,
+          itemFingerprint,
+          itemIndex,
+          companyRaw: company,
+          roleRaw: role,
+          locationRaw: entry.location ?? null,
+          periodRaw,
+          isCurrent,
+          technologiesUsed: dedupeCanonicalTechLabels(entry.technologies ?? []),
+          bulletsJson: entry.bullets ?? [],
+        },
+        update: {},
+      });
+    }
+  }
+
+  // Visão consolidada/cache legado (achado da 3ª rodada de auditoria
+  // adversarial): reaproveita TalentExperience (tabela legada, escrita
+  // originalmente por TalentProfileCaptureService), mas ela é chaveada por
+  // (sourceRecordId, companyNormalized, roleNormalized) — duas experiências
+  // reais no mesmo CV com a MESMA empresa e MESMO cargo (duas passagens, ou
+  // o cargo repetido em dois períodos) colidem na mesma chave e a segunda
+  // sobrescreve a primeira. Empresa+cargo não identifica unicamente uma
+  // experiência. Aceitável aqui porque esta tabela é só uma projeção de
+  // conveniência (mesmo papel que qualquer "view"/cache tem) — a fonte de
+  // verdade de fidelidade total é captureExperienceObservations, acima,
+  // que nunca perde nenhuma entrada. sourceRecordType/sourceRecordId
+  // seguem o mesmo padrão do capturador legado com AnalysisCvSnapshot: um
+  // ponteiro de aplicação (não uma FK de banco) pro documento de origem —
+  // aqui, "CvStructuredProfile"/cvStructuredProfileId.
   private async captureExperiences(
     talentProfileId: string,
     input: CaptureTalentInput,

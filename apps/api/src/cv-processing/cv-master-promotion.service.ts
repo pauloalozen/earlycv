@@ -170,6 +170,28 @@ export class CvMasterPromotionService {
   ): Promise<PromoteMasterAndProjectResult> {
     const promotion = await this.runPromotionCore(tx, input);
 
+    // Achado da 3ª rodada de auditoria adversarial: CvTalentCaptureService#
+    // deriveCurrentTitle só roda no instante da extração (CvProcessingWorker#
+    // processJob) — uma promoção EXPLÍCITA posterior (resumes.service.ts#
+    // setPrimary, ou claim via ClaimSourceGrantService, ambos entram por
+    // aqui) nunca re-executa aquela lógica, então currentTitle ficava
+    // parado no valor da extração original mesmo depois do Master mudar de
+    // verdade. currentTitle é um FATO CONSOLIDADO gravado em cada evento
+    // que confirma quem é o Master (nunca uma projeção "ao vivo" recalculada
+    // por leitura) — por isso esta atualização acontece aqui, no evento de
+    // promoção, e não como uma consulta derivada em tempo real. Roda pra
+    // USER e GUEST (diferente do sync de UserProfile abaixo, que é só
+    // USER) — TalentProfile existe pros dois.
+    if (promotion.changed && input.canonicalProfile?.headline?.trim()) {
+      await tx.talentProfile.updateMany({
+        where:
+          input.ownerType === "USER"
+            ? { userId: input.userId }
+            : { talentSubjectId: input.talentSubjectId },
+        data: { currentTitle: input.canonicalProfile.headline.trim() },
+      });
+    }
+
     let monitorProjectionJobId: string | null = null;
 
     // MonitorProjectionJob.userId é obrigatório no schema — só faz
