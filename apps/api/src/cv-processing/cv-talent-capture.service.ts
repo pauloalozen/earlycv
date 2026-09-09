@@ -21,9 +21,14 @@ import { createHash } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
 import type { TalentCompetencyCategory, TalentProfile } from "@prisma/client";
-import { Prisma } from "@prisma/client";
+import { Prisma, TalentDataProvenance } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import {
+  dedupeCanonicalTechLabels,
+  normalize,
+  parseLooseDate,
+} from "../talent-profiles/talent-canonical-mapper";
 import type { CanonicalProfileForSync } from "./cv-user-profile-sync.service";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -92,8 +97,128 @@ export class CvTalentCaptureService {
     await this.captureCompetencies(talentProfile.id, input);
     await this.captureLanguages(talentProfile.id, input);
     await this.captureCertifications(talentProfile.id, input);
+    await this.captureExperiences(talentProfile.id, input);
+    await this.deriveCurrentTitle(talentProfile.id, input);
 
     return { talentProfileId: talentProfile.id };
+  }
+
+  // Reaproveita TalentExperience (tabela legada, escrita por
+  // TalentProfileCaptureService) em vez de criar uma "Observation" nova —
+  // achado da auditoria da 2ª rodada: o modelo já é corretamente chaveado
+  // por documento (@@unique inclui sourceRecordType+sourceRecordId, o
+  // identificador do DOCUMENTO de origem, não só a pessoa), então múltiplas
+  // experiências do mesmo CV coexistem (discriminadas por
+  // companyNormalized+roleNormalized) e a mesma experiência em dois CVs
+  // gera duas linhas (sourceRecordId — o CvStructuredProfile — difere).
+  // sourceRecordType/sourceRecordId aqui seguem exatamente o mesmo padrão
+  // já usado pelo capturador legado com AnalysisCvSnapshot: um ponteiro de
+  // aplicação (não uma FK de banco) para o documento de origem — aqui,
+  // "CvStructuredProfile"/cvStructuredProfileId.
+  //
+  // Limitação conhecida, herdada do desenho existente (não introduzida
+  // aqui): duas experiências REAIS no mesmo CV com company+role idênticos
+  // (ex.: duas passagens pelo mesmo cargo na mesma empresa) colidem na
+  // mesma chave e a segunda sobrescreve a primeira — o mesmo já acontecia
+  // no capturador legado. Fora do escopo desta correção (o achado da
+  // auditoria era ausência total de captura, não este caso extremo).
+  private async captureExperiences(
+    talentProfileId: string,
+    input: CaptureTalentInput,
+  ): Promise<void> {
+    const entries = (input.canonicalProfile.experiences ?? []).filter(
+      (entry) => entry.company?.trim() && entry.role?.trim(),
+    );
+
+    for (const entry of entries) {
+      const company = entry.company as string;
+      const role = entry.role as string;
+      const companyNormalized = normalize(company);
+      const roleNormalized = normalize(role);
+      const isCurrent = /presente|atual|current|now/i.test(
+        entry.endDate ?? "",
+      );
+
+      await this.database.talentExperience.upsert({
+        where: {
+          talentProfileId_sourceRecordType_sourceRecordId_companyNormalized_roleNormalized:
+            {
+              talentProfileId,
+              sourceRecordType: "CvStructuredProfile",
+              sourceRecordId: input.cvStructuredProfileId,
+              companyNormalized,
+              roleNormalized,
+            },
+        },
+        create: {
+          talentProfileId,
+          sourceRecordType: "CvStructuredProfile",
+          sourceRecordId: input.cvStructuredProfileId,
+          provenance: TalentDataProvenance.EXTRACTED_IA,
+          company,
+          companyNormalized,
+          role,
+          roleNormalized,
+          location: entry.location ?? null,
+          startDate: parseLooseDate(entry.startDate),
+          endDate: parseLooseDate(entry.endDate),
+          isCurrent,
+          technologiesUsed: dedupeCanonicalTechLabels(entry.technologies ?? []),
+          bulletsJson: entry.bullets ?? [],
+        },
+        update: {
+          location: entry.location ?? null,
+          startDate: parseLooseDate(entry.startDate),
+          endDate: parseLooseDate(entry.endDate),
+          isCurrent,
+          technologiesUsed: dedupeCanonicalTechLabels(entry.technologies ?? []),
+          bulletsJson: entry.bullets ?? [],
+        },
+      });
+    }
+  }
+
+  // Regra explícita e determinística (plano, achado da 2ª rodada de
+  // auditoria): currentTitle vem SEMPRE de canonicalProfile.headline
+  // (campo dedicado que a própria extração já resolve como "cargo atual",
+  // nunca inferido por "experiência com a data mais recente" — heurística
+  // ambígua e sujeita a erro de parsing de data). Mesma política de
+  // precedência do capturador legado (talent-profile-capture.service.ts):
+  // o CV que É o Master ativo do dono sempre pode escrever/sobrescrever;
+  // um CV avulso (nunca virou Master, ou já foi superado) só preenche
+  // currentTitle quando ele ainda está vazio — nunca substitui um valor já
+  // confirmado por um cargo potencialmente mais antigo.
+  private async deriveCurrentTitle(
+    talentProfileId: string,
+    input: CaptureTalentInput,
+  ): Promise<void> {
+    const headline = input.canonicalProfile.headline?.trim();
+    if (!headline) return;
+
+    const activeMasterDesignation =
+      await this.database.cvMasterDesignation.findFirst({
+        where: {
+          ...(input.owner.ownerType === "USER"
+            ? { userId: input.owner.userId }
+            : { talentSubjectId: input.owner.talentSubjectId }),
+          cvStructuredProfileId: input.cvStructuredProfileId,
+          supersededAt: null,
+        },
+        select: { id: true },
+      });
+
+    if (activeMasterDesignation) {
+      await this.database.talentProfile.update({
+        where: { id: talentProfileId },
+        data: { currentTitle: headline },
+      });
+      return;
+    }
+
+    await this.database.talentProfile.updateMany({
+      where: { id: talentProfileId, currentTitle: null },
+      data: { currentTitle: headline },
+    });
   }
 
   // create() + catch P2002 (não find-then-create, nem upsert puro): dois
