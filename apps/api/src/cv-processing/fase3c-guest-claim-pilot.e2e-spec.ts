@@ -1,8 +1,10 @@
 // Fase 3C, item 6/8 (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
 // "6. Pilotar guest e claim" / "8. Encerramento — repetir os 10 cenários do
-// piloto original") — piloto guest→conta, agora PRATICÁVEL graças à
-// allowlist de guestSessionHash implementada nesta fase
-// (cv-processing-flag-resolver.service.ts). O piloto anterior (Fase 3B,
+// piloto original") — piloto guest→conta, PRATICÁVEL porque
+// CV_STRUCTURED_PROFILE_PIPELINE_ENABLED=true liga o pipeline novo para
+// guest pelo mesmo master switch do usuário autenticado (sem allowlist
+// dedicada — cv-processing-flag-resolver.service.ts). O piloto anterior
+// (Fase 3B,
 // docs/specs/2026-09-05-cv-canonical-profile-pipeline-piloto-interno-fase3b.md,
 // achado 4) confirmou com evidência real que o claim guest→conta NÃO era
 // exercitável nesta configuração — este arquivo fecha exatamente essa
@@ -18,7 +20,7 @@
 // anteriores documentado no piloto 3B).
 //
 // Cobre os 10 sub-itens pedidos no item 6:
-//  1. Guest (guestSessionHash na allowlist controlada) faz a 1a análise.
+//  1. Guest (flag global ligada) faz a 1a análise.
 //  2. Cria TalentSubject (+ TalentSubjectSessionSignal).
 //  3. Cria Master provisório (PROMOTE_IF_FIRST).
 //  4. Persiste observações na Base de Talentos.
@@ -140,8 +142,8 @@ function buildCvText(name: string, marker: string): string {
 
 // Mesmo hash que hashGuestSessionToken() (cv-adaptation.service.ts) produz
 // a partir do cookie analysis_session_token — precisamos calculá-lo aqui
-// para popular a allowlist ANTES da requisição de guest, provando que o
-// mecanismo é o mesmo (nenhuma duplicação de lógica de hash).
+// só para conferir depois que AnalysisJob.guestSessionHash bate com o
+// valor esperado (identidade de sessão, não mais usado para gate de flag).
 function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -149,8 +151,6 @@ function hashSessionToken(token: string): string {
 async function createApp() {
   delete process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED;
   delete process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_USER_IDS;
-  delete process.env
-    .CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
   if (
     process.env.NODE_ENV === "test" &&
     !process.env.SKIP_TURNSTILE_VERIFICATION
@@ -258,9 +258,9 @@ async function processAnalysisJobById(
 }
 
 // Executa a análise de guest completa (envio + processamento CvProcessingJob
-// + processamento AnalysisJob) para uma sessão específica, já com o hash
-// dela na allowlist de guest (mecanismo do item 6). Devolve tudo que os
-// sub-cenários seguintes precisam.
+// + processamento AnalysisJob) para uma sessão específica, com a flag
+// global ligada (único jeito de ligar o pipeline novo para guest). Devolve
+// tudo que os sub-cenários seguintes precisam.
 async function runGuestAnalysisToSucceeded(
   ctx: Awaited<ReturnType<typeof createApp>>,
   sessionToken: string,
@@ -269,10 +269,7 @@ async function runGuestAnalysisToSucceeded(
 ) {
   const guestSessionHash = hashSessionToken(sessionToken);
 
-  // Allowlist controlada por guestSessionHash (item 6) — só esta sessão
-  // específica é elegível; nenhuma outra sessão guest é afetada.
-  process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-    guestSessionHash;
+  process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "true";
 
   const text = buildCvText(candidateName, marker);
   const res = await request(ctx.app.getHttpServer())
@@ -290,13 +287,13 @@ async function runGuestAnalysisToSucceeded(
     where: { id: jobId },
   });
 
-  // Sub-item 1: guest (com guestSessionHash na allowlist controlada) fez a
-  // primeira análise, e ela de fato entrou no pipeline novo — prova que o
-  // mecanismo de ativação de guest funciona de ponta a ponta (não é só uma
-  // função pura testada isoladamente).
+  // Sub-item 1: guest (com a flag global ligada) fez a primeira análise, e
+  // ela de fato entrou no pipeline novo — prova que o mecanismo de
+  // ativação de guest funciona de ponta a ponta (não é só uma função pura
+  // testada isoladamente).
   assert.ok(
     analysisRow.cvProcessingJobId,
-    "com o hash na allowlist de guest, a análise deveria ter entrado no pipeline novo (cvProcessingJobId preenchido)",
+    "com a flag global ligada, a análise de guest deveria ter entrado no pipeline novo (cvProcessingJobId preenchido)",
   );
   assert.equal(analysisRow.guestSessionHash, guestSessionHash);
 
@@ -356,7 +353,7 @@ async function runGuestAnalysisToSucceeded(
   };
 }
 
-test("Fase 3C, item 6/8 — claim guest→conta, ponta a ponta via HTTP real (allowlist de guestSessionHash)", async (t) => {
+test("Fase 3C, item 6/8 — claim guest→conta, ponta a ponta via HTTP real (flag global)", async (t) => {
   const ctx = await createApp();
 
   try {
@@ -462,14 +459,19 @@ test("Fase 3C, item 6/8 — claim guest→conta, ponta a ponta via HTTP real (al
       "Resume deveria ter isMaster=true de forma atômica com a designação (correção Fase 3C item 1/5)",
     );
 
-    // A designação PROVISÓRIA do guest nunca é tocada pelo claim (o
-    // TalentSubject continua com sua própria designação — claim nunca
-    // supersede a designação do guest, só cria a do usuário).
-    const guestDesignationStillActive =
+    // A designação PROVISÓRIA do guest é encerrada (supersededAt
+    // preenchido) no MESMO commit que promove a designação do usuário —
+    // achado real de auditoria de claim: antes desta correção, as duas
+    // ficavam ativas ao mesmo tempo (CvMasterPromotionService só enxerga/
+    // supersede designações do MESMO dono — userId OU talentSubjectId,
+    // nunca os dois — então promover o usuário nunca supersedia sozinho a
+    // designação guest de origem). Só uma designação deve estar ativa ao
+    // final do claim, para o mesmo perfil estruturado.
+    const guestDesignationAfterClaim =
       await ctx.database.cvMasterDesignation.findUniqueOrThrow({
         where: { id: guestA.guestDesignationId },
       });
-    assert.equal(guestDesignationStillActive.supersededAt, null);
+    assert.notEqual(guestDesignationAfterClaim.supersededAt, null);
 
     // ---------------------------------------------------------------------
     // Sub-item 10: retry do claim (chamando o SERVIÇO de novo diretamente,
@@ -592,14 +594,12 @@ test("Fase 3C, item 6/8 — claim guest→conta, ponta a ponta via HTTP real (al
     assert.equal(guestBDesignationStillActive.supersededAt, null);
 
     // ---------------------------------------------------------------------
-    // Confirmação final: só a sessão explicitamente allowlisted foi
-    // ativada — nenhuma outra sessão foi afetada (prova viva de "impossível
-    // ativar acidentalmente todos os guests": uma 3a sessão SEM estar na
-    // allowlist, com a mesma flag global desligada, continua no legado).
+    // Confirmação final: com a flag global DESLIGADA, uma nova sessão guest
+    // cai no legado normalmente — a ativação de guest depende inteiramente
+    // do master switch, sem nenhum outro caminho residual.
     // ---------------------------------------------------------------------
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      guestA.guestSessionHash; // só a sessão A, não a C abaixo
-    const sessionTokenC = `guest-session-c-nao-listada-${randomUUID()}`;
+    delete process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED;
+    const sessionTokenC = `guest-session-c-flag-desligada-${randomUUID()}`;
     const resC = await request(ctx.app.getHttpServer())
       .post("/api/cv-adaptation/analyze-guest")
       .set("Cookie", `analysis_session_token=${sessionTokenC}`)
@@ -627,23 +627,23 @@ test("Fase 3C, item 6/8 — claim guest→conta, ponta a ponta via HTTP real (al
     assert.equal(
       analysisRowC.cvProcessingJobId,
       null,
-      "sessão FORA da allowlist de guest nunca deveria tocar o pipeline novo, mesmo com outra sessão liberada",
+      "com a flag global desligada, a análise de guest nunca deveria tocar o pipeline novo",
     );
 
     findings.push(
       "Fase 3C item 6 — claim guest→conta EXERCITADO DE PONTA A PONTA com sucesso: " +
-        "guest ativado via allowlist controlada de guestSessionHash, Master provisório " +
-        "criado, Base de Talentos populada, claim gerou ClaimSourceGrant + Resume + " +
-        "promoção de Master (usuário sem Master prévio) e PRESERVOU o Master do usuário " +
-        "num 2o claim (usuário já tinha Master), retry do serviço confirmadamente " +
-        "idempotente (zero duplicação de grant/Resume/designação), e uma 3a sessão FORA " +
-        "da allowlist permaneceu no caminho legado mesmo com outra sessão liberada.",
+        "guest ativado via flag global (mesmo master switch do usuário autenticado), " +
+        "Master provisório criado, Base de Talentos populada, claim gerou " +
+        "ClaimSourceGrant + Resume + promoção de Master (usuário sem Master prévio) e " +
+        "PRESERVOU o Master do usuário num 2o claim (usuário já tinha Master), retry do " +
+        "serviço confirmadamente idempotente (zero duplicação de grant/Resume/" +
+        "designação), e com a flag desligada uma 3a sessão guest permaneceu no caminho " +
+        "legado.",
     );
 
     t.diagnostic(JSON.stringify({ findings }, null, 2));
   } finally {
-    delete process.env
-      .CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
+    delete process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED;
     await ctx.app.close();
   }
 });

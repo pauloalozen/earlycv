@@ -496,3 +496,41 @@ test("create(): duas requisições simultâneas de upload para o mesmo usuário 
     );
   });
 });
+
+// Achado real de auditoria manual (2026-09-09): create() criava o CvSource
+// (via enqueueFromUserText) mas nunca escrevia cvSourceId/cvSubmissionId de
+// volta no Resume recém-criado — qualquer busca posterior por "qual Resume
+// já representa esta fonte" (ex.: CvAdaptationService#
+// ensureResumeForMasterPromotion, usado toda vez que uma reanálise usa
+// masterResumeId) nunca encontrava este Resume, mesmo com o CvSource certo
+// já existindo (dedup por hash funcionando) — criava um Resume duplicado
+// "bare" (título genérico) pro mesmo conteúdo. Este teste prova a correção
+// isolada: o Resume nasce com cvSourceId/cvSubmissionId preenchidos.
+test("create(): Resume nasce com cvSourceId/cvSubmissionId linkados à fonte que o próprio enqueueFromUserText criou", async () => {
+  await withFlagEnabled(async () => {
+    const user = await createUser();
+    const { resumesService } = buildServices();
+
+    const created = await resumesService.create(user.id, {
+      title: `CV linkado ${randomUUID()}`,
+      rawText: `Currículo de teste de link ${randomUUID()}`,
+    } as never);
+
+    const resumeAfter = await prisma.resume.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    assert.ok(
+      resumeAfter.cvSourceId,
+      "Resume precisa ter cvSourceId preenchido logo após create()",
+    );
+    assert.ok(
+      resumeAfter.cvSubmissionId,
+      "Resume precisa ter cvSubmissionId preenchido logo após create()",
+    );
+
+    const cvSource = await prisma.cvSource.findUniqueOrThrow({
+      where: { id: resumeAfter.cvSourceId as string },
+    });
+    assert.equal(cvSource.userId, user.id);
+  });
+});

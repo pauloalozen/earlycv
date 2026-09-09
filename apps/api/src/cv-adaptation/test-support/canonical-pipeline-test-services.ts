@@ -138,12 +138,17 @@ export function buildAnalysisWorker(
     lockRepository,
     userProfileSync,
     cvAdaptationService,
+    claimSourceGrantService,
   );
 }
 
-export async function processOneCvJob(worker: CvProcessingWorker, jobId: string) {
+export async function processOneCvJob(
+  worker: CvProcessingWorker,
+  jobId: string,
+) {
   const claimed = await jobService.claimOne(jobId, `test-${randomUUID()}`);
-  if (!claimed) throw new Error(`cv processing job ${jobId} deveria estar PENDING`);
+  if (!claimed)
+    throw new Error(`cv processing job ${jobId} deveria estar PENDING`);
   await (
     worker as unknown as { processJob: (job: typeof claimed) => Promise<void> }
   ).processJob(claimed);
@@ -169,10 +174,16 @@ export async function processOneAnalysisJob(
     worker as unknown as {
       processReadyJob: (
         job: NonNullable<typeof claimed>,
-        cvProcessingJob: { cvStructuredProfileId: string | null },
+        cvProcessingJob: {
+          id: string;
+          cvSourceId: string;
+          cvStructuredProfileId: string | null;
+        },
       ) => Promise<void>;
     }
   ).processReadyJob(claimed, {
+    id: job.cvProcessingJob.id,
+    cvSourceId: job.cvProcessingJob.cvSourceId,
     cvStructuredProfileId: job.cvProcessingJob.cvStructuredProfileId,
   });
   return database.analysisJob.findUniqueOrThrow({ where: { id: jobId } });
@@ -333,7 +344,9 @@ export function buildRealCvAdaptationService(
   );
 }
 
-export function buildEntrypoint(storage: FakeStorage): CvProcessingEntrypointService {
+export function buildEntrypoint(
+  storage: FakeStorage,
+): CvProcessingEntrypointService {
   return new CvProcessingEntrypointService(database, jobService, storage);
 }
 

@@ -19,12 +19,12 @@
 // idempotentes por construção via CvMasterPromotionService/lookup por
 // hash).
 import { Inject, Injectable } from "@nestjs/common";
-import type {
-  ClaimSourceGrant,
-  CvProcessingJob,
-  CvSource,
+import {
+  type ClaimSourceGrant,
+  type CvProcessingJob,
+  type CvSource,
   Prisma,
-  TalentProfile,
+  type TalentProfile,
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
@@ -77,74 +77,99 @@ export class ClaimSourceGrantService {
 
   async claim(input: ClaimSourceInput): Promise<ClaimSourceResult> {
     try {
-      return await this.database.$transaction(async (tx) => {
-        const processingJob = await tx.cvProcessingJob.findUniqueOrThrow({
-          where: { id: input.cvProcessingJobId },
-        });
-        const source = await tx.cvSource.findUniqueOrThrow({
-          where: { id: processingJob.cvSourceId },
-        });
-
-        // Passo 2 (seção 4.2): grant idempotente. CvSource NUNCA muda de
-        // dono aqui, com ou sem colisão de hash (seção 4.3) — só o grant é
-        // criado.
-        const grantCreated = await this.ensureGrant(
-          tx,
-          source.id,
-          input.userId,
-          input.analysisJobId,
-        );
-
-        // Seção 4.3: colisão de hash — equivalência leve, nunca fusão.
-        const equivalence = await this.ensureEquivalenceIfCollision(
-          tx,
-          source,
-          input.userId,
-        );
-
-        // Passo 5: resolução do sujeito (guardado por
-        // triggeringAnalysisJobId pra idempotência da própria chamada).
-        const subject = await this.resolveSubject(
-          tx,
-          source,
-          input.userId,
-          input.analysisJobId,
-          processingJob,
-        );
-
-        // Passos 6-8: Master + Resume + projeção, quando a fonte
-        // reivindicada é a designação ativa do guest.
-        const master = await this.resolveMasterAndResume(
-          tx,
-          source,
-          input.userId,
-          processingJob,
-          equivalence,
-        );
-
-        return {
-          cvSourceId: source.id,
-          grantCreated,
-          equivalence,
-          subject,
-          master,
-        };
-      });
+      return await this.database.$transaction((tx) =>
+        this.claimWithinTransaction(tx, input),
+      );
     } catch (error) {
-      if (isSubjectMismatchError(error)) {
-        throw new MasterDesignationSubjectMismatchError(
-          "Claim rejeitado no commit: a CvMasterDesignation criada pelo " +
-            "claim não tem ownership nem ClaimSourceGrant válido sobre a " +
-            "fonte (trigger trg_master_designation_subject_match, " +
-            "DEFERRABLE INITIALLY DEFERRED). Nada desta transação foi " +
-            "persistido — nem o grant, nem a resolução de sujeito, nem o " +
-            "Resume. Trate como erro de domínio recuperável e chame " +
-            "claim() de novo.",
-          error,
-        );
-      }
-      throw error;
+      throw this.translateSubjectMismatch(
+        error,
+        "Claim rejeitado no commit: a CvMasterDesignation criada pelo " +
+          "claim não tem ownership nem ClaimSourceGrant válido sobre a " +
+          "fonte (trigger trg_master_designation_subject_match, " +
+          "DEFERRABLE INITIALLY DEFERRED). Nada desta transação foi " +
+          "persistido — nem o grant, nem a resolução de sujeito, nem o " +
+          "Resume. Trate como erro de domínio recuperável e chame " +
+          "claim() de novo.",
+      );
     }
+  }
+
+  // Extraído de claim() para permitir que outros donos de transação
+  // (ex.: claimGuest() em cv-adaptation.service.ts, que já abre a própria
+  // $transaction pra credito/CvUnlock/CvAdaptation) reusem exatamente a
+  // mesma operação de domínio DENTRO da transação deles, em vez de abrir
+  // uma segunda transação aninhada incompatível. O chamador é responsável
+  // por: (a) só invocar isto quando já confirmou que a AnalysisJob de
+  // origem tem cvProcessingJobId preenchido (mesmo contrato de
+  // ClaimSourceInput); (b) traduzir isSubjectMismatchError no catch em
+  // torno da PRÓPRIA transação externa (ver translateSubjectMismatch,
+  // exportado como método público justamente pra isso).
+  async claimWithinTransaction(
+    tx: Prisma.TransactionClient,
+    input: ClaimSourceInput,
+  ): Promise<ClaimSourceResult> {
+    const processingJob = await tx.cvProcessingJob.findUniqueOrThrow({
+      where: { id: input.cvProcessingJobId },
+    });
+    const source = await tx.cvSource.findUniqueOrThrow({
+      where: { id: processingJob.cvSourceId },
+    });
+
+    // Passo 2 (seção 4.2): grant idempotente. CvSource NUNCA muda de
+    // dono aqui, com ou sem colisão de hash (seção 4.3) — só o grant é
+    // criado.
+    const grantCreated = await this.ensureGrant(
+      tx,
+      source.id,
+      input.userId,
+      input.analysisJobId,
+    );
+
+    // Seção 4.3: colisão de hash — equivalência leve, nunca fusão.
+    const equivalence = await this.ensureEquivalenceIfCollision(
+      tx,
+      source,
+      input.userId,
+    );
+
+    // Passo 5: resolução do sujeito (guardado por
+    // triggeringAnalysisJobId pra idempotência da própria chamada).
+    const subject = await this.resolveSubject(
+      tx,
+      source,
+      input.userId,
+      input.analysisJobId,
+      processingJob,
+    );
+
+    // Passos 6-8: Master + Resume + projeção, quando a fonte
+    // reivindicada é a designação ativa do guest.
+    const master = await this.resolveMasterAndResume(
+      tx,
+      source,
+      input.userId,
+      processingJob,
+      equivalence,
+    );
+
+    return {
+      cvSourceId: source.id,
+      grantCreated,
+      equivalence,
+      subject,
+      master,
+    };
+  }
+
+  // Público pra permitir que um chamador com transação própria (claimGuest())
+  // traduza o mesmo erro de domínio no catch em torno da SUA transação —
+  // o trigger é DEFERRABLE INITIALLY DEFERRED, então só dispara no commit
+  // da transação externa, nunca dentro de claimWithinTransaction em si.
+  translateSubjectMismatch(error: unknown, message: string): unknown {
+    if (isSubjectMismatchError(error)) {
+      return new MasterDesignationSubjectMismatchError(message, error);
+    }
+    return error;
   }
 
   // find-then-create (não create()+catch+releitura): dentro de uma
@@ -297,33 +322,67 @@ export class ClaimSourceGrantService {
         where: { userId },
       });
 
-      if (!userProfile) {
-        // Mesma linha, zero cópia — reaponta o TalentProfile do guest pro
-        // usuário (preserva todas as observações/relações já existentes).
+      // Achado real em teste manual (2026-09-09): entre este SELECT e o
+      // UPDATE abaixo, outro caminho completamente alheio ao claim (ex.:
+      // CvTalentCaptureService#findOrCreateTalentProfile, disparado por
+      // uma extração autenticada comum deste MESMO usuário rodando em
+      // paralelo) pode criar um TalentProfile(userId) do zero — violando
+      // o @@unique([userId]) no UPDATE de reaponte abaixo. Mesma classe de
+      // corrida que findOrCreateUserProfile já trata (comentário logo
+      // abaixo), só que aqui o reaponte "zero cópia" não tinha esse
+      // tratamento. Em vez de propagar cru pro chamador (o worker
+      // marcaria a análise inteira como "failed", terminal, sem retry —
+      // pior ainda que o antigo bug de linhagem), relê e cai pro caminho
+      // de cópia (idêntico ao branch "userProfile já existia" abaixo).
+      let resolvedUserProfile = userProfile;
+      if (!resolvedUserProfile) {
+        try {
+          await tx.talentProfile.update({
+            where: { id: guestProfile.id },
+            data: { userId, talentSubjectId: null },
+          });
+          await tx.talentSubject.update({
+            where: { id: talentSubjectId },
+            data: {
+              mergedIntoUserId: userId,
+              mergedIntoTalentProfileId: guestProfile.id,
+              mergedAt: new Date(),
+            },
+          });
+        } catch (error) {
+          if (
+            !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+            error.code !== "P2002"
+          ) {
+            throw error;
+          }
+          resolvedUserProfile = await tx.talentProfile.findUniqueOrThrow({
+            where: { userId },
+          });
+        }
+      }
+
+      if (resolvedUserProfile) {
+        const userProfileForMerge = resolvedUserProfile;
+        await this.copyObservations(
+          tx,
+          guestProfile.id,
+          userProfileForMerge.id,
+        );
+        await this.copyProfileSources(
+          tx,
+          guestProfile.id,
+          userProfileForMerge.id,
+        );
         await tx.talentProfile.update({
           where: { id: guestProfile.id },
-          data: { userId, talentSubjectId: null },
+          data: { mergedIntoTalentProfileId: userProfileForMerge.id },
         });
         await tx.talentSubject.update({
           where: { id: talentSubjectId },
           data: {
             mergedIntoUserId: userId,
-            mergedIntoTalentProfileId: guestProfile.id,
-            mergedAt: new Date(),
-          },
-        });
-      } else {
-        await this.copyObservations(tx, guestProfile.id, userProfile.id);
-        await this.copyProfileSources(tx, guestProfile.id, userProfile.id);
-        await tx.talentProfile.update({
-          where: { id: guestProfile.id },
-          data: { mergedIntoTalentProfileId: userProfile.id },
-        });
-        await tx.talentSubject.update({
-          where: { id: talentSubjectId },
-          data: {
-            mergedIntoUserId: userId,
-            mergedIntoTalentProfileId: userProfile.id,
+            mergedIntoTalentProfileId: userProfileForMerge.id,
             mergedAt: new Date(),
           },
         });
@@ -582,6 +641,27 @@ export class ClaimSourceGrantService {
       return null;
     }
 
+    const userActive = await tx.cvMasterDesignation.findFirst({
+      where: { userId, supersededAt: null },
+    });
+
+    // Idempotência de retry: uma chamada anterior deste mesmo claim já
+    // promoveu (e já supersedeu a designação guest, ver update logo
+    // abaixo) — a designação guest não vai mais aparecer como "ativa" na
+    // busca seguinte, então precisamos reconhecer esse caso ANTES de
+    // procurar guestActive, ou uma segunda chamada devolveria master: null
+    // em vez do mesmo resumeId (quebraria o contrato "claim() é
+    // idempotente").
+    if (
+      userActive &&
+      userActive.cvStructuredProfileId === processingJob.cvStructuredProfileId
+    ) {
+      const resumeId =
+        userActive.resumeId ??
+        (await this.ensureResume(tx, userId, source, equivalence));
+      return { promoted: false, monitorProjectionJobId: null, resumeId };
+    }
+
     const guestActive = await tx.cvMasterDesignation.findFirst({
       where: { talentSubjectId: source.talentSubjectId, supersededAt: null },
       include: { cvStructuredProfile: true },
@@ -596,18 +676,13 @@ export class ClaimSourceGrantService {
       return null;
     }
 
-    const userActive = await tx.cvMasterDesignation.findFirst({
-      where: { userId, supersededAt: null },
-    });
     if (
       userActive &&
       userActive.cvStructuredProfileId !== processingJob.cvStructuredProfileId
     ) {
       // Usuário já tem Master ativo (de OUTRA fonte) — designação do guest
       // preservada, nunca ativada (só o grant já criado dá acesso formal à
-      // fonte). Diferente do caso abaixo (userActive já é exatamente esta
-      // mesma promoção, de uma chamada anterior do mesmo claim — aí segue
-      // em frente pra devolver o mesmo resumeId de forma idempotente).
+      // fonte).
       return { promoted: false, monitorProjectionJobId: null, resumeId: null };
     }
 
@@ -646,6 +721,22 @@ export class ClaimSourceGrantService {
         // flip nunca compete com um Master de outra fonte.
         syncResumeIsMaster: true,
       });
+
+    // Fecha o gap encontrado auditando cv-master-promotion.service.ts:
+    // runPromotionDecision só enxerga/supersede designações do MESMO dono
+    // (userId OU talentSubjectId, nunca os dois) — promover o Master do
+    // usuário nunca supersede sozinho a designação guest de origem. Sem
+    // isto, as duas ficavam ativas ao mesmo tempo (achado real do teste
+    // manual: CvMasterDesignation guest com supersededAt nulo mesmo depois
+    // do claim). Só supersede quando a promoção de fato aconteceu agora
+    // (promotion.changed) — nunca num retry idempotente (esse caso já
+    // retorna mais acima, antes de guestActive ser reconsultado).
+    if (promotion.changed) {
+      await tx.cvMasterDesignation.updateMany({
+        where: { id: guestActive.id, supersededAt: null },
+        data: { supersededAt: new Date() },
+      });
+    }
 
     return {
       promoted: promotion.changed,
@@ -688,10 +779,29 @@ export class ClaimSourceGrantService {
       data: { cvSourceId: targetCvSourceId, origin: "CLAIM" },
     });
 
+    // Preserva o nome original do arquivo que o guest enviou (mesma
+    // convenção do upload autenticado normal, resumes.service.ts#create —
+    // sourceFileName = file.originalname, title = nome sem extensão), em
+    // vez do texto fixo "CV reivindicado" que não dizia ao usuário qual
+    // arquivo foi usado. A fonte original (FILE_UPLOAD) fica na primeira
+    // CvSubmission daquele CvSource; texto colado (PASTED_TEXT) não tem
+    // nome de arquivo, mesmo fallback usado no upload de texto colado no
+    // frontend ("Meu CV").
+    const originalSubmission = await tx.cvSubmission.findFirst({
+      where: { cvSourceId: source.id, origin: "FILE_UPLOAD" },
+      orderBy: { submittedAt: "asc" },
+      select: { fileName: true },
+    });
+    const originalFileName = originalSubmission?.fileName?.trim() || null;
+    const title = originalFileName
+      ? originalFileName.replace(/\.[^.]+$/, "")
+      : "Meu CV";
+
     const resume = await tx.resume.create({
       data: {
         userId,
-        title: "CV reivindicado",
+        title,
+        sourceFileName: originalFileName,
         kind: "master",
         status: "uploaded",
         isMaster: false,

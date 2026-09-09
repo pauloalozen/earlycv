@@ -319,7 +319,10 @@ class ScopedCvProcessingJobService extends CvProcessingJobService {
 function buildScopedProcessingWorker(
   extract: () => Promise<MasterCvCanonicalExtractionOutput>,
   storage: FakeStorage,
-): { worker: CvProcessingWorker; scopedJobService: ScopedCvProcessingJobService } {
+): {
+  worker: CvProcessingWorker;
+  scopedJobService: ScopedCvProcessingJobService;
+} {
   const scopedJobService = new ScopedCvProcessingJobService(database);
   const worker = new CvProcessingWorker(
     database,
@@ -540,9 +543,9 @@ test("1b) análise canônica envia canonicalCvProfile estruturado (CvStructuredP
   assert.equal(claimResult.status, "succeeded");
   if (claimResult.status !== "succeeded") return; // narrowing pro TS
 
-  const materializedAdaptation = await database.cvAdaptation.findUniqueOrThrow(
-    { where: { id: claimResult.cvAdaptationId } },
-  );
+  const materializedAdaptation = await database.cvAdaptation.findUniqueOrThrow({
+    where: { id: claimResult.cvAdaptationId },
+  });
   assert.equal(
     materializedAdaptation.cvStructuredProfileId,
     finalJob.cvStructuredProfileId,
@@ -620,9 +623,10 @@ test("linhagem 1) pipeline novo com FK completa — geração usa canonicalCvPro
   assert.ok(output);
   assert.equal(protectedAnalyze.generationCalls, 1);
   assert.equal(protectedAnalyze.lastGenerationMasterCvText, undefined);
-  const structuredProfile = await database.cvStructuredProfile.findUniqueOrThrow(
-    { where: { id: finalJob.cvStructuredProfileId as string } },
-  );
+  const structuredProfile =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: finalJob.cvStructuredProfileId as string },
+    });
   assert.deepEqual(
     protectedAnalyze.lastGenerationCanonicalCvProfile,
     structuredProfile.canonicalJson,
@@ -630,9 +634,8 @@ test("linhagem 1) pipeline novo com FK completa — geração usa canonicalCvPro
 });
 
 test("linhagem 2) pipeline novo com cvStructuredProfileId removido artificialmente — falha explícita, nunca cai pro texto", async () => {
-  const { service, claimResult } = await setupReadyCanonicalAdaptation(
-    "FK removida",
-  );
+  const { service, claimResult } =
+    await setupReadyCanonicalAdaptation("FK removida");
 
   // Simula a FK se perdendo (o próprio bug que corrigimos hoje, ou qualquer
   // outra causa) — o AnalysisJob de origem AINDA tem cvProcessingJobId, só a
@@ -662,9 +665,9 @@ test("linhagem 3) pipeline novo com CvStructuredProfile FAILED — falha explíc
   // FAILED do zero (nunca chegou a READY) e aponta o objeto em memória
   // pra ele — o alvo do teste é o comportamento de
   // ensureLegacyStructuredOutput, não a escrita da FK em si.
-  const originalProfile = await database.cvStructuredProfile.findUniqueOrThrow(
-    { where: { id: finalJob.cvStructuredProfileId as string } },
-  );
+  const originalProfile = await database.cvStructuredProfile.findUniqueOrThrow({
+    where: { id: finalJob.cvStructuredProfileId as string },
+  });
   const failedProfile = await prisma.cvStructuredProfile.create({
     data: {
       cvSourceId: originalProfile.cvSourceId,
@@ -676,8 +679,9 @@ test("linhagem 3) pipeline novo com CvStructuredProfile FAILED — falha explíc
   const adaptation = await loadAdaptationForGeneration(
     claimResult.cvAdaptationId,
   );
-  (adaptation as { cvStructuredProfileId: string | null }).cvStructuredProfileId =
-    failedProfile.id;
+  (
+    adaptation as { cvStructuredProfileId: string | null }
+  ).cvStructuredProfileId = failedProfile.id;
 
   await assert.rejects(
     // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado
@@ -1057,12 +1061,15 @@ test("trigger 5) trigger e cron concorrentes processam o job exatamente uma vez"
   const user = await createUser();
   const storage = new FakeStorage();
   let extractCalls = 0;
-  const { worker: cvWorker, scopedJobService } = buildScopedProcessingWorker(async () => {
-    extractCalls += 1;
-    // Segura um pouco pra garantir sobreposição real entre trigger e cron.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return fakeCanonicalOutput("Trigger e Cron Concorrentes");
-  }, storage);
+  const { worker: cvWorker, scopedJobService } = buildScopedProcessingWorker(
+    async () => {
+      extractCalls += 1;
+      // Segura um pouco pra garantir sobreposição real entre trigger e cron.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return fakeCanonicalOutput("Trigger e Cron Concorrentes");
+    },
+    storage,
+  );
   const entrypoint = new CvProcessingEntrypointService(
     database,
     jobService,
@@ -1163,19 +1170,41 @@ test("ISOLAMENTO 1: duas suítes com jobs PENDING distintos executando SIMULTANE
     runIsolatedSuite({ suiteName: "suite-B", extractMarker: "Isolamento B" }),
   ]);
 
-  const rowA = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultA.jobId } });
-  const rowB = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultB.jobId } });
-  assert.equal(rowA.status, "READY", "suíte A precisa ter processado o PRÓPRIO job");
-  assert.equal(rowB.status, "READY", "suíte B precisa ter processado o PRÓPRIO job");
-  assert.equal(rowA.attempts, 1, "suíte A não pode ter sido reprocessada pela suíte B (attempts=1)");
-  assert.equal(rowB.attempts, 1, "suíte B não pode ter sido reprocessada pela suíte A (attempts=1)");
+  const rowA = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: resultA.jobId },
+  });
+  const rowB = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: resultB.jobId },
+  });
+  assert.equal(
+    rowA.status,
+    "READY",
+    "suíte A precisa ter processado o PRÓPRIO job",
+  );
+  assert.equal(
+    rowB.status,
+    "READY",
+    "suíte B precisa ter processado o PRÓPRIO job",
+  );
+  assert.equal(
+    rowA.attempts,
+    1,
+    "suíte A não pode ter sido reprocessada pela suíte B (attempts=1)",
+  );
+  assert.equal(
+    rowB.attempts,
+    1,
+    "suíte B não pode ter sido reprocessada pela suíte A (attempts=1)",
+  );
 
-  const structuredProfileA = await database.cvStructuredProfile.findUniqueOrThrow({
-    where: { id: rowA.cvStructuredProfileId as string },
-  });
-  const structuredProfileB = await database.cvStructuredProfile.findUniqueOrThrow({
-    where: { id: rowB.cvStructuredProfileId as string },
-  });
+  const structuredProfileA =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: rowA.cvStructuredProfileId as string },
+    });
+  const structuredProfileB =
+    await database.cvStructuredProfile.findUniqueOrThrow({
+      where: { id: rowB.cvStructuredProfileId as string },
+    });
   assert.equal(
     (structuredProfileA.canonicalJson as { fullName: string }).fullName,
     "Isolamento A",
@@ -1188,11 +1217,21 @@ test("ISOLAMENTO 1: duas suítes com jobs PENDING distintos executando SIMULTANE
 });
 
 test("ISOLAMENTO 2: ordem invertida (suíte B antes de A) produz o mesmo resultado", async () => {
-  const resultB = await runIsolatedSuite({ suiteName: "suite-B-invertida", extractMarker: "Isolamento B invertida" });
-  const resultA = await runIsolatedSuite({ suiteName: "suite-A-invertida", extractMarker: "Isolamento A invertida" });
+  const resultB = await runIsolatedSuite({
+    suiteName: "suite-B-invertida",
+    extractMarker: "Isolamento B invertida",
+  });
+  const resultA = await runIsolatedSuite({
+    suiteName: "suite-A-invertida",
+    extractMarker: "Isolamento A invertida",
+  });
 
-  const rowA = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultA.jobId } });
-  const rowB = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultB.jobId } });
+  const rowA = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: resultA.jobId },
+  });
+  const rowB = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: resultB.jobId },
+  });
   assert.equal(rowA.status, "READY");
   assert.equal(rowB.status, "READY");
   assert.equal(rowA.attempts, 1);
@@ -1278,7 +1317,9 @@ test("trigger 7) request falha antes do commit — nenhum processamento começa,
   const user = await createUser();
   class ThrowingStorage extends FakeStorage {
     async putObject(): Promise<string> {
-      throw new Error("storage indisponível (simulado) — falha antes do commit");
+      throw new Error(
+        "storage indisponível (simulado) — falha antes do commit",
+      );
     }
   }
   const storage = new ThrowingStorage();
@@ -1765,6 +1806,104 @@ test("Fase 3C) saveAsMaster=true via análise demove o Resume.isMaster antigo e 
     SELECT "userId", count(*) as count FROM "Resume" WHERE "isMaster" = true GROUP BY "userId" HAVING count(*) > 1
   `;
   assert.equal(divergent.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Achado real de auditoria manual (2026-09-09): resumes.service.ts#create
+// nunca escrevia Resume.cvSourceId de volta depois de enqueueFromUserText
+// criar o CvSource — corrigido nesta rodada (write-back logo após o
+// enqueue). Sem esse link, ensureResumeForMasterPromotion (chamado aqui
+// pelo branch dto.masterResumeId) achava o CvSource certo por hash, mas
+// nunca achava "qual Resume já representa essa fonte" — criava um Resume
+// SEGUNDO, bare, título genérico "CV enviado para análise", pro MESMO
+// conteúdo. Prova a correção ponta a ponta: um Resume já linkado a um
+// CvSource (mesma forma que resumes.service.ts#create agora produz) é
+// REUSADO quando a análise reivindica via masterResumeId, nunca duplicado.
+// ---------------------------------------------------------------------------
+test("masterResumeId apontando pra um Resume já linkado a um CvSource é REUSADO — nunca cria um segundo Resume bare", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+
+  const cvText = buildCvText("Resume Ja Linkado", "produto");
+
+  // Simula exatamente o que resumes.service.ts#create (já corrigido) faz:
+  // cria o Resume, cria a fonte via enqueueFromUserText, linka de volta.
+  const bareResume = await database.resume.create({
+    data: {
+      userId: user.id,
+      title: "Resume Ja Linkado",
+      isMaster: true,
+      rawText: cvText,
+    },
+  });
+  const enqueued = await entrypoint.enqueueFromUserText({
+    userId: user.id,
+    text: cvText,
+    masterIntent: "PROMOTE_IF_FIRST",
+    resumeId: bareResume.id,
+    submission: { origin: "PASTED_TEXT" },
+  });
+  await database.resume.update({
+    where: { id: bareResume.id },
+    data: {
+      cvSourceId: enqueued.cvSource.id,
+      cvSubmissionId: enqueued.cvSubmission.id,
+    },
+  });
+
+  const resumeCountBefore = await prisma.resume.count({
+    where: { userId: user.id },
+  });
+  assert.equal(resumeCountBefore, 1);
+
+  // Análise reivindicando o Master via masterResumeId (mesmo caminho do
+  // "trocar CV master pelo desta análise" no /adaptar), saveAsMaster:true.
+  const analysis = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterResumeId: bareResume.id,
+    saveAsMaster: true,
+  });
+  const analysisJobRow = await database.analysisJob.findUniqueOrThrow({
+    where: { id: analysis.jobId },
+  });
+  const cvProcessingJob = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: analysisJobRow.cvProcessingJobId as string },
+  });
+
+  assert.equal(
+    cvProcessingJob.resumeId,
+    bareResume.id,
+    "precisa reusar o MESMO Resume, nunca criar um novo",
+  );
+
+  const resumeCountAfter = await prisma.resume.count({
+    where: { userId: user.id },
+  });
+  assert.equal(
+    resumeCountAfter,
+    1,
+    "nenhum Resume novo deveria ter sido criado — reusa o existente",
+  );
+
+  const noGenericResume = await prisma.resume.findFirst({
+    where: { userId: user.id, title: "CV enviado para análise" },
+  });
+  assert.equal(
+    noGenericResume,
+    null,
+    "não pode sobrar nenhum Resume 'bare' com título genérico",
+  );
 });
 
 // ---------------------------------------------------------------------------

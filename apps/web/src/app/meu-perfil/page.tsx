@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
-import { ProgressRing } from "@/components/progress-ring";
 import { PublicFooter } from "@/components/public-footer";
 import { apiRequest } from "@/lib/api-request";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
@@ -40,6 +39,7 @@ import {
 } from "./dashboard-icons";
 import { DeleteAccountSection } from "./delete-account-section";
 import { resolveHeroState } from "./hero-state";
+import { SeuCvProgress } from "./seu-cv-progress";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -503,16 +503,10 @@ export default async function MeuPerfilPage() {
         href="/meu-cv-master"
         className="group flex items-center gap-3 rounded-[10px] border border-[rgba(10,10,10,0.07)] px-3 py-3 transition-colors hover:border-[rgba(10,10,10,0.15)]"
       >
-        <ProgressRing value={profileCompletion} size={64} stroke={5} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13.5px] font-medium text-[#0a0a0a]">
-            {masterResume ? masterResume.title : "Nenhum CV cadastrado ainda"}
-          </p>
-          <span className="flex items-center gap-1 text-[11px] text-[#8a8a85] transition-colors group-hover:text-[#0a0a0a]">
-            Abrir Meu CV Master
-            <Chevron />
-          </span>
-        </div>
+        <SeuCvProgress
+          profileCompletion={profileCompletion}
+          masterResumeTitle={masterResume?.title ?? null}
+        />
       </Link>
 
       {lastAdaptationApp && (

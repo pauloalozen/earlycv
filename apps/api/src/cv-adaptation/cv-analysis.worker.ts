@@ -14,7 +14,7 @@
 // intocado, mesmo com este worker rodando ao lado.
 import { randomUUID } from "node:crypto";
 
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import type { AnalysisJob, CvProcessingJob } from "@prisma/client";
 
@@ -22,6 +22,7 @@ import {
   CV_PROCESSING_JOB_READY,
   cvProcessingDispatchSignal,
 } from "../cv-processing/cv-processing-dispatch.signal";
+import { ClaimSourceGrantService } from "../cv-processing/claim-source-grant.service";
 import { CvUserProfileSyncService } from "../cv-processing/cv-user-profile-sync.service";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
@@ -60,6 +61,28 @@ export class CvAnalysisWorker {
       | "runCanonicalAuthenticatedAnalysis"
       | "runCanonicalGuestAnalysis"
       | "extractAnalysisJobSignalsForPipeline"
+    >,
+    // Achado real de auditoria de claim (2026-09-09): claimGuestAnalysisJob
+    // transfere AnalysisJob.userId do guest pro usuário ANTES de checar
+    // status (necessário pra pollAndClaim funcionar enquanto a análise
+    // ainda está pending/processing) — mas se o CvProcessingJob/análise só
+    // termina DEPOIS dessa transferência, este worker tentava marcar
+    // succeeded com userId de um dono real sobre um CvSource ainda
+    // guest-owned, sem ClaimSourceGrant nenhum: a trigger
+    // trg_analysis_job_succeeded_requires_ready_profile/lineage_ownership
+    // (20260908211500) rejeita corretamente esse UPDATE (por design — é
+    // exatamente a checagem que evita "qualquer userId reivindica
+    // qualquer fonte"). Nunca contorna a trigger: garante o
+    // ClaimSourceGrant de verdade primeiro, na mesma jogada que promove
+    // Master/funde TalentSubject — ver #ensureClaimBeforeSucceeding.
+    // @Optional() pelo mesmo motivo dos outros services deste módulo:
+    // nunca referenciado pelos testes legados que constroem o worker sem
+    // ele.
+    @Optional()
+    @Inject(ClaimSourceGrantService)
+    private readonly claimSourceGrantService?: Pick<
+      ClaimSourceGrantService,
+      "claim"
     >,
   ) {
     // Mesmo raciocínio de CvProcessingWorker: nunca se inscreve durante
@@ -177,6 +200,8 @@ export class CvAnalysisWorker {
       if (!claimed) continue;
 
       await this.processReadyJob(claimed, {
+        id: job.cvProcessingJob.id,
+        cvSourceId: job.cvProcessingJob.cvSourceId,
         cvStructuredProfileId: job.cvProcessingJob.cvStructuredProfileId,
       });
       processed += 1;
@@ -224,7 +249,11 @@ export class CvAnalysisWorker {
 
   private async processReadyJob(
     job: AnalysisJob,
-    cvProcessingJob: { cvStructuredProfileId: string | null },
+    cvProcessingJob: {
+      id: string;
+      cvSourceId: string;
+      cvStructuredProfileId: string | null;
+    },
   ): Promise<void> {
     try {
       if (!cvProcessingJob.cvStructuredProfileId) {
@@ -300,6 +329,8 @@ export class CvAnalysisWorker {
           result.adaptedContentJson,
         );
 
+      await this.ensureClaimBeforeSucceeding(job, cvProcessingJob);
+
       await this.database.analysisJob.update({
         where: { id: job.id },
         data: {
@@ -324,5 +355,53 @@ export class CvAnalysisWorker {
         data: { status: "failed", finishedAt: new Date(), lastError: message },
       });
     }
+  }
+
+  // Cobre o caso descrito no comentário do construtor: só relevante quando
+  // esta AnalysisJob NASCEU guest (ownerKind "guest") e já teve o userId
+  // transferido antes de terminar de processar — job autenticado desde a
+  // criação (ownerKind "authenticated") sempre tem CvSource.userId === job.userId
+  // desde o início (enqueueFromUserText), nunca precisa de grant. Chamar
+  // claim() aqui é seguro e idempotente (mesma garantia de
+  // ClaimSourceGrantService#claim usada por claimGuestAnalysisJob) — se um
+  // claim explícito já rodou antes (ex.: usuário chamou /claim de novo
+  // depois da análise terminar), isto é só um no-op a mais.
+  private async ensureClaimBeforeSucceeding(
+    job: AnalysisJob,
+    cvProcessingJob: { id: string; cvSourceId: string },
+  ): Promise<void> {
+    if (job.ownerKind !== "guest" || !this.claimSourceGrantService) {
+      return;
+    }
+
+    // NUNCA confia em job.userId (o snapshot lido lá em cima, antes de
+    // rodar a IA) — achado real rodando manualmente: a análise leva
+    // segundos, e um claim explícito (cadastro/login do usuário) pode
+    // transferir AnalysisJob.userId ENQUANTO a IA ainda está rodando. Um
+    // guard baseado no snapshot em memória via essa janela: userId ainda
+    // null na leitura, mas já preenchido no banco quando este método
+    // roda — pulava o grant e o UPDATE final (que sempre vê o valor ATUAL
+    // da linha, não o snapshot) caía na mesma trigger de linhagem. Relê
+    // o dono atual aqui, o mais perto possível do UPDATE que decide.
+    const current = await this.database.analysisJob.findUnique({
+      where: { id: job.id },
+      select: { userId: true },
+    });
+    if (!current?.userId) {
+      return;
+    }
+
+    // Deixa propagar pro catch de processReadyJob de propósito: se o
+    // claim falhar (ex.: MasterDesignationSubjectMismatchError sob
+    // concorrência real), a análise inteira cai em "failed" com uma
+    // mensagem clara e o próximo retry tenta tudo de novo — melhor que
+    // engolir aqui e deixar o UPDATE seguinte (analysisJob -> succeeded)
+    // ser rejeitado pela trigger de qualquer jeito, com um erro cru de
+    // Postgres em vez do erro de domínio já traduzido por claim().
+    await this.claimSourceGrantService.claim({
+      userId: current.userId,
+      analysisJobId: job.id,
+      cvProcessingJobId: cvProcessingJob.id,
+    });
   }
 }

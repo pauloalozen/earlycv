@@ -7,7 +7,7 @@ process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "true";
 process.env.SKIP_AI = "false";
 
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
 import {
@@ -566,16 +566,11 @@ test("FLAGS 3: admin (internalRole) -> pipeline novo mesmo com flag desligada e 
   }
 });
 
-test("FLAGS 4/5/6: guest fora da allowlist -> legado; guest allowlisted -> novo; outra sessão -> legado", async () => {
-  const runId = makeRunId("flags-4-6");
-  const previousAllowlist =
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
+test("FLAGS 4/5: guest com flag global desligada -> legado; com flag ligada -> novo", async () => {
+  const runId = makeRunId("flags-4-5");
+  const previousFlag = process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED;
   try {
-    assert.equal(
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED,
-      "true",
-      "pré-condição do arquivo",
-    );
+    assert.equal(previousFlag, "true", "pré-condição do arquivo");
     const storage = new FakeStorage();
     const entrypoint = buildEntrypoint(storage);
     const { client } = buildCapturingAiClient(
@@ -584,51 +579,34 @@ test("FLAGS 4/5/6: guest fora da allowlist -> legado; guest allowlisted -> novo;
     );
     const service = buildRealCvAdaptationService(client, client, entrypoint);
 
-    const allowlistedToken = `${runId}-allowlisted-${randomUUID()}`;
-    const allowlistedHash = createHash("sha256")
-      .update(allowlistedToken)
-      .digest("hex");
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      allowlistedHash;
-
-    // 4: fora da allowlist -> legado.
-    const foraDaAllowlist = await service.startGuestAnalysisJob(
-      `${JOB_DESCRIPTION_BASE} ${runId} fora`,
+    // 4: flag desligada -> legado (guest não tem nenhum outro caminho de
+    // ativação além do master switch).
+    delete process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED;
+    const flagDesligada = await service.startGuestAnalysisJob(
+      `${JOB_DESCRIPTION_BASE} ${runId} desligada`,
       undefined,
       buildCvText(`${runId} guest comum`, "vendas"),
       undefined,
-      { sessionPublicToken: `${runId}-nao-allowlisted-${randomUUID()}` } as never,
+      { sessionPublicToken: `${runId}-flag-off-${randomUUID()}` } as never,
     );
-    const rowFora = await database.analysisJob.findUniqueOrThrow({
-      where: { id: foraDaAllowlist.jobId },
+    const rowDesligada = await database.analysisJob.findUniqueOrThrow({
+      where: { id: flagDesligada.jobId },
     });
-    assert.equal(rowFora.cvProcessingJobId, null);
+    assert.equal(rowDesligada.cvProcessingJobId, null);
 
-    // 5: allowlisted -> novo.
-    const allowlisted = await service.startGuestAnalysisJob(
-      `${JOB_DESCRIPTION_BASE} ${runId} dentro`,
+    // 5: flag ligada -> novo, para qualquer sessão guest, sem allowlist.
+    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "true";
+    const flagLigada = await service.startGuestAnalysisJob(
+      `${JOB_DESCRIPTION_BASE} ${runId} ligada`,
       undefined,
-      buildCvText(`${runId} guest allowlisted`, "vendas"),
+      buildCvText(`${runId} guest com flag ligada`, "vendas"),
       undefined,
-      { sessionPublicToken: allowlistedToken } as never,
+      { sessionPublicToken: `${runId}-flag-on-${randomUUID()}` } as never,
     );
-    const rowDentro = await database.analysisJob.findUniqueOrThrow({
-      where: { id: allowlisted.jobId },
+    const rowLigada = await database.analysisJob.findUniqueOrThrow({
+      where: { id: flagLigada.jobId },
     });
-    assert.ok(rowDentro.cvProcessingJobId);
-
-    // 6: outra sessão (hash diferente) -> legado, mesmo com allowlist ativa.
-    const outraSessao = await service.startGuestAnalysisJob(
-      `${JOB_DESCRIPTION_BASE} ${runId} outra`,
-      undefined,
-      buildCvText(`${runId} outra sessao`, "vendas"),
-      undefined,
-      { sessionPublicToken: `${runId}-outra-sessao-${randomUUID()}` } as never,
-    );
-    const rowOutra = await database.analysisJob.findUniqueOrThrow({
-      where: { id: outraSessao.jobId },
-    });
-    assert.equal(rowOutra.cvProcessingJobId, null);
+    assert.ok(rowLigada.cvProcessingJobId);
 
     await database.analysisJob.deleteMany({
       where: {
@@ -636,16 +614,13 @@ test("FLAGS 4/5/6: guest fora da allowlist -> legado; guest allowlisted -> novo;
       },
     });
   } finally {
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      previousAllowlist;
+    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = previousFlag;
   }
 });
 
-test("SENTINELA 4 (migrada de zz-adversarial-audit.e2e-spec.ts): guest ALLOWLISTED sem identidade — payload de análise contém só o canonicalJson do visitante", async () => {
+test("SENTINELA 4 (migrada de zz-adversarial-audit.e2e-spec.ts): guest sem identidade — payload de análise contém só o canonicalJson do visitante", async () => {
   const runId = makeRunId("src-4-guest");
   const marker = `ORIGEM_CANONICAL_GUEST_${runId}`;
-  const previousAllowlist =
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
   let cvSourceId: string | undefined;
   try {
     const storage = new FakeStorage();
@@ -662,11 +637,6 @@ test("SENTINELA 4 (migrada de zz-adversarial-audit.e2e-spec.ts): guest ALLOWLIST
     const analysisWorker = buildAnalysisWorker(service);
 
     const sessionPublicToken = `${runId}-session-${randomUUID()}`;
-    const guestSessionHash = createHash("sha256")
-      .update(sessionPublicToken)
-      .digest("hex");
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      guestSessionHash;
 
     const started = await service.startGuestAnalysisJob(
       `${JOB_DESCRIPTION_BASE} ${runId}`,
@@ -678,7 +648,7 @@ test("SENTINELA 4 (migrada de zz-adversarial-audit.e2e-spec.ts): guest ALLOWLIST
     const row = await database.analysisJob.findUniqueOrThrow({
       where: { id: started.jobId },
     });
-    assert.ok(row.cvProcessingJobId, "guest allowlisted deveria ter entrado no pipeline novo");
+    assert.ok(row.cvProcessingJobId, "guest deveria ter entrado no pipeline novo (flag global ligada)");
     const cvJobRow = await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
     cvSourceId = cvJobRow.cvSourceId;
     await processOneAnalysisJob(analysisWorker, started.jobId);
@@ -687,8 +657,6 @@ test("SENTINELA 4 (migrada de zz-adversarial-audit.e2e-spec.ts): guest ALLOWLIST
     const payload = allMessageContent(capturedMessages[0]);
     assert.match(payload, new RegExp(marker));
   } finally {
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      previousAllowlist;
     if (cvSourceId) {
       const source = await database.cvSource.findUnique({ where: { id: cvSourceId } });
       await database.analysisJob.deleteMany({
@@ -710,11 +678,9 @@ test("SENTINELA 4 (migrada de zz-adversarial-audit.e2e-spec.ts): guest ALLOWLIST
   }
 });
 
-test("FLAGS 7/8/9: allowlist vazia, variáveis ausentes, e sem wildcard perigoso", async () => {
+test("FLAGS 7/8: allowlist de userId vazia e variável ausente -> nunca ligam sozinhas", async () => {
   const previousUserAllowlist =
     process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_USER_IDS;
-  const previousGuestAllowlist =
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
   try {
     // 7: allowlist vazia (string vazia).
     process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_USER_IDS = "";
@@ -726,24 +692,9 @@ test("FLAGS 7/8/9: allowlist vazia, variáveis ausentes, e sem wildcard perigoso
     // 8: variável totalmente ausente.
     delete process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_USER_IDS;
     assert.equal(isUserIdInPipelineAllowlist("qualquer-id"), false);
-
-    // 9: nenhum wildcard — "*" na allowlist de guest não pode bater com
-    // um hash real de sessão.
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      "*";
-    const { isGuestSessionHashInPipelineAllowlist } = await import(
-      "../cv-processing/cv-processing-flag-resolver.service"
-    );
-    const realHash = createHash("sha256")
-      .update("qualquer-sessao-real")
-      .digest("hex");
-    assert.equal(isGuestSessionHashInPipelineAllowlist(realHash), false);
-    assert.equal(isGuestSessionHashInPipelineAllowlist("*"), true); // "*" bate só com "*" literal, nunca com hash real
   } finally {
     process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_USER_IDS =
       previousUserAllowlist;
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      previousGuestAllowlist;
   }
 });
 

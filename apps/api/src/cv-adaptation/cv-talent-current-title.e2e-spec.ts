@@ -10,7 +10,7 @@ process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "true";
 process.env.SKIP_AI = "false";
 
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
 import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
@@ -292,32 +292,23 @@ test("CURRENTTITLE 4: guest com Master provisório — currentTitle gravado no T
     const analysisWorker = buildAnalysisWorker(service);
 
     const session = `${runId}-session`;
-    const hash = createHash("sha256").update(session).digest("hex");
-    const previous =
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES = hash;
-    try {
-      const started = await service.startGuestAnalysisJob(
-        `${JOB_DESCRIPTION_BASE} ${runId}`,
-        undefined,
-        buildCvText(runId, "geral"),
-        undefined,
-        { sessionPublicToken: session } as never,
-      );
-      const row = await database.analysisJob.findUniqueOrThrow({ where: { id: started.jobId } });
-      const cvJobRow = await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
-      cvSourceId = cvJobRow.cvSourceId;
-      await processOneAnalysisJob(analysisWorker, started.jobId);
+    const started = await service.startGuestAnalysisJob(
+      `${JOB_DESCRIPTION_BASE} ${runId}`,
+      undefined,
+      buildCvText(runId, "geral"),
+      undefined,
+      { sessionPublicToken: session } as never,
+    );
+    const row = await database.analysisJob.findUniqueOrThrow({ where: { id: started.jobId } });
+    const cvJobRow = await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
+    cvSourceId = cvJobRow.cvSourceId;
+    await processOneAnalysisJob(analysisWorker, started.jobId);
 
-      const source = await database.cvSource.findUniqueOrThrow({ where: { id: cvSourceId } });
-      const profile = await prisma.talentProfile.findUniqueOrThrow({
-        where: { talentSubjectId: source.talentSubjectId as string },
-      });
-      assert.equal(profile.currentTitle, `${runId} Cargo Guest`);
-    } finally {
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-        previous;
-    }
+    const source = await database.cvSource.findUniqueOrThrow({ where: { id: cvSourceId } });
+    const profile = await prisma.talentProfile.findUniqueOrThrow({
+      where: { talentSubjectId: source.talentSubjectId as string },
+    });
+    assert.equal(profile.currentTitle, `${runId} Cargo Guest`);
   } finally {
     if (cvSourceId) await cleanup(runId, [cvSourceId]);
   }
@@ -339,43 +330,34 @@ test("CURRENTTITLE 5: claim — currentTitle do guest sobrevive na conta do usu�
     const analysisWorker = buildAnalysisWorker(service);
 
     const session = `${runId}-session`;
-    const hash = createHash("sha256").update(session).digest("hex");
-    const previous =
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES = hash;
-    try {
-      const started = await service.startGuestAnalysisJob(
-        `${JOB_DESCRIPTION_BASE} ${runId}`,
-        undefined,
-        buildCvText(runId, "geral"),
-        undefined,
-        { sessionPublicToken: session } as never,
-      );
-      const row = await database.analysisJob.findUniqueOrThrow({ where: { id: started.jobId } });
-      const cvJobRow = await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
-      cvSourceId = cvJobRow.cvSourceId;
-      await processOneAnalysisJob(analysisWorker, started.jobId);
+    const started = await service.startGuestAnalysisJob(
+      `${JOB_DESCRIPTION_BASE} ${runId}`,
+      undefined,
+      buildCvText(runId, "geral"),
+      undefined,
+      { sessionPublicToken: session } as never,
+    );
+    const row = await database.analysisJob.findUniqueOrThrow({ where: { id: started.jobId } });
+    const cvJobRow = await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
+    cvSourceId = cvJobRow.cvSourceId;
+    await processOneAnalysisJob(analysisWorker, started.jobId);
 
-      const claimResult = await service.claimGuestAnalysisJob(
-        user.id,
-        started.jobId,
-        started.guestPossessionToken,
-        { sessionPublicToken: session } as never,
-      );
-      assert.equal(claimResult.status, "succeeded");
+    const claimResult = await service.claimGuestAnalysisJob(
+      user.id,
+      started.jobId,
+      started.guestPossessionToken,
+      { sessionPublicToken: session } as never,
+    );
+    assert.equal(claimResult.status, "succeeded");
 
-      const userProfile = await prisma.talentProfile.findUniqueOrThrow({
-        where: { userId: user.id },
-      });
-      assert.equal(
-        userProfile.currentTitle,
-        `${runId} Cargo Guest Reivindicado`,
-        "claim completo (CLAIM_FULL) reatribui o TalentProfile do guest pro usuário — currentTitle precisa vir junto, é o mesmo registro",
-      );
-    } finally {
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-        previous;
-    }
+    const userProfile = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(
+      userProfile.currentTitle,
+      `${runId} Cargo Guest Reivindicado`,
+      "claim completo (CLAIM_FULL) reatribui o TalentProfile do guest pro usuário — currentTitle precisa vir junto, é o mesmo registro",
+    );
   } finally {
     if (cvSourceId) await cleanup(runId, [cvSourceId], user.id);
   }

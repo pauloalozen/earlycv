@@ -2,14 +2,14 @@
 // (2026-09-08). CV sintético completo (sem identidade, 3 experiências, 2
 // formações na mesma instituição, skills repetidas, 2 tecnologias em
 // experiences[].technologies, 2 idiomas, 2 certificações), fluxo real
-// (guest allowlisted -> CvProcessingWorker -> CvTalentCaptureService).
+// (guest via flag global -> CvProcessingWorker -> CvTalentCaptureService).
 // Compara canonicalJson x tabelas persistidas campo a campo, nunca só
 // contagem total.
 process.env.CV_STRUCTURED_PROFILE_PIPELINE_ENABLED = "true";
 process.env.SKIP_AI = "false";
 
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
 import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
@@ -56,7 +56,7 @@ async function cleanupTalentRun(
     where: { jobDescriptionText: { contains: runId } },
   });
   if (source?.talentSubjectId) {
-    // Guest allowlisted é sempre o primeiro CV daquele TalentSubject
+    // Guest via flag global é sempre o primeiro CV daquele TalentSubject
     // sintético (masterIntent default do endpoint), então normalmente
     // promove a Master — CvMasterDesignation.cvStructuredProfileId
     // referencia com FK sem cascade, bloqueando a exclusão do CvSource
@@ -162,7 +162,7 @@ function buildSyntheticCanonicalOutput(
   };
 }
 
-async function runGuestAllowlistedAnalysis(
+async function runGuestAnalysis(
   runId: string,
   outputBuilder: (runId: string) => MasterCvCanonicalExtractionOutput = buildSyntheticCanonicalOutput,
 ) {
@@ -180,46 +180,29 @@ async function runGuestAllowlistedAnalysis(
   const analysisWorker = buildAnalysisWorker(service);
 
   const sessionPublicToken = `${runId}-session-${randomUUID()}`;
-  const guestSessionHash = createHash("sha256")
-    .update(sessionPublicToken)
-    .digest("hex");
-  const previousAllowlist =
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
-  process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-    guestSessionHash;
-  try {
-    const started = await service.startGuestAnalysisJob(
-      `${JOB_DESCRIPTION_BASE} ${runId}`,
-      undefined,
-      `${runId} ${buildSyntheticCanonicalOutput(runId).canonicalProfile.professionalSummary}\nExperiência\n${runId} texto suficiente pra passar na validação de tamanho mínimo do endpoint, com múltiplas linhas de conteúdo relevante sobre a carreira do candidato.`,
-      undefined,
-      { sessionPublicToken } as never,
-    );
-    const row = await database.analysisJob.findUniqueOrThrow({
-      where: { id: started.jobId },
-    });
-    if (!row.cvProcessingJobId) {
-      throw new Error(
-        "guest allowlisted deveria ter entrado no pipeline novo",
-      );
-    }
-    const cvJobRow = await processOneCvJob(
-      cvWorker,
-      row.cvProcessingJobId,
-    );
-    await processOneAnalysisJob(analysisWorker, started.jobId);
-    return { cvJobRow, service, analysisWorker, cvWorker, entrypoint };
-  } finally {
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      previousAllowlist;
+  const started = await service.startGuestAnalysisJob(
+    `${JOB_DESCRIPTION_BASE} ${runId}`,
+    undefined,
+    `${runId} ${buildSyntheticCanonicalOutput(runId).canonicalProfile.professionalSummary}\nExperiência\n${runId} texto suficiente pra passar na validação de tamanho mínimo do endpoint, com múltiplas linhas de conteúdo relevante sobre a carreira do candidato.`,
+    undefined,
+    { sessionPublicToken } as never,
+  );
+  const row = await database.analysisJob.findUniqueOrThrow({
+    where: { id: started.jobId },
+  });
+  if (!row.cvProcessingJobId) {
+    throw new Error("guest deveria ter entrado no pipeline novo");
   }
+  const cvJobRow = await processOneCvJob(cvWorker, row.cvProcessingJobId);
+  await processOneAnalysisJob(analysisWorker, started.jobId);
+  return { cvJobRow, service, analysisWorker, cvWorker, entrypoint };
 }
 
 test("TALENTO 1: guest sem identidade — TalentSubject e TalentProfile corretos (talentSubjectId preenchido, userId null)", async () => {
   const runId = makeRunId("talento-1");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
     const cvSource = await database.cvSource.findUniqueOrThrow({
       where: { id: cvJobRow.cvSourceId },
@@ -255,7 +238,7 @@ test("TALENTO 2: formações — DUAS observações sobrevivem mesmo com a mesma
   const runId = makeRunId("talento-2");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
     const observations = await prisma.talentEducationObservation.findMany({
       where: { cvStructuredProfileId: cvJobRow.cvStructuredProfileId as string },
@@ -277,7 +260,7 @@ test("TALENTO 3: skills repetidas no MESMO CV — duas observações distintas (
   const runId = makeRunId("talento-3");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
     const observations = await prisma.talentCompetencyObservation.findMany({
       where: { cvStructuredProfileId: cvJobRow.cvStructuredProfileId as string },
@@ -306,7 +289,7 @@ test("TALENTO 4: idiomas e certificações — dois de cada, campos corretos", a
   const runId = makeRunId("talento-4");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
     const languages = await prisma.talentLanguageObservation.findMany({
       where: { cvStructuredProfileId: cvJobRow.cvStructuredProfileId as string },
@@ -413,7 +396,7 @@ test("TALENTO 5-COLISAO (achado da 3ª rodada): empresa+cargo NÃO identifica un
   const runId = makeRunId("talento-5-colisao");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow } = await runGuestAllowlistedAnalysis(
+    const { cvJobRow } = await runGuestAnalysis(
       runId,
       buildCollisionCanonicalOutput,
     );
@@ -464,7 +447,7 @@ test("TALENTO 5 (corrigido nesta rodada): as 3 experiências do CV são persisti
   const runId = makeRunId("talento-5");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
 
     const experiences = await prisma.talentExperience.findMany({
@@ -521,7 +504,7 @@ test("TALENTO 5b: retry (capture chamado de novo com o mesmo CvStructuredProfile
   const runId = makeRunId("talento-5b");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow, cvWorker } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow, cvWorker } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
     const before = await prisma.talentExperience.count({
       where: { sourceRecordId: cvJobRow.cvStructuredProfileId as string },
@@ -601,52 +584,43 @@ test("TALENTO 5c: mesma experiência (empresa+cargo) em DOIS CVs do mesmo sujeit
     const service = buildRealCvAdaptationService(client, client, entrypoint);
     const analysisWorker = buildAnalysisWorker(service);
 
-    const hash = createHash("sha256").update(session).digest("hex");
-    const previousAllowlist =
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES = hash;
-    try {
-      const jobA = await service.startGuestAnalysisJob(
-        `${JOB_DESCRIPTION_BASE} ${runIdA}`,
-        undefined,
-        `${runIdA} texto suficiente\nExperiência\n${runIdA} múltiplas linhas relevantes v1.`,
-        undefined,
-        { sessionPublicToken: session } as never,
-      );
-      const rowA = await database.analysisJob.findUniqueOrThrow({ where: { id: jobA.jobId } });
-      const cvJobA = await processOneCvJob(cvWorkerA, rowA.cvProcessingJobId as string);
-      cvSourceIdA = cvJobA.cvSourceId;
-      await processOneAnalysisJob(analysisWorker, jobA.jobId);
+    const jobA = await service.startGuestAnalysisJob(
+      `${JOB_DESCRIPTION_BASE} ${runIdA}`,
+      undefined,
+      `${runIdA} texto suficiente\nExperiência\n${runIdA} múltiplas linhas relevantes v1.`,
+      undefined,
+      { sessionPublicToken: session } as never,
+    );
+    const rowA = await database.analysisJob.findUniqueOrThrow({ where: { id: jobA.jobId } });
+    const cvJobA = await processOneCvJob(cvWorkerA, rowA.cvProcessingJobId as string);
+    cvSourceIdA = cvJobA.cvSourceId;
+    await processOneAnalysisJob(analysisWorker, jobA.jobId);
 
-      const jobB = await service.startGuestAnalysisJob(
-        `${JOB_DESCRIPTION_BASE} ${runIdB}`,
-        undefined,
-        `${runIdB} texto suficiente\nExperiência\n${runIdB} múltiplas linhas relevantes v2-diferente-o-bastante.`,
-        undefined,
-        { sessionPublicToken: session } as never,
-      );
-      const rowB = await database.analysisJob.findUniqueOrThrow({ where: { id: jobB.jobId } });
-      const cvJobB = await processOneCvJob(cvWorkerB, rowB.cvProcessingJobId as string);
-      cvSourceIdB = cvJobB.cvSourceId;
-      await processOneAnalysisJob(analysisWorker, jobB.jobId);
+    const jobB = await service.startGuestAnalysisJob(
+      `${JOB_DESCRIPTION_BASE} ${runIdB}`,
+      undefined,
+      `${runIdB} texto suficiente\nExperiência\n${runIdB} múltiplas linhas relevantes v2-diferente-o-bastante.`,
+      undefined,
+      { sessionPublicToken: session } as never,
+    );
+    const rowB = await database.analysisJob.findUniqueOrThrow({ where: { id: jobB.jobId } });
+    const cvJobB = await processOneCvJob(cvWorkerB, rowB.cvProcessingJobId as string);
+    cvSourceIdB = cvJobB.cvSourceId;
+    await processOneAnalysisJob(analysisWorker, jobB.jobId);
 
-      const rows = await prisma.talentExperience.findMany({
-        where: { companyNormalized: sharedCompany.toLowerCase() },
-      });
-      assert.equal(rows.length, 2, "a mesma experiência em 2 CVs precisa gerar 2 linhas, uma por documento");
-      assert.notEqual(rows[0].sourceRecordId, rows[1].sourceRecordId);
-      assert.equal(rows[0].talentProfileId, rows[1].talentProfileId, "mesmo sujeito/sessão — mesmo TalentProfile");
+    const rows = await prisma.talentExperience.findMany({
+      where: { companyNormalized: sharedCompany.toLowerCase() },
+    });
+    assert.equal(rows.length, 2, "a mesma experiência em 2 CVs precisa gerar 2 linhas, uma por documento");
+    assert.notEqual(rows[0].sourceRecordId, rows[1].sourceRecordId);
+    assert.equal(rows[0].talentProfileId, rows[1].talentProfileId, "mesmo sujeito/sessão — mesmo TalentProfile");
 
-      const observations = await prisma.talentExperienceObservation.findMany({
-        where: { companyRaw: sharedCompany },
-      });
-      assert.equal(observations.length, 2, "a fonte de fidelidade total também preserva 2 observações separadas, uma por CvStructuredProfile");
-      assert.notEqual(observations[0].cvStructuredProfileId, observations[1].cvStructuredProfileId);
-      assert.equal(observations[0].talentProfileId, observations[1].talentProfileId);
-    } finally {
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-        previousAllowlist;
-    }
+    const observations = await prisma.talentExperienceObservation.findMany({
+      where: { companyRaw: sharedCompany },
+    });
+    assert.equal(observations.length, 2, "a fonte de fidelidade total também preserva 2 observações separadas, uma por CvStructuredProfile");
+    assert.notEqual(observations[0].cvStructuredProfileId, observations[1].cvStructuredProfileId);
+    assert.equal(observations[0].talentProfileId, observations[1].talentProfileId);
   } finally {
     if (cvSourceIdB) {
       await database.analysisJob.deleteMany({
@@ -670,11 +644,7 @@ test("TALENTO 5d: currentTitle vem de headline; CV avulso (não-Master) só pree
     const analysisWorker = buildAnalysisWorker(service);
 
     const session = `${runId}-session`;
-    const hash = createHash("sha256").update(session).digest("hex");
-    const previousAllowlist =
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES;
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES = hash;
-    try {
+    {
       // CV 1: primeiro do guest — vira Master automaticamente
       // (masterIntent default) — headline dele DEVE virar currentTitle.
       const cvWorker1 = buildProcessingWorker(async () => ({
@@ -734,9 +704,6 @@ test("TALENTO 5d: currentTitle vem de headline; CV avulso (não-Master) só pree
         `${runId} Cargo Atual Master`,
         "CV avulso não pode substituir silenciosamente o cargo atual confirmado pelo Master",
       );
-    } finally {
-      process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-        previousAllowlist;
     }
   } finally {
     if (cvSourceId2) {
@@ -753,7 +720,7 @@ test("TALENTO 6: retry (reprocessar o mesmo CvProcessingJob) não duplica observ
   const runId = makeRunId("talento-6");
   let cvSourceId: string | undefined;
   try {
-    const { cvJobRow, cvWorker } = await runGuestAllowlistedAnalysis(runId);
+    const { cvJobRow, cvWorker } = await runGuestAnalysis(runId);
     cvSourceId = cvJobRow.cvSourceId;
     const before = await prisma.talentCompetencyObservation.count({
       where: { cvStructuredProfileId: cvJobRow.cvStructuredProfileId as string },
@@ -826,10 +793,7 @@ test("TALENTO 7: mesma competência observada em DOIS CVs diferentes gera DUAS o
     const analysisWorker = buildAnalysisWorker(service);
 
     const sessionA = `${runIdA}-session-${randomUUID()}`;
-    const hashA = createHash("sha256").update(sessionA).digest("hex");
     const sessionB = `${runIdB}-session-${randomUUID()}`;
-    const hashB = createHash("sha256").update(sessionB).digest("hex");
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES = `${hashA},${hashB}`;
 
     const jobA = await service.startGuestAnalysisJob(
       `${JOB_DESCRIPTION_BASE} ${runIdA}`,

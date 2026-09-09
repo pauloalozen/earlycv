@@ -41,6 +41,20 @@ export async function runGuestAnalysisFlow(params: {
     return { kind: "error", error: result.error };
   }
 
+  // Gate desligado: o preview em si continua vindo do conteúdo já
+  // resolvido (setGuestAnalysisRaw, só pra renderizar a tela pro
+  // visitante ainda anônimo) — mas o CLAIM pós-cadastro nunca deve usar
+  // esse conteúdo como fonte. Guarda jobId+guestPossessionToken do mesmo
+  // jeito que o caminho gated já faz, pra que register/login/social-callback
+  // sempre reivindiquem pelo mesmo choke point canônico (claimGuestAnalysisJob),
+  // nos dois estados da flag.
+  if (started.guestPossessionToken) {
+    setPendingGuestAnalysis({
+      jobId: started.jobId,
+      guestPossessionToken: started.guestPossessionToken,
+    });
+  }
+
   setGuestAnalysisRaw(
     JSON.stringify({
       ...result,

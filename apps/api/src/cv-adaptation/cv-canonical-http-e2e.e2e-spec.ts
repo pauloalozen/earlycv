@@ -17,7 +17,7 @@ process.env.SKIP_AI = "false";
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { afterEach, test } from "node:test";
 
 import { type INestApplication, ValidationPipe } from "@nestjs/common";
@@ -394,7 +394,7 @@ async function cleanupUser(
 // ===========================================================================
 // Item 1 — guest com upload binário real.
 // ===========================================================================
-test("HTTP 1: guest allowlisted envia arquivo DOCX real via /analyze-guest — extração, submission, worker, claim, talento, tudo ponta a ponta", async () => {
+test("HTTP 1: guest (flag global ligada) envia arquivo DOCX real via /analyze-guest — extração, submission, worker, claim, talento, tudo ponta a ponta", async () => {
   const runId = `http1-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const extractCalls = { count: 0 };
   const extraction = fakeExtractionClient(
@@ -432,9 +432,6 @@ test("HTTP 1: guest allowlisted envia arquivo DOCX real via /analyze-guest — e
   let talentSubjectId: string | undefined;
   try {
     const session = `${runId}-session`;
-    const hash = createHash("sha256").update(session).digest("hex");
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      hash;
 
     const docxBuffer = await buildDocxBuffer([
       `${runId} Nome`,
@@ -470,7 +467,7 @@ test("HTTP 1: guest allowlisted envia arquivo DOCX real via /analyze-guest — e
     });
     assert.ok(
       row.cvProcessingJobId,
-      "guest allowlisted com arquivo precisa entrar no pipeline novo",
+      "guest com arquivo precisa entrar no pipeline novo (flag global)",
     );
 
     const cvJob = await database.cvProcessingJob.findUniqueOrThrow({
@@ -593,8 +590,6 @@ test("HTTP 1: guest allowlisted envia arquivo DOCX real via /analyze-guest — e
     if (userId) {
       await cleanupUser(database, userId, talentSubjectId);
     }
-    process.env.CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_GUEST_SESSION_HASHES =
-      undefined;
   }
 });
 

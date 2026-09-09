@@ -116,6 +116,42 @@ describe("runGuestAnalysisFlow", () => {
     expect(setPendingGuestAnalysisMock).not.toHaveBeenCalled();
   });
 
+  it("gate OFF + sucesso, com guestPossessionToken: guarda jobId+token pendente (choke point único de claim) ALÉM do preview", async () => {
+    analyzeGuestCvMock.mockResolvedValue({
+      ok: true,
+      jobId: "job-2b",
+      guestPossessionToken: "possession-2b",
+      guestSessionPublicToken: "public-2b",
+    });
+    pollAnalysisJobMock.mockResolvedValue({
+      ok: true,
+      adaptedContentJson: { vaga: {} },
+      previewText: "preview",
+      masterCvText: "cv",
+      analysisCvSnapshotId: "snapshot-1",
+      jobTitle: "Analista",
+      companyName: "Empresa",
+    });
+
+    const result = await runGuestAnalysisFlow({
+      formData: buildFormData(),
+      journeyContext: JOURNEY_CONTEXT,
+      guestAnalysisAuthGateEnabled: false,
+    });
+
+    expect(result).toEqual({
+      kind: "revealed",
+      destination: "/adaptar/resultado",
+    });
+    // Mesmo com o gate desligado (preview visível antes do login), o
+    // claim pós-cadastro precisa do mesmo jobId+token que o caminho
+    // gated já usa — nunca do conteúdo salvo em setGuestAnalysisRaw.
+    expect(setPendingGuestAnalysisMock).toHaveBeenCalledWith({
+      jobId: "job-2b",
+      guestPossessionToken: "possession-2b",
+    });
+  });
+
   it("gate OFF + poll falha: retorna erro sem gravar storage", async () => {
     analyzeGuestCvMock.mockResolvedValue({
       ok: true,

@@ -314,32 +314,51 @@ export class ResumesService {
       const text = extractedRawText?.trim();
       if (text) {
         try {
-          await this.cvProcessingEntrypoint.enqueueFromUserText({
-            userId,
-            text,
-            masterIntent: dto.isPrimary
-              ? "PROMOTE_EXPLICIT"
-              : "PROMOTE_IF_FIRST",
-            // Bug #1 do piloto Fase 3B: este chamador nunca passava
-            // resumeId, então CvMasterDesignation.resumeId ficava sempre
-            // null pra todo Master promovido via upload direto (só era
-            // corrigido se o usuário chamasse set-primary depois sobre o
-            // mesmo Resume). createdResume.id já existe nesse ponto (criado
-            // na transação acima) — passar aqui faz o CvProcessingWorker
-            // (job.resumeId) rodar syncResumeIsMaster e a designação nascer
-            // já com resumeId apontando pro Resume certo, mesmo quando o
-            // CvSource é reaproveitado por hash (dedup) e quando o job é
-            // reaproveitado por retry/concorrência (CvProcessingJobService
-            // #enqueue já tem lógica de "upgrade" pra isso).
-            resumeId: createdResume.id,
-            submission: file
-              ? {
-                  origin: "FILE_UPLOAD",
-                  fileName: file.originalname,
-                  mimeType: file.mimetype,
-                  fileSizeBytes: file.size,
-                }
-              : { origin: "PASTED_TEXT" },
+          const enqueued =
+            await this.cvProcessingEntrypoint.enqueueFromUserText({
+              userId,
+              text,
+              masterIntent: dto.isPrimary
+                ? "PROMOTE_EXPLICIT"
+                : "PROMOTE_IF_FIRST",
+              // Bug #1 do piloto Fase 3B: este chamador nunca passava
+              // resumeId, então CvMasterDesignation.resumeId ficava sempre
+              // null pra todo Master promovido via upload direto (só era
+              // corrigido se o usuário chamasse set-primary depois sobre o
+              // mesmo Resume). createdResume.id já existe nesse ponto (criado
+              // na transação acima) — passar aqui faz o CvProcessingWorker
+              // (job.resumeId) rodar syncResumeIsMaster e a designação nascer
+              // já com resumeId apontando pro Resume certo, mesmo quando o
+              // CvSource é reaproveitado por hash (dedup) e quando o job é
+              // reaproveitado por retry/concorrência (CvProcessingJobService
+              // #enqueue já tem lógica de "upgrade" pra isso).
+              resumeId: createdResume.id,
+              submission: file
+                ? {
+                    origin: "FILE_UPLOAD",
+                    fileName: file.originalname,
+                    mimeType: file.mimetype,
+                    fileSizeBytes: file.size,
+                  }
+                : { origin: "PASTED_TEXT" },
+            });
+
+          // Achado real de auditoria manual (2026-09-09): sem isto, este
+          // Resume nascia SEM cvSourceId — qualquer busca posterior por
+          // "qual Resume já representa este CvSource" (ex.:
+          // CvAdaptationService#ensureResumeForMasterPromotion, usado toda
+          // vez que uma reanálise usa masterResumeId) nunca encontrava
+          // este Resume, mesmo com o CvSource certo já existindo (dedup
+          // por hash funcionando) — criava um segundo Resume "bare"
+          // (título genérico "CV enviado para análise") pro mesmo
+          // conteúdo. Mesmo padrão já usado no branch de análise direta
+          // (startAuthenticatedAnalysisJobCanonical, linhas ~1773-1787).
+          await this.database.resume.update({
+            where: { id: createdResume.id },
+            data: {
+              cvSourceId: enqueued.cvSource.id,
+              cvSubmissionId: enqueued.cvSubmission.id,
+            },
           });
         } catch (error) {
           console.error(
