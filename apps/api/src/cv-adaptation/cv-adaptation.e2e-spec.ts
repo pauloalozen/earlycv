@@ -448,7 +448,41 @@ test("DELETE /cv-adaptation/:id is blocked — analyses/CVs adaptados nunca pode
   await app.close();
 });
 
-test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not create a primary master resume", async () => {
+// Achado da 4ª rodada de auditoria adversarial (2026-09-09): este teste
+// falhava, mas não por um bug do produto. Auditoria completa:
+//
+// - Nome exato: "POST /cv-adaptation/save-guest-preview without
+//   saveAsMaster does not create a primary master resume".
+// - Expectativa do teste: usuário SEM Master prévio, saveAsMaster ausente
+//   (falsy) -> o Resume criado a partir do texto colado deveria ficar com
+//   isMaster: false e nenhum Resume isMaster=true deveria existir.
+// - Comportamento atual (e em origin/main, confirmado por
+//   `git show origin/main:.../cv-adaptation.service.ts` — este código NÃO
+//   foi tocado por nenhuma rodada desta auditoria): o branch "sem arquivo
+//   e sem master existente" de saveGuestPreview (cv-adaptation.service.ts,
+//   comentário "vira o primeiro master do usuário automaticamente, sem
+//   perguntar nada") grava isMaster: true incondicionalmente — mesma
+//   regra aplicada em mais 4 lugares do mesmo arquivo (upload de arquivo,
+//   resumes.service.ts#create, etc.): o PRIMEIRO CV de um usuário sempre
+//   vira Master, dto.saveAsMaster só decide se um upload SUBSTITUI um
+//   Master que já existe.
+// - Regra de negócio correta (verificada pela consistência entre 5 pontos
+//   do código-fonte, todos com o mesmo comentário/intenção, e confirmada
+//   também em origin/main, portanto não é uma mudança de contrato recente
+//   desta feature): primeiro CV do usuário SEMPRE vira Master; sem Master
+//   prévio, não existe estado "não-master" possível pra ele.
+// - Impacto verificado: CvSource/CvProcessingJob/TalentProfile não são
+//   tocados aqui (flag do pipeline canônico desligada neste arquivo de
+//   teste inteiro — nenhum CV_STRUCTURED_PROFILE_PIPELINE_ENABLED setado);
+//   claim e retry têm suítes próprias e não dependem deste teste.
+//
+// Classificação: TESTE OBSOLETO (fixture nunca testou o cenário que seu
+// próprio nome descrevia — "sem Master prévio" é justamente o único caso
+// em que isMaster SEMPRE precisa ser true). Corrigido para refletir a
+// regra real, e o cenário que o nome original prometia (saveAsMaster
+// ausente NÃO promove/substitui quando JÁ existe um Master) ganhou um
+// teste próprio logo abaixo.
+test("POST /cv-adaptation/save-guest-preview sem Master prévio — primeiro CV colado vira Master automaticamente, mesmo sem saveAsMaster", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "cv-save-nomaster");
 
@@ -503,7 +537,11 @@ test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not creat
     assert.equal(resumes.length, 1);
     assert.equal(resumes[0]?.id, response.body.masterResumeId);
     assert.equal(resumes[0]?.kind, "master");
-    assert.equal(resumes[0]?.isMaster, false);
+    assert.equal(
+      resumes[0]?.isMaster,
+      true,
+      "sem Master prévio, o primeiro CV colado precisa virar Master automaticamente — não existe estado 'não-master' possível aqui",
+    );
     assert.equal(resumes[0]?.sourceFileName, null);
     assert.equal(resumes[0]?.sourceFileType, null);
     assert.equal(resumes[0]?.sourceFileUrl, null);
@@ -511,7 +549,79 @@ test("POST /cv-adaptation/save-guest-preview without saveAsMaster does not creat
     const primaryResumeCount = await database.resume.count({
       where: { userId: user.userId, isMaster: true },
     });
-    assert.equal(primaryResumeCount, 0);
+    assert.equal(primaryResumeCount, 1);
+  } finally {
+    await deleteUserByEmail(database, user.email);
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/save-guest-preview COM Master prévio e SEM saveAsMaster — reaproveita o Master existente, nunca cria nem promove outro", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "cv-save-existing-master");
+
+  const previousMaster = await database.resume.create({
+    data: {
+      userId: user.userId,
+      title: "CV anterior",
+      kind: "master",
+      status: "uploaded",
+      rawText: "CV anterior do usuario",
+      isMaster: true,
+    },
+  });
+
+  try {
+    const snapshot = await database.analysisCvSnapshot.create({
+      data: {
+        userId: user.userId,
+        sourceType: "text_input",
+        textStorageKey: "analysis-cv-snapshots/test-save-existing-master.md",
+        textSha256: "hash-save-existing-master",
+        textSizeBytes: 123,
+        professionalProfileFingerprint: "profile-hash-save-existing-master",
+        professionalProfileJson: {
+          version: "test",
+          highlights: ["Analise avulsa, nao deve mexer no Master"],
+        },
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/save-guest-preview")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .field(
+        "adaptedContentJson",
+        JSON.stringify({
+          vaga: { cargo: "Data Analyst", empresa: "EarlyCV" },
+          fit: { score: 80, categoria: "alto", headline: "ok" },
+        }),
+      )
+      .field("jobDescriptionText", "Descricao da vaga")
+      .field("masterCvText", "CV anterior do usuario")
+      .field("analysisCvSnapshotId", snapshot.id)
+      .field("jobTitle", "Data Analyst")
+      .field("companyName", "EarlyCV")
+      .field("previewText", "preview");
+
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+    assert.equal(
+      response.body.masterResumeId,
+      previousMaster.id,
+      "sem arquivo novo e sem saveAsMaster, o Master EXISTENTE precisa ser reaproveitado, nunca substituído por um novo Resume",
+    );
+
+    const resumes = await database.resume.findMany({
+      where: { userId: user.userId },
+    });
+    assert.equal(resumes.length, 1, "nenhum Resume novo pode ter sido criado");
+    assert.equal(resumes[0]?.id, previousMaster.id);
+    assert.equal(resumes[0]?.isMaster, true, "o Master existente continua Master");
+
+    const primaryResumeCount = await database.resume.count({
+      where: { userId: user.userId, isMaster: true },
+    });
+    assert.equal(primaryResumeCount, 1, "nunca dois Resumes isMaster=true ao mesmo tempo");
   } finally {
     await deleteUserByEmail(database, user.email);
     await app.close();

@@ -16,6 +16,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
+import { ClaimSourceGrantService } from "../cv-processing/claim-source-grant.service";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
 import { CvUserProfileSyncService } from "../cv-processing/cv-user-profile-sync.service";
 import { DatabaseService } from "../database/database.service";
@@ -36,10 +37,10 @@ class FakeStorage {
   }
 }
 
-function minimalCanonicalProfile(fullName: string) {
+function minimalCanonicalProfile(fullName: string, headline: string | null = null) {
   return {
     fullName,
-    headline: null,
+    headline,
     email: null,
     phone: null,
     linkedinUrl: null,
@@ -113,6 +114,7 @@ async function setupActiveMaster(
   userId: string,
   masterPromotion: CvMasterPromotionService,
   fullName: string,
+  headline: string | null = null,
 ) {
   const textSha256 = createHash("sha256").update(randomUUID()).digest("hex");
   const cvSource = await prisma.cvSource.create({
@@ -129,7 +131,7 @@ async function setupActiveMaster(
       extractorVersion: "v1",
       schemaVersion: "v1",
       status: "READY",
-      canonicalJson: minimalCanonicalProfile(fullName),
+      canonicalJson: minimalCanonicalProfile(fullName, headline),
       finishedAt: new Date(),
     },
   });
@@ -143,6 +145,16 @@ async function setupActiveMaster(
       cvSourceId: cvSource.id,
       rawText: `Currículo de ${fullName}`,
     },
+  });
+  // No pipeline real, CvTalentCaptureService#capture SEMPRE roda antes da
+  // promoção (worker: extrai -> captura -> promove) — garante que o
+  // TalentProfile já existe pro promoteAndProjectWithinTransaction
+  // atualizar (updateMany nunca cria a linha). upsert aqui simula esse
+  // passo sem precisar instanciar CvTalentCaptureService inteiro.
+  await prisma.talentProfile.upsert({
+    where: { userId },
+    create: { userId },
+    update: {},
   });
   const promotion = await masterPromotion.promoteAndProject({
     ownerType: "USER",
@@ -390,3 +402,278 @@ test("remove(): excluir um Resume comum (não-Master) nunca mexe em CvMasterDesi
     "excluir um Resume comum nunca deveria supersedir a designação do Master real",
   );
 });
+
+// ===========================================================================
+// Item 3 da correção pós-4ª-rodada — currentTitle na exclusão SEM
+// substituto: nenhum outro CV é promovido automaticamente aqui
+// (confirmado acima, "nenhuma promoção automática"), então currentTitle
+// (fato consolidado, nunca uma projeção ao vivo — ver
+// CvMasterPromotionService#promoteAndProjectWithinTransaction) precisa
+// ser LIMPO, não deixado apontando pro Master que não existe mais.
+//
+// Os 6 testes originais acima (pré-existentes, não tocados nesta rodada)
+// não tinham cleanup — debt histórico do arquivo, fora do escopo desta
+// correção. Os testes NOVOS abaixo (item 3 da 4ª rodada) limpam depois de
+// si mesmos: nenhum teste novo pode adicionar resíduo.
+// ===========================================================================
+
+async function cleanupUser(
+  userId: string,
+  extra?: { talentSubjectId?: string },
+): Promise<void> {
+  await prisma.cvMasterDesignation.deleteMany({ where: { userId } });
+  await prisma.resume.deleteMany({ where: { userId } });
+  await prisma.talentProfile.deleteMany({ where: { userId } });
+  await prisma.cvSource.deleteMany({ where: { userId } });
+  await prisma.userProfile.deleteMany({ where: { userId } }).catch(() => undefined);
+  await prisma.userRadarProfile.deleteMany({ where: { userId } }).catch(() => undefined);
+  await prisma.monitorProjectionJob.deleteMany({ where: { userId } }).catch(() => undefined);
+  if (extra?.talentSubjectId) {
+    await prisma.cvMasterDesignation.deleteMany({
+      where: { talentSubjectId: extra.talentSubjectId },
+    });
+    await prisma.talentProfile.deleteMany({
+      where: { talentSubjectId: extra.talentSubjectId },
+    });
+    await prisma.cvSource.deleteMany({
+      where: { talentSubjectId: extra.talentSubjectId },
+    });
+    await prisma.talentSubject.deleteMany({ where: { id: extra.talentSubjectId } });
+  }
+  await prisma.user.deleteMany({ where: { id: userId } });
+}
+
+test("remove(): TalentProfile.currentTitle e campos derivados são limpos; preferências/metadados de matching preservados", async () => {
+  const user = await createUser();
+  try {
+    const { masterPromotion, resumesService } = buildServices();
+    const { resume } = await setupActiveMaster(
+      user.id,
+      masterPromotion,
+      "Master com Cargo",
+      "Engenheiro de Dados Sênior",
+    );
+
+    const profileBeforeRemove = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(profileBeforeRemove.currentTitle, "Engenheiro de Dados Sênior");
+
+    // Preferências de matching — nunca derivadas de CV, nunca tocadas pela
+    // exclusão.
+    await prisma.talentProfile.update({
+      where: { userId: user.id },
+      data: {
+        internalMatchingEnabled: false,
+        b2bExposureStatus: "OPT_IN_GRANTED",
+        contactAuthorization: "GRANTED",
+      },
+    });
+
+    await resumesService.remove(user.id, resume.id);
+
+    const profileAfterRemove = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(
+      profileAfterRemove.currentTitle,
+      null,
+      "sem Master ativo nenhum, currentTitle não pode continuar apontando pro cargo do Master apagado",
+    );
+    assert.equal(profileAfterRemove.fullName, null);
+    assert.equal(profileAfterRemove.seniority, null);
+    assert.equal(profileAfterRemove.yearsExperience, null);
+    assert.deepEqual(profileAfterRemove.primaryAreas, []);
+
+    // Preferências de matching preservadas — a exclusão do Master nunca
+    // pode desligar/reabrir a exposição B2B ou o matching interno do
+    // candidato por conta própria.
+    assert.equal(profileAfterRemove.internalMatchingEnabled, false);
+    assert.equal(profileAfterRemove.b2bExposureStatus, "OPT_IN_GRANTED");
+    assert.equal(profileAfterRemove.contactAuthorization, "GRANTED");
+  } finally {
+    await cleanupUser(user.id);
+  }
+});
+
+test("remove(): excluir um Resume comum (não-Master) nunca mexe em TalentProfile.currentTitle", async () => {
+  const user = await createUser();
+  try {
+    const { masterPromotion, resumesService } = buildServices();
+    await setupActiveMaster(
+      user.id,
+      masterPromotion,
+      "Master Intacto",
+      "Cargo Que Deve Permanecer",
+    );
+
+    const otherResume = await prisma.resume.create({
+      data: {
+        userId: user.id,
+        title: "CV adaptado, não Master",
+        isMaster: false,
+        rawText: "conteudo qualquer",
+      },
+    });
+
+    await resumesService.remove(user.id, otherResume.id);
+
+    const profile = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(profile.currentTitle, "Cargo Que Deve Permanecer");
+  } finally {
+    await cleanupUser(user.id);
+  }
+});
+
+test("remove(): retry (chamar remove() de novo pro MESMO Resume já apagado) falha limpo, não reabre nem reprocessa a limpeza", async () => {
+  const user = await createUser();
+  try {
+    const { masterPromotion, resumesService } = buildServices();
+    const { resume } = await setupActiveMaster(
+      user.id,
+      masterPromotion,
+      "Master Retry",
+      "Cargo Retry",
+    );
+
+    await resumesService.remove(user.id, resume.id);
+    const profileAfterFirst = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(profileAfterFirst.currentTitle, null);
+
+    await assert.rejects(
+      () => resumesService.remove(user.id, resume.id),
+      (err: unknown) => err instanceof Error && /not found/i.test(err.message),
+      "retry sobre um Resume já apagado precisa falhar explicitamente (NotFoundException), nunca reprocessar a limpeza silenciosamente",
+    );
+
+    const profileAfterRetry = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(
+      profileAfterRetry.currentTitle,
+      null,
+      "estado precisa continuar exatamente como o primeiro remove() deixou",
+    );
+  } finally {
+    await cleanupUser(user.id);
+  }
+});
+
+test("remove(): exclusão do Master DEPOIS de um claim real (guest -> conta) limpa currentTitle no TalentProfile do USUÁRIO", async () => {
+  let userId: string | undefined;
+  let guestSubjectId: string | undefined;
+  try {
+    const userProfileSync = new CvUserProfileSyncService(
+      new ProfileCanonicalMergeService(),
+      new ProfileReadinessService(),
+    );
+    const masterPromotion = new CvMasterPromotionService(database, userProfileSync);
+    const claimService = new ClaimSourceGrantService(database, masterPromotion);
+    const resumesService = new ResumesService(
+      database,
+      new FakeStorage() as never,
+      undefined,
+      undefined,
+      masterPromotion,
+      new UserRadarProfileService(database),
+    );
+
+    const guestSubject = await prisma.talentSubject.create({ data: {} });
+    guestSubjectId = guestSubject.id;
+    const guestCvSource = await prisma.cvSource.create({
+      data: {
+        ownerType: "GUEST",
+        talentSubjectId: guestSubject.id,
+        textStorageKey: `inline:${randomUUID()}`,
+        textSha256: createHash("sha256").update(randomUUID()).digest("hex"),
+      },
+    });
+    const guestSubmission = await prisma.cvSubmission.create({
+      data: { cvSourceId: guestCvSource.id, origin: "PASTED_TEXT" },
+    });
+    const guestStructuredProfile = await prisma.cvStructuredProfile.create({
+      data: {
+        cvSourceId: guestCvSource.id,
+        extractorVersion: "v1",
+        schemaVersion: "v1",
+        status: "READY",
+        canonicalJson: minimalCanonicalProfile("Guest Reivindicado", "Cargo Reivindicado"),
+        finishedAt: new Date(),
+      },
+    });
+    const guestCvProcessingJob = await prisma.cvProcessingJob.create({
+      data: {
+        cvSourceId: guestCvSource.id,
+        cvSubmissionId: guestSubmission.id,
+        status: "READY",
+        cvStructuredProfileId: guestStructuredProfile.id,
+      },
+    });
+    // CvTalentCaptureService#capture sempre roda antes da promoção no
+    // pipeline real — garante o TalentProfile do guest já existindo, com
+    // TalentProfileSource ligada a este CvSource (senão
+    // ClaimSourceGrantService#resolveSubject não encontra nada pra
+    // reivindicar e pula a resolução de sujeito inteira).
+    const guestTalentProfile = await prisma.talentProfile.upsert({
+      where: { talentSubjectId: guestSubject.id },
+      create: { talentSubjectId: guestSubject.id },
+      update: {},
+    });
+    await prisma.talentProfileSource.create({
+      data: { talentProfileId: guestTalentProfile.id, cvSourceId: guestCvSource.id },
+    });
+    // Guest's próprio Master provisório — mesmo caminho real
+    // (CvProcessingWorker chamaria promoteAndProject com masterIntent
+    // PROMOTE_IF_FIRST logo após a extração).
+    await masterPromotion.promoteAndProject({
+      ownerType: "GUEST",
+      talentSubjectId: guestSubject.id,
+      cvStructuredProfileId: guestStructuredProfile.id,
+      masterIntent: "PROMOTE_IF_FIRST",
+      promotedReason: "FIRST_EVER",
+      canonicalProfile: guestStructuredProfile.canonicalJson as never,
+      cvSourceId: guestCvSource.id,
+    });
+
+    const user = await createUser();
+    userId = user.id;
+    const claimResult = await claimService.claim({
+      userId: user.id,
+      analysisJobId: `seed-analysis-job-${randomUUID()}`,
+      cvProcessingJobId: guestCvProcessingJob.id,
+    });
+    assert.ok(claimResult.master?.promoted, "claim precisa ter promovido o CV reivindicado a Master do usuário");
+    const claimedResumeId = claimResult.master.resumeId as string;
+
+    const profileAfterClaim = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(profileAfterClaim.currentTitle, "Cargo Reivindicado");
+
+    await resumesService.remove(user.id, claimedResumeId);
+
+    const profileAfterRemove = await prisma.talentProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    assert.equal(
+      profileAfterRemove.currentTitle,
+      null,
+      "excluir o Master reivindicado via claim precisa limpar currentTitle igual a qualquer outro Master",
+    );
+  } finally {
+    if (userId) await cleanupUser(userId, { talentSubjectId: guestSubjectId });
+  }
+});
+
+// Exclusão do Master de um GUEST puro (nunca reivindicado): não existe
+// hoje nenhum endpoint/fluxo do produto que apague um Resume de guest —
+// guests não têm linha em Resume antes de um claim (ResumesService#remove
+// exige userId autenticado). CvMasterDesignation de guest só é
+// supersedida por uma promoção posterior (substituição), nunca por uma
+// "exclusão sem substituto" equivalente à de resumes.service.ts#remove.
+// Documentado aqui como NÃO COBERTO por ausência de fluxo no produto,
+// conforme instrução explícita da 4ª rodada ("se esse fluxo existir").

@@ -25,6 +25,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 
 import { BadRequestException } from "@nestjs/common";
+import type { CvProcessingJob } from "@prisma/client";
 import { PrismaClient } from "@prisma/client";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
 import { CvProcessingWorker } from "../cv-processing/cv-processing.worker";
@@ -73,45 +74,6 @@ function buildCvText(name: string, marker: string): string {
     "Experiência",
     `2020 - 2023 | Analista - ${marker}`,
   ].join("\n");
-}
-
-// Item 4 da correção pós-3ª-rodada: processPendingBatch() é um scan GLOBAL
-// (mesmo método que o cron real chama) — debris de PENDING/FAILED
-// acumulado por OUTROS arquivos de teste (mesmo earlycv_test compartilhado,
-// sem isolamento por schema) competia pelo BATCH_SIZE pequeno (5) do
-// worker, empurrando o job do PRÓPRIO teste pra fora do lote e causando uma
-// falha de timing reproduzível (não um bug do pipeline).
-//
-// A correção anterior (deleteMany indiscriminado de PENDING/FAILED) foi
-// REJEITADA na 3ª rodada por apagar fixtures de OUTRAS specs. Esta versão
-// nunca deleta nem processa a fixture alheia: só a coloca temporariamente
-// fora do alcance de findPending() (que só seleciona status=PENDING),
-// marcando-a PROCESSING (um estado que o scan real também produz
-// legitimamente, nunca inventado) pela duração da chamada, e restaura o
-// status ORIGINAL de cada uma no finally — mesmo se o teste falhar no
-// meio. Nunca toca no conteúdo da fixture alheia, só no campo status, e
-// sempre devolve exatamente o valor anterior.
-async function quarantineOtherPendingJobs(
-  ownJobId: string,
-): Promise<() => Promise<void>> {
-  const others = await prisma.cvProcessingJob.findMany({
-    where: { status: { in: ["PENDING", "FAILED"] }, id: { not: ownJobId } },
-    select: { id: true, status: true },
-  });
-  if (others.length > 0) {
-    await prisma.cvProcessingJob.updateMany({
-      where: { id: { in: others.map((o) => o.id) } },
-      data: { status: "PROCESSING" },
-    });
-  }
-  return async () => {
-    for (const other of others) {
-      await prisma.cvProcessingJob.update({
-        where: { id: other.id },
-        data: { status: other.status },
-      });
-    }
-  };
 }
 
 async function createUser() {
@@ -316,6 +278,59 @@ function buildProcessingWorker(
     masterPromotion,
     storage,
   );
+}
+
+// Isolamento real pro scan em lote (item 1 da correção pós-3ª-rodada):
+// processPendingBatch() é um scan global (mesmo método do cron real), e
+// PENDING/FAILED de OUTROS arquivos de teste (mesmo earlycv_test
+// compartilhado) competem pelo BATCH_SIZE pequeno do worker. A correção
+// anterior (marcar temporariamente PROCESSING e restaurar depois) foi
+// rejeitada: sobrescrever o status de uma fixture alheia pode colidir com
+// uma mudança concorrente legítima daquela outra spec/worker.
+//
+// Este subclass, exclusivo do harness de teste (nunca instanciado em
+// produção — CvProcessingJobService nunca ganha filtro de runId), troca
+// SÓ o método findPending() por uma versão que enxerga apenas os IDs que
+// o próprio teste registrou — nenhuma outra fixture é lida, alterada ou
+// processada, então não há nada pra restaurar. claimOne/
+// recoverStaleProcessing continuam os métodos reais herdados (claim é
+// sempre por ID específico, nunca um scan).
+class ScopedCvProcessingJobService extends CvProcessingJobService {
+  private readonly ownJobIds = new Set<string>();
+
+  constructor(private readonly scopedDatabase: DatabaseService) {
+    super(scopedDatabase);
+  }
+
+  trackOwnJob(jobId: string): void {
+    this.ownJobIds.add(jobId);
+  }
+
+  async findPending(limit: number): Promise<CvProcessingJob[]> {
+    if (this.ownJobIds.size === 0) return [];
+    return this.scopedDatabase.cvProcessingJob.findMany({
+      where: { status: "PENDING", id: { in: [...this.ownJobIds] } },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+    });
+  }
+}
+
+function buildScopedProcessingWorker(
+  extract: () => Promise<MasterCvCanonicalExtractionOutput>,
+  storage: FakeStorage,
+): { worker: CvProcessingWorker; scopedJobService: ScopedCvProcessingJobService } {
+  const scopedJobService = new ScopedCvProcessingJobService(database);
+  const worker = new CvProcessingWorker(
+    database,
+    lockRepository,
+    scopedJobService,
+    { extract },
+    talentCapture,
+    masterPromotion,
+    storage,
+  );
+  return { worker, scopedJobService };
 }
 
 function buildAnalysisWorker(cvAdaptationService: CvAdaptationService) {
@@ -933,7 +948,12 @@ test("trigger 2) resposta do enqueue não espera o processamento — emit é sí
 test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, cron (processPendingBatch) ainda recupera", async () => {
   const user = await createUser();
   const storage = new FakeStorage();
-  const cvWorker = buildProcessingWorker(
+  // Worker com jobService ESCOPADO (item 1 da correção pós-3ª-rodada):
+  // findPending() só enxerga os IDs que este teste registrar — nenhuma
+  // fixture de outra spec é lida, alterada ou processada, então não há
+  // nada a restaurar nem risco de colidir com uma mudança concorrente
+  // legítima de outro worker/spec.
+  const { worker: cvWorker, scopedJobService } = buildScopedProcessingWorker(
     async () => fakeCanonicalOutput("Cron Recupera"),
     storage,
   );
@@ -952,6 +972,7 @@ test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, 
     masterIntent: "NONE",
     submission: { origin: "PASTED_TEXT" },
   });
+  scopedJobService.trackOwnJob(job.id);
 
   const rowBeforeCron = await database.cvProcessingJob.findUniqueOrThrow({
     where: { id: job.id },
@@ -959,17 +980,9 @@ test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, 
   assert.equal(rowBeforeCron.status, "PENDING");
 
   // Simula o tick do cron — exatamente o mesmo processPendingBatch que
-  // @Cron(BASE_TICK_CRON) chamaria. Coloca fixtures PENDING/FAILED de
-  // OUTRAS specs fora do alcance do scan (nunca as apaga nem processa —
-  // ver quarantineOtherPendingJobs) enquanto BATCH_SIZE é pequeno demais
-  // pra garantir que o job deste teste seja alcançado.
-  const restoreOthers = await quarantineOtherPendingJobs(job.id);
-  let processed: number;
-  try {
-    processed = await cvWorker.processPendingBatch();
-  } finally {
-    await restoreOthers();
-  }
+  // @Cron(BASE_TICK_CRON) chamaria, só que enxergando apenas o job deste
+  // teste.
+  const processed = await cvWorker.processPendingBatch();
   assert.ok(processed >= 1);
 
   const rowAfterCron = await database.cvProcessingJob.findUniqueOrThrow({
@@ -981,7 +994,7 @@ test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, 
 test("trigger 4) erro no trigger mantém o job pending e recuperável pelo cron", async () => {
   const user = await createUser();
   const storage = new FakeStorage();
-  const cvWorker = buildProcessingWorker(
+  const { worker: cvWorker, scopedJobService } = buildScopedProcessingWorker(
     async () => fakeCanonicalOutput("Trigger Falha Recupera"),
     storage,
   );
@@ -1020,6 +1033,7 @@ test("trigger 4) erro no trigger mantém o job pending e recuperável pelo cron"
   } finally {
     cvProcessingDispatchSignal.off(CV_PROCESSING_JOB_CREATED, listener);
   }
+  scopedJobService.trackOwnJob(job.id);
 
   const rowAfterFailedTrigger =
     await database.cvProcessingJob.findUniqueOrThrow({
@@ -1031,13 +1045,8 @@ test("trigger 4) erro no trigger mantém o job pending e recuperável pelo cron"
     "trigger falho não pode deixar o job em nenhum estado além de pending/claimable — nunca marca failed só por não ter rodado",
   );
 
-  // Cron real recupera normalmente.
-  const restoreOthers = await quarantineOtherPendingJobs(job.id);
-  try {
-    await cvWorker.processPendingBatch();
-  } finally {
-    await restoreOthers();
-  }
+  // Cron real recupera normalmente — jobService escopado só enxerga este job.
+  await cvWorker.processPendingBatch();
   const rowAfterCron = await database.cvProcessingJob.findUniqueOrThrow({
     where: { id: job.id },
   });
@@ -1048,7 +1057,7 @@ test("trigger 5) trigger e cron concorrentes processam o job exatamente uma vez"
   const user = await createUser();
   const storage = new FakeStorage();
   let extractCalls = 0;
-  const cvWorker = buildProcessingWorker(async () => {
+  const { worker: cvWorker, scopedJobService } = buildScopedProcessingWorker(async () => {
     extractCalls += 1;
     // Segura um pouco pra garantir sobreposição real entre trigger e cron.
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1069,16 +1078,13 @@ test("trigger 5) trigger e cron concorrentes processam o job exatamente uma vez"
       masterIntent: "NONE",
       submission: { origin: "PASTED_TEXT" },
     });
+    scopedJobService.trackOwnJob(job.id);
 
     // "Cron" concorrente disparado logo em seguida, sobrepondo o trigger
     // que o listener acima já iniciou — a claim atômica (UPDATE ... WHERE
     // status='pending') garante que só um dos dois processa de fato.
-    const restoreOthers = await quarantineOtherPendingJobs(job.id);
-    try {
-      await cvWorker.processPendingBatch();
-    } finally {
-      await restoreOthers();
-    }
+    // jobService escopado: nenhuma fixture alheia é lida/tocada.
+    await cvWorker.processPendingBatch();
 
     await waitUntil(async () => {
       const row = await database.cvProcessingJob.findUniqueOrThrow({
@@ -1097,11 +1103,22 @@ test("trigger 5) trigger e cron concorrentes processam o job exatamente uma vez"
   }
 });
 
-test("ISOLAMENTO 1 (item 4 da 3ª rodada): scan global não apaga nem processa PERMANENTEMENTE fixture PENDING de outra spec — restaura o status original", async () => {
+// Item 1 da correção pós-3ª-rodada: duas "suítes" simuladas (cada uma com
+// seu próprio worker escopado e seu próprio job PENDING), executando de
+// fato simultaneamente (Promise.all — sem await sequencial entre elas),
+// provam que uma nunca lê, altera ou processa o job da outra. Repetido em
+// ordem invertida (item 5) e com uma falha injetada no meio de uma delas
+// (item 3) pra provar que nada fica em estado alterado quando isso
+// acontece.
+async function runIsolatedSuite(input: {
+  suiteName: string;
+  extractMarker: string;
+  injectFailureAfterQuarantineCheck?: boolean;
+}): Promise<{ jobId: string; otherSuiteJobIds: string[] }> {
   const user = await createUser();
   const storage = new FakeStorage();
-  const cvWorker = buildProcessingWorker(
-    async () => fakeCanonicalOutput("Isolamento — job próprio"),
+  const { worker, scopedJobService } = buildScopedProcessingWorker(
+    async () => fakeCanonicalOutput(input.extractMarker),
     storage,
   );
   const entrypoint = new CvProcessingEntrypointService(
@@ -1110,54 +1127,104 @@ test("ISOLAMENTO 1 (item 4 da 3ª rodada): scan global não apaga nem processa P
     storage,
   );
 
-  // Simula uma fixture "de outra spec": um CvProcessingJob PENDING real,
-  // dono/conteúdo completamente alheios a este teste.
-  const otherUser = await createUser();
-  const { job: otherJob } = await entrypoint.enqueueFromUserText({
-    userId: otherUser.id,
-    text: buildCvText("Fixture de outra spec", "design"),
-    masterIntent: "NONE",
-    submission: { origin: "PASTED_TEXT" },
-  });
-  const otherJobBefore = await database.cvProcessingJob.findUniqueOrThrow({
-    where: { id: otherJob.id },
-  });
-  assert.equal(otherJobBefore.status, "PENDING");
-
   const { job } = await entrypoint.enqueueFromUserText({
     userId: user.id,
-    text: buildCvText("Isolamento — job próprio", "produto"),
+    text: buildCvText(input.extractMarker, input.suiteName),
     masterIntent: "NONE",
     submission: { origin: "PASTED_TEXT" },
   });
+  scopedJobService.trackOwnJob(job.id);
 
-  const restoreOthers = await quarantineOtherPendingJobs(job.id);
-  try {
-    await cvWorker.processPendingBatch();
-  } finally {
-    await restoreOthers();
+  if (input.injectFailureAfterQuarantineCheck) {
+    throw new Error(`falha intencional na suíte ${input.suiteName}`);
   }
 
-  const rowOwn = await database.cvProcessingJob.findUniqueOrThrow({
-    where: { id: job.id },
+  // processPendingBatch() usa o MESMO lock global que o cron real (só uma
+  // instância processa por vez, por design — evita trabalho duplicado).
+  // Sob concorrência de verdade (duas suítes chamando ao mesmo tempo via
+  // Promise.all), perder a corrida do lock é esperado e correto — o
+  // scan simplesmente não roda desta vez, sem erro, sem tocar em nada
+  // (nunca mexe no job alheio, só devolve 0). Repete até o PRÓPRIO job
+  // ficar READY, exatamente como o cron real tentaria de novo no próximo
+  // tick de 15s.
+  await waitUntil(async () => {
+    await worker.processPendingBatch();
+    const row = await database.cvProcessingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    return row.status === "READY";
   });
-  assert.equal(rowOwn.status, "READY", "o próprio job precisa ter sido processado normalmente");
+  return { jobId: job.id, otherSuiteJobIds: [] };
+}
 
-  const otherJobAfter = await database.cvProcessingJob.findUniqueOrThrow({
-    where: { id: otherJob.id },
+test("ISOLAMENTO 1: duas suítes com jobs PENDING distintos executando SIMULTANEAMENTE — nenhuma lê, altera ou processa o job da outra", async () => {
+  const [resultA, resultB] = await Promise.all([
+    runIsolatedSuite({ suiteName: "suite-A", extractMarker: "Isolamento A" }),
+    runIsolatedSuite({ suiteName: "suite-B", extractMarker: "Isolamento B" }),
+  ]);
+
+  const rowA = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultA.jobId } });
+  const rowB = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultB.jobId } });
+  assert.equal(rowA.status, "READY", "suíte A precisa ter processado o PRÓPRIO job");
+  assert.equal(rowB.status, "READY", "suíte B precisa ter processado o PRÓPRIO job");
+  assert.equal(rowA.attempts, 1, "suíte A não pode ter sido reprocessada pela suíte B (attempts=1)");
+  assert.equal(rowB.attempts, 1, "suíte B não pode ter sido reprocessada pela suíte A (attempts=1)");
+
+  const structuredProfileA = await database.cvStructuredProfile.findUniqueOrThrow({
+    where: { id: rowA.cvStructuredProfileId as string },
+  });
+  const structuredProfileB = await database.cvStructuredProfile.findUniqueOrThrow({
+    where: { id: rowB.cvStructuredProfileId as string },
   });
   assert.equal(
-    otherJobAfter.status,
-    "PENDING",
-    "a fixture de outra spec precisa voltar EXATAMENTE ao status original — nunca apagada, nunca deixada PROCESSING, nunca reprocessada com o extrator deste teste",
+    (structuredProfileA.canonicalJson as { fullName: string }).fullName,
+    "Isolamento A",
+    "o conteúdo extraído do job A precisa ser o do extrator de A, nunca contaminado pelo de B",
   );
   assert.equal(
-    otherJobAfter.attempts,
-    otherJobBefore.attempts,
-    "a fixture alheia não pode ter sido tocada pelo processJob deste teste (attempts inalterado)",
+    (structuredProfileB.canonicalJson as { fullName: string }).fullName,
+    "Isolamento B",
+  );
+});
+
+test("ISOLAMENTO 2: ordem invertida (suíte B antes de A) produz o mesmo resultado", async () => {
+  const resultB = await runIsolatedSuite({ suiteName: "suite-B-invertida", extractMarker: "Isolamento B invertida" });
+  const resultA = await runIsolatedSuite({ suiteName: "suite-A-invertida", extractMarker: "Isolamento A invertida" });
+
+  const rowA = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultA.jobId } });
+  const rowB = await database.cvProcessingJob.findUniqueOrThrow({ where: { id: resultB.jobId } });
+  assert.equal(rowA.status, "READY");
+  assert.equal(rowB.status, "READY");
+  assert.equal(rowA.attempts, 1);
+  assert.equal(rowB.attempts, 1);
+});
+
+test("ISOLAMENTO 3: falha no meio de uma suíte não deixa o job da OUTRA suíte em estado alterado", async () => {
+  const okResult = await runIsolatedSuite({
+    suiteName: "suite-ok",
+    extractMarker: "Isolamento OK antes da falha",
+  });
+  const rowBefore = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: okResult.jobId },
+  });
+  assert.equal(rowBefore.status, "READY");
+
+  await assert.rejects(() =>
+    runIsolatedSuite({
+      suiteName: "suite-falha",
+      extractMarker: "Isolamento suite que falha",
+      injectFailureAfterQuarantineCheck: true,
+    }),
   );
 
-  await prisma.cvProcessingJob.deleteMany({ where: { id: otherJob.id } });
+  // O job da suíte que já tinha terminado com sucesso precisa continuar
+  // exatamente como estava — a suíte escopada da OUTRA nem sequer sabia
+  // que ele existia, então uma falha ali não pode alcançá-lo.
+  const rowAfter = await database.cvProcessingJob.findUniqueOrThrow({
+    where: { id: okResult.jobId },
+  });
+  assert.equal(rowAfter.status, "READY");
+  assert.equal(rowAfter.attempts, rowBefore.attempts);
 });
 
 test("trigger 6) dois triggers simultâneos pro MESMO job processam exatamente uma vez", async () => {

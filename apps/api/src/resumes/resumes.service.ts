@@ -799,6 +799,36 @@ export class ResumesService {
             },
           });
 
+          // Achado da 4ª rodada de auditoria adversarial: exclusão do
+          // Master SEM substituto (nenhum outro CV é promovido
+          // automaticamente aqui — supersedeIfResumeMatches só limpa a
+          // designação ativa) precisa limpar também os campos DERIVADOS de
+          // CV na Base de Talentos (TalentProfile) — mesmo escopo do
+          // UserProfile acima. currentTitle é fato consolidado (ver
+          // CvMasterPromotionService#promoteAndProjectWithinTransaction),
+          // não uma projeção recalculada; sem Master nenhum pra
+          // reconfirmar o fato, ele fica desatualizado/mentindo se não for
+          // limpo aqui. Preferências manuais (internalMatchingEnabled,
+          // b2bExposureStatus, contactAuthorization, identityConfidence)
+          // NUNCA são tocadas — só campos de conteúdo derivado do CV.
+          await tx.talentProfile.updateMany({
+            where: { userId },
+            data: {
+              fullName: null,
+              primaryEmail: null,
+              phone: null,
+              linkedinUrl: null,
+              city: null,
+              state: null,
+              country: null,
+              currentTitle: null,
+              seniority: null,
+              yearsExperience: null,
+              primaryAreas: [],
+              completenessScore: 0,
+            },
+          });
+
           await tx.monitorProjectionJob.create({
             data: { userId, reason: "MASTER_REMOVED" },
           });
