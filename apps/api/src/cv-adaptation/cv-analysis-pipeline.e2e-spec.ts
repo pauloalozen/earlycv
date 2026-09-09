@@ -75,6 +75,20 @@ function buildCvText(name: string, marker: string): string {
   ].join("\n");
 }
 
+// Item 4 da correção pós-2ª-rodada: processPendingBatch() é um scan GLOBAL
+// (mesmo método que o cron real chama) — debris de PENDING/FAILED
+// acumulado por OUTROS arquivos de teste (mesmo earlycv_test compartilhado,
+// sem isolamento por schema) competia pelo BATCH_SIZE pequeno (5) do
+// worker, empurrando o job do PRÓPRIO teste pra fora do lote e causando
+// falha de timing reproduzível (não um bug do pipeline). Chamado só pelos
+// poucos testes que de fato exercitam o scan em lote (nunca afeta
+// claimOne/processJob, que são sempre por ID específico).
+async function purgeStaleCvProcessingQueueDebris(): Promise<void> {
+  await prisma.cvProcessingJob.deleteMany({
+    where: { status: { in: ["PENDING", "FAILED"] } },
+  });
+}
+
 async function createUser() {
   return prisma.user.create({
     data: {
@@ -602,13 +616,28 @@ test("linhagem 3) pipeline novo com CvStructuredProfile FAILED — falha explíc
   const { service, claimResult, finalJob } =
     await setupReadyCanonicalAdaptation("perfil FAILED");
 
-  await database.cvStructuredProfile.update({
-    where: { id: finalJob.cvStructuredProfileId as string },
-    data: { status: "FAILED" },
+  // READY -> FAILED é bloqueado pelo próprio banco desde a migration
+  // 20260908210000 (READY é terminal) — não dá mais pra simular este
+  // estado via UPDATE num profile que já foi READY. Constrói um profile
+  // FAILED do zero (nunca chegou a READY) e aponta o objeto em memória
+  // pra ele — o alvo do teste é o comportamento de
+  // ensureLegacyStructuredOutput, não a escrita da FK em si.
+  const originalProfile = await database.cvStructuredProfile.findUniqueOrThrow(
+    { where: { id: finalJob.cvStructuredProfileId as string } },
+  );
+  const failedProfile = await prisma.cvStructuredProfile.create({
+    data: {
+      cvSourceId: originalProfile.cvSourceId,
+      extractorVersion: "v2-failed",
+      schemaVersion: "v1",
+      status: "FAILED",
+    },
   });
   const adaptation = await loadAdaptationForGeneration(
     claimResult.cvAdaptationId,
   );
+  (adaptation as { cvStructuredProfileId: string | null }).cvStructuredProfileId =
+    failedProfile.id;
 
   await assert.rejects(
     // biome-ignore lint/suspicious/noExplicitAny: acesso a método privado
@@ -877,6 +906,7 @@ test("trigger 2) resposta do enqueue não espera o processamento — emit é sí
 });
 
 test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, cron (processPendingBatch) ainda recupera", async () => {
+  await purgeStaleCvProcessingQueueDebris();
   const user = await createUser();
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
@@ -916,6 +946,7 @@ test("trigger 3) processo morre entre commit e trigger — sem NENHUM listener, 
 });
 
 test("trigger 4) erro no trigger mantém o job pending e recuperável pelo cron", async () => {
+  await purgeStaleCvProcessingQueueDebris();
   const user = await createUser();
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
@@ -977,6 +1008,7 @@ test("trigger 4) erro no trigger mantém o job pending e recuperável pelo cron"
 });
 
 test("trigger 5) trigger e cron concorrentes processam o job exatamente uma vez", async () => {
+  await purgeStaleCvProcessingQueueDebris();
   const user = await createUser();
   const storage = new FakeStorage();
   let extractCalls = 0;
