@@ -280,8 +280,8 @@ async function waitFor<T>(
   predicate: (value: T) => boolean,
   opts: { attempts?: number; intervalMs?: number } = {},
 ): Promise<T> {
-  const attempts = opts.attempts ?? 30;
-  const intervalMs = opts.intervalMs ?? 100;
+  const attempts = opts.attempts ?? 80;
+  const intervalMs = opts.intervalMs ?? 150;
   let last = await fn();
   for (let i = 0; i < attempts; i++) {
     if (predicate(last)) return last;
