@@ -28,7 +28,8 @@
     "talent:fix-confirmed-cache": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-talent-profile-confirmed-cache.ts",
     "fix:radar-cv-adaptation-job-info": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-radar-cv-adaptation-job-info.ts",
     "audit:company-sources": "NODE_OPTIONS='--conditions=development' tsx src/scripts/audit-company-sources.ts",
-    "apply:company-source-audit": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-company-source-audit.ts"
+    "apply:company-source-audit": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-company-source-audit.ts",
+    "cleanup:foreign-jobs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-foreign-jobs.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",

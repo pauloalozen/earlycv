@@ -17,6 +17,7 @@ import { AuditTabClient } from "./_components/audit-tab-client";
 import { DiscoveryTabClient } from "./_components/discovery-tab-client";
 import { EnrichmentTabContent } from "./_components/enrichment-tab-content";
 import { FontesTableClient } from "./_components/fontes-table-client";
+import { ForeignJobsTabClient } from "./_components/foreign-jobs-tab-client";
 import { IndexacaoTabClient } from "./_components/indexacao-tab-client";
 import { IngestionDashboardCards } from "./_components/ingestion-dashboard-cards";
 import { JobsTabClient } from "./_components/jobs-tab-client";
@@ -34,6 +35,7 @@ type SearchParams = Promise<{
     | "enrichment"
     | "descoberta"
     | "audit"
+    | "vagas-estrangeiras"
     | "indexacao";
   message?: string;
   status?: string;
@@ -157,6 +159,7 @@ export default async function AdminIngestionPage({
     "enrichment",
     "descoberta",
     "audit",
+    "vagas-estrangeiras",
     "indexacao",
   ] as const;
   const activeTab = VALID_TABS.includes(tab as (typeof VALID_TABS)[number])
@@ -256,6 +259,12 @@ export default async function AdminIngestionPage({
             Audit de Fontes
           </TabLink>
           <TabLink
+            active={activeTab === "vagas-estrangeiras"}
+            href={buildTabHref("vagas-estrangeiras")}
+          >
+            Vagas Estrangeiras
+          </TabLink>
+          <TabLink
             active={activeTab === "descoberta"}
             badgeCount={promotableDiscoveriesCount}
             href={buildTabHref("descoberta")}
@@ -351,6 +360,9 @@ export default async function AdminIngestionPage({
 
         {/* ── AUDIT DE FONTES ── */}
         {activeTab === "audit" && <AuditTabClient />}
+
+        {/* ── VAGAS ESTRANGEIRAS ── */}
+        {activeTab === "vagas-estrangeiras" && <ForeignJobsTabClient />}
 
         {/* ── ENRIQUECIMENTO ── */}
         {activeTab === "enrichment" && (

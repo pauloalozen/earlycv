@@ -185,3 +185,40 @@ test("isForeignLocation rejeita código ISO de país que colide com sigla de UF 
   assert.equal(isForeignLocation("Rondônia", null), false);
   assert.equal(isForeignLocation("Pará", null), false);
 });
+
+test("isForeignLocation rejeita location composto com qualificador 'Remote-Friendly' junto de escritórios estrangeiros (bug real: Anthropic, board Greenhouse global)", () => {
+  // "Remote-Friendly" é um qualificador da empresa, não geolocalização — o
+  // split por hífen de splitCountryTokens cortava em "Remote"/"Friendly" e
+  // o token "Remote" batia a exceção de vaga remota BR, deixando passar
+  // vaga de Londres/Ontário como brasileira.
+  assert.equal(
+    isForeignLocation(
+      "London, UK; Ontario, CAN; Remote-Friendly, United States; San Francisco, CA",
+      null,
+    ),
+    true,
+  );
+  assert.equal(isForeignLocation("Remote-Friendly, United States", null), true);
+  // "Remote-Friendly" sozinho não é sinal de Brasil (era só o efeito
+  // colateral do bug) — mas "remoto"/"remote" isolados continuam
+  // reconhecidos normalmente (sem regressão).
+  assert.equal(isForeignLocation("Remote-Friendly", null), true);
+  assert.equal(isForeignLocation("Remoto", null), false);
+  assert.equal(isForeignLocation("Remote", null), false);
+});
+
+test("isForeignLocation resolve o par '<País> - Remote' (boards Greenhouse globais) pelo país, não mais por 'Remote' sozinho", () => {
+  // Achado auditando fontes reais: Twilio Brasil/Stripe Brasil/VALTECH
+  // BRASIL têm vaga "Remote - US"/"US-Remote"/"Canada-Remote" que uma
+  // primeira versão deste fix continuava aceitando como BR só porque
+  // "Remote" batia via split de hífen — o país explícito no par é quem
+  // deve decidir.
+  assert.equal(isForeignLocation("Brazil - Remote", null), false);
+  assert.equal(isForeignLocation("Remote - Brazil", null), false);
+  assert.equal(isForeignLocation("Brasil - Remote", null), false);
+  assert.equal(isForeignLocation("US - Remote", null), true);
+  assert.equal(isForeignLocation("Remote - US", null), true);
+  assert.equal(isForeignLocation("US-Remote", null), true);
+  assert.equal(isForeignLocation("Canada-Remote", null), true);
+  assert.equal(isForeignLocation("Colombia - Remote", null), true);
+});
