@@ -216,6 +216,7 @@ Mergear o hotfix em `develop` imediatamente apos o deploy em `main` e obrigatori
 - Slice `analysis-protection + analysis-observability` implementado (facade protegida, turnstile, rate-limit/dedupe/usage policy, telemetry e funnel idempotente) e integrado no `cv-adaptation` sem mudar UX visivel.
 - Referencia operacional oficial do slice: `docs/analysis-protection-operational-runbook.md`.
 - Pre-lancamento do Alerta de Vaga Certa (ghost mode via `JOBS_GHOST_MODE` + correcao de atribuicao da jornada): implementado e testado na branch `pré-lançamento-monitor` (não mergeada em `develop`), aguardando decisao do Paulo sobre `/meu-perfil` e levantamento de usuarios ja com acesso. Status completo em `docs/specs/2026-09-02-monitor-pre-lancamento-ghost-mode.md`.
+- Causa raiz do bug recorrente de "lineage inconsistency" no pipeline canônico de CV corrigida (`saveGuestPreview` agora resolve `cvStructuredProfileId` sozinho, nunca mais depende de cada chamador); `UserProfileMasterSyncService` novo faz edições em `/meu-cv-master` alimentarem análises NOVAS (análises já existentes continuam sempre congeladas na versão de quando foram feitas). Commitado e em `develop` (`5faa9bd`), aguardando confirmação visual do Paulo no navegador. Status completo, incluindo o que falta testar amanhã, em `docs/specs/2026-09-10-cv-canonical-pipeline-lineage-fixes-e-profile-sync.md`.
 
 ---
 
