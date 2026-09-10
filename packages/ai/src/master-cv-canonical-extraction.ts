@@ -4,6 +4,7 @@ import type OpenAI from "openai";
 import { extractTextFromPdf } from "./pdf-parser.js";
 import {
   buildDeepSeekExtraBody,
+  buildMaxOutputTokensParam,
   buildSystemMessage,
   stripJsonCodeFence,
 } from "./prompt-cache.js";
@@ -635,8 +636,11 @@ export async function extractMasterCvCanonicalProfile(
     // Sem isso o provedor aplica o próprio default (visto na prática: baixo
     // demais pra um CV rico — muitas experiências/bullets — e a resposta é
     // cortada no meio do JSON, quebrando o parse). CVs observados chegam a
-    // ~4.7k tokens de saída; a folga aqui é deliberada.
-    max_tokens: 8_192,
+    // ~4.7k tokens de saída; a folga aqui é deliberada. O nome do parâmetro
+    // (max_tokens vs max_completion_tokens) é decidido pelo adapter central
+    // — nunca aqui — porque a família "reasoning" da OpenAI (o1/o3/o4/
+    // gpt-5*) rejeita max_tokens com erro 400.
+    ...buildMaxOutputTokensParam(provider, model, 8_192),
     ...buildDeepSeekExtraBody(model),
   });
 

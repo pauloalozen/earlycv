@@ -6,6 +6,7 @@ import {
 } from "../analysis-protection/analysis-protection.facade";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
+import type { CanonicalCvProfileData } from "./cv-adaptation-ai.service";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import type {
   JobRequirementCoverage,
@@ -23,8 +24,22 @@ type ProtectedAnalyzeInput<TPayload> = {
   };
   jobDescriptionText: string;
   loadMasterCvText: () => Promise<string>;
+  // Pipeline canônico: quando o chamador já tem um CvStructuredProfile
+  // READY, passa o perfil estruturado aqui — a IA de análise recebe
+  // canonicalCvProfile em vez do texto de loadMasterCvText() (nunca os
+  // dois juntos). loadMasterCvText() continua sendo chamado de qualquer
+  // forma: o texto ainda alimenta AnalysisCvSnapshot/AnalysisJob.masterCvText
+  // (trilha de auditoria/histórico, fora de escopo desta correção — só o
+  // que vai pro PROMPT da IA muda).
+  canonicalCvProfile?: CanonicalCvProfileData;
   payload: TPayload;
   turnstileToken?: string | null;
+  // Fase 2C (pipeline canônico): a análise passa a rodar num worker
+  // separado, depois da resposta HTTP original — o turnstile já foi
+  // verificado uma única vez no entrypoint (precheckTurnstile), então o
+  // token (de uso único/curto) não pode ser reapresentado aqui. Mesmo
+  // padrão já usado por executeProtectedBuildPaidCvOutputFromGuest.
+  skipTurnstile?: boolean;
 };
 
 type ProtectedAnalyzeOutput = {
@@ -50,12 +65,16 @@ type ProtectedAnalyzeAndPersistInput<TPayload> = {
   turnstileToken?: string | null;
 };
 
-type ProtectedBuildPaidCvOutputInput<TPayload> = {
+// masterCvText/canonicalCvProfile mutuamente exclusivos — mesma garantia de
+// ProtectedAnalyzeInput.canonicalCvProfile, aplicada à geração.
+type ProtectedBuildPaidCvOutputInput<TPayload> = (
+  | { masterCvText: string; canonicalCvProfile?: undefined }
+  | { masterCvText?: undefined; canonicalCvProfile: CanonicalCvProfileData }
+) & {
   companyName?: string;
   context: AnalysisRequestContext & { routeKey: string };
   jobDescriptionText: string;
   jobTitle?: string;
-  masterCvText: string;
   requirementCoverage?: JobRequirementCoverage[];
   selectedMissingKeywords?: string[];
   ajustesConteudo?: Array<{
@@ -91,13 +110,22 @@ export class CvAdaptationProtectedAnalyzeService {
     return this.analysisProtectionFacade.executeProtectedAnalysis(
       {
         payload: input.payload,
+        skipTurnstile: input.skipTurnstile ?? false,
         turnstileToken: input.turnstileToken,
       },
       input.context,
       async () => {
         const masterCvText = await input.loadMasterCvText();
+        // canonicalCvProfile (quando presente) é o que vai pro PROMPT da
+        // IA — masterCvText, carregado de qualquer forma acima, só alimenta
+        // o retorno/trilha de auditoria (AnalysisCvSnapshot/AnalysisJob.
+        // masterCvText), nunca os dois juntos no prompt.
+        const cvSourceInput =
+          input.canonicalCvProfile !== undefined
+            ? { canonicalCvProfile: input.canonicalCvProfile }
+            : { masterCvText };
         const result = await this.aiService.analyzeAndAdaptDirect({
-          masterCvText,
+          ...cvSourceInput,
           jobDescriptionText: input.jobDescriptionText,
           canonicalJobJson: input.canonicalJobJson,
           existingRequirements: input.existingRequirements,
@@ -141,11 +169,15 @@ export class CvAdaptationProtectedAnalyzeService {
       },
       input.context,
       async () => {
+        const cvSourceInput =
+          input.canonicalCvProfile !== undefined
+            ? { canonicalCvProfile: input.canonicalCvProfile }
+            : { masterCvText: input.masterCvText };
         return this.aiService.buildPaidCvOutputFromGuest({
+          ...cvSourceInput,
           companyName: input.companyName,
           jobDescriptionText: input.jobDescriptionText,
           jobTitle: input.jobTitle,
-          masterCvText: input.masterCvText,
           requirementCoverage: input.requirementCoverage,
           selectedMissingKeywords: input.selectedMissingKeywords,
           ajustesConteudo: input.ajustesConteudo,

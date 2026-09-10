@@ -2,23 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
-import { saveGuestPreview } from "@/lib/cv-adaptation-api";
+import { claimGuestAnalysisJob } from "@/lib/cv-adaptation-api";
+import { clearGuestAnalysisRaw } from "@/lib/guest-analysis-storage";
 import {
-  clearGuestAnalysisRaw,
-  getGuestAnalysisRaw,
-} from "@/lib/guest-analysis-storage";
-import { getJourneySessionInternalId } from "@/lib/journey-session";
-import { getOrCreateVisitorId } from "@/lib/visitor-id";
-
-type GuestAnalysisStored = {
-  adaptedContentJson: CvAnalysisData;
-  previewText: string;
-  jobDescriptionText: string;
-  masterCvText: string;
-  analysisCvSnapshotId?: string;
-  guestSessionPublicToken?: string | null;
-};
+  clearPendingGuestAnalysis,
+  getPendingGuestAnalysis,
+} from "@/lib/guest-analysis-pending";
 
 export function GuestAnalysisClaimer() {
   const router = useRouter();
@@ -27,46 +16,47 @@ export function GuestAnalysisClaimer() {
   );
 
   useEffect(() => {
-    const raw = getGuestAnalysisRaw();
-    if (!raw) return;
-
-    let parsed: GuestAnalysisStored;
-    try {
-      parsed = JSON.parse(raw) as GuestAnalysisStored;
-    } catch {
-      clearGuestAnalysisRaw();
-      return;
-    }
-
-    if (!parsed.masterCvText?.trim() || !parsed.analysisCvSnapshotId?.trim()) {
-      clearGuestAnalysisRaw();
-      return;
-    }
+    const pending = getPendingGuestAnalysis();
+    if (!pending) return;
 
     setStatus("claiming");
 
-    saveGuestPreview({
-      adaptedContentJson: parsed.adaptedContentJson as Record<string, unknown>,
-      previewText: parsed.previewText,
-      jobDescriptionText: parsed.jobDescriptionText,
-      masterCvText: parsed.masterCvText,
-      analysisCvSnapshotId: parsed.analysisCvSnapshotId,
-      guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
-      jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
-      companyName: parsed.adaptedContentJson?.vaga?.empresa,
-      sessionInternalId: getJourneySessionInternalId(),
-      visitorId: getOrCreateVisitorId(),
-    })
-      .then((saved) => {
+    // Único choke point de claim: resolve a AnalysisJob original por
+    // jobId+guestPossessionToken — nunca reconstrói a fonte a partir de
+    // conteúdo salvo no navegador (masterCvText/adaptedContentJson do
+    // localStorage nunca são a fonte de verdade do claim).
+    claimGuestAnalysisJob(pending.jobId, pending.guestPossessionToken)
+      .then((result) => {
+        clearPendingGuestAnalysis();
         clearGuestAnalysisRaw();
-        setStatus("done");
-        // Independente de como o usuário criou a conta (email, Google, link
-        // do header etc.), se tinha uma análise guest pendente, ele deve cair
-        // direto nela — não no /meu-perfil genérico.
-        router.push(`/adaptar/resultado?adaptationId=${saved.id}`);
+
+        if (result.status === "succeeded") {
+          setStatus("done");
+          // Independente de como o usuário criou a conta (email, Google,
+          // link do header etc.), se tinha uma análise guest pendente, ele
+          // deve cair direto nela — não no /meu-perfil genérico.
+          router.push(
+            `/adaptar/resultado?adaptationId=${result.cvAdaptationId}`,
+          );
+          return;
+        }
+
+        if (result.status === "pending" || result.status === "processing") {
+          // Claim aceito, mas a projeção/materialização ainda não
+          // terminou — /adaptar/resultado sabe retomar por claimJobId
+          // (pollAndClaim), sem precisar reenviar nada do navegador.
+          setStatus("done");
+          router.push(`/adaptar/resultado?claimJobId=${pending.jobId}`);
+          return;
+        }
+
+        setStatus("error");
       })
       .catch((err: unknown) => {
-        console.error("[GuestAnalysisClaimer] saveGuestPreview failed:", err);
+        console.error(
+          "[GuestAnalysisClaimer] claimGuestAnalysisJob failed:",
+          err,
+        );
         setStatus("error");
       });
   }, [router]);

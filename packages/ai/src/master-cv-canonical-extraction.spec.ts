@@ -164,6 +164,116 @@ describe("extractMasterCvCanonicalProfile", () => {
     assert.match(request.messages[1]?.content ?? "", /Ana Silva/);
   });
 
+  describe("max_tokens vs max_completion_tokens routing (auditoria 2026-09-05)", () => {
+    it("DeepSeek recebe max_tokens (parâmetro compatível atual) e a extração continua funcionando sem regressão", async () => {
+      const chatCompletionsCreate = mockChatCompletion(
+        JSON.stringify(createValidOutput()),
+      );
+      const mockClient = {
+        chat: { completions: { create: chatCompletionsCreate } },
+      } as unknown as OpenAI;
+
+      const { output } = await extractMasterCvCanonicalProfile(
+        mockClient,
+        "deepseek-v4-flash",
+        { masterCvText: SAMPLE_CV_TEXT },
+        "deepseek",
+      );
+
+      assert.equal(output.canonicalProfile.fullName, "Ana Silva");
+      const request = chatCompletionsCreate.mock.calls[0]?.arguments[0] as Record<
+        string,
+        unknown
+      >;
+      assert.equal(request.max_tokens, 8192);
+      assert.equal("max_completion_tokens" in request, false);
+    });
+
+    it("OpenAI gpt-5.4-mini NÃO recebe max_tokens (contrato rejeita) — recebe max_completion_tokens", async () => {
+      const chatCompletionsCreate = mockChatCompletion(
+        JSON.stringify(createValidOutput()),
+      );
+      const mockClient = {
+        chat: { completions: { create: chatCompletionsCreate } },
+      } as unknown as OpenAI;
+
+      const { output } = await extractMasterCvCanonicalProfile(
+        mockClient,
+        "gpt-5.4-mini",
+        { masterCvText: SAMPLE_CV_TEXT },
+        "openai",
+      );
+
+      assert.equal(output.canonicalProfile.fullName, "Ana Silva");
+      const request = chatCompletionsCreate.mock.calls[0]?.arguments[0] as Record<
+        string,
+        unknown
+      >;
+      assert.equal(request.max_completion_tokens, 8192);
+      assert.equal(
+        "max_tokens" in request,
+        false,
+        "gpt-5.4-mini nunca deveria receber max_tokens — é exatamente o que causava o erro 400 real da OpenAI",
+      );
+    });
+
+    it("nunca envia os dois parâmetros de limite simultaneamente, para nenhum provider testado", async () => {
+      for (const [provider, model] of [
+        ["deepseek", "deepseek-v4-flash"],
+        ["openai", "gpt-5.4-mini"],
+        ["openai", "gpt-4.1-mini"],
+      ] as const) {
+        const chatCompletionsCreate = mockChatCompletion(
+          JSON.stringify(createValidOutput()),
+        );
+        const mockClient = {
+          chat: { completions: { create: chatCompletionsCreate } },
+        } as unknown as OpenAI;
+
+        await extractMasterCvCanonicalProfile(
+          mockClient,
+          model,
+          { masterCvText: SAMPLE_CV_TEXT },
+          provider,
+        );
+
+        const request = chatCompletionsCreate.mock.calls[0]?.arguments[0] as Record<
+          string,
+          unknown
+        >;
+        const hasMaxTokens = "max_tokens" in request;
+        const hasMaxCompletionTokens = "max_completion_tokens" in request;
+        assert.notEqual(
+          hasMaxTokens,
+          hasMaxCompletionTokens,
+          `${provider}/${model}: esperava exatamente UM dos dois parâmetros`,
+        );
+      }
+    });
+
+    it("outros modelos OpenAI já suportados (gpt-4.1-mini) preservam max_tokens, sem alteração indevida", async () => {
+      const chatCompletionsCreate = mockChatCompletion(
+        JSON.stringify(createValidOutput()),
+      );
+      const mockClient = {
+        chat: { completions: { create: chatCompletionsCreate } },
+      } as unknown as OpenAI;
+
+      await extractMasterCvCanonicalProfile(
+        mockClient,
+        "gpt-4.1-mini",
+        { masterCvText: SAMPLE_CV_TEXT },
+        "openai",
+      );
+
+      const request = chatCompletionsCreate.mock.calls[0]?.arguments[0] as Record<
+        string,
+        unknown
+      >;
+      assert.equal(request.max_tokens, 8192);
+    });
+  });
+
   it("stores file metadata in the audit payload", async () => {
     const mockOutput = createValidOutput();
     const file = createFileInput();

@@ -258,7 +258,13 @@ function parseExps(raw: unknown): ExpEntry[] {
   });
 }
 
-function ExperienciasEditor({ raw }: { raw: unknown }) {
+function ExperienciasEditor({
+  raw,
+  onRemove,
+}: {
+  raw: unknown;
+  onRemove?: () => void;
+}) {
   const [entries, setEntries] = useState<ExpEntry[]>(() => parseExps(raw));
 
   const add = () =>
@@ -275,8 +281,13 @@ function ExperienciasEditor({ raw }: { raw: unknown }) {
       },
     ]);
 
-  const remove = (id: string) =>
+  // Achado 2026-09-10: remover um item inteiro nunca dispara o autosave
+  // por blur (o clique no botão de remover continua dentro do próprio
+  // form, o foco nunca sai dele) — dispara explicitamente aqui.
+  const remove = (id: string) => {
     setEntries((prev) => prev.filter((e) => e._id !== id));
+    onRemove?.();
+  };
 
   const update = (id: string, key: keyof ExpEntry, value: string | boolean) =>
     setEntries((prev) =>
@@ -413,7 +424,13 @@ function parseEdu(raw: unknown): EduEntry[] {
   });
 }
 
-function FormacaoEditor({ raw }: { raw: unknown }) {
+function FormacaoEditor({
+  raw,
+  onRemove,
+}: {
+  raw: unknown;
+  onRemove?: () => void;
+}) {
   const [entries, setEntries] = useState<EduEntry[]>(() => parseEdu(raw));
 
   const add = () =>
@@ -429,8 +446,10 @@ function FormacaoEditor({ raw }: { raw: unknown }) {
       },
     ]);
 
-  const remove = (id: string) =>
+  const remove = (id: string) => {
     setEntries((prev) => prev.filter((e) => e._id !== id));
+    onRemove?.();
+  };
 
   const update = (id: string, key: keyof EduEntry, value: string) =>
     setEntries((prev) =>
@@ -540,7 +559,13 @@ function parseSkillsFlat(raw: unknown): string[] {
   ];
 }
 
-function HabilidadesEditor({ raw }: { raw: unknown }) {
+function HabilidadesEditor({
+  raw,
+  onRemove,
+}: {
+  raw: unknown;
+  onRemove?: () => void;
+}) {
   const [chips, setChips] = useState<string[]>(() => parseSkillsFlat(raw));
   const [input, setInput] = useState("");
 
@@ -551,8 +576,10 @@ function HabilidadesEditor({ raw }: { raw: unknown }) {
     setInput("");
   };
 
-  const remove = (idx: number) =>
+  const remove = (idx: number) => {
     setChips((prev) => prev.filter((_, i) => i !== idx));
+    onRemove?.();
+  };
 
   // Serialize as { technical: [...all], business: [], soft: [] }
   const serialized = JSON.stringify({
@@ -629,14 +656,22 @@ const LANG_LEVELS = [
   "Básico",
 ];
 
-function IdiomasEditor({ raw }: { raw: unknown }) {
+function IdiomasEditor({
+  raw,
+  onRemove,
+}: {
+  raw: unknown;
+  onRemove?: () => void;
+}) {
   const [entries, setEntries] = useState<LangEntry[]>(() => parseLangs(raw));
 
   const add = () =>
     setEntries((prev) => [...prev, { _id: uid(), language: "", level: "" }]);
 
-  const remove = (id: string) =>
+  const remove = (id: string) => {
     setEntries((prev) => prev.filter((e) => e._id !== id));
+    onRemove?.();
+  };
 
   const update = (id: string, key: keyof LangEntry, value: string) =>
     setEntries((prev) =>
@@ -718,7 +753,13 @@ function parseCerts(raw: unknown): CertEntry[] {
   });
 }
 
-function CertificacoesEditor({ raw }: { raw: unknown }) {
+function CertificacoesEditor({
+  raw,
+  onRemove,
+}: {
+  raw: unknown;
+  onRemove?: () => void;
+}) {
   const [entries, setEntries] = useState<CertEntry[]>(() => parseCerts(raw));
 
   const add = () =>
@@ -727,8 +768,10 @@ function CertificacoesEditor({ raw }: { raw: unknown }) {
       { _id: uid(), name: "", issuer: "", year: "" },
     ]);
 
-  const remove = (id: string) =>
+  const remove = (id: string) => {
     setEntries((prev) => prev.filter((e) => e._id !== id));
+    onRemove?.();
+  };
 
   const update = (id: string, key: keyof CertEntry, value: string) =>
     setEntries((prev) =>
@@ -874,31 +917,46 @@ function BlockContent({
   block,
   profile,
   userEmail,
+  onRemove,
 }: {
   block: ProfileBlockDefinition;
   profile: UserProfileRecord;
   userEmail?: string;
+  onRemove?: () => void;
 }) {
   const bid = block.id;
 
   if (bid === "experiencias") {
-    return <ExperienciasEditor raw={profile.experiencesJson} />;
+    return (
+      <ExperienciasEditor raw={profile.experiencesJson} onRemove={onRemove} />
+    );
   }
 
   if (bid === "formacao") {
-    return <FormacaoEditor raw={profile.educationJson} />;
+    return (
+      <FormacaoEditor raw={profile.educationJson} onRemove={onRemove} />
+    );
   }
 
   if (bid === "habilidades") {
-    return <HabilidadesEditor raw={profile.skillsJson} />;
+    return (
+      <HabilidadesEditor raw={profile.skillsJson} onRemove={onRemove} />
+    );
   }
 
   if (bid === "idiomas") {
-    return <IdiomasEditor raw={profile.languagesJson} />;
+    return (
+      <IdiomasEditor raw={profile.languagesJson} onRemove={onRemove} />
+    );
   }
 
   if (bid === "certificacoes") {
-    return <CertificacoesEditor raw={profile.certificationsJson} />;
+    return (
+      <CertificacoesEditor
+        raw={profile.certificationsJson}
+        onRemove={onRemove}
+      />
+    );
   }
 
   if (bid === "links") {
@@ -1011,6 +1069,11 @@ export function CvMasterBlock({
   const [closing, setClosing] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // "Cancelar" precisa fechar SEM salvar, mas clicar nele também tira o
+  // foco de dentro do form (dispara onBlur) — este flag, setado no
+  // mousedown (antes do blur disparar), suprime o autosave só dessa vez.
+  const suppressAutosaveRef = useRef(false);
   const state: BlockState = isOptional
     ? "opcional"
     : hasGap
@@ -1024,6 +1087,30 @@ export function CvMasterBlock({
       setOpen(false);
       setClosing(false);
     }, CLOSE_MS);
+  };
+
+  // Autosave: dispara quando o foco sai do painel do bloco pra qualquer
+  // lugar fora dele — cobre tanto "fechar o bloco" (clicar no cabeçalho
+  // move o foco pra fora do form) quanto "mudar o foco" (clicar em outro
+  // bloco/campo fora deste). Nunca dispara em navegação DENTRO do form
+  // (tab entre campos) nem depois de um "Cancelar" explícito.
+  const handleBlur = (e: React.FocusEvent<HTMLFormElement>) => {
+    if (suppressAutosaveRef.current) {
+      suppressAutosaveRef.current = false;
+      return;
+    }
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    formRef.current?.requestSubmit();
+  };
+
+  // Achado 2026-09-10: remover um item inteiro (experiência, formação
+  // etc.) é um clique num botão DENTRO do próprio form — o foco nunca sai
+  // do form, então handleBlur nunca dispara. Chamado explicitamente pelos
+  // editores no remove(). Precisa do setTimeout: requestSubmit() síncrono
+  // logo após setEntries() ainda leria o <input type="hidden"> com o
+  // valor ANTIGO (React só commita o DOM depois que o handler termina).
+  const triggerAutosave = () => {
+    setTimeout(() => formRef.current?.requestSubmit(), 0);
   };
 
   const handleToggle = () => {
@@ -1148,8 +1235,10 @@ export function CvMasterBlock({
 
       {(open || closing) && (
         <form
+          ref={formRef}
           action={action}
           id={`${block.id}-panel`}
+          onBlur={handleBlur}
           className={cn(
             "border-t border-[rgba(10,10,10,0.06)]",
             closing ? "cv-block-panel-close" : "cv-block-panel",
@@ -1162,6 +1251,7 @@ export function CvMasterBlock({
               block={block}
               profile={profile}
               userEmail={userEmail}
+              onRemove={triggerAutosave}
             />
           </div>
 
@@ -1175,6 +1265,9 @@ export function CvMasterBlock({
               <button
                 className="rounded-[8px] border border-[rgba(10,10,10,0.12)] bg-white px-4 py-2 text-[13px] font-medium text-[#0a0a0a] transition-colors hover:bg-[rgba(10,10,10,0.04)]"
                 type="button"
+                onMouseDown={() => {
+                  suppressAutosaveRef.current = true;
+                }}
                 onClick={handleClose}
                 style={BTN_STYLE}
               >

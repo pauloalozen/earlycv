@@ -17,18 +17,20 @@ import {
   downloadFromApi,
 } from "@/lib/client-download";
 import type { CvAnalysisData } from "@/lib/cv-adaptation-api";
-import { saveGuestPreview } from "@/lib/cv-adaptation-api";
+import { claimGuestAnalysisJob } from "@/lib/cv-adaptation-api";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
 import { DEMO_CV_ANALYSIS_MOCK } from "@/lib/demo-cv-analysis-mock";
 import { getDownloadCtaCopy } from "@/lib/download-cta-copy";
 import { fetchGuestAnalysisAuthGateEnabled } from "@/lib/guest-analysis-auth-gate";
 import {
+  clearPendingGuestAnalysis,
+  getPendingGuestAnalysis,
+} from "@/lib/guest-analysis-pending";
+import {
   clearGuestAnalysisRaw,
   getGuestAnalysisRaw,
 } from "@/lib/guest-analysis-storage";
-import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { getAuthStatus } from "@/lib/session-actions";
-import { getOrCreateVisitorId } from "@/lib/visitor-id";
 import { getAtsScoreColors } from "./ats-score-colors";
 import { buildContentFetchErrorMessage } from "./content-fetch-error";
 import { shouldPersistGuestAnalysis } from "./guest-analysis-persistence";
@@ -1619,7 +1621,12 @@ export default function ResultadoPage() {
     // até a AnalysisJob terminar.
     async function pollAndClaim(jobId: string, gateEnabled: boolean) {
       setClaimStatus("waiting");
-      const deadline = Date.now() + 8 * 60 * 1000;
+      // Achado 2026-09-10: o backend recupera sozinho um AnalysisJob/
+      // CvProcessingJob travado em "processing" (STALE_PROCESSING_THRESHOLD_MS
+      // = 10min, ex.: servidor derrubado no meio) — este timeout precisa
+      // ficar acima desses 10min, senão o usuário desiste antes do backend
+      // ter chance de se curar sozinho.
+      const deadline = Date.now() + 11 * 60 * 1000;
       while (Date.now() < deadline) {
         if (!active || controller.signal.aborted) return;
         let response: Response;
@@ -1940,79 +1947,98 @@ export default function ResultadoPage() {
       return;
     }
 
-    const raw = getGuestAnalysisRaw();
-    if (!raw) return;
-
-    let parsed: GuestAnalysisStored;
-    try {
-      parsed = JSON.parse(raw) as GuestAnalysisStored;
-    } catch {
-      return;
-    }
-    if (!parsed.masterCvText?.trim() || !parsed.analysisCvSnapshotId?.trim()) {
-      return;
-    }
-
-    const masterCvText = parsed.masterCvText;
-    const analysisCvSnapshotId = parsed.analysisCvSnapshotId;
+    // Choke point único de claim: só jobId+guestPossessionToken, nunca o
+    // conteúdo salvo em localStorage/sessionStorage. rawData (já presente
+    // pra renderizar o preview) é reaproveitado só pro score local, nunca
+    // enviado como fonte do CV pro backend.
+    const pending = getPendingGuestAnalysis();
+    if (!pending) return;
 
     if (autoSaveInFlight.current) return;
     autoSaveInFlight.current = true;
     setAutoSaveStatus("saving");
 
+    const scheduleRetry = (maxAttempts: number, delayMs: number) => {
+      autoSaveInFlight.current = false;
+      autoSaveRetryCount.current += 1;
+      if (autoSaveRetryCount.current <= maxAttempts) {
+        setAutoSaveStatus("saving");
+        window.setTimeout(() => {
+          autoSaveAttempted.current = false;
+          setAutoSaveRetryTick((value) => value + 1);
+        }, delayMs);
+      } else {
+        setAutoSaveStatus("error");
+      }
+    };
+
     const runPersist = async () => {
       try {
-        const result = await saveGuestPreview({
-          adaptedContentJson: parsed.adaptedContentJson as Record<
-            string,
-            unknown
-          >,
-          previewText: parsed.previewText,
-          jobDescriptionText: parsed.jobDescriptionText ?? "",
-          masterCvText,
-          analysisCvSnapshotId,
-          guestSessionPublicToken: parsed.guestSessionPublicToken ?? undefined,
-          jobTitle: parsed.adaptedContentJson?.vaga?.cargo,
-          companyName: parsed.adaptedContentJson?.vaga?.empresa,
-          sessionInternalId: getJourneySessionInternalId(),
-          visitorId: getOrCreateVisitorId(),
-        });
+        const result = await claimGuestAnalysisJob(
+          pending.jobId,
+          pending.guestPossessionToken,
+        );
+
+        if (result.status === "pending" || result.status === "processing") {
+          // Claim aceito, mas a AnalysisJob ainda não terminou de
+          // processar no backend — repete a mesma consulta idempotente
+          // (nunca reprocessa nada), sem limite curto de tentativas.
+          scheduleRetry(20, 1500);
+          return;
+        }
+
+        if (result.status !== "succeeded") {
+          scheduleRetry(3, 1200);
+          return;
+        }
 
         autoSaveAttempted.current = true;
         autoSaveInFlight.current = false;
         setAutoSaveStatus("saved");
-        setReviewAdaptationId(result.id);
-        setReviewPaymentStatus(
-          result.isUnlocked ? "completed" : (result.paymentStatus ?? "none"),
+        setReviewAdaptationId(result.cvAdaptationId);
+
+        const contentRes = await fetch(
+          `/api/cv-adaptation/${result.cvAdaptationId}/content`,
+          { cache: "no-store" },
         );
-        setJobApplicationId(result.jobApplicationId ?? null);
-        const normalized = normalizeData(parsed.adaptedContentJson);
-        const score = normalized.score.scoreAtualBase;
-        if (typeof score === "number") {
-          const scoreProjetado = normalized.score.scoreAposLiberarBase;
-          sessionStorage.setItem(
-            "lastAnalysisScore",
-            JSON.stringify({ score, scoreProjetado }),
+        if (contentRes.ok) {
+          const payload = (await contentRes.json()) as {
+            paymentStatus:
+              | "none"
+              | "pending"
+              | "completed"
+              | "failed"
+              | "refunded";
+            isUnlocked?: boolean;
+            jobApplicationId?: string | null;
+          };
+          setReviewPaymentStatus(
+            payload.isUnlocked ? "completed" : payload.paymentStatus,
           );
+          setJobApplicationId(payload.jobApplicationId ?? null);
         }
+
+        if (rawData) {
+          const normalized = normalizeData(rawData);
+          const score = normalized.score.scoreAtualBase;
+          if (typeof score === "number") {
+            const scoreProjetado = normalized.score.scoreAposLiberarBase;
+            sessionStorage.setItem(
+              "lastAnalysisScore",
+              JSON.stringify({ score, scoreProjetado }),
+            );
+          }
+        }
+
+        clearPendingGuestAnalysis();
         clearGuestAnalysisRaw();
         window.history.replaceState(
           null,
           "",
-          `/adaptar/resultado?adaptationId=${result.id}`,
+          `/adaptar/resultado?adaptationId=${result.cvAdaptationId}`,
         );
       } catch {
-        autoSaveInFlight.current = false;
-        autoSaveRetryCount.current += 1;
-        if (autoSaveRetryCount.current <= 3) {
-          setAutoSaveStatus("saving");
-          window.setTimeout(() => {
-            autoSaveAttempted.current = false;
-            setAutoSaveRetryTick((value) => value + 1);
-          }, 1200);
-        } else {
-          setAutoSaveStatus("error");
-        }
+        scheduleRetry(3, 1200);
       }
     };
 
@@ -2231,16 +2257,38 @@ export default function ResultadoPage() {
       >
         <EcvBuildLoader size={48} />
         {claimStatus === "waiting" && (
-          <p
-            style={{
-              fontFamily: MONO,
-              fontSize: 12.5,
-              color: "#6a6560",
-              letterSpacing: 0.2,
-            }}
-          >
-            Estamos finalizando sua análise...
-          </p>
+          <>
+            <p
+              style={{
+                fontFamily: MONO,
+                fontSize: 12.5,
+                color: "#6a6560",
+                letterSpacing: 0.2,
+              }}
+            >
+              Estamos finalizando sua análise...
+            </p>
+            {/* Achado 2026-09-10: esta tela é um overlay fixed cobrindo a
+                tela inteira, sem header nem navegação — se o processamento
+                travar (ex.: servidor caiu no meio), o usuário fica preso
+                aqui até o timeout (11min) ou fechar a aba. Este link é a
+                única saída enquanto isso: a análise continua sendo
+                processada em background, o usuário pode voltar mais
+                tarde e retomar de onde parou. */}
+            <a
+              href="/meu-perfil"
+              style={{
+                fontFamily: MONO,
+                fontSize: 11.5,
+                color: "#8a8580",
+                letterSpacing: 0.2,
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              Isso pode levar alguns minutos — continuar navegando
+            </a>
+          </>
         )}
       </div>
     );

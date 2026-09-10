@@ -34,6 +34,13 @@ import {
   hashGuestPossessionToken,
   possessionTokenMatchesHash,
 } from "../common/guest-possession-token";
+import { ClaimSourceGrantService } from "../cv-processing/claim-source-grant.service";
+import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
+import { NoValidMasterCvForProfileAnalysisError } from "../cv-processing/cv-processing.errors";
+import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
+import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
+import { CvProcessingFlagResolverService } from "../cv-processing/cv-processing-flag-resolver.service";
+import { UserProfileMasterSyncService } from "../cv-processing/user-profile-master-sync.service";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
@@ -43,7 +50,9 @@ import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merg
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
 import { StorageService } from "../storage/storage.service";
 import { TalentProfileCaptureService } from "../talent-profiles/talent-profile-capture.service";
+import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
 import { CvAdaptationAiService } from "./cv-adaptation-ai.service";
+import type { CanonicalCvProfileData } from "./cv-adaptation-ai.service";
 import { CvAdaptationDocxService } from "./cv-adaptation-docx.service";
 import {
   CvAdaptationPaymentService,
@@ -218,7 +227,81 @@ export class CvAdaptationService {
         return { event: {}, ingested: false };
       },
     },
+    // Fase 2C (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md):
+    // usados só quando CV_STRUCTURED_PROFILE_PIPELINE_ENABLED=true, dentro
+    // de startAuthenticatedAnalysisJobCanonical/resolveCanonicalMasterIntent.
+    // Sempre @Optional — com a flag desligada (default), nunca são
+    // referenciados, então nunca precisam existir (mantém os ~90 testes
+    // legados de cv-adaptation.service.spec.ts intocados, já que são
+    // parâmetros novos no final da lista, com default undefined).
+    @Optional()
+    @Inject(CvProcessingEntrypointService)
+    private readonly cvProcessingEntrypoint?: Pick<
+      CvProcessingEntrypointService,
+      "enqueueFromUserText" | "enqueueFromGuestText"
+    >,
+    @Optional()
+    @Inject(CvMasterPromotionService)
+    private readonly cvMasterPromotionForAnalysis?: Pick<
+      CvMasterPromotionService,
+      "getActiveDesignation"
+    >,
+    // Fase 2D: resolve o TalentSubject (sujeito anônimo) dono do
+    // CvSource/CvProcessingJob de uma análise de visitante, quando
+    // CV_STRUCTURED_PROFILE_PIPELINE_ENABLED=true. Mesmo padrão @Optional
+    // dos dois acima — nunca referenciado com a flag desligada.
+    @Optional()
+    @Inject(TalentSubjectService)
+    private readonly talentSubjectService?: Pick<
+      TalentSubjectService,
+      "resolveForGuestSession"
+    >,
+    // Fase 2E: claim granular por fonte (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+    // seção 4). Usado só dentro de claimGuestAnalysisJob, quando a flag
+    // está ligada E a AnalysisJob reivindicada tem cvProcessingJobId
+    // preenchido (passou pelo pipeline novo) — nesses casos, ALÉM do
+    // claim legado abaixo (que continua materializando o CvAdaptation via
+    // saveGuestPreview, inalterado). Mesmo padrão @Optional dos serviços
+    // acima — nunca referenciado com a flag desligada, mantendo os ~90
+    // testes legados de claim intocados.
+    @Optional()
+    @Inject(ClaimSourceGrantService)
+    private readonly claimSourceGrantService?: Pick<
+      ClaimSourceGrantService,
+      "claim" | "claimWithinTransaction" | "translateSubjectMismatch"
+    >,
+    // Fase 3 (pré-rollout) — resolução centralizada de ativação granular
+    // (admin/allowlist), ver cv-processing-flag-resolver.service.ts.
+    // @Optional() pelo mesmo motivo dos serviços acima: nunca referenciado
+    // pelos ~90 testes legados; ausência cai de volta na flag global pura.
+    @Optional()
+    @Inject(CvProcessingFlagResolverService)
+    private readonly flagResolver?: Pick<
+      CvProcessingFlagResolverService,
+      "isEnabledFor"
+    >,
+    // Achado 2026-09-09: edições diretas em UserProfile (blocos de
+    // /meu-cv-master) nunca alimentavam análises novas — ver
+    // user-profile-master-sync.service.ts. Chamado só dentro de
+    // resolveActiveMasterCvProcessingJobId, nunca na geração/liberação de
+    // uma CvAdaptation já existente. Mesmo padrão @Optional dos serviços
+    // acima.
+    @Optional()
+    @Inject(UserProfileMasterSyncService)
+    private readonly userProfileMasterSync?: Pick<
+      UserProfileMasterSyncService,
+      "ensureMasterReflectsProfileEdits"
+    >,
   ) {}
+
+  private async isPipelineEnabledFor(
+    context: Parameters<CvProcessingFlagResolverService["isEnabledFor"]>[0],
+  ): Promise<boolean> {
+    if (this.flagResolver) {
+      return this.flagResolver.isEnabledFor(context);
+    }
+    return isCvStructuredProfilePipelineEnabled();
+  }
 
   // Fire-and-forget: um CV que virou master durante uma análise (primeiro
   // CV do usuário, promovido automaticamente, ou explicitamente marcado
@@ -258,6 +341,75 @@ export class CvAdaptationService {
       });
   }
 
+  // Fase 2G (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+  // item 2 do plano de fechamento): create()/claimGuest()/saveGuestPreview()
+  // nunca tinham sido tocados por nenhuma fase anterior (2A-2F) — auditados
+  // nesta fase e confirmados VIVOS (create() é o único morto — sem caller
+  // real no frontend, ver relatório da Fase 2G). Os três criam/promovem um
+  // Resume master automaticamente na primeira vez do usuário (ou por troca
+  // explícita via dto.saveAsMaster), então, pela regra de decisão do plano,
+  // precisam do mesmo desvio pro pipeline novo que resumes.service.ts#create
+  // já tem (Fase 2A) — SEMPRE ao lado de triggerMasterCvExtraction (legado),
+  // nunca substituindo-o, e sempre AWAITED antes da resposta HTTP (diferente
+  // de triggerMasterCvExtraction, que é fire-and-forget de propósito porque
+  // dispara a chamada de IA legada; aqui não há IA síncrona — só
+  // CvSource+CvSubmission+CvProcessingJob, seguro de esperar).
+  //
+  // Nunca lança para o chamador: falha aqui nunca pode quebrar a análise/
+  // claim/preview em si (mesma tolerância de resumes.service.ts#create).
+  private async enqueueCanonicalMasterProcessing(input: {
+    userId: string;
+    rawText: string | null | undefined;
+    masterIntent: "PROMOTE_IF_FIRST" | "PROMOTE_EXPLICIT";
+    file?: FileUpload;
+    // Fase 3C item 2/5 — mesmo bug de fundo do achado #1 do piloto 3B
+    // (resumes.service.ts#create), encontrado aqui também nos 4 chamadores
+    // deste método (create()/claimGuest()/saveGuestPreview(), Fase 2G):
+    // todos já têm o Resume recém-criado disponível (mesmo id passado pra
+    // triggerMasterCvExtraction ao lado), mas nenhum o repassava pro
+    // pipeline novo — CvMasterDesignation.resumeId ficava null pra todo
+    // Master promovido por estes 3 fluxos. Corrigido junto por ser a MESMA
+    // causa raiz, no mesmo arquivo, e por ser exigido pela integridade
+    // estrutural nova (migration 20260905_cv_master_designation_integrity_defense,
+    // Fase 3C item 5): designação ativa de usuário sem resumeId agora falha
+    // no banco, então deixar estes 4 chamadores sem resumeId quebraria os
+    // fluxos legítimos de claim/preview/create em runtime real.
+    resumeId: string;
+  }): Promise<void> {
+    if (
+      !(await this.isPipelineEnabledFor({ userId: input.userId })) ||
+      !this.cvProcessingEntrypoint
+    ) {
+      return;
+    }
+
+    const text = input.rawText?.trim();
+    if (!text) return;
+
+    try {
+      await this.cvProcessingEntrypoint.enqueueFromUserText({
+        userId: input.userId,
+        text,
+        masterIntent: input.masterIntent,
+        resumeId: input.resumeId,
+        submission: input.file
+          ? {
+              origin: "FILE_UPLOAD",
+              fileName: input.file.originalname,
+              mimeType: input.file.mimetype,
+              fileSizeBytes: input.file.size,
+            }
+          : { origin: "PASTED_TEXT" },
+      });
+    } catch (error) {
+      this.logger.error(
+        `[cv-processing] failed to enqueue canonical master processing for user ${input.userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   private async triggerJobApplicationHook(
     input: JobApplicationHookInput,
   ): Promise<void> {
@@ -282,7 +434,27 @@ export class CvAdaptationService {
     }
   }
 
+  // Auditoria de 2026-09-08 (seção 3 do relatório de fechamento do pipeline
+  // canônico): confirmado código morto — sem caller real em apps/web/src
+  // (createCvAdaptation/createCvAdaptationFromMaster nunca são importados
+  // em nenhuma página/componente), já documentado assim desde a Fase 2G
+  // (commit b87e0eb). A rota HTTP continua tecnicamente acessível
+  // (POST /cv-adaptation -> CvAdaptationController), e internamente chama
+  // #analyzeAndAdapt -> adaptCv() com masterCvText bruto, INCONDICIONALMENTE
+  // — nunca checou a flag pra decidir a fonte da análise/geração em si (só
+  // usa enqueueCanonicalMasterProcessing como efeito colateral do upload de
+  // Master, igual claimGuest/saveGuestPreview). Isso violaria a invariante
+  // "pipeline novo nunca usa texto bruto" se algum caller externo
+  // desconhecido ainda existir. Em vez de só confiar na ausência de caller
+  // conhecido, rejeita explicitamente quando o pipeline está ativo pro
+  // usuário — fail-safe barato até a remoção formal na Fase 5.
   async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
+    if (await this.isPipelineEnabledFor({ userId })) {
+      throw new BadRequestException(
+        "POST /cv-adaptation (create) está descontinuado para contas com o pipeline canônico ativo — use /cv-adaptation/analyze. Marcado para remoção na Fase 5 (código morto, sem caller em produção).",
+      );
+    }
+
     const normalizedJobDescriptionText = this.validateJobDescription(
       dto.jobDescriptionText,
       {
@@ -377,6 +549,14 @@ export class CvAdaptationService {
           resumeId: masterResume.id,
           rawText: masterCvText,
           file,
+        });
+        await this.enqueueCanonicalMasterProcessing({
+          userId,
+          rawText: masterCvText,
+          masterIntent:
+            dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
+          file,
+          resumeId: masterResume.id,
         });
       }
     }
@@ -594,151 +774,244 @@ export class CvAdaptationService {
     // de perfil depois que a análise em si já foi persistida.
     let newMasterResumeId: string | null = null;
 
-    const adaptation = await this.database.$transaction(async (tx) => {
-      const snapshot = await this.validateAndClaimSnapshot({
-        tx,
-        snapshotId: dto.analysisCvSnapshotId,
-        userId,
-        guestSessionHash,
-      });
-
-      const releaseDate = this.getSnapshotEnforcementReleaseDate();
-      if (!snapshot && new Date() >= releaseDate) {
-        throw new BadRequestException(
-          "Analysis snapshot is required to claim this adaptation.",
-        );
-      }
-
-      const existingMaster = await tx.resume.findFirst({
-        where: { userId, isMaster: true, kind: "master" },
-        select: { id: true },
-      });
-
-      let masterResumeId: string;
-      if (existingMaster) {
-        masterResumeId = existingMaster.id;
-      } else {
-        // Sem master existente, este CV vira o primeiro master do usuário
-        // automaticamente — sem perguntar nada. O título usa o nome do
-        // arquivo que o usuário de fato enviou na análise (guardado no
-        // snapshot), não um placeholder baseado na vaga.
-        const originalFileName = snapshot?.originalFileName ?? null;
-        const created = await tx.resume.create({
-          data: {
+    const adaptation = await (async () => {
+      try {
+        return await this.database.$transaction(async (tx) => {
+          const snapshot = await this.validateAndClaimSnapshot({
+            tx,
+            snapshotId: dto.analysisCvSnapshotId,
             userId,
-            title: originalFileName
-              ? originalFileName.replace(/\.[^.]+$/, "")
-              : dto.jobTitle
-                ? `CV para ${dto.jobTitle}`
-                : "CV Importado",
-            sourceFileName: originalFileName ?? undefined,
-            kind: "master",
-            status: "uploaded",
-            sourceFileType: "application/pdf",
-            rawText: dto.masterCvText,
-            isMaster: true,
-          },
-        });
-        masterResumeId = created.id;
-        newMasterResumeId = created.id;
-      }
+            guestSessionHash,
+          });
 
-      const adaptedContent = this.reconcileVagaFields(
-        this.withFrozenMissingKeywords(
-          dto.adaptedContentJson,
-          dto.selectedMissingKeywords,
-        ),
-        { jobTitle: dto.jobTitle ?? null, companyName: dto.companyName ?? null },
-      );
+          const releaseDate = this.getSnapshotEnforcementReleaseDate();
+          if (!snapshot && new Date() >= releaseDate) {
+            throw new BadRequestException(
+              "Analysis snapshot is required to claim this adaptation.",
+            );
+          }
 
-      const created = await tx.cvAdaptation.create({
-        data: {
-          userId,
-          masterResumeId,
-          jobDescriptionText: dto.jobDescriptionText,
-          templateId: defaultTemplate?.id ?? null,
-          canonicalJobId,
-          jobRequirementSetId: existingRequirementSet?.id ?? null,
-          jobTitle: dto.jobTitle ?? null,
-          companyName: dto.companyName ?? null,
-          adaptedContentJson: adaptedContent as Prisma.InputJsonValue,
-          // aiAuditJson is generated lazily via ensureLegacyStructuredOutput on download
-          previewText: dto.previewText ?? null,
-          analysisCvSnapshotId: snapshot?.id ?? null,
-          status: "delivered",
-          isUnlocked: true,
-          unlockedAt: new Date(),
-        },
-        include: {
-          template: { select: { id: true, name: true, slug: true } },
-          analysisCvSnapshot: {
-            select: {
-              sourceType: true,
-              originalFileStorageKey: true,
-              originalFileName: true,
+          // Achado da auditoria real de claim (mesmo defeito de saveGuestPreview/
+          // caminho C): claimGuest() nunca perguntava se a análise reivindicada
+          // já tinha linhagem canônica (CvProcessingJob/CvStructuredProfile) —
+          // sem master ainda, sempre criava um CvSource NOVO a partir de
+          // dto.masterCvText (texto renderizado, nunca o original) e reenfileirava
+          // processamento, reextraindo pela IA algo que já tinha sido extraído.
+          // validateAndClaimSnapshot acima já é a prova de posse real (por
+          // guestSessionHash ou userId) — a busca abaixo só CONSULTA a
+          // AnalysisJob dona do mesmo snapshot já validado, nunca confia
+          // isoladamente em analysisCvSnapshotId vindo do body.
+          // AnalysisJob.analysisCvSnapshotId é @unique no schema.
+          let preResolvedMasterResumeId: string | undefined;
+          // Achado 2026-09-09/10: mesmo defeito de saveGuestPreview (branch
+          // existingAdaptation) — este método buscava cvProcessingJobId do
+          // job de origem só pra decidir SE roda o claim granular, mas
+          // nunca lia nem propagava cvStructuredProfileId pro CvAdaptation
+          // criado abaixo. Resultado idêntico: adaptação nasce com
+          // cvProcessingJobId "de fato" (via AnalysisJob) mas
+          // cvStructuredProfileId nulo — resolveGenerationCvSource trata
+          // como inconsistência de linhagem e recusa gerar, permanentemente.
+          let originCvStructuredProfileId: string | undefined;
+          if (snapshot && this.claimSourceGrantService) {
+            const originJob = await tx.analysisJob.findUnique({
+              where: { analysisCvSnapshotId: snapshot.id },
+              select: {
+                id: true,
+                userId: true,
+                cvProcessingJobId: true,
+                cvStructuredProfileId: true,
+              },
+            });
+            if (
+              originJob &&
+              (originJob.userId === null || originJob.userId === userId) &&
+              originJob.cvProcessingJobId
+            ) {
+              originCvStructuredProfileId =
+                originJob.cvStructuredProfileId ?? undefined;
+              // Sem try/catch aqui de propósito: a trigger de subject-match é
+              // DEFERRABLE INITIALLY DEFERRED — só dispara no COMMIT da
+              // transação inteira, nunca durante esta chamada em si. O catch
+              // que traduz isSubjectMismatchError precisa envolver o
+              // $transaction inteiro (abaixo), não este ponto.
+              const claimed =
+                await this.claimSourceGrantService.claimWithinTransaction(tx, {
+                  userId,
+                  analysisJobId: originJob.id,
+                  cvProcessingJobId: originJob.cvProcessingJobId,
+                });
+              if (claimed.master?.resumeId) {
+                preResolvedMasterResumeId = claimed.master.resumeId;
+              }
+            }
+          }
+
+          const existingMaster = await tx.resume.findFirst({
+            where: { userId, isMaster: true, kind: "master" },
+            select: { id: true },
+          });
+
+          let masterResumeId: string;
+          if (preResolvedMasterResumeId) {
+            // O claim canônico já resolveu qual Resume representa o Master —
+            // reusa exatamente esse, sem criar Resume/CvSource novo nem
+            // reenfileirar processamento a partir de dto.masterCvText.
+            masterResumeId = preResolvedMasterResumeId;
+          } else if (existingMaster) {
+            masterResumeId = existingMaster.id;
+          } else {
+            // Sem master existente, este CV vira o primeiro master do usuário
+            // automaticamente — sem perguntar nada. O título usa o nome do
+            // arquivo que o usuário de fato enviou na análise (guardado no
+            // snapshot), não um placeholder baseado na vaga.
+            const originalFileName = snapshot?.originalFileName ?? null;
+            const created = await tx.resume.create({
+              data: {
+                userId,
+                title: originalFileName
+                  ? originalFileName.replace(/\.[^.]+$/, "")
+                  : dto.jobTitle
+                    ? `CV para ${dto.jobTitle}`
+                    : "CV Importado",
+                sourceFileName: originalFileName ?? undefined,
+                kind: "master",
+                status: "uploaded",
+                sourceFileType: "application/pdf",
+                rawText: dto.masterCvText,
+                isMaster: true,
+              },
+            });
+            masterResumeId = created.id;
+            newMasterResumeId = created.id;
+          }
+
+          const adaptedContent = this.reconcileVagaFields(
+            this.withFrozenMissingKeywords(
+              dto.adaptedContentJson,
+              dto.selectedMissingKeywords,
+            ),
+            {
+              jobTitle: dto.jobTitle ?? null,
+              companyName: dto.companyName ?? null,
             },
-          },
-        },
-      });
+          );
 
-      const adaptedResume = await tx.resume.create({
-        data: {
-          userId,
-          title: dto.jobTitle ? `${dto.jobTitle} - Adaptado` : "CV Adaptado",
-          kind: "adapted",
-          isMaster: false,
-          status: "reviewed",
-          basedOnResumeId: masterResumeId,
-          sourceFileName: "cv-adaptado.pdf",
-          sourceFileType: "application/pdf",
-          rawText: dto.previewText ?? "CV adaptado",
-        },
-      });
-
-      const linked = await tx.cvAdaptation.update({
-        where: { id: created.id },
-        data: { adaptedResumeId: adaptedResume.id },
-        include: {
-          template: { select: { id: true, name: true, slug: true } },
-          analysisCvSnapshot: {
-            select: {
-              sourceType: true,
-              originalFileStorageKey: true,
-              originalFileName: true,
+          const created = await tx.cvAdaptation.create({
+            data: {
+              userId,
+              masterResumeId,
+              jobDescriptionText: dto.jobDescriptionText,
+              templateId: defaultTemplate?.id ?? null,
+              canonicalJobId,
+              jobRequirementSetId: existingRequirementSet?.id ?? null,
+              jobTitle: dto.jobTitle ?? null,
+              companyName: dto.companyName ?? null,
+              adaptedContentJson: adaptedContent as Prisma.InputJsonValue,
+              // aiAuditJson is generated lazily via ensureLegacyStructuredOutput on download
+              previewText: dto.previewText ?? null,
+              analysisCvSnapshotId: snapshot?.id ?? null,
+              status: "delivered",
+              isUnlocked: true,
+              unlockedAt: new Date(),
+              cvStructuredProfileId: originCvStructuredProfileId ?? null,
             },
-          },
-          masterResume: {
-            select: { rawText: true, title: true, sourceFileName: true },
-          },
-        },
-      });
+            include: {
+              template: { select: { id: true, name: true, slug: true } },
+              analysisCvSnapshot: {
+                select: {
+                  sourceType: true,
+                  originalFileStorageKey: true,
+                  originalFileName: true,
+                },
+              },
+            },
+          });
 
-      if (!hasUnlimitedClaims) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { creditsRemaining: { decrement: 1 } },
+          const adaptedResume = await tx.resume.create({
+            data: {
+              userId,
+              title: dto.jobTitle
+                ? `${dto.jobTitle} - Adaptado`
+                : "CV Adaptado",
+              kind: "adapted",
+              isMaster: false,
+              status: "reviewed",
+              basedOnResumeId: masterResumeId,
+              sourceFileName: "cv-adaptado.pdf",
+              sourceFileType: "application/pdf",
+              rawText: dto.previewText ?? "CV adaptado",
+            },
+          });
+
+          const linked = await tx.cvAdaptation.update({
+            where: { id: created.id },
+            data: { adaptedResumeId: adaptedResume.id },
+            include: {
+              template: { select: { id: true, name: true, slug: true } },
+              analysisCvSnapshot: {
+                select: {
+                  sourceType: true,
+                  originalFileStorageKey: true,
+                  originalFileName: true,
+                },
+              },
+              masterResume: {
+                select: { rawText: true, title: true, sourceFileName: true },
+              },
+            },
+          });
+
+          if (!hasUnlimitedClaims) {
+            await tx.user.update({
+              where: { id: userId },
+              data: { creditsRemaining: { decrement: 1 } },
+            });
+          }
+
+          await tx.cvUnlock.create({
+            data: {
+              userId,
+              cvAdaptationId: linked.id,
+              creditsConsumed: hasUnlimitedClaims ? 0 : 1,
+              source: hasUnlimitedClaims ? "ADMIN" : "CREDIT",
+              status: "UNLOCKED",
+              unlockedAt: new Date(),
+            },
+          });
+
+          return linked;
         });
+      } catch (error) {
+        if (this.claimSourceGrantService) {
+          throw this.claimSourceGrantService.translateSubjectMismatch(
+            error,
+            "Claim rejeitado no commit: a CvMasterDesignation criada pelo " +
+              "claim não tem ownership nem ClaimSourceGrant válido sobre a " +
+              "fonte (trigger trg_master_designation_subject_match, " +
+              "DEFERRABLE INITIALLY DEFERRED). Nada desta transação foi " +
+              "persistido. Trate como erro de domínio recuperável e tente " +
+              "novamente.",
+          );
+        }
+        throw error;
       }
-
-      await tx.cvUnlock.create({
-        data: {
-          userId,
-          cvAdaptationId: linked.id,
-          creditsConsumed: hasUnlimitedClaims ? 0 : 1,
-          source: hasUnlimitedClaims ? "ADMIN" : "CREDIT",
-          status: "UNLOCKED",
-          unlockedAt: new Date(),
-        },
-      });
-
-      return linked;
-    });
+    })();
 
     if (newMasterResumeId) {
       this.triggerMasterCvExtraction({
         userId,
         resumeId: newMasterResumeId,
         rawText: dto.masterCvText,
+      });
+      // claimGuest só cria newMasterResumeId quando o usuário ainda não
+      // tinha nenhum master — sempre o primeiro CV, nunca uma substituição
+      // explícita (isso é feito por outro caminho, ex. resumes.service.ts
+      // #setPrimary).
+      await this.enqueueCanonicalMasterProcessing({
+        userId,
+        rawText: dto.masterCvText,
+        masterIntent: "PROMOTE_IF_FIRST",
+        resumeId: newMasterResumeId,
       });
     }
 
@@ -968,6 +1241,25 @@ export class CvAdaptationService {
     guestSessionPublicToken: string | null;
     guestPossessionToken: string;
   }> {
+    // Fase 2D: liga o entrypoint de visitante ao pipeline canônico de CV
+    // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md), espelho
+    // exato de startAuthenticatedAnalysisJob/startAuthenticatedAnalysisJobCanonical
+    // (Fase 2C) — com a flag desligada, esta condição nunca é verdadeira e
+    // o resto do método roda exatamente como antes, bit a bit.
+    // Guest (sem userId resolvido ainda neste ponto) liga o pipeline novo
+    // pelo mesmo master switch usado para usuário autenticado
+    // (cv-processing-flag-resolver.service.ts) — sem allowlist dedicada.
+    if (await this.isPipelineEnabledFor({})) {
+      return this.startGuestAnalysisJobCanonical(
+        jobDescriptionText,
+        file,
+        masterCvText,
+        turnstileToken,
+        analysisContext,
+        radarJobId,
+      );
+    }
+
     const turnstilePrecheck =
       await this.protectedAnalyzeService.precheckTurnstile(
         { turnstileToken },
@@ -1041,6 +1333,181 @@ export class CvAdaptationService {
       this.logger.error(
         `[analysis-job] ${job.id} background processing crashed: ${err instanceof Error ? err.message : String(err)}`,
       );
+    });
+
+    return {
+      jobId: job.id,
+      status: "pending",
+      guestSessionPublicToken: analysisContext?.sessionPublicToken ?? null,
+      guestPossessionToken,
+    };
+  }
+
+  // Fase 2D — entrypoint de visitante do pipeline canônico
+  // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md, seções 1,
+  // 2, 3 e 11), espelho de startAuthenticatedAnalysisJobCanonical (Fase 2C)
+  // trocando userId por talentSubjectId. Único trabalho aqui é resolver o
+  // TalentSubject da sessão, PERSISTIR (CvSource/CvSubmission via
+  // CvProcessingEntrypointService#enqueueFromGuestText, AnalysisJob
+  // apontando cvProcessingJobId) e responder — nenhuma chamada de IA
+  // acontece dentro deste método nem de nada que ele aguarda. Guest nunca
+  // tem inputMode "profile" nem masterResumeId (não existe Resume de
+  // visitante) — sempre conteúdo novo (arquivo ou texto colado).
+  private async startGuestAnalysisJobCanonical(
+    jobDescriptionText: string,
+    file: FileUpload | undefined,
+    masterCvText: string | undefined,
+    turnstileToken: string | undefined,
+    analysisContext: AnalysisRequestContext | undefined,
+    radarJobId: string | undefined,
+  ): Promise<{
+    jobId: string;
+    status: "pending";
+    guestSessionPublicToken: string | null;
+    guestPossessionToken: string;
+  }> {
+    if (!this.cvProcessingEntrypoint || !this.talentSubjectService) {
+      throw new Error(
+        "CV_STRUCTURED_PROFILE_PIPELINE_ENABLED está ligado, mas " +
+          "CvProcessingEntrypointService/TalentSubjectService não foram " +
+          "injetados em CvAdaptationService — verifique cv-adaptation.module.ts.",
+      );
+    }
+
+    const turnstilePrecheck =
+      await this.protectedAnalyzeService.precheckTurnstile(
+        { turnstileToken },
+        this.buildProtectionContext(
+          analysisContext,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+      );
+    if (!turnstilePrecheck.ok) {
+      throw new BadRequestException("Turnstile verification failed");
+    }
+
+    if (!file && !masterCvText?.trim()) {
+      throw new BadRequestException("PDF file or CV text is required.");
+    }
+
+    // guestSessionHash é null quando o cliente não mandou nenhum token de
+    // sessão (ex.: chamada avulsa sem cookie/local storage ainda gravado).
+    // Sem sessão nenhuma pra correlacionar, cada chamada assim vira seu
+    // próprio TalentSubject — correto por construção, já que não há
+    // nenhuma identidade de sessão real pra reaproveitar. Este sentinela é
+    // usado SÓ para a correlação de TalentSubject abaixo — nunca é
+    // persistido em AnalysisJob.guestSessionHash (ver guestSessionHash mais
+    // abaixo, no create): getAnalysisJobStatus trata guestSessionHash nulo
+    // no job como "sem sessão real, aberto" (mesma regra do fluxo legado,
+    // startGuestAnalysisJob acima); gravar aqui o sentinela em vez de null
+    // quebrava essa checagem, porque hash(null) computado no polling nunca
+    // bate com um valor "no-session:<uuid>" gerado uma única vez na criação.
+    const guestSessionHash = this.hashGuestSessionToken(
+      analysisContext?.sessionPublicToken,
+    );
+    const guestSessionHashForTalentCorrelation =
+      guestSessionHash ?? `no-session:${randomUUID()}`;
+
+    const { talentSubjectId } =
+      await this.talentSubjectService.resolveForGuestSession(
+        guestSessionHashForTalentCorrelation,
+      );
+
+    const guestPossessionToken = randomBytes(32).toString("hex");
+    const guestPossessionTokenHash =
+      hashGuestPossessionToken(guestPossessionToken);
+
+    const resolved = await this.resolveAnalysisJobDescription({
+      radarJobId,
+      jobDescriptionText,
+    });
+
+    let cvText: string;
+    let submission:
+      | {
+          origin: "FILE_UPLOAD";
+          fileName: string;
+          mimeType: string;
+          fileSizeBytes: number;
+        }
+      | { origin: "PASTED_TEXT" };
+
+    if (masterCvText?.trim()) {
+      cvText = this.validateCvTextInput(
+        this.normalizeSnapshotText(masterCvText),
+      );
+      submission = { origin: "PASTED_TEXT" };
+    } else if (file) {
+      try {
+        validateCvFileEnvelope(file);
+      } catch (error) {
+        await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            null,
+            "cv-adaptation/analyze-guest",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze-guest",
+        });
+      }
+
+      let extracted: string;
+      try {
+        extracted = await extractTextFromCvFile(file);
+      } catch (error) {
+        return (await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            null,
+            "cv-adaptation/analyze-guest",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze-guest",
+        })) as never;
+      }
+
+      cvText = this.normalizeSnapshotText(extracted);
+      submission = {
+        fileName: file.originalname,
+        fileSizeBytes: file.buffer.length,
+        mimeType: file.mimetype,
+        origin: "FILE_UPLOAD",
+      };
+    } else {
+      throw new BadRequestException("PDF file or CV text is required.");
+    }
+
+    // Guest nunca tem "saveAsMaster" explícito (não existe esse conceito no
+    // fluxo anônimo hoje) — a única forma de virar Master provisório é ser
+    // a primeira análise deste TalentSubject (plano, seção "Master
+    // provisório" da Fase 2D). Análises seguintes do mesmo TalentSubject
+    // nunca substituem automaticamente.
+    const activeDesignation =
+      await this.cvMasterPromotionForAnalysis?.getActiveDesignation({
+        ownerType: "GUEST",
+        talentSubjectId,
+      });
+    const masterIntent = activeDesignation ? "NONE" : "PROMOTE_IF_FIRST";
+
+    const enqueued = await this.cvProcessingEntrypoint.enqueueFromGuestText({
+      talentSubjectId,
+      text: cvText,
+      masterIntent,
+      submission,
+    });
+
+    const job = await this.database.analysisJob.create({
+      data: {
+        ownerKind: "guest",
+        status: "pending",
+        cvProcessingJobId: enqueued.job.id,
+        cvSubmissionId: enqueued.cvSubmission.id,
+        guestSessionHash,
+        guestPossessionTokenHash,
+        jobDescriptionText: resolved.text,
+      },
     });
 
     return {
@@ -1140,6 +1607,25 @@ export class CvAdaptationService {
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
   ): Promise<{ jobId: string; status: "pending" }> {
+    // Fase 2C: liga o entrypoint autenticado ao pipeline canônico de CV
+    // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
+    // Fase 2C.1 fecha a lacuna que a 2C deixou: inputMode "profile" agora
+    // também é desviado pro pipeline novo — em vez de compor o CV a partir
+    // do UserProfile já salvo (reconstrução ad hoc, nunca uma extração
+    // formal), localiza/materializa o Master formal (CvMasterDesignation
+    // ativa, ou Resume.isMaster legado) e analisa a partir do
+    // CvStructuredProfile.canonicalJson correspondente. Com a flag
+    // desligada (default), esta condição nunca é verdadeira e o resto do
+    // método roda exatamente como antes, bit a bit.
+    if (await this.isPipelineEnabledFor({ userId })) {
+      return this.startAuthenticatedAnalysisJobCanonical(
+        userId,
+        dto,
+        file,
+        analysisContext,
+      );
+    }
+
     const turnstilePrecheck =
       await this.protectedAnalyzeService.precheckTurnstile(
         { turnstileToken: dto.turnstileToken },
@@ -1185,7 +1671,8 @@ export class CvAdaptationService {
         // /radar/[slug] — pode ser "monitor"/"monitor_email" quando a vaga
         // foi descoberta pelo Alerta, não só "radar". Sem o campo
         // (chamadas antigas, ou fora desse fluxo), cai no fallback anterior.
-        productOrigin: dto.radarJobOrigin ?? (dto.radarJobId ? "radar" : "direct"),
+        productOrigin:
+          dto.radarJobOrigin ?? (dto.radarJobId ? "radar" : "direct"),
       },
       {
         jobTitle: resolved.radarJobTitle,
@@ -1198,6 +1685,616 @@ export class CvAdaptationService {
     });
 
     return { jobId: job.id, status: "pending" };
+  }
+
+  // Fase 2C — entrypoint autenticado do pipeline canônico
+  // (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md, seções 1
+  // e 11). Único trabalho aqui é PERSISTIR (CvSource/CvSubmission via
+  // CvProcessingEntrypointService, e o AnalysisJob apontando
+  // cvProcessingJobId) e responder — nenhuma chamada de IA acontece dentro
+  // deste método nem de nada que ele aguarda. A extração/promoção de
+  // Master roda depois, em CvProcessingWorker (cron); a análise em si roda
+  // depois disso, em CvAnalysisWorker (cron) — nunca aqui, nunca como
+  // Promise fire-and-forget.
+  //
+  // Turnstile continua verificado uma única vez aqui (não é chamada de
+  // IA, é verificação de bot da Cloudflare) — o token não é reaproveitado
+  // depois no worker (ver skipTurnstile em runCanonicalAuthenticatedAnalysis).
+  private async startAuthenticatedAnalysisJobCanonical(
+    userId: string,
+    dto: AnalyzeCvDto,
+    file: FileUpload | undefined,
+    analysisContext?: AnalysisRequestContext,
+  ): Promise<{ jobId: string; status: "pending" }> {
+    if (!this.cvProcessingEntrypoint || !this.cvMasterPromotionForAnalysis) {
+      throw new Error(
+        "CV_STRUCTURED_PROFILE_PIPELINE_ENABLED está ligado, mas " +
+          "CvProcessingEntrypointService/CvMasterPromotionService não foram " +
+          "injetados em CvAdaptationService — verifique cv-adaptation.module.ts.",
+      );
+    }
+
+    const turnstilePrecheck =
+      await this.protectedAnalyzeService.precheckTurnstile(
+        { turnstileToken: dto.turnstileToken },
+        this.buildProtectionContext(
+          analysisContext,
+          userId,
+          "cv-adaptation/analyze",
+        ),
+      );
+    if (!turnstilePrecheck.ok) {
+      throw new BadRequestException("Turnstile verification failed");
+    }
+
+    const resolved = await this.resolveAnalysisJobDescription(dto);
+    const jobDescriptionText = resolved.text;
+
+    // Resolução de conteúdo — só extração/validação LOCAL (parsing de
+    // arquivo, normalização de texto), nunca chamada de IA. `cvText: null`
+    // significa "sem conteúdo novo": reusa/materializa o Master formal
+    // atual (cenários 1-6 da Fase 2C.1, ver resolveActiveMasterCvProcessingJobId).
+    //
+    // inputMode "profile" (Fase 2C.1) NUNCA deriva cvText de
+    // file/masterCvText/masterResumeId, mesmo que algum desses tenha sido
+    // enviado por engano no mesmo payload — o modo perfil sempre significa
+    // "use o Master atual", nunca "aqui está um CV novo" (mesma regra já
+    // aplicada por create() pra este inputMode).
+    let cvText: string | null = null;
+    let submission:
+      | {
+          origin: "FILE_UPLOAD";
+          fileName: string;
+          mimeType: string;
+          fileSizeBytes: number;
+        }
+      | { origin: "PASTED_TEXT" }
+      | null = null;
+
+    if (dto.inputMode === "profile") {
+      // cvText permanece null — resolvido abaixo via
+      // resolveActiveMasterCvProcessingJobId.
+    } else if (dto.masterCvText?.trim()) {
+      cvText = this.validateCvTextInput(
+        this.normalizeSnapshotText(dto.masterCvText),
+      );
+      submission = { origin: "PASTED_TEXT" };
+    } else if (file) {
+      try {
+        validateCvFileEnvelope(file);
+      } catch (error) {
+        await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            userId,
+            "cv-adaptation/analyze",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze",
+        });
+      }
+
+      let extracted: string;
+      try {
+        extracted = await extractTextFromCvFile(file);
+      } catch (error) {
+        return (await this.mapFileExtractionError(error, {
+          context: this.buildProtectionContext(
+            analysisContext,
+            userId,
+            "cv-adaptation/analyze",
+          ),
+          file,
+          routeKey: "cv-adaptation/analyze",
+        })) as never;
+      }
+
+      cvText = this.normalizeSnapshotText(extracted);
+      submission = {
+        fileName: file.originalname,
+        fileSizeBytes: file.buffer.length,
+        mimeType: file.mimetype,
+        origin: "FILE_UPLOAD",
+      };
+    } else if (dto.masterResumeId) {
+      const resume = await this.database.resume.findFirst({
+        select: { rawText: true },
+        where: { id: dto.masterResumeId, userId },
+      });
+      if (!resume?.rawText?.trim()) {
+        throw new BadRequestException(
+          "Resume not found or has no text content.",
+        );
+      }
+      cvText = this.normalizeSnapshotText(resume.rawText);
+      submission = { origin: "PASTED_TEXT" };
+    }
+
+    let cvProcessingJobId: string;
+    let cvSubmissionId: string | null = null;
+
+    if (cvText === null) {
+      try {
+        cvProcessingJobId =
+          await this.resolveActiveMasterCvProcessingJobId(userId);
+      } catch (error) {
+        if (error instanceof NoValidMasterCvForProfileAnalysisError) {
+          // Mapeamento erro de domínio -> erro HTTP no boundary (mesmo
+          // padrão do resto do serviço: cv-processing.errors.ts nunca
+          // depende de @nestjs/common, quem chama traduz).
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
+    } else {
+      const masterIntent = await this.resolveCanonicalMasterIntent(
+        userId,
+        dto.saveAsMaster === true,
+      );
+
+      // Bug #2 do piloto Fase 3B: quando esta análise vai promover Master
+      // (masterIntent != NONE — inclui tanto o saveAsMaster:true explícito
+      // quanto o "primeiro Master automático" via análise), este caminho
+      // nunca criava/reusava um Resume real pra representar o CV sendo
+      // promovido. Sem Resume, o CvProcessingJob nascia com resumeId null,
+      // então CvMasterPromotionService#syncResumeIsMaster nunca disparava
+      // no worker — a CvMasterDesignation trocava de Master corretamente,
+      // mas o Resume.isMaster ANTIGO (upload de arquivo anterior) nunca era
+      // demovido, quebrando a invariante "exatamente um Resume.isMaster,
+      // igual ao Resume da designação ativa". Reaproveita o mesmo padrão já
+      // usado por resumes.service.ts#setPrimaryCanonical e por
+      // ClaimSourceGrantService#ensureResume: reusa um Resume existente do
+      // usuário que já aponte pro mesmo conteúdo (mesmo textSha256), senão
+      // cria um novo (sem cvSourceId ainda, se a fonte também for nova) e
+      // liga cvSourceId/cvSubmissionId assim que enqueueFromUserText resolve
+      // a fonte (dedup por hash já garante que não duplica).
+      const resumeId =
+        masterIntent !== "NONE"
+          ? (await this.ensureResumeForMasterPromotion(userId, cvText)).id
+          : undefined;
+
+      const enqueued = await this.cvProcessingEntrypoint.enqueueFromUserText({
+        masterIntent,
+        submission: submission ?? { origin: "PASTED_TEXT" },
+        text: cvText,
+        userId,
+        resumeId,
+      });
+      cvProcessingJobId = enqueued.job.id;
+      cvSubmissionId = enqueued.cvSubmission.id;
+
+      if (resumeId) {
+        const resumeRow = await this.database.resume.findUnique({
+          where: { id: resumeId },
+          select: { cvSourceId: true },
+        });
+        if (resumeRow && !resumeRow.cvSourceId) {
+          await this.database.resume.update({
+            where: { id: resumeId },
+            data: {
+              cvSourceId: enqueued.cvSource.id,
+              cvSubmissionId: enqueued.cvSubmission.id,
+            },
+          });
+        }
+      }
+    }
+
+    const analysisJob = await this.database.analysisJob.create({
+      data: {
+        cvProcessingJobId,
+        cvSubmissionId,
+        jobDescriptionText,
+        ownerKind: "authenticated",
+        status: "pending",
+        userId,
+      },
+    });
+
+    return { jobId: analysisJob.id, status: "pending" };
+  }
+
+  // Correção Fase 3C item 3 (bug #2 do piloto 3B) — cria ou reusa o Resume
+  // que representa o CV desta análise, exatamente quando ela vai promover
+  // Master (masterIntent != NONE). Mesmo padrão de
+  // ClaimSourceGrantService#ensureResume: procura primeiro por um Resume
+  // do usuário já ligado a um CvSource com o mesmo textSha256 (mesmo
+  // conteúdo, upload/análise anterior) — nunca cria um segundo Resume pro
+  // mesmo conteúdo. Se não existe fonte nem Resume ainda, cria um Resume
+  // "bare" (cvSourceId null) — o chamador liga cvSourceId/cvSubmissionId
+  // logo depois que enqueueFromUserText resolve/cria a fonte real. Nunca
+  // marca isMaster aqui: quem decide isso é
+  // CvMasterPromotionService#syncResumeIsMaster, atômico com a
+  // CvMasterDesignation, dentro do CvProcessingWorker — nunca antes.
+  private async ensureResumeForMasterPromotion(
+    userId: string,
+    cvText: string,
+  ): Promise<{ id: string }> {
+    const textSha256 = createHash("sha256").update(cvText).digest("hex");
+
+    const existingSource = await this.database.cvSource.findUnique({
+      where: { userId_textSha256: { userId, textSha256 } },
+    });
+
+    if (existingSource) {
+      const existingResume = await this.database.resume.findFirst({
+        where: { userId, cvSourceId: existingSource.id },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (existingResume) return { id: existingResume.id };
+    }
+
+    const created = await this.database.resume.create({
+      data: {
+        userId,
+        title: "CV enviado para análise",
+        kind: "master",
+        status: "uploaded",
+        isMaster: false,
+        cvSourceId: existingSource?.id ?? null,
+      },
+    });
+    return { id: created.id };
+  }
+
+  private async resolveCanonicalMasterIntent(
+    userId: string,
+    explicitSaveAsMaster: boolean,
+  ): Promise<"NONE" | "PROMOTE_IF_FIRST" | "PROMOTE_EXPLICIT"> {
+    if (explicitSaveAsMaster) {
+      return "PROMOTE_EXPLICIT";
+    }
+    const active =
+      await this.cvMasterPromotionForAnalysis?.getActiveDesignation({
+        ownerType: "USER",
+        userId,
+      });
+    return active ? "NONE" : "PROMOTE_IF_FIRST";
+  }
+
+  // Fase 2C.1 — fecha a lacuna deixada pela 2C: localiza (ou materializa
+  // just-in-time) o Master formal do usuário pra reuso em análise sem
+  // conteúdo novo (inputMode "profile", ou nenhum file/masterCvText/
+  // masterResumeId informado). Quatro desfechos (o primeiro revisado em
+  // 2026-09-09 — ver nota abaixo):
+  //
+  //  1. Existe CvMasterDesignation ativa (supersededAt IS NULL) — antes de
+  //     reusá-la, UserProfileMasterSyncService#ensureMasterReflectsProfileEdits
+  //     verifica se o UserProfile mudou desde a última sincronização (achado
+  //     2026-09-09: edições diretas em /meu-cv-master nunca alimentavam
+  //     análises novas, porque este método sempre reusava a designação
+  //     ativa sem checar isso) e, se sim, promove uma nova versão ANTES de
+  //     seguir — sem IA (mapeamento puro do UserProfile já estruturado),
+  //     idempotente (no-op se nada mudou). Fora isso, é sempre criada pelo
+  //     mesmo processamento que já deixou seu CvStructuredProfile READY
+  //     (CvMasterPromotionService#promoteAndProject roda DEPOIS da extração
+  //     no CvProcessingWorker), então o CvProcessingJob READY correspondente
+  //     sempre existe — reusa sem nenhuma IA.
+  //  2/3/4. Sem designação ativa, mas existe Resume.isMaster=true (Master
+  //     "legado" — nunca passou pelo pipeline novo, ou upload novo ainda em
+  //     voo): delega a CvProcessingEntrypointService#enqueueFromUserText, que:
+  //       - reaproveita (dedup por hash) um CvSource já existente pra este
+  //         conteúdo, nunca duplica escrita no storage;
+  //       - reaproveita (dedup por status) um CvProcessingJob
+  //         PENDING/PROCESSING já em voo pro mesmo cvSourceId — cobre o
+  //         caso 2 (upload novo, extração ainda em andamento) de graça, sem
+  //         lógica extra aqui;
+  //       - só cria um CvProcessingJob genuinamente novo quando nenhum dos
+  //         dois acima existe — o worker (cv-processing.worker.ts#
+  //         tryReuseLegacyExtraction) decide, sem IA no request: reusa uma
+  //         MasterCvCanonicalExtraction legada (status succeeded, mesmo
+  //         inputHash) se existir (caso 3), senão chama IA de verdade numa
+  //         passagem de cron separada (caso 4).
+  //  5/6. Nem designação ativa nem Resume.isMaster com texto — erro de
+  //     domínio explícito (NoValidMasterCvForProfileAnalysisError).
+  //
+  // Importante: isto só afeta análises NOVAS a partir daqui. Nenhuma
+  // CvAdaptation/AnalysisJob já existente é tocada — seus cvStructuredProfileId
+  // ficam congelados pra sempre (CvStructuredProfile é imutável após READY,
+  // reforçado por trigger de banco), então liberar/gerar o CV de uma análise
+  // antiga sempre usa a versão do CV que existia quando ELA foi feita, nunca
+  // uma edição de perfil posterior.
+  private async resolveActiveMasterCvProcessingJobId(
+    userId: string,
+  ): Promise<string> {
+    if (!this.cvProcessingEntrypoint || !this.cvMasterPromotionForAnalysis) {
+      throw new Error(
+        "CV_STRUCTURED_PROFILE_PIPELINE_ENABLED está ligado, mas " +
+          "CvProcessingEntrypointService/CvMasterPromotionService não foram " +
+          "injetados em CvAdaptationService — verifique cv-adaptation.module.ts.",
+      );
+    }
+
+    await this.userProfileMasterSync?.ensureMasterReflectsProfileEdits(
+      userId,
+    );
+
+    const active = await this.cvMasterPromotionForAnalysis.getActiveDesignation(
+      { ownerType: "USER", userId },
+    );
+
+    if (active) {
+      const existingJob = await this.database.cvProcessingJob.findFirst({
+        orderBy: { finishedAt: "desc" },
+        where: {
+          cvStructuredProfileId: active.cvStructuredProfileId,
+          status: "READY",
+        },
+      });
+      if (!existingJob) {
+        // Defensivo — não deveria acontecer (ver comentário do método),
+        // mas nunca finge sucesso: trata como "ainda processando".
+        throw new BadRequestException(
+          "O CV Base ainda está sendo processado. Tente novamente em instantes.",
+        );
+      }
+      return existingJob.id;
+    }
+
+    const masterResume = await this.database.resume.findFirst({
+      where: { userId, isMaster: true },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    if (!masterResume?.rawText?.trim()) {
+      throw new NoValidMasterCvForProfileAnalysisError(userId);
+    }
+
+    // Mesma causa raiz do achado #1 (piloto 3B): materializar just-in-time
+    // um Master legado (Resume.isMaster=true sem designação canônica ainda)
+    // sem passar resumeId deixaria a CvMasterDesignation recém-criada sem
+    // resumeId — viola a integridade estrutural nova (Fase 3C item 5).
+    // masterResume.id já é exatamente o Resume que está virando Master.
+    const enqueued = await this.cvProcessingEntrypoint.enqueueFromUserText({
+      userId,
+      text: this.normalizeSnapshotText(masterResume.rawText),
+      masterIntent: "PROMOTE_IF_FIRST",
+      submission: { origin: "PASTED_TEXT" },
+      resumeId: masterResume.id,
+    });
+    return enqueued.job.id;
+  }
+
+  // Chamado exclusivamente por CvAnalysisWorker (cv-analysis.worker.ts),
+  // nunca dentro de um request HTTP — roda depois que o CvProcessingJob já
+  // está READY (extração + Base de Talentos + Master, se aplicável, já
+  // persistidos). Espelha a segunda metade de analyzeAuthenticated
+  // (chamada real de IA via protectedAnalyzeService), mas lê o texto do CV
+  // exclusivamente do CvStructuredProfile.canonicalJson daquele
+  // processamento (nunca texto bruto/arquivo) e nunca decide Master (isso
+  // já aconteceu, se aplicável, antes deste método ser chamado).
+  async runCanonicalAuthenticatedAnalysis(input: {
+    userId: string;
+    jobDescriptionText: string;
+    canonicalCvProfile: CanonicalCvProfileData;
+    cvStructuredProfileId: string;
+    canonicalCvText: string;
+    analysisContext?: AnalysisRequestContext;
+  }): Promise<{
+    adaptedContentJson: unknown;
+    previewText: string;
+    masterCvText: string;
+    analysisCvSnapshotId: string;
+  }> {
+    const normalizedJobDescriptionText = this.validateJobDescription(
+      input.jobDescriptionText,
+      {
+        context: this.buildProtectionContext(
+          input.analysisContext,
+          input.userId,
+          "cv-adaptation/analyze",
+        ),
+        routeKey: "cv-adaptation/analyze",
+      },
+    );
+    const canonicalJob = await this.resolveCanonicalJob(
+      normalizedJobDescriptionText,
+      "runCanonicalAuthenticatedAnalysis",
+    );
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
+    const effectiveRequirements = await this.resolveEffectiveRequirements(
+      existingRequirementSet,
+    );
+    const existingKeywordRule = await this.resolveExistingKeywordRule({
+      jobRequirementSetId: existingRequirementSet?.id ?? null,
+      userId: input.userId,
+    });
+
+    const protectionResult =
+      await this.protectedAnalyzeService.executeProtectedAnalyze({
+        canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
+          description: normalizedJobDescriptionText,
+        },
+        context: this.buildProtectionContext(
+          input.analysisContext,
+          input.userId,
+          "cv-adaptation/analyze",
+        ),
+        canonicalCvProfile: input.canonicalCvProfile,
+        existingKeywordRule,
+        existingRequirements: effectiveRequirements ?? undefined,
+        jobDescriptionText: normalizedJobDescriptionText,
+        loadMasterCvText: async () => input.canonicalCvText,
+        payload: {
+          cvFingerprint: null,
+          hasFile: false,
+          hasTextInput: true,
+          jobDescriptionText: normalizedJobDescriptionText,
+          masterResumeId: null,
+          profileUpdatedAt: null,
+          route: "cv-adaptation/analyze",
+          saveAsMaster: false,
+          textFingerprint: this.buildFileFingerprint(
+            Buffer.from(input.canonicalCvText),
+          ),
+          userId: input.userId,
+        },
+        skipTurnstile: true,
+        turnstileToken: null,
+      });
+
+    if (!protectionResult.ok) {
+      throw new BadRequestException(
+        this.toProtectedBoundaryMessage(protectionResult),
+      );
+    }
+
+    if (!existingRequirementSet) {
+      await this.persistRequirementSetFromAnalysis({
+        analysisModel: protectionResult.result.analysisModel,
+        analysisPromptVersion: protectionResult.result.analysisPromptVersion,
+        canonicalJob,
+        structuredRequirements: protectionResult.result.structuredRequirements,
+      });
+    }
+
+    const snapshot = await this.createAnalysisCvSnapshot({
+      file: undefined,
+      guestSessionHash: null,
+      sourceType: "master_resume",
+      text: input.canonicalCvText,
+      userId: input.userId,
+      cvStructuredProfileId: input.cvStructuredProfileId,
+    });
+
+    return {
+      ...protectionResult.result,
+      analysisCvSnapshotId: snapshot.id,
+      masterCvText: input.canonicalCvText,
+    };
+  }
+
+  // Fase 2D — espelho de runCanonicalAuthenticatedAnalysis pro caminho de
+  // visitante (userId null, guestSessionHash em vez de userId em todo
+  // lugar que builda contexto/payload/snapshot). Chamado exclusivamente
+  // por CvAnalysisWorker, nunca dentro de um request HTTP — roda depois
+  // que o CvProcessingJob já está READY (extração + Base de Talentos +
+  // Master provisório, se aplicável, já persistidos). Lê o texto do CV
+  // exclusivamente do CvStructuredProfile.canonicalJson (nunca texto
+  // bruto/arquivo) e nunca decide Master (isso já aconteceu antes deste
+  // método ser chamado).
+  async runCanonicalGuestAnalysis(input: {
+    guestSessionHash: string | null;
+    jobDescriptionText: string;
+    canonicalCvProfile: CanonicalCvProfileData;
+    cvStructuredProfileId: string;
+    canonicalCvText: string;
+  }): Promise<{
+    adaptedContentJson: unknown;
+    previewText: string;
+    masterCvText: string;
+    analysisCvSnapshotId: string;
+  }> {
+    const normalizedJobDescriptionText = this.validateJobDescription(
+      input.jobDescriptionText,
+      {
+        context: this.buildProtectionContext(
+          undefined,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        routeKey: "cv-adaptation/analyze-guest",
+      },
+    );
+    const canonicalJob = await this.resolveCanonicalJob(
+      normalizedJobDescriptionText,
+      "runCanonicalGuestAnalysis",
+    );
+    const existingRequirementSet =
+      await this.resolveExistingRequirementSet(canonicalJob);
+    const effectiveRequirements = await this.resolveEffectiveRequirements(
+      existingRequirementSet,
+    );
+    const existingKeywordRule = await this.resolveExistingKeywordRule({
+      jobRequirementSetId: existingRequirementSet?.id ?? null,
+      userId: null,
+    });
+
+    const protectionResult =
+      await this.protectedAnalyzeService.executeProtectedAnalyze({
+        canonicalJobJson: canonicalJob?.canonicalJobJson ?? {
+          description: normalizedJobDescriptionText,
+        },
+        context: this.buildProtectionContext(
+          undefined,
+          null,
+          "cv-adaptation/analyze-guest",
+        ),
+        canonicalCvProfile: input.canonicalCvProfile,
+        existingKeywordRule,
+        existingRequirements: effectiveRequirements ?? undefined,
+        jobDescriptionText: normalizedJobDescriptionText,
+        loadMasterCvText: async () => input.canonicalCvText,
+        payload: {
+          cvFingerprint: null,
+          hasFile: false,
+          hasTextInput: true,
+          jobDescriptionText: normalizedJobDescriptionText,
+          masterResumeId: null,
+          profileUpdatedAt: null,
+          route: "cv-adaptation/analyze-guest",
+          saveAsMaster: false,
+          textFingerprint: this.buildFileFingerprint(
+            Buffer.from(input.canonicalCvText),
+          ),
+          userId: null,
+        },
+        skipTurnstile: true,
+        turnstileToken: null,
+      });
+
+    if (!protectionResult.ok) {
+      throw new BadRequestException(
+        this.toProtectedBoundaryMessage(protectionResult),
+      );
+    }
+
+    if (!existingRequirementSet) {
+      await this.persistRequirementSetFromAnalysis({
+        analysisModel: protectionResult.result.analysisModel,
+        analysisPromptVersion: protectionResult.result.analysisPromptVersion,
+        canonicalJob,
+        structuredRequirements: protectionResult.result.structuredRequirements,
+      });
+    }
+
+    const snapshot = await this.createAnalysisCvSnapshot({
+      file: undefined,
+      guestSessionHash: input.guestSessionHash,
+      sourceType: "master_resume",
+      text: input.canonicalCvText,
+      userId: null,
+      cvStructuredProfileId: input.cvStructuredProfileId,
+    });
+
+    return {
+      ...protectionResult.result,
+      analysisCvSnapshotId: snapshot.id,
+      masterCvText: input.canonicalCvText,
+    };
+  }
+
+  // Alias público (Fase 2C) — CvAnalysisWorker precisa renderizar o
+  // canonicalJson de um CvStructuredProfile como texto, reaproveitando
+  // exatamente o mesmo formatador já usado pelo modo perfil legado
+  // (renderCanonicalProfileToText, privado), sem duplicar a lógica de
+  // formatação em outro arquivo.
+  renderCanonicalProfileTextForPipeline(data: CanonicalProfileData): string {
+    return this.renderCanonicalProfileToText(data);
+  }
+
+  // Alias público (Fase 2C) — mesma extração de sinais (jobTitle/
+  // companyName/scoreBefore/scoreAfter) já usada por processAnalysisJob,
+  // reaproveitada por CvAnalysisWorker ao persistir o AnalysisJob
+  // "succeeded" do pipeline novo.
+  extractAnalysisJobSignalsForPipeline(adaptedContentJson: unknown): {
+    jobTitle: string | null;
+    companyName: string | null;
+    scoreBefore: number | null;
+    scoreAfter: number | null;
+  } {
+    return this.extractAnalysisJobSignals(adaptedContentJson);
   }
 
   private async processAnalysisJob(
@@ -1556,6 +2653,14 @@ export class CvAdaptationService {
     userId: string,
     jobId: string,
     guestPossessionToken?: string,
+    // Fase 3C, item 6 — corrige o gap descrito no controller: sem isto,
+    // saveGuestPreview (chamado abaixo) sempre calculava guestSessionHash a
+    // partir de um contexto vazio, então validateAndClaimSnapshot rejeitava
+    // qualquer AnalysisCvSnapshot de guest criada com uma sessão real.
+    // Opcional (nunca quebra os ~90 testes legados que chamam este método
+    // sem contexto, ex. via OAuth) — quando ausente, comportamento idêntico
+    // a antes desta fase.
+    analysisContext?: AnalysisRequestContext,
   ): Promise<
     | { status: "pending" | "processing" | "failed" }
     | { status: "succeeded"; cvAdaptationId: string }
@@ -1621,6 +2726,36 @@ export class CvAdaptationService {
       );
     }
 
+    // Fase 2E (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md,
+    // seção 4): quando esta AnalysisJob passou pelo pipeline novo
+    // (cvProcessingJobId preenchido), roda o claim granular por fonte
+    // (grant + resolução de sujeito + Master/Resume/UserProfile/projeção,
+    // tudo numa única transação) — nunca decidido pelo valor ATUAL da flag
+    // global (achado da auditoria real de claim: a flag controla se
+    // análises NOVAS entram no pipeline canônico, nunca se uma AnalysisJob
+    // histórica específica tem linhagem canônica ou não; usar
+    // isPipelineEnabledFor aqui deixava o claim cair no legado sempre que
+    // alguém desligasse a flag entre a análise e o cadastro, mesmo com
+    // cvProcessingJobId preenchido). O único critério é o fato já gravado
+    // nesta AnalysisJob: tem cvProcessingJobId, tem linhagem; não tem, é
+    // legado de verdade e cai no saveGuestPreview de sempre.
+    let preResolvedMasterResumeId: string | undefined;
+    if (job.cvProcessingJobId && this.claimSourceGrantService) {
+      const claimed = await this.claimSourceGrantService.claim({
+        userId,
+        analysisJobId: job.id,
+        cvProcessingJobId: job.cvProcessingJobId,
+      });
+      // Quando o claim granular já promoveu (ou reconheceu, em retry
+      // idempotente) o Master do usuário a partir da MESMA fonte/perfil
+      // estruturado do guest, saveGuestPreview abaixo NUNCA deve criar um
+      // Resume/CvSource novo a partir de masterCvText — reusa o Resume que
+      // o claim já resolveu.
+      if (claimed.master?.resumeId) {
+        preResolvedMasterResumeId = claimed.master.resumeId;
+      }
+    }
+
     const dto: SaveGuestPreviewDto = {
       adaptedContentJson: (job.adaptedContentJson ?? {}) as Record<
         string,
@@ -1634,7 +2769,14 @@ export class CvAdaptationService {
       companyName: job.companyName ?? undefined,
     };
 
-    const adaptation = await this.saveGuestPreview(userId, dto);
+    const adaptation = await this.saveGuestPreview(
+      userId,
+      dto,
+      undefined,
+      analysisContext,
+      job.cvStructuredProfileId ?? undefined,
+      preResolvedMasterResumeId,
+    );
 
     return { status: "succeeded", cvAdaptationId: adaptation.id };
   }
@@ -2314,6 +3456,29 @@ export class CvAdaptationService {
     dto: SaveGuestPreviewDto,
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
+    // Nunca exposto no DTO público (SaveGuestPreviewDto é o corpo de um
+    // endpoint HTTP real — client nunca pode escolher isso). Override
+    // opcional: quando o chamador (claimGuestAnalysisJob) já sabe o valor
+    // certo, evita a query redundante de auto-resolução logo abaixo do
+    // snapshot. Achado 2026-09-10: como campo OBRIGATÓRIO (sem fallback)
+    // isso era um bug real — o endpoint público save-guest-preview (usado
+    // pela análise nova autenticada) nunca preenchia isto, então toda
+    // CvAdaptation criada por ele ficava sem linhagem mesmo vindo do
+    // pipeline canônico. Agora o método sempre resolve sozinho a partir
+    // do AnalysisJob dono do snapshot quando este parâmetro vem vazio.
+    cvStructuredProfileId?: string,
+    // Idem — nunca exposto no DTO público. Só o chamador interno
+    // (claimGuestAnalysisJob) preenche, quando ClaimSourceGrantService.claim()
+    // já promoveu (ou reconheceu, em retry idempotente) o Master do
+    // usuário a partir da MESMA fonte/CvStructuredProfile do guest. Achado
+    // da auditoria real de claim: sem isto, mesmo com claim() já tendo
+    // resolvido o Resume corretamente, este método podia ainda cair no
+    // branch "sem master existente" abaixo e criar um Resume/CvSource
+    // NOVO a partir de dto.masterCvText (texto re-renderizado, nunca o
+    // original) — reextração de IA duplicada e linhagem quebrada. Presente
+    // ⇒ pula os três branches de resolução de masterResumeId abaixo por
+    // completo.
+    preResolvedMasterResumeId?: string,
   ) {
     // Mesma reconciliação de processAnalysisJob — dto.jobTitle/companyName
     // já chegam confiáveis (ver analyze-master-cv-flow.ts/
@@ -2361,6 +3526,29 @@ export class CvAdaptationService {
       );
     }
 
+    // Achado 2026-09-10: até aqui, só claimGuestAnalysisJob resolvia e
+    // passava cvStructuredProfileId (parâmetro abaixo) — o endpoint HTTP
+    // público POST /cv-adaptation/save-guest-preview (usado pelo fluxo de
+    // análise NOVA autenticada, apps/web/src/lib/authenticated-analysis-flow.ts,
+    // que não é guest claim nenhum apesar do nome) chama este método
+    // diretamente, sem nunca preencher esse parâmetro — toda análise
+    // autenticada que passou pelo pipeline canônico (cvProcessingJobId
+    // preenchido na AnalysisJob) virava uma CvAdaptation com
+    // cvStructuredProfileId nulo, e resolveGenerationCvSource recusa
+    // gerar pra sempre (BadRequestException de inconsistência de
+    // linhagem). Resolve aqui, uma vez, pra QUALQUER chamador — não
+    // depende mais de cada caller lembrar de buscar isso.
+    const resolvedCvStructuredProfileId =
+      cvStructuredProfileId ??
+      (snapshot
+        ? (
+            await this.database.analysisJob.findUnique({
+              where: { analysisCvSnapshotId: snapshot.id },
+              select: { cvProcessingJobId: true, cvStructuredProfileId: true },
+            })
+          )?.cvStructuredProfileId ?? undefined
+        : undefined);
+
     const existingMaster = await this.database.resume.findFirst({
       where: { userId, isMaster: true, kind: "master" },
       select: { id: true },
@@ -2368,7 +3556,13 @@ export class CvAdaptationService {
 
     let masterResumeId: string;
 
-    if (file) {
+    if (preResolvedMasterResumeId) {
+      // O claim canônico (ClaimSourceGrantService.claim(), via
+      // claimGuestAnalysisJob) já resolveu qual Resume representa o Master
+      // — reusa exatamente esse, sem criar Resume/CvSource novo nem
+      // reenfileirar processamento a partir de dto.masterCvText.
+      masterResumeId = preResolvedMasterResumeId;
+    } else if (file) {
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
       // Sem master existente, este CV vira o primeiro master automaticamente
       // — dto.saveAsMaster só importa pra decidir SUBSTITUIR um master que
@@ -2406,6 +3600,14 @@ export class CvAdaptationService {
           rawText: dto.masterCvText,
           file,
         });
+        await this.enqueueCanonicalMasterProcessing({
+          userId,
+          rawText: dto.masterCvText,
+          masterIntent:
+            dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
+          file,
+          resumeId: created.id,
+        });
       }
     } else if (existingMaster) {
       masterResumeId = existingMaster.id;
@@ -2438,6 +3640,15 @@ export class CvAdaptationService {
         resumeId: created.id,
         rawText: dto.masterCvText,
       });
+      // Sem arquivo e sem master existente — é sempre o primeiro CV do
+      // usuário (o branch dto.saveAsMaster de substituição explícita só
+      // existe no ramo com arquivo, acima).
+      await this.enqueueCanonicalMasterProcessing({
+        userId,
+        rawText: dto.masterCvText,
+        masterIntent: "PROMOTE_IF_FIRST",
+        resumeId: created.id,
+      });
     }
 
     const existingAdaptation = await this.database.cvAdaptation.findFirst({
@@ -2466,6 +3677,26 @@ export class CvAdaptationService {
         await this.database.cvAdaptation.update({
           where: { id: existingAdaptation.id },
           data: { jobApplicationId: linkedJobApplicationId },
+        });
+      }
+      // Achado em produção (2026-09-09): este branch de idempotência (mesmo
+      // userId+analysisCvSnapshotId já tem CvAdaptation) sempre existiu, mas
+      // nunca gravava cvStructuredProfileId no registro existente — mesmo
+      // quando o chamador (claimGuestAnalysisJob) descobre agora que essa
+      // AnalysisJob passou pelo pipeline canônico. Resultado: a adaptação
+      // fica para sempre com cvStructuredProfileId nulo enquanto sua
+      // AnalysisJob de origem tem cvProcessingJobId preenchido —
+      // resolveGenerationCvSource trata isso como inconsistência de
+      // linhagem e recusa gerar, permanentemente. Backfilla aqui, uma
+      // única vez, sempre que o valor certo chegar e o registro ainda não
+      // o tiver.
+      if (
+        resolvedCvStructuredProfileId &&
+        !existingAdaptation.cvStructuredProfileId
+      ) {
+        await this.database.cvAdaptation.update({
+          where: { id: existingAdaptation.id },
+          data: { cvStructuredProfileId: resolvedCvStructuredProfileId },
         });
       }
       await this.triggerJobApplicationHook({
@@ -2522,6 +3753,7 @@ export class CvAdaptationService {
         jobApplicationId: linkedJobApplicationId,
         status: "pending",
         paymentStatus: "none",
+        cvStructuredProfileId: resolvedCvStructuredProfileId ?? null,
       },
       include: {
         template: { select: { id: true, name: true, slug: true } },
@@ -3676,10 +4908,18 @@ export class CvAdaptationService {
         typeof (s as { sectionType?: string }).sectionType === "string" &&
         (s as { sectionType: string }).sectionType !== "other",
     );
-    if (
-      adaptation.status === "delivered" &&
-      (!finalCvOutput || !hasRealSections)
-    ) {
+    // Achado em produção (2026-09-09): este bloco disparava uma regeneração
+    // a cada poll do frontend (a cada 3s), sem nenhum cooldown — quando a
+    // causa é permanente (ex.: inconsistência de linhagem), isso vira um
+    // loop infinito de tentativas idênticas martelando o servidor, e o
+    // frontend nunca sabia que tinha dado erro (só via timeout genérico
+    // após 8min de polling). Agora só dispara a regeneração se ainda não
+    // houver failureReason registrado; a primeira falha é persistida e
+    // interrompe as tentativas seguintes, e o payload abaixo expõe `error`
+    // pro frontend parar de esperar imediatamente.
+    const isBroken =
+      adaptation.status === "delivered" && (!finalCvOutput || !hasRealSections);
+    if (isBroken && !adaptation.failureReason) {
       void this.database.cvAdaptation
         .findFirst({
           where: { id, userId },
@@ -3694,13 +4934,30 @@ export class CvAdaptationService {
             });
           }
         })
-        .catch((err) => {
+        .catch(async (err) => {
           console.error(
             `Retry CV generation for ${id}:`,
             err instanceof Error ? err.message : String(err),
           );
+          await this.database.cvAdaptation
+            .update({
+              where: { id },
+              data: { failureReason: this.sanitizeFailureReason(err) },
+            })
+            .catch((updateError) => {
+              console.error(
+                `Failed to persist regeneration failure for ${id}:`,
+                updateError instanceof Error
+                  ? updateError.message
+                  : String(updateError),
+              );
+            });
         });
     }
+    const generationError =
+      isBroken && adaptation.failureReason
+        ? "A geração deste currículo falhou. Tente novamente mais tarde ou entre em contato com o suporte."
+        : null;
 
     return {
       adaptedContentJson: enrichedAnalysis,
@@ -3717,6 +4974,7 @@ export class CvAdaptationService {
       adaptationNotes,
       jobApplicationId: adaptation.jobApplicationId,
       jobAnalysisCount: await countPromise,
+      error: generationError,
     };
   }
 
@@ -3991,6 +5249,7 @@ export class CvAdaptationService {
     userId: string;
     createdAt: Date;
     analysisCvSnapshotId: string | null;
+    cvStructuredProfileId?: string | null;
     masterResumeId?: string | null;
     adaptationSource?: "uploaded_content" | "user_profile";
     inputMode?: "file_upload" | "text_paste" | "profile";
@@ -4017,16 +5276,19 @@ export class CvAdaptationService {
     this.cvGenerationInProgress.add(adaptation.id);
 
     try {
-      const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
+      const cvSource = await this.resolveGenerationCvSource(adaptation);
 
-      if (!masterCvText) {
+      if (!cvSource) {
         this.logger.warn(
-          `No master CV text available for adaptation ${adaptation.id}`,
+          `No CV source available for adaptation ${adaptation.id}`,
         );
         return null;
       }
 
-      await this.persistGenerationSnapshotIfMissing(adaptation, masterCvText);
+      await this.persistGenerationSnapshotIfMissing(
+        adaptation,
+        cvSource.fingerprintSource,
+      );
 
       const requirementCoverage = this.extractRequirementCoverageFromAnalysis(
         adaptation.adaptedContentJson,
@@ -4046,7 +5308,11 @@ export class CvAdaptationService {
             ),
             jobDescriptionText: adaptation.jobDescriptionText,
             jobTitle: adaptation.jobTitle ?? undefined,
-            masterCvText,
+            // Nunca os dois — mesma regra da análise (ver
+            // resolveGenerationCvSource).
+            ...("canonicalCvProfile" in cvSource
+              ? { canonicalCvProfile: cvSource.canonicalCvProfile }
+              : { masterCvText: cvSource.masterCvText }),
             requirementCoverage,
             ajustesConteudo,
             selectedMissingKeywords: this.mergeKeywordsForGeneration(
@@ -4091,6 +5357,15 @@ export class CvAdaptationService {
         `CV generation failed for adaptation ${adaptation.id}: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
+      // Inconsistência de linhagem (resolveGenerationCvSource) precisa
+      // "falhar explicitamente" pro chamador (download retorna erro HTTP em
+      // vez de gerar um PDF com dado errado) — nunca ser engolida como as
+      // demais falhas transitórias (rede/IA) que este catch trata como
+      // "tenta de novo depois". BadRequestException é o sinal usado por
+      // resolveGenerationCvSource pra essa categoria especificamente.
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
       return null;
     } finally {
       this.cvGenerationInProgress.delete(adaptation.id);
@@ -5312,6 +6587,12 @@ export class CvAdaptationService {
       | "user_profile";
     text: string;
     file?: FileUpload;
+    // Pipeline canônico: quando a análise que gerou este snapshot usou um
+    // CvStructuredProfile READY, o id vai junto — é o que permite a
+    // geração (ensureLegacyStructuredOutput/resolveGenerationCvSource)
+    // achar o MESMO perfil estruturado usado na análise, em vez de reler
+    // texto achatado do snapshot.
+    cvStructuredProfileId?: string;
   }) {
     const normalizedText = this.normalizeSnapshotText(input.text);
     const professionalProfile =
@@ -5363,6 +6644,7 @@ export class CvAdaptationService {
         professionalProfileFingerprint: professionalProfile.fingerprint,
         professionalProfileJson: professionalProfile.profile,
         expiresAt,
+        cvStructuredProfileId: input.cvStructuredProfileId ?? null,
       },
     });
 
@@ -5374,6 +6656,7 @@ export class CvAdaptationService {
       userId: snapshot.userId,
       sourceType: snapshot.sourceType,
       text: normalizedText,
+      guestSessionHash: snapshot.guestSessionHash,
     });
 
     return snapshot;
@@ -5447,6 +6730,83 @@ export class CvAdaptationService {
     }
 
     return snapshot;
+  }
+
+  // Achado da auditoria do pipeline canônico (2026-09-08): a geração do CV
+  // adaptado (ensureLegacyStructuredOutput, chamada no download/claim, pós-
+  // desbloqueio) sempre lia texto achatado de AnalysisCvSnapshot, mesmo
+  // quando a análise original já tinha rodado sobre um CvStructuredProfile
+  // READY.
+  //
+  // Correção de 2ª rodada (mesmo dia): NÃO decidir "legado" só por
+  // cvStructuredProfileId ser null — isso deixaria uma ausência ACIDENTAL
+  // da FK (ex.: um bug de propagação, como o que corrigimos hoje mesmo)
+  // travestida de análise legada, sem erro nenhum. A linhagem real é o
+  // AnalysisJob de origem (AnalysisJob.convertedCvAdaptationId ->
+  // CvAdaptation.originAnalysisJob, FK já existente, sem migration nova):
+  // se esse AnalysisJob existe e tem cvProcessingJobId preenchido, esta
+  // adaptação NASCEU do pipeline novo — cvStructuredProfileId é
+  // OBRIGATÓRIO nesse caso, sua ausência é uma inconsistência que precisa
+  // falhar explicitamente, nunca cair pro texto. Só adaptações sem
+  // AnalysisJob de origem, ou cujo AnalysisJob nunca teve cvProcessingJobId
+  // (o caminho create()/analyzeAndAdapt legado, que nunca passa pelo
+  // pipeline canônico — ver seção 3 do relatório), são legitimamente
+  // legadas. A flag atual (CV_STRUCTURED_PROFILE_PIPELINE_ENABLED) NUNCA
+  // decide isso — só o que foi gravado no momento da análise.
+  private async resolveGenerationCvSource(adaptation: {
+    id: string;
+    cvStructuredProfileId?: string | null;
+    adaptedContentJson: unknown;
+    analysisCvSnapshotId: string | null;
+    createdAt: Date;
+    masterResume: { rawText: string | null } | null;
+  }): Promise<
+    | { canonicalCvProfile: CanonicalCvProfileData; fingerprintSource: string }
+    | { masterCvText: string; fingerprintSource: string }
+    | null
+  > {
+    const originAnalysisJob = await this.database.analysisJob.findUnique({
+      where: { convertedCvAdaptationId: adaptation.id },
+      select: { cvProcessingJobId: true },
+    });
+    const pipelineExpected = Boolean(originAnalysisJob?.cvProcessingJobId);
+
+    if (pipelineExpected && !adaptation.cvStructuredProfileId) {
+      throw new BadRequestException(
+        `Adaptation ${adaptation.id} originated from a canonical-pipeline AnalysisJob (cvProcessingJobId set) but has no cvStructuredProfileId — lineage inconsistency, refusing to fall back to legacy text.`,
+      );
+    }
+
+    if (adaptation.cvStructuredProfileId) {
+      const structuredProfile =
+        await this.database.cvStructuredProfile.findUnique({
+          where: { id: adaptation.cvStructuredProfileId },
+        });
+
+      if (
+        !structuredProfile ||
+        structuredProfile.status !== "READY" ||
+        !structuredProfile.canonicalJson
+      ) {
+        throw new BadRequestException(
+          `Adaptation ${adaptation.id} references CvStructuredProfile ${adaptation.cvStructuredProfileId}, but it is missing or not READY — refusing to fall back to legacy text.`,
+        );
+      }
+
+      const canonicalCvProfile =
+        structuredProfile.canonicalJson as CanonicalCvProfileData;
+      return {
+        canonicalCvProfile,
+        fingerprintSource: JSON.stringify(canonicalCvProfile),
+      };
+    }
+
+    // Só alcançável aqui quando pipelineExpected é false E
+    // cvStructuredProfileId é null — legado de verdade, comprovado pela
+    // linhagem (nunca pelo estado atual da flag).
+    const masterCvText = await this.resolveGenerationMasterCvText(adaptation);
+    if (!masterCvText) return null;
+    return { masterCvText, fingerprintSource: masterCvText };
   }
 
   private async resolveGenerationMasterCvText(adaptation: {

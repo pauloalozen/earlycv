@@ -5,13 +5,30 @@ import type OpenAI from "openai";
 import { getActiveAiSupplier, getAiModel } from "../common/ai-client-factory";
 import { DatabaseService } from "../database/database.service";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
+// Mesmo shape de CanonicalCvProfileData em packages/ai/src/cv-adaptation.ts
+// (duplicado ali deliberadamente porque packages/ai é um pacote-folha) —
+// reusa o tipo que já existe em apps/api em vez de importar do pacote (evita
+// o mesmo hazard de import ESM/CJS type-only que todo import real de
+// "@earlycv/ai" neste arquivo já contorna com `await import(...)` dinâmico).
+import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
+
+export type CanonicalCvProfileData =
+  MasterCvCanonicalExtractionOutput["canonicalProfile"];
 import type {
   JobRequirementCoverage,
   StructuredJobRequirement,
 } from "./dto/job-requirement.types";
 
-type AnalyzeJobFitInput = {
-  masterCvText: string;
+// masterCvText (texto bruto/achatado) e canonicalCvProfile (perfil já
+// categorizado pelo pipeline de extração) são MUTUAMENTE EXCLUSIVOS — nunca
+// enviar os dois juntos pro prompt de análise (duas fontes de CV
+// potencialmente divergentes). Todo chamador com CvStructuredProfile READY
+// disponível deve preferir canonicalCvProfile; masterCvText continua sendo
+// o único caminho pro fluxo legado (flag desligada / sem extração ainda).
+type AnalyzeJobFitInput = (
+  | { masterCvText: string; canonicalCvProfile?: undefined }
+  | { masterCvText?: undefined; canonicalCvProfile: CanonicalCvProfileData }
+) & {
   jobDescriptionText: string;
   canonicalJobJson: unknown;
   existingRequirements?: StructuredJobRequirement[];
@@ -43,6 +60,16 @@ export class CvAdaptationAiService {
     input: AnalyzeJobFitInput,
   ): Promise<AnalyzeJobFitResult> {
     if (process.env.SKIP_AI === "true") {
+      // Stub de dev (SKIP_AI=true) — sem chamada de IA real, só precisa de
+      // algum texto curto pra preencher o preview. canonicalCvProfile não
+      // tem um "texto" único, então usa o resumo profissional (ou o nome,
+      // como fallback) — nunca achata o perfil inteiro, mesmo aqui.
+      const previewSource =
+        input.canonicalCvProfile !== undefined
+          ? (input.canonicalCvProfile.professionalSummary ??
+            input.canonicalCvProfile.fullName ??
+            "[perfil canônico sem resumo/nome — stub]")
+          : input.masterCvText;
       const stubOutput = {
         vaga: {
           cargo: "Cargo não identificado (stub)",
@@ -78,8 +105,8 @@ export class CvAdaptationAiService {
         melhorias_aplicadas: ["Nenhuma melhoria aplicada no modo stub"],
         ats_keywords: { presentes: [], ausentes: [] },
         preview: {
-          antes: input.masterCvText.slice(0, 200),
-          depois: input.masterCvText.slice(0, 200),
+          antes: previewSource.slice(0, 200),
+          depois: previewSource.slice(0, 200),
         },
         projecao_melhoria: {
           score_atual: 72,
@@ -109,9 +136,15 @@ export class CvAdaptationAiService {
     const { analyzeAndAdaptCv, CV_ANALYSIS_PROMPT_VERSION } = await import(
       "@earlycv/ai"
     );
+    // Nunca envia os dois — canonicalCvProfile (quando presente) SUBSTITUI
+    // masterCvText, nunca complementa (ver comentário do tipo acima).
+    const cvSourceInput =
+      input.canonicalCvProfile !== undefined
+        ? { canonicalCvProfile: input.canonicalCvProfile }
+        : { masterCvText: input.masterCvText };
     // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
     const output = await analyzeAndAdaptCv(this.analysisClient as any, model, {
-      masterCvText: input.masterCvText,
+      ...cvSourceInput,
       jobDescriptionText: input.jobDescriptionText,
       canonicalJobJson: input.canonicalJobJson,
       existingRequirements: input.existingRequirements,
@@ -179,23 +212,43 @@ export class CvAdaptationAiService {
     return { output: output as CvAdaptationOutput, audit };
   }
 
-  async buildPaidCvOutputFromGuest(input: {
-    masterCvText: string;
-    jobDescriptionText: string;
-    selectedMissingKeywords?: string[];
-    jobTitle?: string;
-    companyName?: string;
-    requirementCoverage?: JobRequirementCoverage[];
-    ajustesConteudo?: Array<{
-      id: string;
-      titulo: string;
-      categoria: "keywords_incluidas" | "texto_reescrito" | "ajuste_conteudo";
-    }>;
-  }): Promise<CvAdaptationOutput> {
+  async buildPaidCvOutputFromGuest(
+    input: (
+      | { masterCvText: string; canonicalCvProfile?: undefined }
+      | {
+          masterCvText?: undefined;
+          canonicalCvProfile: CanonicalCvProfileData;
+        }
+    ) & {
+      jobDescriptionText: string;
+      selectedMissingKeywords?: string[];
+      jobTitle?: string;
+      companyName?: string;
+      requirementCoverage?: JobRequirementCoverage[];
+      ajustesConteudo?: Array<{
+        id: string;
+        titulo: string;
+        categoria:
+          | "keywords_incluidas"
+          | "texto_reescrito"
+          | "ajuste_conteudo";
+      }>;
+    },
+  ): Promise<CvAdaptationOutput> {
+    // Stub de dev (SKIP_AI=true) — mesmo raciocínio de analyzeAndAdaptDirect:
+    // canonicalCvProfile não tem um "texto" único, usa resumo/nome como
+    // fallback só pra preencher o preview, nunca achata o perfil inteiro.
+    const previewSource =
+      input.canonicalCvProfile !== undefined
+        ? (input.canonicalCvProfile.professionalSummary ??
+          input.canonicalCvProfile.fullName ??
+          "[perfil canônico sem resumo/nome — stub]")
+        : input.masterCvText;
+
     if (process.env.SKIP_AI === "true") {
       return {
         language: "pt-BR",
-        summary: input.masterCvText.slice(0, 300),
+        summary: previewSource.slice(0, 300),
         sections: [
           {
             sectionType: "other",
@@ -203,7 +256,7 @@ export class CvAdaptationAiService {
             items: [
               {
                 heading: "CV enviado",
-                bullets: input.masterCvText
+                bullets: previewSource
                   .split("\n")
                   .map((line) => line.trim())
                   .filter((line) => line.length > 0)
@@ -227,12 +280,17 @@ export class CvAdaptationAiService {
 
     const model = getAiModel("CV_GENERATION");
     const { adaptCv } = await import("@earlycv/ai");
+    // Nunca envia os dois — mesma regra de analyzeAndAdaptDirect.
+    const cvSourceInput =
+      input.canonicalCvProfile !== undefined
+        ? { canonicalCvProfile: input.canonicalCvProfile }
+        : { masterCvText: input.masterCvText };
     const { output } = await adaptCv(
       // biome-ignore lint/suspicious/noExplicitAny: OpenAI dual-package hazard between CJS/ESM resolutions
       this.generationClient as any,
       model,
       {
-        masterCvText: input.masterCvText,
+        ...cvSourceInput,
         jobDescriptionText: input.jobDescriptionText,
         selectedKeywords: input.selectedMissingKeywords,
         jobTitle: input.jobTitle,

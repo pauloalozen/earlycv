@@ -562,7 +562,11 @@ function AdaptarPageContent() {
           });
         }
 
-        router.push("/entrar?ctx=analysis_guest");
+        // noPreview=1 distingue esse redirect (guest nunca viu o resultado)
+        // do CTA "Criar conta e liberar" em /adaptar/resultado, que também
+        // usa ctx=analysis_guest mas com o guest já tendo visto a análise —
+        // ctx segue só para tracking de conversão, sem mudar copy nenhuma.
+        router.push("/entrar?ctx=analysis_guest&noPreview=1");
         return;
       } else {
         if (cvMode === "text") {
@@ -631,7 +635,18 @@ function AdaptarPageContent() {
             masterCvText: analyzeResult.masterCvText,
             analysisCvSnapshotId: analyzeResult.analysisCvSnapshotId,
             previewText: analyzeResult.previewText,
-            file: file ?? undefined,
+            // Achado real de auditoria manual (2026-09-09): quando a troca
+            // de Master já foi feita via uploadMasterResume() acima
+            // (saveMasterDecisionRef.current), reenviar o mesmo `file`
+            // aqui fazia saveGuestPreview criar um SEGUNDO Resume pro
+            // mesmo arquivo (seu branch `if(file)` sempre cria, nunca
+            // reaproveita) — nunca mande o arquivo de novo quando o
+            // Master já existe; o branch `else if (existingMaster)` do
+            // backend reaproveita o Resume que uploadMasterResume() já
+            // criou.
+            file: saveMasterDecisionRef.current
+              ? undefined
+              : (file ?? undefined),
             jobApplicationId: prefillApplicationId ?? undefined,
             radarJobId: jobIdParam ?? undefined,
             sessionInternalId: journeyContext.sessionInternalId,

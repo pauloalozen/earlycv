@@ -10,7 +10,6 @@ function baseInput(overrides: Partial<HeroStateInput> = {}): HeroStateInput {
     hasAnyApplication: true,
     nearestInterview: null,
     cvReadyUnsubmitted: null,
-    hasAvailableCredits: true,
     topRecommendation: null,
     lastActivityAt: NOW.toISOString(),
     now: NOW,
@@ -27,7 +26,6 @@ test("prioriza entrevista em ate 3 dias sobre qualquer outro estado", () => {
       nextActionAt: new Date("2026-08-29T12:00:00.000Z").toISOString(),
     },
     cvReadyUnsubmitted: { id: "app-2", jobTitle: "X", companyName: "Y" },
-    hasAvailableCredits: false,
   });
   assert.equal(resolveHeroState(input).kind, "interview_soon");
 });
@@ -49,16 +47,6 @@ test("cai para cv_ready_unsent quando nao ha entrevista proxima", () => {
     cvReadyUnsubmitted: { id: "app-2", jobTitle: "X", companyName: "Y" },
   });
   assert.equal(resolveHeroState(input).kind, "cv_ready_unsent");
-});
-
-test("cai para credits_empty quando os creditos zeraram", () => {
-  const input = baseInput({ hasAvailableCredits: false });
-  assert.equal(resolveHeroState(input).kind, "credits_empty");
-});
-
-test("nao dispara credits_empty com creditos ilimitados/disponiveis", () => {
-  const input = baseInput({ hasAvailableCredits: true });
-  assert.notEqual(resolveHeroState(input).kind, "credits_empty");
 });
 
 test("cai para high_match_recommendation com score >= 90", () => {

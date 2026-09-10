@@ -15,6 +15,7 @@ import { CompaniesModule } from "./companies/companies.module";
 import { EnvModule } from "./config/env.module";
 import { CvAdaptationModule } from "./cv-adaptation/cv-adaptation.module";
 import { CvBenchmarkAdminModule } from "./cv-benchmark-admin/cv-benchmark-admin.module";
+import { CvProcessingModule } from "./cv-processing/cv-processing.module";
 import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
 import { Ga4Module } from "./ga4/ga4.module";
@@ -65,6 +66,20 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
       ? [MasterCvCanonicalExtractionModule]
       : []),
+    // Pipeline de perfil canônico de CV — SEMPRE carregado (Fase 3,
+    // "Ativação granular": admin/allowlist por userId precisam do
+    // CvProcessingEntrypointService/CvMasterPromotionService/
+    // CvProcessingWorker disponíveis mesmo com a flag global desligada).
+    // Achado ao revisar esta condicional na Fase 3: ela já era
+    // efetivamente morta desde a Fase 2G — ResumesModule e
+    // CvAdaptationModule importam CvProcessingModule incondicionalmente
+    // (ver seus próprios arquivos), então o Nest já instanciava este
+    // módulo (worker de cron incluso) em todo boot, com ou sem a flag
+    // ligada aqui. A condicional só escondia essa realidade; removida
+    // para refletir o comportamento real e permitir a ativação granular
+    // por contexto (CvProcessingFlagResolverService) sem depender de
+    // reboot para mudar quem tem acesso.
+    CvProcessingModule,
     RadarModule,
     AnalysisProtectionModule,
     AnalysisObservabilityModule,

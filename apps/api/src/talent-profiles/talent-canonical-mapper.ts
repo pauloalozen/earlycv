@@ -222,7 +222,7 @@ export function canonicalTechLabel(raw: string): string {
 // technologiesUsed é um array livre por experiência (não tem @@unique pra
 // forçar isso no banco como TalentCompetency) — sem isso, "JS" e
 // "Javascript" na mesma experiência viram duas entradas na mesma lista.
-function dedupeCanonicalTechLabels(values: string[]): string[] {
+export function dedupeCanonicalTechLabels(values: string[]): string[] {
   const seen = new Map<string, string>();
   for (const value of values) {
     if (!value.trim()) continue;
@@ -241,7 +241,7 @@ function parseYear(value: string | null): number | null {
 // Datas do CV vêm em formatos livres ("Jan 2022", "2022-01", "2022") — só
 // tenta reconhecer ano+mês numérico ou só ano; qualquer outra coisa vira
 // null em vez de uma Date incorreta.
-function parseLooseDate(value: string | null): Date | null {
+export function parseLooseDate(value: string | null): Date | null {
   if (!value) return null;
   const isoMatch = value.match(/(\d{4})-(\d{2})/);
   if (isoMatch) {

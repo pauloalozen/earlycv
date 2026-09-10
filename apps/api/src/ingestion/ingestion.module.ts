@@ -28,6 +28,8 @@ import { DiscoveredCompaniesController } from "./discovered-companies.controller
 import { DiscoveredCompaniesService } from "./discovered-companies.service";
 import { EnrichmentConfigController } from "./enrichment-config.controller";
 import { EnrichmentConfigService } from "./enrichment-config.service";
+import { ForeignJobsCleanupController } from "./foreign-jobs-cleanup.controller";
+import { ForeignJobsCleanupService } from "./foreign-jobs-cleanup.service";
 import { GlobalSchedulerConfigService } from "./global-scheduler-config.service";
 import { IngestionController } from "./ingestion.controller";
 import { IngestionService } from "./ingestion.service";
@@ -65,6 +67,7 @@ import { WebSearchService } from "./web-search/web-search.service";
     DashboardAdminController,
     DiscoveredCompaniesController,
     CompanySourceAuditController,
+    ForeignJobsCleanupController,
   ],
   providers: [
     IngestionService,
@@ -72,6 +75,7 @@ import { WebSearchService } from "./web-search/web-search.service";
     DashboardAdminService,
     DiscoveredCompaniesService,
     CompanySourceAuditService,
+    ForeignJobsCleanupService,
     AdminIngestionImportService,
     CrawlerDiscardService,
     GlobalSchedulerConfigService,

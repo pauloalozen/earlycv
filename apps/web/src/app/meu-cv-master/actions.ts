@@ -27,7 +27,9 @@ export async function saveProfileBlockAction(
   const focusBlockId = typeof focus === "string" && focus ? focus : blockId;
 
   revalidatePath("/meu-cv-master");
-  redirect(`/meu-cv-master?focus=${encodeURIComponent(focusBlockId)}`);
+  redirect(
+    `/meu-cv-master?focus=${encodeURIComponent(focusBlockId)}&saved=1`,
+  );
 }
 
 export async function clearProfileBlockAction(blockId: ProfileBlockId) {

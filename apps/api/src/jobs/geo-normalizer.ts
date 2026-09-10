@@ -262,6 +262,7 @@ const FOREIGN_COUNTRY_TOKENS = new Set(
     "Israel",
     "Chile",
     "Peru",
+    "Romania",
   ].map(normalizeLookupKey),
 );
 
@@ -292,11 +293,29 @@ export function isRecognizedForeignRegion(
 // Separadores observados em location composto de fonte real: "São Paulo ou
 // Rio de Janeiro", "São Paulo e Rio de Janeiro", "São Paulo-SP / Rio de
 // Janeiro-RJ", "São Paulo; Curitiba; Fortaleza".
+//
+// O hífen entra aqui só pra separar par "Cidade-UF" — NÃO pode ser usado
+// pra achar o token "remoto"/"remote" (ver isBrazilianCountryValue): bug
+// real encontrado em produção (Anthropic, board Greenhouse global) —
+// location composto trazia "Remote-Friendly" (qualificador da empresa,
+// não geolocalização), o split por hífen cortava em "Remote"/"Friendly" e
+// o token "Remote" batia a exceção de vaga remota BR, fazendo uma vaga de
+// Londres/Ontário passar como brasileira. splitCountryTokensForRemote()
+// abaixo faz o mesmo split sem hífen, usado só pra essa checagem.
 function splitCountryTokens(value: string): string[] {
   return value
     .replace(/\s+ou\s+/gi, "|")
     .replace(/\s+e\s+/gi, "|")
     .split(/[/;,|•-]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function splitCountryTokensForRemote(value: string): string[] {
+  return value
+    .replace(/\s+ou\s+/gi, "|")
+    .replace(/\s+e\s+/gi, "|")
+    .split(/[/;,|•]/)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -332,12 +351,25 @@ function isBrazilianCountryValue(value: string): boolean {
     return true;
   }
 
+  if (
+    splitCountryTokensForRemote(value).some((token) => {
+      const tokenKey = normalizeLookupKey(token);
+      return tokenKey === "remoto" || tokenKey === "remote";
+    })
+  ) {
+    return true;
+  }
+
+  // Cobre o par "<País> - Remote" / "Remote - <País>" que boards
+  // Greenhouse globais usam pra vaga remota (ex: "Brazil - Remote",
+  // "US - Remote", "Canada-Remote") — aqui o hífen separa duas
+  // informações reais (país + qualificador), então precisa do split COM
+  // hífen; o token "Brazil"/"Brasil" é quem decide, não mais "Remote"
+  // (que sozinho não distingue "Brazil - Remote" de "US - Remote").
   return splitCountryTokens(value).some((token) => {
     const tokenKey = normalizeLookupKey(token);
     return (
-      tokenKey === "remoto" ||
-      tokenKey === "remote" ||
-      isBrazilianStateFullNameToken(token)
+      BRAZIL_COUNTRY_NAMES.has(tokenKey) || isBrazilianStateFullNameToken(token)
     );
   });
 }

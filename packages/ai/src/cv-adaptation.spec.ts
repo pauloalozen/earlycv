@@ -73,6 +73,83 @@ describe("adaptCv", () => {
     assert.equal(audit.usage.promptTokens, 100);
   });
 
+  // Teste sentinela (achado da auditoria de geração do CV adaptado,
+  // 2026-09-08): a mesma correção da análise (canonicalCvProfile) se aplica
+  // à geração — nunca achatar o perfil estruturado em texto pro prompt.
+  it("canonicalCvProfile: envia SOMENTE o perfil canônico ao prompt de geração — nunca masterCvText", async () => {
+    const mockOutput: CvAdaptationOutput = {
+      summary: "ok",
+      sections: [
+        {
+          sectionType: "experience",
+          title: "Experiência",
+          items: [{ heading: "Cargo", bullets: ["Entrega"] }],
+        },
+      ],
+      highlightedSkills: [],
+      removedSections: [],
+      adaptationNotes: "ok",
+    };
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mock.fn(
+            async (params: {
+              messages: Array<{ role: string; content: string }>;
+            }) => {
+              capturedMessages = params.messages;
+              return {
+                choices: [{ message: { content: JSON.stringify(mockOutput) } }],
+                usage: {
+                  prompt_tokens: 10,
+                  completion_tokens: 10,
+                  total_tokens: 20,
+                },
+              };
+            },
+          ),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const input: CvAdaptationInput = {
+      canonicalCvProfile: {
+        fullName: "ORIGEM_CANONICAL Nome",
+        headline: null,
+        email: null,
+        phone: null,
+        linkedinUrl: null,
+        location: { city: null, state: null, country: null },
+        professionalSummary: "ORIGEM_CANONICAL Resumo",
+        experiences: [
+          {
+            role: "ORIGEM_CANONICAL Cargo",
+            company: "ORIGEM_CANONICAL Empresa",
+            location: null,
+            startDate: null,
+            endDate: null,
+            bullets: ["ORIGEM_CANONICAL Entrega"],
+            technologies: [],
+          },
+        ],
+        education: [],
+        skills: ["ORIGEM_CANONICAL Skill"],
+        languages: [],
+        certifications: [],
+      },
+      jobDescriptionText: "Vaga de teste.",
+    };
+
+    await adaptCv(mockClient, "gpt-4-mini", input);
+
+    const userMessage = capturedMessages.find((m) => m.role === "user");
+    assert.ok(userMessage, "mensagem de usuário não encontrada no payload");
+    assert.match(userMessage.content, /ORIGEM_CANONICAL/);
+    assert.doesNotMatch(userMessage.content, /ORIGEM_RAW/);
+    assert.doesNotMatch(userMessage.content, /ORIGEM_USER_PROFILE/);
+  });
+
   it("throws when AI returns malformed JSON", async () => {
     const mockClient = {
       chat: {
@@ -221,6 +298,369 @@ describe("analyzeAndAdaptCv", () => {
     assert.deepEqual(output.lacunas, [
       "SQL aparece, mas com pouca profundidade",
     ]);
+  });
+
+  function minimalValidAnalysisResponse() {
+    return JSON.stringify({
+      vaga: { cargo: "Analista", empresa: "Acme" },
+      requirements: [
+        {
+          requirementText: "Requisito de teste",
+          importance: "medium",
+          coverageStatus: "partial",
+          evidence: [],
+          gapExplanation: "",
+          recommendation: "",
+          impactScore: 10,
+        },
+      ],
+      fit: {
+        score: 50,
+        score_pos_ajustes: 50,
+        categoria: "medio",
+        headline: "ok",
+        subheadline: "ok",
+      },
+      secoes: {
+        experiencia: { score: 20, max: 40 },
+        competencias: { score: 20, max: 40 },
+        formatacao: { score: 10, max: 20 },
+      },
+      positivos: [],
+      ajustes_conteudo: [],
+      keywords: { presentes: [], ausentes: [] },
+      formato_cv: { ats_score: 50, resumo: "ok", problemas: [], campos: [] },
+      comparacao: { antes: "antes", depois: "depois" },
+      preview: { antes: "antes", depois: "depois" },
+      pontos_fortes: [],
+      lacunas: [],
+      melhorias_aplicadas: [],
+      ats_keywords: { presentes: [], ausentes: [] },
+      projecao_melhoria: {
+        score_atual: 50,
+        score_pos_otimizacao: 50,
+        explicacao_curta: "ok",
+      },
+      mensagem_venda: { titulo: "ok", subtexto: "ok" },
+    });
+  }
+
+  // Teste sentinela (achado da auditoria do pipeline canônico,
+  // 2026-09-08): a IA de análise recebia SEMPRE texto achatado, mesmo
+  // quando a fonte já era um perfil estruturado — canonicalCvProfile agora
+  // existe exatamente pra evitar isso. Três origens propositalmente
+  // diferentes, só uma pode aparecer no payload real enviado à IA.
+  it("canonicalCvProfile: envia SOMENTE o perfil canônico ao prompt — nunca masterCvText nem qualquer texto achatado", async () => {
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mock.fn(
+            async (params: {
+              messages: Array<{ role: string; content: string }>;
+            }) => {
+              capturedMessages = params.messages;
+              return {
+                choices: [
+                  { message: { content: minimalValidAnalysisResponse() } },
+                ],
+              };
+            },
+          ),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const canonicalCvProfile = {
+      fullName: "ORIGEM_CANONICAL Nome",
+      headline: "ORIGEM_CANONICAL Headline",
+      email: null,
+      phone: null,
+      linkedinUrl: null,
+      location: { city: null, state: null, country: null },
+      professionalSummary: "ORIGEM_CANONICAL Resumo profissional",
+      experiences: [
+        {
+          role: "ORIGEM_CANONICAL Cargo",
+          company: "ORIGEM_CANONICAL Empresa",
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: ["ORIGEM_CANONICAL Entrega relevante"],
+          technologies: ["ORIGEM_CANONICAL Tech"],
+        },
+      ],
+      education: [],
+      skills: ["ORIGEM_CANONICAL Skill"],
+      languages: [],
+      certifications: [],
+    };
+
+    await analyzeAndAdaptCv(mockClient, "gpt-4-mini", {
+      canonicalCvProfile,
+      jobDescriptionText: "Vaga de teste.",
+      canonicalJobJson: { title: "Vaga de teste" },
+    });
+
+    const userMessage = capturedMessages.find((m) => m.role === "user");
+    assert.ok(userMessage, "mensagem de usuário não encontrada no payload");
+    const payload = userMessage.content;
+
+    assert.match(payload, /ORIGEM_CANONICAL/);
+    assert.doesNotMatch(payload, /ORIGEM_RAW/);
+    assert.doesNotMatch(payload, /ORIGEM_USER_PROFILE/);
+  });
+
+  // Seção 4 do relatório de fechamento (2026-09-08): no smoke real, DeepSeek
+  // marcou "Amplitude"/"Looker" como ausentes mesmo elas aparecendo
+  // literalmente em experiences[].technologies. Prova que a checagem
+  // determinística corrige isso ANTES do score ser calculado (moveria
+  // "competencias" pra cima se rodasse via analyzeAndAdaptCv completo — aqui
+  // testamos direto a reclassificação de keywords.ausentes/presentes).
+  it("canonicalCvProfile: reclassifica deterministicamente keyword que o modelo marcou ausente mas aparece literalmente no perfil (Amplitude/Looker)", async () => {
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mock.fn(async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    vaga: { cargo: "PO", empresa: "FinHub" },
+                    requirements: [
+                      {
+                        requirementText: "SQL",
+                        importance: "high",
+                        coverageStatus: "covered",
+                        evidence: [],
+                        gapExplanation: "",
+                        recommendation: "",
+                        impactScore: 10,
+                      },
+                    ],
+                    fit: {
+                      score: 0,
+                      score_pos_ajustes: 0,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 0, max: 40 },
+                      competencias: { score: 0, max: 40 },
+                      formatacao: { score: 0, max: 20 },
+                    },
+                    positivos: [],
+                    ajustes_conteudo: [],
+                    // O modelo marcou Amplitude e Looker como ausentes —
+                    // mesmo elas estando em experiences[].technologies do
+                    // perfil canônico abaixo. "Datadog" fica genuinamente
+                    // ausente (não aparece em canonicalCvProfile nenhum).
+                    keywords: {
+                      presentes: [{ kw: "SQL", pontos: 5 }],
+                      possiveis: [],
+                      ausentes: [
+                        { kw: "Amplitude", pontos: 4 },
+                        { kw: "Looker", pontos: 4 },
+                        { kw: "Datadog", pontos: 4 },
+                      ],
+                    },
+                    formato_cv: {
+                      ats_score: 50,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
+                    comparacao: { antes: "antes", depois: "depois" },
+                    preview: { antes: "antes", depois: "depois" },
+                    pontos_fortes: [],
+                    lacunas: [],
+                    melhorias_aplicadas: [],
+                    ats_keywords: { presentes: [], ausentes: [] },
+                    projecao_melhoria: {
+                      score_atual: 0,
+                      score_pos_otimizacao: 0,
+                      explicacao_curta: "ok",
+                    },
+                    mensagem_venda: { titulo: "ok", subtexto: "ok" },
+                  }),
+                },
+              },
+            ],
+          })),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const canonicalCvProfile = {
+      fullName: "Camila",
+      headline: null,
+      email: null,
+      phone: null,
+      linkedinUrl: null,
+      location: { city: null, state: null, country: null },
+      professionalSummary: null,
+      experiences: [
+        {
+          role: "PO",
+          company: "FinHub",
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: [],
+          technologies: ["Jira", "Amplitude", "SQL"],
+        },
+        {
+          role: "Analyst",
+          company: "XP",
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: [],
+          technologies: ["Looker"],
+        },
+      ],
+      education: [],
+      skills: [],
+      languages: [],
+      certifications: [],
+    };
+
+    const output = await analyzeAndAdaptCv(mockClient, "gpt-4-mini", {
+      canonicalCvProfile,
+      jobDescriptionText: "Vaga de teste.",
+      canonicalJobJson: { title: "Vaga de teste" },
+    });
+
+    const presentesKw = output.keywords.presentes.map((k) => k.kw);
+    const ausentesKw = output.keywords.ausentes.map((k) => k.kw);
+
+    assert.ok(
+      presentesKw.includes("Amplitude"),
+      "Amplitude aparece literalmente em technologies — deve virar presente",
+    );
+    assert.ok(
+      presentesKw.includes("Looker"),
+      "Looker aparece literalmente em technologies — deve virar presente",
+    );
+    assert.ok(
+      ausentesKw.includes("Datadog"),
+      "Datadog não aparece em nenhum campo do perfil — deve permanecer ausente (a IA continua responsável pela equivalência semântica)",
+    );
+    assert.equal(
+      output.keywordPresenceDivergences?.length,
+      2,
+      "divergência entre modelo e checagem determinística deve ficar registrada pra auditoria",
+    );
+  });
+
+  // Caso negativo explícito: substring acidental nunca pode virar falso
+  // positivo (ex.: "SQL" não pode "aparecer" só porque "NoSQL"/"PostgreSQL"
+  // estão no perfil — teria que ser a palavra "SQL" isolada).
+  it("canonicalCvProfile: NÃO reclassifica keyword que só aparece como substring de outra palavra (evita falso positivo)", async () => {
+    const mockClient = {
+      chat: {
+        completions: {
+          create: mock.fn(async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    vaga: { cargo: "Dev", empresa: "Acme" },
+                    requirements: [
+                      {
+                        requirementText: "req",
+                        importance: "medium",
+                        coverageStatus: "partial",
+                        evidence: [],
+                        gapExplanation: "",
+                        recommendation: "",
+                        impactScore: 5,
+                      },
+                    ],
+                    fit: {
+                      score: 0,
+                      score_pos_ajustes: 0,
+                      categoria: "medio",
+                      headline: "ok",
+                      subheadline: "ok",
+                    },
+                    secoes: {
+                      experiencia: { score: 0, max: 40 },
+                      competencias: { score: 0, max: 40 },
+                      formatacao: { score: 0, max: 20 },
+                    },
+                    positivos: [],
+                    ajustes_conteudo: [],
+                    keywords: {
+                      presentes: [],
+                      possiveis: [],
+                      ausentes: [{ kw: "SQL", pontos: 4 }],
+                    },
+                    formato_cv: {
+                      ats_score: 50,
+                      resumo: "ok",
+                      problemas: [],
+                      campos: [],
+                    },
+                    comparacao: { antes: "antes", depois: "depois" },
+                    preview: { antes: "antes", depois: "depois" },
+                    pontos_fortes: [],
+                    lacunas: [],
+                    melhorias_aplicadas: [],
+                    ats_keywords: { presentes: [], ausentes: [] },
+                    projecao_melhoria: {
+                      score_atual: 0,
+                      score_pos_otimizacao: 0,
+                      explicacao_curta: "ok",
+                    },
+                    mensagem_venda: { titulo: "ok", subtexto: "ok" },
+                  }),
+                },
+              },
+            ],
+          })),
+        },
+      },
+    } as unknown as OpenAI;
+
+    const canonicalCvProfile = {
+      fullName: null,
+      headline: null,
+      email: null,
+      phone: null,
+      linkedinUrl: null,
+      location: { city: null, state: null, country: null },
+      professionalSummary: null,
+      // Só tem "PostgreSQL" e "NoSQL" — nunca a palavra "SQL" isolada.
+      experiences: [
+        {
+          role: null,
+          company: null,
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: [],
+          technologies: ["PostgreSQL", "NoSQL"],
+        },
+      ],
+      education: [],
+      skills: [],
+      languages: [],
+      certifications: [],
+    };
+
+    const output = await analyzeAndAdaptCv(mockClient, "gpt-4-mini", {
+      canonicalCvProfile,
+      jobDescriptionText: "Vaga de teste.",
+      canonicalJobJson: { title: "Vaga de teste" },
+    });
+
+    assert.ok(
+      output.keywords.ausentes.some((k) => k.kw === "SQL"),
+      "SQL isolado não aparece no perfil (só como parte de PostgreSQL/NoSQL) — deve permanecer ausente, sem falso positivo por substring",
+    );
+    assert.equal(output.keywordPresenceDivergences, undefined);
   });
 
   it("covered requirements are excluded from lacunas", async () => {

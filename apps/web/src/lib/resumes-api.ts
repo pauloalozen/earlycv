@@ -9,6 +9,11 @@ export type ResumeDto = {
   sourceFileName: string | null;
   isMaster: boolean;
   updatedAt: string;
+  // true quando o Master ativo foi promovido automaticamente a partir de
+  // uma edição direta em /meu-cv-master (UserProfileMasterSyncService) —
+  // o título/nome do arquivo continuam sendo os originais, isto é só um
+  // sinal pra exibir um badge "sincronizado com o perfil".
+  syncedFromProfile?: boolean;
 };
 
 export type MasterCvExtractionStatusDto = {

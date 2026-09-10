@@ -995,3 +995,50 @@ export async function discardCompanySourceAuditDraft(
     { method: "POST" },
   );
 }
+
+// Vagas fora do Brasil que já entraram no radar (antes do fix de
+// isForeignLocation() existir, ou por bug nele — ver "Vagas Estrangeiras"
+// em /admin/ingestion). "ambiguous" = sigla de 2 letras isolada no campo
+// country que colide com UF brasileira (ex: "SP", "MG") — não é removido
+// automaticamente, precisa de revisão manual (ver
+// foreign-jobs-cleanup.service.ts).
+export type ForeignJobCleanupFinding = {
+  jobId: string;
+  companyName: string;
+  title: string;
+  country: string | null;
+  state: string | null;
+  status: string;
+  sourceUrl: string | null;
+};
+
+export type ForeignJobsCleanupPreview = {
+  checked: number;
+  foreign: ForeignJobCleanupFinding[];
+  ambiguous: ForeignJobCleanupFinding[];
+};
+
+export async function previewForeignJobsCleanup(token?: string) {
+  return apiRequest<ForeignJobsCleanupPreview>(
+    "/admin/foreign-jobs-cleanup/preview",
+    token,
+  );
+}
+
+export type ForeignJobsCleanupApplySummary = {
+  dryRun: boolean;
+  removed: number;
+  skippedAmbiguous: number;
+};
+
+export async function applyForeignJobsCleanup(dryRun: boolean, token?: string) {
+  return apiRequest<ForeignJobsCleanupApplySummary>(
+    "/admin/foreign-jobs-cleanup/apply",
+    token,
+    {
+      body: JSON.stringify({ dryRun }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+}

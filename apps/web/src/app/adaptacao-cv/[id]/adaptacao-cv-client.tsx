@@ -1492,6 +1492,10 @@ export function AdaptacaoCvClient({
   // enquanto isGenerating for true, mostramos só microfeedback, nunca um
   // estado de "atualizar página" prematuro como antes.
   const [generationTimedOut, setGenerationTimedOut] = useState(false);
+  // Erro definitivo reportado pelo backend (ex.: inconsistência de linhagem)
+  // — para de esperar na hora, em vez de só descobrir depois de 8min de
+  // timeout genérico.
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   // Local copy of saved output so view mode reflects edits immediately after save
   const [localEditedOutput, setLocalEditedOutput] =
@@ -1564,9 +1568,15 @@ export function AdaptacaoCvClient({
         sectionMapping?: Record<string, string>;
         status?: string;
         isLegacyFormat?: boolean;
+        error?: string | null;
       };
       if (typeof payload.isLegacyFormat === "boolean") {
         setIsLegacyFormat(payload.isLegacyFormat);
+      }
+      if (payload.error) {
+        setGenerationError(payload.error);
+        setIsGenerating(false);
+        return true;
       }
       const isDone =
         payload.status === "delivered" &&
@@ -2991,10 +3001,11 @@ export function AdaptacaoCvClient({
                   </div>
                 )}
 
-                {/* Fallback: only after a real terminal state (timeout or legacy
-                    format) — never mid-polling, isGenerating already covers that. */}
+                {/* Fallback: only after a real terminal state (timeout, backend
+                    error, or legacy format) — never mid-polling, isGenerating
+                    already covers that. */}
                 {displaySections.length === 0 &&
-                  (isLegacyFormat || generationTimedOut) && (
+                  (isLegacyFormat || generationTimedOut || generationError) && (
                     <div
                       style={{
                         background: AMBER_SOFT,
@@ -3013,7 +3024,8 @@ export function AdaptacaoCvClient({
                       >
                         {isLegacyFormat
                           ? "Este currículo foi gerado em uma versão antiga do sistema. Faça uma nova análise para ver o resultado atualizado."
-                          : "A geração do seu currículo está demorando bem mais que o esperado. Tente atualizar a página — se persistir, entre em contato com o suporte."}
+                          : (generationError ??
+                            "A geração do seu currículo está demorando bem mais que o esperado. Tente atualizar a página — se persistir, entre em contato com o suporte.")}
                       </p>
                       <button
                         type="button"

@@ -1,0 +1,433 @@
+// Worker do CvProcessingJob — plano, seção 1.1: claim atômico, extração
+// (IA fora de transação), captura da Base de Talentos (sempre), promoção
+// de Master opcional (com UserProfile sync + MonitorProjectionJob na MESMA
+// transação Prisma da promoção — nunca depois), markReady/markFailed.
+//
+// O trabalho de IA em si NUNCA roda dentro de um request HTTP: todo
+// trabalho que precisa sobreviver ao request já está representado pela
+// linha de CvProcessingJob persistida pelo entrypoint
+// (resumes.service.ts/cv-adaptation.service.ts) ANTES da resposta HTTP.
+// Dois gatilhos processam essa fila, nunca um só (seção 5 do relatório de
+// fechamento, 2026-09-08): o cron de 15s (@Cron abaixo, sempre existiu) e um
+// "kick" imediato — cvProcessingDispatchSignal, emitido pelo entrypoint
+// logo após o commit do job — que só acelera o primeiro processamento
+// (chama exatamente o mesmo processPendingBatch()/claim atômico do cron,
+// nunca um caminho separado). Se o processo morrer entre o commit e o kick,
+// ou o kick falhar por qualquer motivo, o job continua PENDING e o próximo
+// tick do cron o recupera normalmente — o cron nunca deixou de ser a rede
+// de segurança.
+import { randomUUID } from "node:crypto";
+
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
+import type { CvProcessingJob, CvSource } from "@prisma/client";
+
+import { DatabaseService } from "../database/database.service";
+import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
+import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
+import { StorageService } from "../storage/storage.service";
+import { CvMasterPromotionService } from "./cv-master-promotion.service";
+import {
+  CV_PROCESSING_JOB_CREATED,
+  CV_PROCESSING_JOB_READY,
+  cvProcessingDispatchSignal,
+} from "./cv-processing-dispatch.signal";
+import {
+  CvSourceTextObjectMissingError,
+  MasterDesignationSubjectMismatchError,
+} from "./cv-processing.errors";
+import {
+  CvProcessingJobService,
+  MAX_CV_PROCESSING_ATTEMPTS,
+} from "./cv-processing-job.service";
+import {
+  CvStructuredProfileExtractionService,
+  type ExtractionClient,
+} from "./cv-structured-profile-extraction.service";
+import { CvTalentCaptureService } from "./cv-talent-capture.service";
+
+const LOCK_ID = "cv-processing-worker";
+const LOCK_TTL_MS = 5 * 60_000;
+const BASE_TICK_CRON = "*/15 * * * * *";
+const BATCH_SIZE = 5;
+const EXTRACTOR_VERSION = "v1";
+const SCHEMA_VERSION = "v1";
+
+@Injectable()
+export class CvProcessingWorker {
+  private readonly logger = new Logger(CvProcessingWorker.name);
+
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(IngestionLockRepository)
+    private readonly lockRepository: IngestionLockRepository,
+    @Inject(CvProcessingJobService)
+    private readonly jobService: CvProcessingJobService,
+    @Inject(CvStructuredProfileExtractionService)
+    private readonly extractionClient: ExtractionClient,
+    @Inject(CvTalentCaptureService)
+    private readonly talentCapture: CvTalentCaptureService,
+    @Inject(CvMasterPromotionService)
+    private readonly masterPromotion: CvMasterPromotionService,
+    @Inject(StorageService)
+    private readonly storage: Pick<StorageService, "getObject">,
+  ) {
+    // Mesmo guard de NODE_ENV do @Cron abaixo — nunca se inscreve durante
+    // testes: cada arquivo de e2e-spec cria várias instâncias efêmeras
+    // deste worker (sem container do Nest, sem OnModuleDestroy) contra o
+    // MESMO EventEmitter singleton do processo; inscrição incondicional
+    // aqui vazaria listener por instância e faria workers de testes
+    // antigos reagirem a jobs de testes seguintes. Em produção (um único
+    // worker de longa duração por processo) isso nunca é um problema. A
+    // emissão em si (cv-processing-entrypoint.service.ts) e o
+    // triggerProcessing() em si são testados diretamente, sem depender
+    // desta inscrição automática.
+    if (process.env.NODE_ENV !== "test") {
+      cvProcessingDispatchSignal.on(
+        CV_PROCESSING_JOB_CREATED,
+        (jobId: string) => this.triggerProcessing(jobId),
+      );
+    }
+  }
+
+  @Cron(BASE_TICK_CRON)
+  async tick() {
+    if (process.env.NODE_ENV === "test") return;
+    await this.processPendingBatch();
+  }
+
+  // Disparo imediato (correção de UX de 2026-09-08 — job não pode depender
+  // só do cron de 15s). Contrato exigido:
+  // - nunca cria job (só processa o jobId recebido, que já existe/committed);
+  // - claim atômico POR ID (mesmo claimOne do cron/batch) — nunca um scan
+  //   de lote, nunca compete com backlog de outros jobs pending;
+  // - chama exatamente o mesmo processJob() do cron;
+  // - nunca lança pro chamador (o emit que dispara isto é síncrono, dentro
+  //   do mesmo call stack do request HTTP que criou o job — deixar escapar
+  //   quebraria a resposta já commitada);
+  // - nunca marca failed só porque o kick não rodou/perdeu a corrida — se
+  //   claimOne retornar null (outro worker/kick/cron já pegou, ou o job já
+  //   não está mais pending por qualquer motivo), simplesmente não faz
+  //   nada: o job continua no estado em que already estava, recuperável
+  //   pelo cron se ainda pending.
+  triggerProcessing(jobId: string): void {
+    this.processOneJob(jobId).catch((err) => {
+      this.logger.error(
+        `cv processing trigger(${jobId}) falhou (job permanece pending/claimable, cron recupera): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
+  }
+
+  private async processOneJob(jobId: string): Promise<void> {
+    // Sem lock global aqui de propósito: a atomicidade que importa é a do
+    // claim POR LINHA (UPDATE ... WHERE id=$1 AND status='pending', em
+    // CvProcessingJobService#claimOne) — dois triggers concorrentes pro
+    // MESMO jobId, ou um trigger disputando com o cron (que usa o lock
+    // global só pra serializar o SCAN de lote + recoverStaleProcessing,
+    // não o claim em si), nunca processam a mesma linha duas vezes graças
+    // a esse UPDATE atômico. Adquirir o lock global aqui só serializaria
+    // triggers de jobs DIFERENTES sem necessidade nenhuma.
+    const owner = `cv-processing-trigger-${randomUUID()}`;
+    const claimed = await this.jobService.claimOne(jobId, owner);
+    if (!claimed) return; // perdeu a corrida (cron/outro trigger), ou job não está mais pending
+    await this.processJob(claimed);
+  }
+
+  async processPendingBatch(): Promise<number> {
+    const owner = `cv-processing-worker-${randomUUID()}`;
+    const acquired = await this.lockRepository.acquire(
+      LOCK_ID,
+      owner,
+      LOCK_TTL_MS,
+    );
+    if (!acquired) return 0;
+
+    try {
+      await this.jobService.recoverStaleProcessing();
+
+      const pending = await this.jobService.findPending(BATCH_SIZE);
+      let processed = 0;
+      for (const job of pending) {
+        const claimed = await this.jobService.claimOne(job.id, owner);
+        if (!claimed) continue; // outro worker venceu a corrida do claim
+        await this.processJob(claimed);
+        processed += 1;
+      }
+      return processed;
+    } finally {
+      await this.lockRepository.release(LOCK_ID, owner);
+    }
+  }
+
+  private async processJob(job: CvProcessingJob): Promise<void> {
+    try {
+      const cvSource = await this.database.cvSource.findUniqueOrThrow({
+        where: { id: job.cvSourceId },
+      });
+      const text = await this.readSourceText(cvSource);
+
+      // 1. Extração — chamada de IA fora de qualquer transação. Antes de
+      // chamar IA, verifica se já existe uma extração legada equivalente
+      // (Fase 2C.1 — materialização just-in-time de Master legado, plano
+      // seção 13 item 1, aplicada sob demanda em vez de em lote).
+      const structuredProfile = await this.ensureStructuredProfile(
+        cvSource,
+        text,
+      );
+
+      // 2. Base de Talentos — sempre, independente de virar Master (seção 2).
+      const owner = this.resolveOwner(cvSource);
+      await this.talentCapture.capture({
+        owner,
+        cvSourceId: job.cvSourceId,
+        cvStructuredProfileId: structuredProfile.id,
+        canonicalProfile: structuredProfile.canonicalJson as never,
+      });
+
+      // 3. Promoção de Master opcional — promoção + UserProfile sync +
+      // MonitorProjectionJob numa única transação Prisma (seção 1.1 item 4).
+      let masterDesignationId: string | null = null;
+      if (job.masterIntent !== "NONE" && owner.ownerType === "USER") {
+        try {
+          const promotion = await this.masterPromotion.promoteAndProject({
+            ownerType: "USER",
+            userId: owner.userId,
+            cvStructuredProfileId: structuredProfile.id,
+            masterIntent: job.masterIntent,
+            promotedReason:
+              job.masterIntent === "PROMOTE_IF_FIRST"
+                ? "FIRST_EVER"
+                : "EXPLICIT_FLAG",
+            canonicalProfile: structuredProfile.canonicalJson as never,
+            confidence:
+              (structuredProfile.confidenceJson as Record<
+                string,
+                number
+              > | null) ?? {},
+            cvSourceId: job.cvSourceId,
+            // Correção da Fase 3 — resumes.service.ts#setPrimary: job.resumeId
+            // só é preenchido quando este job nasceu de uma troca explícita
+            // de Master já existente que precisou esperar a extração (ver
+            // schema CvProcessingJob.resumeId). syncResumeIsMaster: true faz
+            // o flip de Resume.isMaster acontecer ATÔMICO com a
+            // CvMasterDesignation, dentro desta mesma transação — nunca
+            // antes (regra do usuário: Master antigo nunca "meio trocado").
+            // Para todo outro job (resumeId null — create()/análises,
+            // fora de escopo desta correção), este parâmetro nunca ativa
+            // nada, preservando o comportamento anterior.
+            resumeId: job.resumeId,
+            syncResumeIsMaster: !!job.resumeId,
+          });
+          masterDesignationId = promotion.activeDesignation.id;
+        } catch (error) {
+          if (error instanceof MasterDesignationSubjectMismatchError) {
+            // Erro de domínio, recuperável: não derruba a extração nem a
+            // captura de talentos (já persistidas) — só a promoção falhou.
+            // O job vai a FAILED com essa causa; um retry reavalia do zero.
+            throw error;
+          }
+          throw error;
+        }
+      } else if (job.masterIntent !== "NONE" && owner.ownerType === "GUEST") {
+        // Guest não tem UserProfile/MonitorProjectionJob — só promove a
+        // designação em si (sem projeção, sem sync).
+        const promotion = await this.masterPromotion.promote({
+          ownerType: "GUEST",
+          talentSubjectId: owner.talentSubjectId,
+          cvStructuredProfileId: structuredProfile.id,
+          masterIntent: job.masterIntent,
+          promotedReason:
+            job.masterIntent === "PROMOTE_IF_FIRST"
+              ? "FIRST_EVER"
+              : "EXPLICIT_FLAG",
+        });
+        masterDesignationId = promotion.activeDesignation.id;
+      }
+
+      // 4. READY só depois que TUDO acima persistiu de verdade.
+      await this.jobService.markReady(job.id, {
+        cvStructuredProfileId: structuredProfile.id,
+        masterDesignationId,
+      });
+      // Kick imediato da próxima etapa: CvAnalysisWorker não precisa
+      // esperar até 15s pra notar que este CvProcessingJob virou READY —
+      // mesma garantia do kick de criação (emit depois do commit, nunca
+      // antes; falha do listener nunca afeta este worker). job.id aqui é o
+      // id do CvProcessingJob — é o que AnalysisJob.cvProcessingJobId
+      // referencia, nunca um id de AnalysisJob (pode haver mais de um
+      // AnalysisJob pendente pro mesmo CvProcessingJob reusado).
+      cvProcessingDispatchSignal.emit(CV_PROCESSING_JOB_READY, job.id);
+    } catch (error) {
+      this.logger.warn(
+        `cv processing job ${job.id} failed (attempt ${job.attempts}/${MAX_CV_PROCESSING_ATTEMPTS}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      await this.jobService.markFailed(job.id, error);
+    }
+  }
+
+  private async ensureStructuredProfile(cvSource: CvSource, text: string) {
+    const cvSourceId = cvSource.id;
+    const existingReady = await this.database.cvStructuredProfile.findUnique({
+      where: {
+        cvSourceId_extractorVersion_schemaVersion: {
+          cvSourceId,
+          extractorVersion: EXTRACTOR_VERSION,
+          schemaVersion: SCHEMA_VERSION,
+        },
+      },
+    });
+    if (existingReady?.status === "READY") {
+      return existingReady;
+    }
+
+    const output =
+      (await this.tryReuseLegacyExtraction(cvSource)) ??
+      (await this.extractionClient.extract({ text }));
+
+    return this.database.cvStructuredProfile.upsert({
+      where: {
+        cvSourceId_extractorVersion_schemaVersion: {
+          cvSourceId,
+          extractorVersion: EXTRACTOR_VERSION,
+          schemaVersion: SCHEMA_VERSION,
+        },
+      },
+      create: {
+        cvSourceId,
+        extractorVersion: EXTRACTOR_VERSION,
+        schemaVersion: SCHEMA_VERSION,
+        status: "READY",
+        canonicalJson: output.canonicalProfile as never,
+        coverageJson: output.extractionCoverage as never,
+        confidenceJson: output.confidence as never,
+        evidenceJson: output.evidence as never,
+        startedAt: new Date(),
+        finishedAt: new Date(),
+      },
+      // Imutável após READY (trigger de Fase 1) — este update só é
+      // alcançado quando a linha existente NÃO está READY (PENDING/FAILED
+      // de uma tentativa anterior), nunca sobrescreve uma READY.
+      update: {
+        status: "READY",
+        canonicalJson: output.canonicalProfile as never,
+        coverageJson: output.extractionCoverage as never,
+        confidenceJson: output.confidence as never,
+        evidenceJson: output.evidence as never,
+        finishedAt: new Date(),
+        attempts: { increment: 1 },
+      },
+    });
+  }
+
+  // Fase 2C.1 — reuso de extração legada sem nova chamada de IA (plano,
+  // seção 5/13 item 1, aplicado just-in-time em vez de em lote). Só se
+  // aplica a fontes de USUÁRIO: MasterCvCanonicalExtraction não existe para
+  // guest. O casamento é por (userId, inputHash) — inputHash da extração
+  // legada é sha256 do texto bruto exato usado naquela extração
+  // (master-cv-canonical-extraction.service.ts#enqueueFromMasterResumeUpload),
+  // exatamente a mesma função usada para CvSource.textSha256
+  // (cv-processing-entrypoint.service.ts) — mesmo texto byte a byte produz
+  // o mesmo hash nos dois lados, então o casamento nunca reusa conteúdo
+  // divergente/desatualizado. `status: "succeeded"` garante que
+  // canonicalJson/coverageJson/confidenceJson/evidenceJson estão
+  // preenchidos (o worker legado só marca "succeeded" depois de persistir
+  // os quatro). Se por algum motivo algum vier nulo mesmo assim (dado
+  // corrompido/parcial), cai de volta pra extração real via IA em vez de
+  // gravar um CvStructuredProfile READY incompleto.
+  private async tryReuseLegacyExtraction(
+    cvSource: CvSource,
+  ): Promise<MasterCvCanonicalExtractionOutput | null> {
+    if (cvSource.ownerType !== "USER" || !cvSource.userId) {
+      return null;
+    }
+
+    const legacy = await this.database.masterCvCanonicalExtraction.findFirst({
+      where: {
+        userId: cvSource.userId,
+        inputHash: cvSource.textSha256,
+        status: "succeeded",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (
+      !legacy?.canonicalJson ||
+      !legacy.coverageJson ||
+      !legacy.confidenceJson ||
+      !legacy.evidenceJson
+    ) {
+      return null;
+    }
+
+    this.logger.log(
+      `cv processing job reusing legacy MasterCvCanonicalExtraction ${legacy.id} for cvSource ${cvSource.id} — no AI call`,
+    );
+
+    return {
+      canonicalProfile: legacy.canonicalJson,
+      extractionCoverage: legacy.coverageJson,
+      confidence: legacy.confidenceJson,
+      evidence: legacy.evidenceJson,
+    } as unknown as MasterCvCanonicalExtractionOutput;
+  }
+
+  private resolveOwner(cvSource: {
+    ownerType: "USER" | "GUEST";
+    userId: string | null;
+    talentSubjectId: string | null;
+  }):
+    | { ownerType: "USER"; userId: string }
+    | { ownerType: "GUEST"; talentSubjectId: string } {
+    if (cvSource.ownerType === "USER" && cvSource.userId) {
+      return { ownerType: "USER", userId: cvSource.userId };
+    }
+    if (cvSource.ownerType === "GUEST" && cvSource.talentSubjectId) {
+      return { ownerType: "GUEST", talentSubjectId: cvSource.talentSubjectId };
+    }
+    throw new Error(
+      `CvSource ${cvSource.ownerType} sem userId/talentSubjectId consistente`,
+    );
+  }
+
+  // Leitura idempotente: o mesmo storageKey sempre resolve pro mesmo
+  // conteúdo (o objeto é imutável — a chave é determinística pelo hash do
+  // texto, plano Fase 2B), então ler duas vezes (ex.: retry após falha na
+  // extração) devolve exatamente os mesmos bytes, sem efeito colateral.
+  // Objeto ausente vira erro de domínio explícito
+  // (CvSourceTextObjectMissingError), nunca uma exceção crua do SDK do S3
+  // — markFailed trata isso como qualquer outra falha recuperável
+  // (retry até MAX_CV_PROCESSING_ATTEMPTS, depois FAILED com lastError
+  // claro para intervenção manual).
+  private async readSourceText(cvSource: {
+    textStorageKey: string;
+  }): Promise<string> {
+    try {
+      const buffer = await this.storage.getObject(cvSource.textStorageKey);
+      return buffer.toString("utf-8");
+    } catch (error) {
+      if (this.isMissingObjectError(error)) {
+        throw new CvSourceTextObjectMissingError(cvSource.textStorageKey);
+      }
+      throw error;
+    }
+  }
+
+  private isMissingObjectError(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const err = error as {
+      name?: string;
+      Code?: string;
+      $metadata?: { httpStatusCode?: number };
+    };
+    return (
+      err.name === "NoSuchKey" ||
+      err.name === "NotFound" ||
+      err.Code === "NoSuchKey" ||
+      err.$metadata?.httpStatusCode === 404
+    );
+  }
+}

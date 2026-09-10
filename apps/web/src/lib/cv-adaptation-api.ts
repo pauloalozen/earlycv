@@ -477,6 +477,38 @@ export async function claimGuestAnalysis(payload: {
   return response.json() as Promise<CvAdaptationDto>;
 }
 
+export type ClaimAnalysisJobResult =
+  | { status: "succeeded"; cvAdaptationId: string }
+  | { status: "pending" | "processing" | "failed" }
+  | { status: "error" };
+
+// Único choke point de claim guest→conta chamável a partir de client
+// components (guest-analysis-claimer.tsx, resultado/page.tsx) — mesmo
+// endpoint que register/login/social-callback já chamam server-side via
+// claimGuestAnalysisJobServerSide (guest-analysis-claim.server.ts). Nunca
+// aceita masterCvText/adaptedContentJson do chamador: o único input real é
+// jobId (não é segredo) + guestPossessionToken (prova de posse) — todo o
+// conteúdo materializado vem do que o backend já tem persistido na
+// AnalysisJob/CvStructuredProfile, nunca do localStorage.
+export async function claimGuestAnalysisJob(
+  jobId: string,
+  guestPossessionToken?: string,
+): Promise<ClaimAnalysisJobResult> {
+  try {
+    const response = await apiRequest(
+      "POST",
+      `/cv-adaptation/analysis-jobs/${jobId}/claim`,
+      guestPossessionToken ? { guestPossessionToken } : {},
+    );
+    if (!response.ok) {
+      return { status: "error" };
+    }
+    return (await response.json()) as ClaimAnalysisJobResult;
+  } catch {
+    return { status: "error" };
+  }
+}
+
 export async function saveGuestPreview(payload: {
   adaptedContentJson: Record<string, unknown>;
   previewText?: string;
