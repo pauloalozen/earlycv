@@ -79,7 +79,7 @@ export default function NotFound() {
               </span>
             </div>
             <span className="ml-0.5 rounded-[3px] border border-[#d8d6ce] px-[5px] py-px font-mono text-[10px] font-medium text-[#8a8a85]">
-              v2.1
+              v3.1
             </span>
           </Link>
 

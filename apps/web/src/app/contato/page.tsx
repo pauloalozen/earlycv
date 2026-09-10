@@ -54,7 +54,7 @@ export default function ContatoPage() {
               fontWeight: 500,
             }}
           >
-            v2.1
+            v3.1
           </span>
         </a>
 

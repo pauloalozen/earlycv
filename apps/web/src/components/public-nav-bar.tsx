@@ -44,8 +44,7 @@ export function PublicNavBar({
   // precisam continuar vendo o link pra validar o fluxo em produção
   // durante o ghost mode.
   const hideAlertaLink =
-    (IS_JOBS_GHOST_MODE && !canAccessJobsInGhostMode(userRole)) ||
-    hideJobsLink;
+    (IS_JOBS_GHOST_MODE && !canAccessJobsInGhostMode(userRole)) || hideJobsLink;
   const bg = dark ? "#0a0a0a" : "transparent";
   const borderColor = dark ? "rgba(250,250,246,0.06)" : "rgba(0,0,0,0.04)";
   const linkColor = dark ? "#a0a098" : "#3a3a38";
@@ -158,7 +157,7 @@ export function PublicNavBar({
               fontWeight: 500,
             }}
           >
-            v2.1
+            v3.1
           </span>
         </Link>
 

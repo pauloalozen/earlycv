@@ -502,7 +502,7 @@ export function LandingVariantF2({
               fontWeight: 400,
             }}
           >
-            v2.1
+            v3.1
           </span>
         </Link>
 
