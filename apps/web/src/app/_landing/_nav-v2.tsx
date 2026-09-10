@@ -3,11 +3,12 @@ import { Logo } from "@/components/logo";
 import { LandingMobileMenu } from "../_landing-mobile-menu";
 import { btnPrimary, FEATURE_PAGES } from "./_shared";
 
-/** Ubuntu-based tokens — matches the main landing (variant-f-v2) exactly. */
+/** Mesmos tokens da landing padrão (variant-a e demais, exceto f-v2, que
+ * tem nav própria inline e não usa este arquivo) — ajustado pra corrigir
+ * inconsistência de fonte entre as páginas de produto e a landing padrão. */
 export const GEIST_V2 =
-  'var(--font-ubuntu), -apple-system, "Segoe UI", system-ui, sans-serif';
-export const MONO_V2 =
-  'var(--font-ubuntu-mono), ui-monospace, "SF Mono", Menlo, monospace';
+  "var(--font-geist), -apple-system, system-ui, sans-serif";
+export const MONO_V2 = "var(--font-geist-mono), monospace";
 export const SERIF_ITALIC_V2 = "var(--font-instrument-serif), serif";
 
 /** Nav label override — canonical product name is "Radar de Oportunidades";
