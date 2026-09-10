@@ -16,6 +16,7 @@ import { CvProcessingJobsController } from "./cv-processing-jobs.controller";
 import { CvStructuredProfileExtractionService } from "./cv-structured-profile-extraction.service";
 import { CvTalentCaptureService } from "./cv-talent-capture.service";
 import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
+import { UserProfileMasterSyncService } from "./user-profile-master-sync.service";
 
 @Module({
   imports: [DatabaseModule, StorageModule],
@@ -38,6 +39,7 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
     TalentSubjectService,
     ClaimSourceGrantService,
     CvProcessingFlagResolverService,
+    UserProfileMasterSyncService,
   ],
   // CvMasterPromotionService exportado a partir da Fase 2C: cv-adaptation.service
   // (análise autenticada) precisa consultar a designação ativa de Master
@@ -65,6 +67,7 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
     ClaimSourceGrantService,
     CvUserProfileSyncService,
     CvProcessingFlagResolverService,
+    UserProfileMasterSyncService,
   ],
 })
 export class CvProcessingModule {}

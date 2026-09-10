@@ -28,10 +28,15 @@ export type AnalysisJobResult =
     }
   | { ok: false; error: string };
 
-// Mesma margem usada no polling de geração de CV (item 2 do plano de LLM
-// assíncronas): a análise roda em background, sem risco de timeout de proxy,
-// então só desistimos se passar tempo demais mesmo.
-const POLL_TIMEOUT_MS = 8 * 60 * 1000;
+// Achado 2026-09-10: o backend tem recuperação automática de "processing
+// travado" (CvProcessingJob e AnalysisJob do pipeline canônico, ambos com
+// STALE_PROCESSING_THRESHOLD_MS = 10min — ex.: servidor derrubado no meio
+// do processamento) — o job volta sozinho pra "pending" e é retomado no
+// próximo ciclo de cron, sem duplicar a análise. Esse timeout do frontend
+// tem que ser MAIOR que os 10min da recuperação de backend, senão o
+// usuário desiste (e reinicia do zero, gerando trabalho/custo de IA
+// duplicado) bem antes do backend ter chance de se curar sozinho.
+const POLL_TIMEOUT_MS = 11 * 60 * 1000;
 const POLL_INTERVAL_MS = 3000;
 
 export async function fetchAnalysisJobStatus(

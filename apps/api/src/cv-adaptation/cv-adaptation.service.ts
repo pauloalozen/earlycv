@@ -40,6 +40,7 @@ import { NoValidMasterCvForProfileAnalysisError } from "../cv-processing/cv-proc
 import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
 import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
 import { CvProcessingFlagResolverService } from "../cv-processing/cv-processing-flag-resolver.service";
+import { UserProfileMasterSyncService } from "../cv-processing/user-profile-master-sync.service";
 import { DatabaseService } from "../database/database.service";
 import { JobApplicationsService } from "../job-applications/job-applications.service";
 import { MasterCvCanonicalExtractionService } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.service";
@@ -278,6 +279,18 @@ export class CvAdaptationService {
     private readonly flagResolver?: Pick<
       CvProcessingFlagResolverService,
       "isEnabledFor"
+    >,
+    // Achado 2026-09-09: edições diretas em UserProfile (blocos de
+    // /meu-cv-master) nunca alimentavam análises novas — ver
+    // user-profile-master-sync.service.ts. Chamado só dentro de
+    // resolveActiveMasterCvProcessingJobId, nunca na geração/liberação de
+    // uma CvAdaptation já existente. Mesmo padrão @Optional dos serviços
+    // acima.
+    @Optional()
+    @Inject(UserProfileMasterSyncService)
+    private readonly userProfileMasterSync?: Pick<
+      UserProfileMasterSyncService,
+      "ensureMasterReflectsProfileEdits"
     >,
   ) {}
 
@@ -790,16 +803,32 @@ export class CvAdaptationService {
           // isoladamente em analysisCvSnapshotId vindo do body.
           // AnalysisJob.analysisCvSnapshotId é @unique no schema.
           let preResolvedMasterResumeId: string | undefined;
+          // Achado 2026-09-09/10: mesmo defeito de saveGuestPreview (branch
+          // existingAdaptation) — este método buscava cvProcessingJobId do
+          // job de origem só pra decidir SE roda o claim granular, mas
+          // nunca lia nem propagava cvStructuredProfileId pro CvAdaptation
+          // criado abaixo. Resultado idêntico: adaptação nasce com
+          // cvProcessingJobId "de fato" (via AnalysisJob) mas
+          // cvStructuredProfileId nulo — resolveGenerationCvSource trata
+          // como inconsistência de linhagem e recusa gerar, permanentemente.
+          let originCvStructuredProfileId: string | undefined;
           if (snapshot && this.claimSourceGrantService) {
             const originJob = await tx.analysisJob.findUnique({
               where: { analysisCvSnapshotId: snapshot.id },
-              select: { id: true, userId: true, cvProcessingJobId: true },
+              select: {
+                id: true,
+                userId: true,
+                cvProcessingJobId: true,
+                cvStructuredProfileId: true,
+              },
             });
             if (
               originJob &&
               (originJob.userId === null || originJob.userId === userId) &&
               originJob.cvProcessingJobId
             ) {
+              originCvStructuredProfileId =
+                originJob.cvStructuredProfileId ?? undefined;
               // Sem try/catch aqui de propósito: a trigger de subject-match é
               // DEFERRABLE INITIALLY DEFERRED — só dispara no COMMIT da
               // transação inteira, nunca durante esta chamada em si. O catch
@@ -884,6 +913,7 @@ export class CvAdaptationService {
               status: "delivered",
               isUnlocked: true,
               unlockedAt: new Date(),
+              cvStructuredProfileId: originCvStructuredProfileId ?? null,
             },
             include: {
               template: { select: { id: true, name: true, slug: true } },
@@ -1925,14 +1955,21 @@ export class CvAdaptationService {
   // Fase 2C.1 — fecha a lacuna deixada pela 2C: localiza (ou materializa
   // just-in-time) o Master formal do usuário pra reuso em análise sem
   // conteúdo novo (inputMode "profile", ou nenhum file/masterCvText/
-  // masterResumeId informado). Nunca lê/reconstrói a partir de UserProfile
-  // — UserProfile é só projeção (plano, seções 1 e 6). Três desfechos:
+  // masterResumeId informado). Quatro desfechos (o primeiro revisado em
+  // 2026-09-09 — ver nota abaixo):
   //
-  //  1. Existe CvMasterDesignation ativa (supersededAt IS NULL) — é sempre
-  //     criada pelo mesmo processamento que já deixou seu CvStructuredProfile
-  //     READY (CvMasterPromotionService#promoteAndProject roda DEPOIS da
-  //     extração no CvProcessingWorker), então o CvProcessingJob READY
-  //     correspondente sempre existe — reusa sem nenhuma IA.
+  //  1. Existe CvMasterDesignation ativa (supersededAt IS NULL) — antes de
+  //     reusá-la, UserProfileMasterSyncService#ensureMasterReflectsProfileEdits
+  //     verifica se o UserProfile mudou desde a última sincronização (achado
+  //     2026-09-09: edições diretas em /meu-cv-master nunca alimentavam
+  //     análises novas, porque este método sempre reusava a designação
+  //     ativa sem checar isso) e, se sim, promove uma nova versão ANTES de
+  //     seguir — sem IA (mapeamento puro do UserProfile já estruturado),
+  //     idempotente (no-op se nada mudou). Fora isso, é sempre criada pelo
+  //     mesmo processamento que já deixou seu CvStructuredProfile READY
+  //     (CvMasterPromotionService#promoteAndProject roda DEPOIS da extração
+  //     no CvProcessingWorker), então o CvProcessingJob READY correspondente
+  //     sempre existe — reusa sem nenhuma IA.
   //  2/3/4. Sem designação ativa, mas existe Resume.isMaster=true (Master
   //     "legado" — nunca passou pelo pipeline novo, ou upload novo ainda em
   //     voo): delega a CvProcessingEntrypointService#enqueueFromUserText, que:
@@ -1949,8 +1986,14 @@ export class CvAdaptationService {
   //         inputHash) se existir (caso 3), senão chama IA de verdade numa
   //         passagem de cron separada (caso 4).
   //  5/6. Nem designação ativa nem Resume.isMaster com texto — erro de
-  //     domínio explícito (NoValidMasterCvForProfileAnalysisError), nunca
-  //     uma reconstrução a partir de UserProfile.
+  //     domínio explícito (NoValidMasterCvForProfileAnalysisError).
+  //
+  // Importante: isto só afeta análises NOVAS a partir daqui. Nenhuma
+  // CvAdaptation/AnalysisJob já existente é tocada — seus cvStructuredProfileId
+  // ficam congelados pra sempre (CvStructuredProfile é imutável após READY,
+  // reforçado por trigger de banco), então liberar/gerar o CV de uma análise
+  // antiga sempre usa a versão do CV que existia quando ELA foi feita, nunca
+  // uma edição de perfil posterior.
   private async resolveActiveMasterCvProcessingJobId(
     userId: string,
   ): Promise<string> {
@@ -1961,6 +2004,10 @@ export class CvAdaptationService {
           "injetados em CvAdaptationService — verifique cv-adaptation.module.ts.",
       );
     }
+
+    await this.userProfileMasterSync?.ensureMasterReflectsProfileEdits(
+      userId,
+    );
 
     const active = await this.cvMasterPromotionForAnalysis.getActiveDesignation(
       { ownerType: "USER", userId },
@@ -3410,11 +3457,15 @@ export class CvAdaptationService {
     file?: FileUpload,
     analysisContext?: AnalysisRequestContext,
     // Nunca exposto no DTO público (SaveGuestPreviewDto é o corpo de um
-    // endpoint HTTP real — client nunca pode escolher isso). Só o chamador
-    // interno (claimGuestAnalysisJob, que já tem job.cvStructuredProfileId
-    // de um AnalysisJob do pipeline canônico) preenche. Materializa o
-    // vínculo que a geração (ensureLegacyStructuredOutput) depois usa pra
-    // achar o MESMO CvStructuredProfile usado na análise.
+    // endpoint HTTP real — client nunca pode escolher isso). Override
+    // opcional: quando o chamador (claimGuestAnalysisJob) já sabe o valor
+    // certo, evita a query redundante de auto-resolução logo abaixo do
+    // snapshot. Achado 2026-09-10: como campo OBRIGATÓRIO (sem fallback)
+    // isso era um bug real — o endpoint público save-guest-preview (usado
+    // pela análise nova autenticada) nunca preenchia isto, então toda
+    // CvAdaptation criada por ele ficava sem linhagem mesmo vindo do
+    // pipeline canônico. Agora o método sempre resolve sozinho a partir
+    // do AnalysisJob dono do snapshot quando este parâmetro vem vazio.
     cvStructuredProfileId?: string,
     // Idem — nunca exposto no DTO público. Só o chamador interno
     // (claimGuestAnalysisJob) preenche, quando ClaimSourceGrantService.claim()
@@ -3474,6 +3525,29 @@ export class CvAdaptationService {
         "Analysis snapshot is required to persist this adaptation.",
       );
     }
+
+    // Achado 2026-09-10: até aqui, só claimGuestAnalysisJob resolvia e
+    // passava cvStructuredProfileId (parâmetro abaixo) — o endpoint HTTP
+    // público POST /cv-adaptation/save-guest-preview (usado pelo fluxo de
+    // análise NOVA autenticada, apps/web/src/lib/authenticated-analysis-flow.ts,
+    // que não é guest claim nenhum apesar do nome) chama este método
+    // diretamente, sem nunca preencher esse parâmetro — toda análise
+    // autenticada que passou pelo pipeline canônico (cvProcessingJobId
+    // preenchido na AnalysisJob) virava uma CvAdaptation com
+    // cvStructuredProfileId nulo, e resolveGenerationCvSource recusa
+    // gerar pra sempre (BadRequestException de inconsistência de
+    // linhagem). Resolve aqui, uma vez, pra QUALQUER chamador — não
+    // depende mais de cada caller lembrar de buscar isso.
+    const resolvedCvStructuredProfileId =
+      cvStructuredProfileId ??
+      (snapshot
+        ? (
+            await this.database.analysisJob.findUnique({
+              where: { analysisCvSnapshotId: snapshot.id },
+              select: { cvProcessingJobId: true, cvStructuredProfileId: true },
+            })
+          )?.cvStructuredProfileId ?? undefined
+        : undefined);
 
     const existingMaster = await this.database.resume.findFirst({
       where: { userId, isMaster: true, kind: "master" },
@@ -3605,6 +3679,26 @@ export class CvAdaptationService {
           data: { jobApplicationId: linkedJobApplicationId },
         });
       }
+      // Achado em produção (2026-09-09): este branch de idempotência (mesmo
+      // userId+analysisCvSnapshotId já tem CvAdaptation) sempre existiu, mas
+      // nunca gravava cvStructuredProfileId no registro existente — mesmo
+      // quando o chamador (claimGuestAnalysisJob) descobre agora que essa
+      // AnalysisJob passou pelo pipeline canônico. Resultado: a adaptação
+      // fica para sempre com cvStructuredProfileId nulo enquanto sua
+      // AnalysisJob de origem tem cvProcessingJobId preenchido —
+      // resolveGenerationCvSource trata isso como inconsistência de
+      // linhagem e recusa gerar, permanentemente. Backfilla aqui, uma
+      // única vez, sempre que o valor certo chegar e o registro ainda não
+      // o tiver.
+      if (
+        resolvedCvStructuredProfileId &&
+        !existingAdaptation.cvStructuredProfileId
+      ) {
+        await this.database.cvAdaptation.update({
+          where: { id: existingAdaptation.id },
+          data: { cvStructuredProfileId: resolvedCvStructuredProfileId },
+        });
+      }
       await this.triggerJobApplicationHook({
         cvAdaptationId: existingAdaptation.id,
         userId,
@@ -3659,7 +3753,7 @@ export class CvAdaptationService {
         jobApplicationId: linkedJobApplicationId,
         status: "pending",
         paymentStatus: "none",
-        cvStructuredProfileId: cvStructuredProfileId ?? null,
+        cvStructuredProfileId: resolvedCvStructuredProfileId ?? null,
       },
       include: {
         template: { select: { id: true, name: true, slug: true } },
@@ -4814,10 +4908,18 @@ export class CvAdaptationService {
         typeof (s as { sectionType?: string }).sectionType === "string" &&
         (s as { sectionType: string }).sectionType !== "other",
     );
-    if (
-      adaptation.status === "delivered" &&
-      (!finalCvOutput || !hasRealSections)
-    ) {
+    // Achado em produção (2026-09-09): este bloco disparava uma regeneração
+    // a cada poll do frontend (a cada 3s), sem nenhum cooldown — quando a
+    // causa é permanente (ex.: inconsistência de linhagem), isso vira um
+    // loop infinito de tentativas idênticas martelando o servidor, e o
+    // frontend nunca sabia que tinha dado erro (só via timeout genérico
+    // após 8min de polling). Agora só dispara a regeneração se ainda não
+    // houver failureReason registrado; a primeira falha é persistida e
+    // interrompe as tentativas seguintes, e o payload abaixo expõe `error`
+    // pro frontend parar de esperar imediatamente.
+    const isBroken =
+      adaptation.status === "delivered" && (!finalCvOutput || !hasRealSections);
+    if (isBroken && !adaptation.failureReason) {
       void this.database.cvAdaptation
         .findFirst({
           where: { id, userId },
@@ -4832,13 +4934,30 @@ export class CvAdaptationService {
             });
           }
         })
-        .catch((err) => {
+        .catch(async (err) => {
           console.error(
             `Retry CV generation for ${id}:`,
             err instanceof Error ? err.message : String(err),
           );
+          await this.database.cvAdaptation
+            .update({
+              where: { id },
+              data: { failureReason: this.sanitizeFailureReason(err) },
+            })
+            .catch((updateError) => {
+              console.error(
+                `Failed to persist regeneration failure for ${id}:`,
+                updateError instanceof Error
+                  ? updateError.message
+                  : String(updateError),
+              );
+            });
         });
     }
+    const generationError =
+      isBroken && adaptation.failureReason
+        ? "A geração deste currículo falhou. Tente novamente mais tarde ou entre em contato com o suporte."
+        : null;
 
     return {
       adaptedContentJson: enrichedAnalysis,
@@ -4855,6 +4974,7 @@ export class CvAdaptationService {
       adaptationNotes,
       jobApplicationId: adaptation.jobApplicationId,
       jobAnalysisCount: await countPromise,
+      error: generationError,
     };
   }
 

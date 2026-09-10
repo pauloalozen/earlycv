@@ -2743,6 +2743,12 @@ enum CvSubmissionOrigin {
   FILE_UPLOAD
   PASTED_TEXT
   CLAIM
+  // Sincronização automática: usuário editou um bloco do CV Master
+  // diretamente no UserProfile (sem enviar arquivo/texto novo) — nenhum
+  // conteúdo "enviado" de verdade, mas precisa de uma CvSubmission formal
+  // pra caber no modelo existente (CvProcessingJob exige uma). Nunca tem
+  // fileStorageKey/fileSha256/fileName/mimeType/fileSizeBytes.
+  PROFILE_EDIT
 }
 
 // Ocorrência real de ingestão (um envio específico) — preserva metadados de
@@ -2883,6 +2889,16 @@ enum CvMasterPromotionReason {
   FIRST_EVER
   EXPLICIT_FLAG
   CLAIM_PROMOTION
+  // Achado 2026-09-09: edições diretas no UserProfile (blocos do CV Master
+  // em /meu-cv-master) nunca alimentavam análises/gerações novas — o
+  // pipeline canônico só lia do CvStructuredProfile extraído do arquivo
+  // original, congelado pra sempre. Esta promoção é automática (nunca
+  // pedida explicitamente pelo usuário) e acontece só no início de uma
+  // análise nova sem conteúdo próprio (resolveActiveMasterCvProcessingJobId),
+  // quando o UserProfile mudou desde a última sincronização — nunca reescreve
+  // CvAdaptation/AnalysisJob já existentes (cvStructuredProfileId
+  // permanece imutável nesses, por trigger de banco).
+  PROFILE_EDIT_SYNC
 }
 
 // Referência formal de "quem é o Master", inclusive antes de existir conta

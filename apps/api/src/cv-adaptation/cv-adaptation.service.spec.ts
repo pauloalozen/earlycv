@@ -1402,6 +1402,7 @@ test("saveGuestPreview auto-promotes the first CV to master when the user has no
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: {
         findFirst: async () => null,
       },
@@ -1523,6 +1524,7 @@ test("saveGuestPreview reuses the existing master and never creates a new resume
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: {
         findFirst: async ({ where }: { where: { kind?: string } }) => {
@@ -1625,6 +1627,7 @@ test("saveGuestPreview returns existing adaptation for same snapshot and user", 
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: {
         findFirst: async () => null,
       },
@@ -1725,6 +1728,7 @@ test("saveGuestPreview accepts original guest session token after login context 
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: {
         findFirst: async () => null,
       },
@@ -2962,6 +2966,7 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED ao criar nova 
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: { findFirst: async () => ({ id: "master-1" }) },
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
@@ -3005,6 +3010,7 @@ test("saveGuestPreview: chama upsertFromCvAdaptation com ANALYZED quando adapta�
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: { findFirst: async () => ({ id: "master-1" }) },
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
@@ -3047,6 +3053,7 @@ test("saveGuestPreview retorna adaptação mesmo sem jobTitle/companyName e não
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: { findFirst: async () => ({ id: "master-1" }) },
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
@@ -3080,6 +3087,62 @@ test("saveGuestPreview retorna adaptação mesmo sem jobTitle/companyName e não
   assert.equal(call.jobTitle, null);
   assert.equal(call.companyName, null);
   assert.equal(call.targetStatus, "ANALYZED");
+});
+
+// Achado 2026-09-10: POST /cv-adaptation/save-guest-preview (usado pela
+// análise nova autenticada, apps/web/src/lib/authenticated-analysis-flow.ts)
+// chama saveGuestPreview SEM o parâmetro cvStructuredProfileId (só
+// claimGuestAnalysisJob preenchia isso) — mesmo quando a AnalysisJob dona
+// do snapshot já tinha passado pelo pipeline canônico. Resultado real:
+// CvAdaptation nascia sem cvStructuredProfileId, e resolveGenerationCvSource
+// recusava gerar o CV pra sempre (BadRequestException de inconsistência de
+// linhagem). saveGuestPreview agora resolve isso sozinho a partir da
+// AnalysisJob dona do snapshot, sem depender do caller.
+test("saveGuestPreview auto-resolve cvStructuredProfileId a partir da AnalysisJob do snapshot, mesmo sem o caller passar", async () => {
+  let capturedCreateData: Record<string, unknown> | null = null;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async ({ where }: { where: { analysisCvSnapshotId: string } }) => {
+          assert.equal(where.analysisCvSnapshotId, "snap-1");
+          return {
+            cvProcessingJobId: "cvproc-1",
+            cvStructuredProfileId: "structured-profile-1",
+          };
+        },
+      },
+      resumeTemplate: { findFirst: async () => null },
+      resume: { findFirst: async () => ({ id: "master-1" }) },
+      analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
+      cvAdaptation: {
+        findFirst: async () => null,
+        findUnique: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          capturedCreateData = data;
+          return makeAdaptationRecord("adapt-auto-resolved");
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    noopStorage,
+    noopTelemetry,
+    makeHookSpy().service,
+  );
+
+  await service.saveGuestPreview("user-1", {
+    analysisCvSnapshotId: "snap-1",
+    masterCvText: "CV text",
+    jobDescriptionText: "vaga de teste",
+    adaptedContentJson: { sections: [] },
+    previewText: "preview",
+  });
+
+  assert.equal(capturedCreateData?.cvStructuredProfileId, "structured-profile-1");
 });
 
 test("persistApplicationIdentity atualiza identidade ausente e chama upsert manual", async () => {
@@ -3384,6 +3447,7 @@ test("hook envia targetStatus correto — regra de não rebaixar status é respo
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: { findFirst: async () => ({ id: "master-1" }) },
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
@@ -3465,6 +3529,7 @@ test("falha no upsertFromCvAdaptation não quebra fluxo do saveGuestPreview", as
 
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: { findFirst: async () => ({ id: "master-1" }) },
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },
@@ -3507,6 +3572,7 @@ test("service mantém comportamento sem jobApplicationsService explícito — ba
   // Only 8 constructor args — jobApplicationsService uses default no-op
   const service = new CvAdaptationServiceCtor(
     {
+      analysisJob: { findUnique: async () => null },
       resumeTemplate: { findFirst: async () => null },
       resume: { findFirst: async () => ({ id: "master-1" }) },
       analysisCvSnapshot: { findUnique: async () => makeOwnedSnapshot() },

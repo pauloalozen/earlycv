@@ -252,10 +252,32 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
           />
           <div>
             <p className={labelCls}>CV Base</p>
-            <p className="mt-0.5 text-[14.5px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
+            <p className="mt-0.5 flex items-center gap-2 text-[14.5px] font-medium tracking-[-0.01em] text-[#0a0a0a]">
               {pendingFile
                 ? pendingFile.name
                 : (masterResume?.title ?? "Nenhum CV Master ativo")}
+              {!pendingFile && masterResume?.syncedFromProfile && (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[rgba(110,150,20,0.25)] bg-[rgba(198,255,58,0.16)] px-2 py-[3px] font-mono text-[9.5px] font-medium tracking-[0.03em] text-[#3a5008]"
+                  title="Este CV reflete as edições mais recentes feitas em /meu-cv-master"
+                >
+                  <svg
+                    width="9"
+                    height="9"
+                    viewBox="0 0 10 10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <title>Sincronizado</title>
+                    <path d="M1.5 5l2.5 2.5 4.5-5" />
+                  </svg>
+                  Sincronizado com o perfil
+                </span>
+              )}
             </p>
             <p className="mt-0.5 font-mono text-[10.5px] text-[#8a8a85]">
               {pendingFile

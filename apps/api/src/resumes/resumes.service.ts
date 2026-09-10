@@ -86,11 +86,32 @@ export class ResumesService {
     return isCvStructuredProfilePipelineEnabled();
   }
 
-  list(userId: string) {
-    return this.database.resume.findMany({
-      where: { userId },
-      orderBy: [{ isMaster: "desc" }, { updatedAt: "desc" }],
-    });
+  // syncedFromProfile: achado 2026-09-10 — quando o Master ativo veio de
+  // uma sincronização automática de edições diretas em UserProfile
+  // (UserProfileMasterSyncService, promotedReason PROFILE_EDIT_SYNC), o
+  // Resume continua com o nome/título do arquivo original (nunca
+  // reescrito — ver user-profile-master-sync.service.ts), mas o frontend
+  // precisa de um jeito de mostrar "sincronizado com o perfil" sem perder
+  // essa rastreabilidade. Anotado aqui pra não expor CvMasterDesignation
+  // como um conceito novo pro cliente.
+  async list(userId: string) {
+    const [resumes, activeDesignation] = await Promise.all([
+      this.database.resume.findMany({
+        where: { userId },
+        orderBy: [{ isMaster: "desc" }, { updatedAt: "desc" }],
+      }),
+      this.database.cvMasterDesignation.findFirst({
+        where: { userId, supersededAt: null },
+        select: { resumeId: true, promotedReason: true },
+      }),
+    ]);
+
+    return resumes.map((resume) => ({
+      ...resume,
+      syncedFromProfile:
+        activeDesignation?.promotedReason === "PROFILE_EDIT_SYNC" &&
+        activeDesignation.resumeId === resume.id,
+    }));
   }
 
   async getById(userId: string, resumeId: string) {

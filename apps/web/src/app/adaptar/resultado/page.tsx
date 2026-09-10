@@ -1621,7 +1621,12 @@ export default function ResultadoPage() {
     // até a AnalysisJob terminar.
     async function pollAndClaim(jobId: string, gateEnabled: boolean) {
       setClaimStatus("waiting");
-      const deadline = Date.now() + 8 * 60 * 1000;
+      // Achado 2026-09-10: o backend recupera sozinho um AnalysisJob/
+      // CvProcessingJob travado em "processing" (STALE_PROCESSING_THRESHOLD_MS
+      // = 10min, ex.: servidor derrubado no meio) — este timeout precisa
+      // ficar acima desses 10min, senão o usuário desiste antes do backend
+      // ter chance de se curar sozinho.
+      const deadline = Date.now() + 11 * 60 * 1000;
       while (Date.now() < deadline) {
         if (!active || controller.signal.aborted) return;
         let response: Response;
@@ -2252,16 +2257,38 @@ export default function ResultadoPage() {
       >
         <EcvBuildLoader size={48} />
         {claimStatus === "waiting" && (
-          <p
-            style={{
-              fontFamily: MONO,
-              fontSize: 12.5,
-              color: "#6a6560",
-              letterSpacing: 0.2,
-            }}
-          >
-            Estamos finalizando sua análise...
-          </p>
+          <>
+            <p
+              style={{
+                fontFamily: MONO,
+                fontSize: 12.5,
+                color: "#6a6560",
+                letterSpacing: 0.2,
+              }}
+            >
+              Estamos finalizando sua análise...
+            </p>
+            {/* Achado 2026-09-10: esta tela é um overlay fixed cobrindo a
+                tela inteira, sem header nem navegação — se o processamento
+                travar (ex.: servidor caiu no meio), o usuário fica preso
+                aqui até o timeout (11min) ou fechar a aba. Este link é a
+                única saída enquanto isso: a análise continua sendo
+                processada em background, o usuário pode voltar mais
+                tarde e retomar de onde parou. */}
+            <a
+              href="/meu-perfil"
+              style={{
+                fontFamily: MONO,
+                fontSize: 11.5,
+                color: "#8a8580",
+                letterSpacing: 0.2,
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              Isso pode levar alguns minutos — continuar navegando
+            </a>
+          </>
         )}
       </div>
     );

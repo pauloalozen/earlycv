@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
@@ -25,6 +26,7 @@ import {
   type UserProfileRecord,
 } from "./profile-blocks";
 import { ResumeUploadStrip } from "./resume-upload-strip";
+import { SaveToast } from "./save-toast";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -151,6 +153,9 @@ export default async function MeuCvMasterPage({
 
   return (
     <PageShell>
+      <Suspense fallback={null}>
+        <SaveToast />
+      </Suspense>
       <main
         className="min-h-screen text-[#0a0a0a]"
         style={{
