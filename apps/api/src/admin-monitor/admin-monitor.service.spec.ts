@@ -685,27 +685,6 @@ test("sendDigestNow rejects (422-equivalent) when the user has no MonitorAlertPr
   }
 });
 
-test("sendDigestNow reports not_entitled (and never creates a digest) when the user isn't entitled today", async () => {
-  const user = await seedUser();
-  try {
-    await service.trackAlertUser("admin-1", user.id);
-    // Ghost mode off por padrão neste ambiente de teste — ninguém é
-    // elegível, nem staff.
-    const result = await service.sendDigestNow("admin-1", user.id);
-
-    assert.deepEqual(result, { sent: false, skippedReason: "not_entitled" });
-    const digests = await prisma.monitorDigest.findMany({
-      where: { userId: user.id },
-    });
-    assert.equal(digests.length, 0);
-  } finally {
-    await prisma.monitorAdminActionLog
-      .deleteMany({ where: { entityId: user.id } })
-      .catch(() => undefined);
-    await cleanupUser(user.id);
-  }
-});
-
 test("sendDigestNow sends synchronously and records source=ADMIN_MANUAL with the triggering admin", async () => {
   withGhostModeOn();
   // sendDigest monta o link de unsubscribe, que exige este secret — mesmo

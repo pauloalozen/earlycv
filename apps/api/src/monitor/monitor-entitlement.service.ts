@@ -1,7 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
-import { isJobsGhostModeEnabled } from "../common/jobs-ghost-mode";
 
 // Ponto único de decisão "este usuário pode usar o Meu Monitor" — todo
 // endpoint/worker do Monitor consulta ESTE serviço, nunca inspeciona
@@ -9,16 +8,15 @@ import { isJobsGhostModeEnabled } from "../common/jobs-ghost-mode";
 // espalhar checks de acesso pelo código, o que a spec da Fase 3.1 pede
 // explicitamente pra evitar).
 //
-// Fase de lançamento ghost mode: enquanto JOBS_GHOST_MODE=true (env do
-// serviço @earlycv/api no Railway — fonte de verdade do gate real, a
-// cópia do mesmo nome na Vercel só controla visibilidade de menu), só
-// internalRole admin/superadmin passam — é como o time valida o fluxo
-// completo (matching, digest, e-mail, clique, análise, candidatura) em
-// produção sem expor a feature à base. Com JOBS_GHOST_MODE=false, resolve
-// fechado (allowed:false) pra quem não é staff — ainda NÃO existe regra
-// comercial real (trial/plano/concessão administrativa); quando existir,
-// a troca acontece SÓ aqui dentro, sem tocar nenhum call site, que só olha
-// `.allowed`.
+// Lançamento pra base inteira (decisão de 2026-09-10, Paulo): a fase de
+// ghost mode (só internalRole admin/superadmin, gate via JOBS_GHOST_MODE)
+// foi encerrada — ainda NÃO existe regra comercial real (trial/plano/
+// concessão administrativa), mas a decisão agora é liberar geral em vez
+// de fechado por padrão. JOBS_GHOST_MODE não decide mais acesso aqui —
+// só controla visibilidade cosmética de menu no frontend (ver
+// isJobsGhostModeEnabled() em apps/web/src/lib/jobs-ghost-mode.ts).
+// Quando a regra comercial existir, a troca acontece SÓ aqui dentro, sem
+// tocar nenhum call site, que só olha `.allowed`.
 //
 // Perder entitlement no futuro NUNCA apaga UserJobRecommendation,
 // MonitorDigest ou qualquer histórico — os call sites só usam isto pra
@@ -28,6 +26,7 @@ import { isJobsGhostModeEnabled } from "../common/jobs-ghost-mode";
 // linhas no banco não são tocadas).
 export type MonitorEntitlementReason =
   | "internal_access"
+  | "open_launch"
   | "manual_override"
   | "trial"
   | "active_subscription"
@@ -47,36 +46,27 @@ export class MonitorEntitlementService {
   ) {}
 
   async canUseMonitor(userId: string): Promise<MonitorEntitlementResult> {
-    if (!isJobsGhostModeEnabled()) {
-      // Sem regra comercial real ainda — default fechado, de propósito
-      // (nunca "liberado enquanto não decidimos", ver comentário acima).
-      return { allowed: false, reason: "none" };
-    }
-
     const user = await this.database.user.findUnique({
       where: { id: userId },
       select: { internalRole: true },
     });
+    if (!user) return { allowed: false, reason: "none" };
 
-    const allowed = Boolean(user && INTERNAL_ROLES.has(user.internalRole));
-    return { allowed, reason: allowed ? "internal_access" : "none" };
+    const isInternal = INTERNAL_ROLES.has(user.internalRole);
+    return {
+      allowed: true,
+      reason: isInternal ? "internal_access" : "open_launch",
+    };
   }
 
   // Variante em lote — usada onde N usuários precisam ser filtrados de
   // uma vez (ex.: MonitorMatchingWorker decidindo quais
   // UserRadarProfile candidatos a uma vaga nova são elegíveis;
   // MonitorDigestScheduler filtrando as preferências do dia) — evita
-  // N chamadas individuais.
+  // N chamadas individuais. Mesma decisão de canUseMonitor: liberado pra
+  // base inteira, sem consulta ao banco (confia na lista recebida, que já
+  // vem de uma query sobre usuários reais nos call sites acima).
   async filterEntitledUserIds(userIds: string[]): Promise<Set<string>> {
-    if (!isJobsGhostModeEnabled() || userIds.length === 0) {
-      return new Set();
-    }
-
-    const internal = await this.database.user.findMany({
-      where: { id: { in: userIds }, internalRole: { in: ["admin", "superadmin"] } },
-      select: { id: true },
-    });
-
-    return new Set(internal.map((user) => user.id));
+    return new Set(userIds);
   }
 }

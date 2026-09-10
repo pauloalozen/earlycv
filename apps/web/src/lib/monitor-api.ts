@@ -74,7 +74,11 @@ export type MonitorNotificationGroup = {
 };
 
 export type MonitorNotificationsFeed = {
-  pending: { items: MonitorRecommendationItem[]; total: number; hasMore: boolean } | null;
+  pending: {
+    items: MonitorRecommendationItem[];
+    total: number;
+    hasMore: boolean;
+  } | null;
   groups: MonitorNotificationGroup[];
   page: number;
   limit: number;
@@ -99,13 +103,14 @@ const EMPTY_FEED: MonitorFeed = {
 
 // Único ponto que o frontend deve consultar pra saber se o usuário tem
 // acesso ao Meu Monitor — NENHUM outro componente deve inspecionar
-// plano/assinatura diretamente. Fase de ghost mode: allowed=true só para
-// internalRole admin/superadmin enquanto JOBS_GHOST_MODE está ligado no
-// backend; "reason" existe desde já pra permitir, no futuro, diferenciar
-// gratuito/trial/assinante/promocional/bloqueado sem mudar o contrato —
-// ver MonitorEntitlementService no backend.
+// plano/assinatura diretamente. Lançamento pra base inteira (2026-09-10):
+// allowed=true pra qualquer usuário autenticado; "reason" existe desde já
+// pra permitir, no futuro, diferenciar gratuito/trial/assinante/
+// promocional/bloqueado sem mudar o contrato — ver MonitorEntitlementService
+// no backend.
 export type MonitorAccessReason =
   | "internal_access"
+  | "open_launch"
   | "manual_override"
   | "trial"
   | "active_subscription"
@@ -203,8 +208,12 @@ export async function listMonitorNotifications(
   pendingLimit?: number,
 ): Promise<MonitorNotificationsFeed> {
   try {
-    const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (pendingLimit !== undefined) qs.set("pendingLimit", String(pendingLimit));
+    const qs = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (pendingLimit !== undefined)
+      qs.set("pendingLimit", String(pendingLimit));
     const response = await apiRequest("GET", `/monitor/notifications?${qs}`);
     if (!response.ok) return { ...EMPTY_NOTIFICATIONS_FEED, page, limit };
     return (await response.json()) as MonitorNotificationsFeed;

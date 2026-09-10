@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, test } from "node:test";
+import { test } from "node:test";
 
 import { MonitorEntitlementService } from "./monitor-entitlement.service";
 
@@ -11,48 +11,26 @@ function buildDatabase(users: UserRow[]) {
       findUnique: async ({ where }: { where: { id: string } }) => {
         return users.find((user) => user.id === where.id) ?? null;
       },
-      findMany: async ({
-        where,
-      }: {
-        where: { id: { in: string[] }; internalRole: { in: string[] } };
-      }) => {
-        return users.filter(
-          (user) =>
-            where.id.in.includes(user.id) &&
-            where.internalRole.in.includes(user.internalRole),
-        );
-      },
     },
   } as never;
 }
 
-let originalGhostMode: string | undefined;
-
-beforeEach(() => {
-  originalGhostMode = process.env.JOBS_GHOST_MODE;
-});
-
-afterEach(() => {
-  if (originalGhostMode === undefined) {
-    delete process.env.JOBS_GHOST_MODE;
-  } else {
-    process.env.JOBS_GHOST_MODE = originalGhostMode;
-  }
-});
-
-test("canUseMonitor denies access when JOBS_GHOST_MODE is off — no commercial rule exists yet, default is closed", async () => {
-  process.env.JOBS_GHOST_MODE = "false";
+// Lançamento pra base inteira (decisão de 2026-09-10, Paulo): ghost mode
+// encerrado, canUseMonitor libera qualquer usuário autenticado real —
+// "reason" continua distinguindo staff (internal_access) do resto
+// (open_launch), só pra telemetria (monitor_access_type), nunca pra
+// decidir `.allowed`.
+test("canUseMonitor allows a regular user (open launch)", async () => {
   const service = new MonitorEntitlementService(
     buildDatabase([{ id: "user-1", internalRole: "none" }]),
   );
 
   const result = await service.canUseMonitor("user-1");
 
-  assert.deepEqual(result, { allowed: false, reason: "none" });
+  assert.deepEqual(result, { allowed: true, reason: "open_launch" });
 });
 
-test("canUseMonitor allows admin/superadmin while JOBS_GHOST_MODE is on (ghost mode validation)", async () => {
-  process.env.JOBS_GHOST_MODE = "true";
+test("canUseMonitor allows admin/superadmin, still tagged internal_access for telemetry", async () => {
   const service = new MonitorEntitlementService(
     buildDatabase([
       { id: "admin-1", internalRole: "admin" },
@@ -67,19 +45,7 @@ test("canUseMonitor allows admin/superadmin while JOBS_GHOST_MODE is on (ghost m
   assert.deepEqual(superadmin, { allowed: true, reason: "internal_access" });
 });
 
-test("canUseMonitor denies a regular user even while JOBS_GHOST_MODE is on", async () => {
-  process.env.JOBS_GHOST_MODE = "true";
-  const service = new MonitorEntitlementService(
-    buildDatabase([{ id: "user-1", internalRole: "none" }]),
-  );
-
-  const result = await service.canUseMonitor("user-1");
-
-  assert.deepEqual(result, { allowed: false, reason: "none" });
-});
-
-test("canUseMonitor denies an unknown userId while JOBS_GHOST_MODE is on", async () => {
-  process.env.JOBS_GHOST_MODE = "true";
+test("canUseMonitor denies an unknown userId (deleted/ghost id, not a real user)", async () => {
   const service = new MonitorEntitlementService(buildDatabase([]));
 
   const result = await service.canUseMonitor("ghost-user");
@@ -87,38 +53,19 @@ test("canUseMonitor denies an unknown userId while JOBS_GHOST_MODE is on", async
   assert.deepEqual(result, { allowed: false, reason: "none" });
 });
 
-test("filterEntitledUserIds returns an empty set while JOBS_GHOST_MODE is off, regardless of role", async () => {
-  process.env.JOBS_GHOST_MODE = "false";
-  const service = new MonitorEntitlementService(
-    buildDatabase([{ id: "admin-1", internalRole: "admin" }]),
-  );
-
-  const result = await service.filterEntitledUserIds(["admin-1"]);
-
-  assert.equal(result.size, 0);
-});
-
-test("filterEntitledUserIds keeps only admin/superadmin ids while JOBS_GHOST_MODE is on", async () => {
-  process.env.JOBS_GHOST_MODE = "true";
-  const service = new MonitorEntitlementService(
-    buildDatabase([
-      { id: "admin-1", internalRole: "admin" },
-      { id: "superadmin-1", internalRole: "superadmin" },
-      { id: "user-1", internalRole: "none" },
-    ]),
-  );
+test("filterEntitledUserIds returns every id it received (open launch, no filtering)", async () => {
+  const service = new MonitorEntitlementService(buildDatabase([]));
 
   const result = await service.filterEntitledUserIds([
-    "admin-1",
-    "superadmin-1",
     "user-1",
+    "admin-1",
+    "user-2",
   ]);
 
-  assert.deepEqual([...result].sort(), ["admin-1", "superadmin-1"]);
+  assert.deepEqual([...result].sort(), ["admin-1", "user-1", "user-2"].sort());
 });
 
 test("filterEntitledUserIds returns an empty set for an empty input, without erroring", async () => {
-  process.env.JOBS_GHOST_MODE = "true";
   const service = new MonitorEntitlementService(buildDatabase([]));
 
   const result = await service.filterEntitledUserIds([]);
