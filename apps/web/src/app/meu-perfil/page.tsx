@@ -21,7 +21,6 @@ import {
   isJobsGhostModeEnabled,
 } from "@/lib/jobs-ghost-mode";
 import { getMonitorCount, listMonitorRecommendations } from "@/lib/monitor-api";
-import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { listSavedJobs } from "@/lib/saved-jobs-api";
@@ -308,7 +307,6 @@ export default async function MeuPerfilPage() {
           companyName: cvReadyUnsubmitted.companyName,
         }
       : null,
-    hasAvailableCredits: hasAvailableCredits(plan),
     topRecommendation,
     lastActivityAt,
     now,

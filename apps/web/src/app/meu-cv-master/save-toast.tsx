@@ -4,13 +4,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
-const TOAST_MS = 3000;
+const TOAST_MS = 5000;
 
 // Mesmo padrão visual do Toast de /radar/analysis-cta.tsx (pílula escura)
 // — projeto não tem um Toast compartilhado ainda, então replica o mesmo
 // estilo já usado em produção em vez de inventar um novo. Posição e barra
 // de progresso ajustadas 2026-09-10: canto inferior direito, mesma margem
-// da borda, com contador visual de 3s até fechar sozinho.
+// da borda, com contador visual de 5s até fechar sozinho (ou X manual).
 export function SaveToast() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,6 +77,26 @@ export function SaveToast() {
           <path d="M2.5 7.5l3 3 6-6" />
         </svg>
         <span>CV salvo</span>
+        <button
+          type="button"
+          onClick={() => setVisible(false)}
+          aria-label="Fechar"
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            border: "none",
+            padding: 2,
+            cursor: "pointer",
+            color: "rgba(250,250,246,0.6)",
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+            <path d="M2 2l8 8M10 2l-8 8" />
+          </svg>
+        </button>
       </div>
       <div style={{ height: 2, background: "rgba(250,250,246,0.14)" }}>
         <div

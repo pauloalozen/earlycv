@@ -24,6 +24,7 @@ type EntrarPageProps = {
     error?: string;
     next?: string;
     ctx?: string;
+    noPreview?: string;
   }>;
 };
 
@@ -50,6 +51,10 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
     : "direct_auth";
 
   const isLogin = tab === "entrar";
+  // Guest que fez upload de CV+vaga na landing, análise já rodou, mas ele
+  // nunca viu o resultado (fluxo sem preview) — só o painel esquerdo muda,
+  // pra dar contexto do que aconteceu e incentivar a confirmação da conta.
+  const isGuestNoPreview = params.noPreview === "1";
   const rawApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() ?? "";
   const apiBase = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
   const googleStartParams = new URLSearchParams();
@@ -127,7 +132,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                   fontWeight: 500,
                 }}
               >
-                v2.1
+                v3.1
               </span>
             </a>
             <span
@@ -177,7 +182,11 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                   display: "inline-block",
                 }}
               />
-              {isLogin ? "ENTRAR" : "CRIAR CONTA"}
+              {isGuestNoPreview
+                ? "ANÁLISE PRONTA"
+                : isLogin
+                  ? "ENTRAR"
+                  : "CRIAR CONTA"}
             </div>
 
             <h1
@@ -192,7 +201,21 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                 margin: "0 0 22px",
               }}
             >
-              {isLogin ? (
+              {isGuestNoPreview ? (
+                <>
+                  Sua análise
+                  <br />
+                  <em
+                    style={{
+                      fontFamily: SERIF_ITALIC,
+                      fontStyle: "italic",
+                      fontWeight: 400,
+                    }}
+                  >
+                    está pronta.
+                  </em>
+                </>
+              ) : isLogin ? (
                 <>
                   Bem-vindo
                   <br />
@@ -232,9 +255,11 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                 marginBottom: 36,
               }}
             >
-              {isLogin
-                ? "Continue de onde parou. Seus CVs e vagas analisadas seguem esperando."
-                : "Grátis. Sem cartão. Menos de 1 minuto para criar sua conta e adaptar seu CV."}
+              {isGuestNoPreview
+                ? "Você está a um passo de ver o resultado da sua análise gratuita — confirme sua conta e libere agora."
+                : isLogin
+                  ? "Continue de onde parou. Seus CVs e vagas analisadas seguem esperando."
+                  : "Grátis. Sem cartão. Menos de 1 minuto para criar sua conta e adaptar seu CV."}
             </p>
 
             {/* Receipt */}
@@ -320,7 +345,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
             }}
           >
             <span>© earlyCV · 2026</span>
-            <span>v2.1 · status ● operational</span>
+            <span>v3.1 · status ● operational</span>
           </div>
         </div>
 
@@ -429,7 +454,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                 <>
                   Não tem conta?{" "}
                   <a
-                    href={`/entrar?tab=cadastro${next ? `&next=${encodeURIComponent(next)}` : ""}`}
+                    href={`/entrar?tab=cadastro${next ? `&next=${encodeURIComponent(next)}` : ""}${isGuestNoPreview ? "&noPreview=1" : ""}`}
                     style={{
                       color: "#0a0a0a",
                       fontWeight: 500,
@@ -444,7 +469,7 @@ export default async function EntrarPage({ searchParams }: EntrarPageProps) {
                 <>
                   Já tem conta?{" "}
                   <a
-                    href={`/entrar?tab=entrar${next ? `&next=${encodeURIComponent(next)}` : ""}`}
+                    href={`/entrar?tab=entrar${next ? `&next=${encodeURIComponent(next)}` : ""}${isGuestNoPreview ? "&noPreview=1" : ""}`}
                     style={{
                       color: "#0a0a0a",
                       fontWeight: 500,

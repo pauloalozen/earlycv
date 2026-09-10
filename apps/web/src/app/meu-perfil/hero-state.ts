@@ -6,7 +6,6 @@
 export type HeroStateKind =
   | "interview_soon"
   | "cv_ready_unsent"
-  | "credits_empty"
   | "high_match_recommendation"
   | "new_user"
   | "inactive"
@@ -25,7 +24,6 @@ export type HeroStateInput = {
     jobTitle: string;
     companyName: string;
   } | null;
-  hasAvailableCredits: boolean;
   topRecommendation: {
     jobTitle: string;
     companyName: string;
@@ -97,21 +95,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
     };
   }
 
-  // 3 · SE os créditos de download zeraram (bloqueia analisar/adaptar)
-  if (!input.hasAvailableCredits) {
-    return {
-      kind: "credits_empty",
-      eyebrow: "Próxima ação recomendada",
-      eyebrowQualifier: "Créditos zerados",
-      titlePlain: "Seus créditos",
-      titleEmphasis: "acabaram.",
-      description: "Compre mais créditos pra continuar adaptando seu CV.",
-      ctaLabel: "Comprar créditos →",
-      ctaHref: "/planos",
-    };
-  }
-
-  // 4 · SE existe recomendação nova de altíssima aderência (Radar/Monitor)
+  // 3 · SE existe recomendação nova de altíssima aderência (Radar/Monitor)
   if (
     input.topRecommendation &&
     input.topRecommendation.score >= HIGH_MATCH_SCORE_THRESHOLD
@@ -128,7 +112,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
     };
   }
 
-  // 5 · SE o usuário é novo (zero candidaturas/análises)
+  // 4 · SE o usuário é novo (zero candidaturas/análises)
   if (!input.hasAnyApplication) {
     return {
       kind: "new_user",
@@ -143,7 +127,7 @@ export function resolveHeroState(input: HeroStateInput): HeroState {
     };
   }
 
-  // 6 · SE está há 14+ dias sem nenhuma atividade
+  // 5 · SE está há 14+ dias sem nenhuma atividade
   if (input.lastActivityAt) {
     const daysSince = daysBetween(new Date(input.lastActivityAt), now);
     if (daysSince >= INACTIVE_DAYS) {

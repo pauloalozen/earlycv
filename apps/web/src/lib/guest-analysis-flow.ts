@@ -33,7 +33,14 @@ export async function runGuestAnalysisFlow(params: {
         guestPossessionToken: started.guestPossessionToken,
       });
     }
-    return { kind: "gated", destination: "/entrar?ctx=analysis_guest" };
+    // noPreview=1 distingue esse redirect (guest nunca viu o resultado) do
+    // CTA "Criar conta e liberar" em /adaptar/resultado, que também usa
+    // ctx=analysis_guest mas com o guest já tendo visto a análise — ctx
+    // segue só para tracking de conversão, sem mudar copy nenhuma.
+    return {
+      kind: "gated",
+      destination: "/entrar?ctx=analysis_guest&noPreview=1",
+    };
   }
 
   const result = await pollAnalysisJob(started.jobId);

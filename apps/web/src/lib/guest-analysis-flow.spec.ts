@@ -70,7 +70,7 @@ describe("runGuestAnalysisFlow", () => {
 
     expect(result).toEqual({
       kind: "gated",
-      destination: "/entrar?ctx=analysis_guest",
+      destination: "/entrar?ctx=analysis_guest&noPreview=1",
     });
     expect(setPendingGuestAnalysisMock).toHaveBeenCalledWith({
       jobId: "job-1",
