@@ -55,7 +55,10 @@ test("saveGuestPreview (flag ligada, primeiro CV do usuário — sem arquivo): e
           }),
           updateMany: async () => ({ count: 0 }),
         },
-        analysisJob: { updateMany: async () => ({ count: 0 }) },
+        analysisJob: {
+          updateMany: async () => ({ count: 0 }),
+          findUnique: async () => null,
+        },
         analysisCvSnapshot: {
           findUnique: async () => ({
             id: "snapshot-1",
@@ -140,7 +143,10 @@ test("saveGuestPreview (flag desligada): nunca chama o pipeline novo", async () 
         }),
         updateMany: async () => ({ count: 0 }),
       },
-      analysisJob: { updateMany: async () => ({ count: 0 }) },
+      analysisJob: {
+        updateMany: async () => ({ count: 0 }),
+        findUnique: async () => null,
+      },
       analysisCvSnapshot: {
         findUnique: async () => ({
           id: "snapshot-1",
