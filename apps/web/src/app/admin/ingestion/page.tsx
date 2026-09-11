@@ -175,14 +175,28 @@ export default async function AdminIngestionPage({
     );
   }
 
+  // Antes disso essas 3 chamadas rodavam sempre, pra qualquer aba — mas
+  // listJobSources() só é usado pelas abas "vagas"/"jobs" e
+  // listJobSourcesPaginated() só pela aba "fontes". Trocar pra Matching,
+  // Enriquecimento, Audit, Indexação, Vagas Estrangeiras ou Descoberta
+  // (6 das 9 abas) pagava esses 2 fetches à toa em toda navegação. A
+  // contagem de descoberta (badge da aba, sempre visível) continua
+  // incondicional — é a única coisa que todas as abas precisam.
+  const needsSources = activeTab === "vagas" || activeTab === "jobs";
+  const needsSourcesFirstPage = activeTab === "fontes";
+
   try {
     const [sourcesResult, sourcesFirstPageResult, promotableDiscoveries] =
       await Promise.all([
-        listJobSources().catch((e: unknown) => e),
-        listJobSourcesPaginated({
-          pageSize: 50,
-          typeFilter: sourceType,
-        }).catch((e: unknown) => e),
+        needsSources
+          ? listJobSources().catch((e: unknown) => e)
+          : Promise.resolve([]),
+        needsSourcesFirstPage
+          ? listJobSourcesPaginated({
+              pageSize: 50,
+              typeFilter: sourceType,
+            }).catch((e: unknown) => e)
+          : Promise.resolve(null),
         listDiscoveredCompanies([
           "VALIDATED",
           "NO_TECH_JOBS",
