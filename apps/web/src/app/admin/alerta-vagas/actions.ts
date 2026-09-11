@@ -12,6 +12,7 @@ import {
   resendAdminMonitorDigest,
   searchAdminMonitorUsers,
   sendMonitorDigestNow,
+  setAlertPreference,
   trackAlertUser,
   updateAlertRolloutPolicy,
   updateMonitorDigestContent,
@@ -61,6 +62,36 @@ export async function trackAlertUserAction(formData: FormData) {
   redirect(
     buildAdminRedirect(redirectPath, "success", "Usuário incluído na lista."),
   );
+}
+
+// Toggle por linha — liga/desliga 1 usuário específico sem precisar de uma
+// ação em massa (ver AlertRolloutSection).
+export async function setAlertPreferenceAction(formData: FormData) {
+  const userId = String(formData.get("userId") ?? "").trim();
+  const emailEnabled = formData.get("emailEnabled") === "true";
+  const redirectPath = String(
+    formData.get("redirectPath") ?? ROOT_REDIRECT_PATH,
+  );
+
+  let outcome: { status: "success" | "error"; message: string };
+  try {
+    await setAlertPreference(userId, emailEnabled);
+    outcome = {
+      status: "success",
+      message: `Alerta ${emailEnabled ? "ativado" : "desativado"} pra esse usuário.`,
+    };
+  } catch (error) {
+    outcome = {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Falha ao atualizar o alerta desse usuário.",
+    };
+  }
+
+  revalidatePath(ROOT_REDIRECT_PATH);
+  redirect(buildAdminRedirect(redirectPath, outcome.status, outcome.message));
 }
 
 export async function sendDigestNowAction(formData: FormData) {

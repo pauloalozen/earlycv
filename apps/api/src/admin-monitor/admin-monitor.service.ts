@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
@@ -36,14 +35,6 @@ import type { DigestHistorySourceFilter } from "./dto/list-digest-history.dto";
 import type { UpdateAlertRolloutPolicyDto } from "./dto/update-alert-rollout-policy.dto";
 import type { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
 import type { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
-
-// Só ALL/PAID fazem sentido pra política contínua — TRACKED_PAID/
-// TRACKED_ONLY dependem da lista já cadastrada manualmente (que só cresce
-// por ação do admin), não tem usuário "novo" pra reconciliar contra ela.
-const ROLLOUT_POLICY_SEGMENTS = new Set<MonitorAlertBulkSegment>([
-  "ALL",
-  "PAID",
-]);
 
 const INTERVAL_FREQUENCIES = new Set([
   "EVERY_2_DAYS",
@@ -1110,6 +1101,40 @@ export class AdminMonitorService {
     return { tracked: true, emailEnabled: preference.emailEnabled };
   }
 
+  // Toggle individual — botão por linha na tabela de "Alerta de Vagas",
+  // pra ligar/desligar 1 usuário específico sem precisar de uma ação em
+  // massa (ver applyAlertRollout). Delega pro mesmo
+  // MonitorAlertPreferenceService.update() já usado pelo próprio usuário
+  // (self-service), então nunca sobrescreve unsubscribedAt aqui também.
+  async setAlertPreference(
+    adminId: string,
+    userId: string,
+    emailEnabled: boolean,
+  ) {
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new NotFoundException("user not found");
+    }
+
+    const updated = await this.alertPreferenceService.update(userId, {
+      emailEnabled,
+    });
+
+    await this.logAction(
+      adminId,
+      "alert_preference_set",
+      "MonitorAlertPreference",
+      userId,
+      "ok",
+      { emailEnabled },
+    );
+
+    return { userId, emailEnabled: updated.emailEnabled };
+  }
+
   // Disparo síncrono: a requisição só retorna depois que o e-mail foi de
   // fato enviado (ou definitivamente pulado) — nunca enfileira pro
   // MonitorDigestWorker. Reaproveita a mesma sequência do script
@@ -1437,14 +1462,7 @@ export class AdminMonitorService {
     const where: Prisma.UserWhereInput =
       segment === "ALL"
         ? {}
-        : segment === "PAID"
-          ? { planPurchases: { some: { status: "completed" } } }
-          : segment === "TRACKED_PAID"
-            ? {
-                planPurchases: { some: { status: "completed" } },
-                monitorAlertPreference: { isNot: null },
-              }
-            : { monitorAlertPreference: { isNot: null } }; // TRACKED_ONLY
+        : { planPurchases: { some: { status: "completed" } } }; // PAID
 
     const users = await this.database.user.findMany({
       where,
@@ -1567,12 +1585,6 @@ export class AdminMonitorService {
     adminId: string,
     dto: UpdateAlertRolloutPolicyDto,
   ) {
-    if (!ROLLOUT_POLICY_SEGMENTS.has(dto.segment)) {
-      throw new BadRequestException(
-        "segment must be ALL or PAID for the continuous rollout policy",
-      );
-    }
-
     const updated = await this.database.monitorAlertRolloutPolicy.upsert({
       where: { id: "default" },
       create: {

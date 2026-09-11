@@ -559,6 +559,22 @@ export function trackAlertUser(userId: string, token?: string) {
   );
 }
 
+export function setAlertPreference(
+  userId: string,
+  emailEnabled: boolean,
+  token?: string,
+) {
+  return apiRequest<{ userId: string; emailEnabled: boolean }>(
+    "/admin/monitor/alert-preference/set",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, emailEnabled }),
+    },
+  );
+}
+
 export function sendMonitorDigestNow(userId: string, token?: string) {
   return apiRequest<SendDigestNowResult>(
     "/admin/monitor/digest/send-now",
@@ -630,11 +646,7 @@ export function updateMonitorDigestContent(dto: DigestContent, token?: string) {
   });
 }
 
-export type AlertRolloutSegment =
-  | "ALL"
-  | "PAID"
-  | "TRACKED_PAID"
-  | "TRACKED_ONLY";
+export type AlertRolloutSegment = "ALL" | "PAID";
 
 export type AlertRolloutPreview = {
   segment: AlertRolloutSegment;
@@ -696,7 +708,7 @@ export function getAlertRolloutPolicy(token?: string) {
 export function updateAlertRolloutPolicy(
   dto: {
     active: boolean;
-    segment: "ALL" | "PAID";
+    segment: AlertRolloutSegment;
     cutoffAt: string | null;
   },
   token?: string,

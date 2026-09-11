@@ -37,6 +37,7 @@ import { TrackUserCombobox } from "./_components/track-user-combobox";
 import {
   resendDigestAction,
   sendDigestNowAction,
+  setAlertPreferenceAction,
   updateDigestContentAction,
   updateDigestScheduleAction,
 } from "./actions";
@@ -300,24 +301,54 @@ export default async function AdminAlertaVagasPage({
                     <AdminPill tone="warn">em breve</AdminPill>
                   </AdminTd>
                   <AdminTd align="right">
-                    <form action={sendDigestNowAction}>
-                      <input type="hidden" name="userId" value={user.id} />
-                      <input
-                        type="hidden"
-                        name="redirectPath"
-                        value={currentRedirectPath}
-                      />
-                      <button
-                        type="submit"
-                        disabled={!canSend}
-                        className={buttonVariants({ size: "sm" })}
-                        title={
-                          canSend ? undefined : "Usuário não é elegível hoje"
-                        }
-                      >
-                        Disparar agora →
-                      </button>
-                    </form>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <form action={setAlertPreferenceAction}>
+                        <input type="hidden" name="userId" value={user.id} />
+                        <input
+                          type="hidden"
+                          name="emailEnabled"
+                          value={String(!user.emailEnabled)}
+                        />
+                        <input
+                          type="hidden"
+                          name="redirectPath"
+                          value={currentRedirectPath}
+                        />
+                        <button
+                          type="submit"
+                          className={buttonVariants({
+                            size: "sm",
+                            variant: "outline",
+                          })}
+                        >
+                          {user.emailEnabled ? "Desativar" : "Ativar"}
+                        </button>
+                      </form>
+                      <form action={sendDigestNowAction}>
+                        <input type="hidden" name="userId" value={user.id} />
+                        <input
+                          type="hidden"
+                          name="redirectPath"
+                          value={currentRedirectPath}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!canSend}
+                          className={buttonVariants({ size: "sm" })}
+                          title={
+                            canSend ? undefined : "Usuário não é elegível hoje"
+                          }
+                        >
+                          Disparar agora →
+                        </button>
+                      </form>
+                    </div>
                   </AdminTd>
                 </tr>
               );

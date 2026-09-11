@@ -1008,31 +1008,65 @@ test("applyAlertRollout(PAID, enable=true) só afeta usuários com PlanPurchase 
   }
 });
 
-test("applyAlertRollout(TRACKED_ONLY, enable=false) só desliga quem já estava na lista manual, e nunca toca unsubscribedAt", async () => {
+test("applyAlertRollout(ALL, enable=false) desliga todo mundo do segmento, e nunca toca unsubscribedAt", async () => {
   const tracked = await seedUser();
-  const untracked = await seedUser();
   try {
     await prisma.monitorAlertPreference.create({
       data: { userId: tracked.id, emailEnabled: true },
     });
 
-    await service.applyAlertRollout("admin-1", "TRACKED_ONLY", false);
+    await service.applyAlertRollout("admin-1", "ALL", false);
 
     const trackedPreference = await prisma.monitorAlertPreference.findUnique(
       { where: { userId: tracked.id } },
     );
     assert.equal(trackedPreference?.emailEnabled, false);
     assert.equal(trackedPreference?.unsubscribedAt, null);
-
-    const untrackedPreference =
-      await prisma.monitorAlertPreference.findUnique({
-        where: { userId: untracked.id },
-      });
-    assert.equal(untrackedPreference, null);
   } finally {
     await cleanupUser(tracked.id);
-    await cleanupUser(untracked.id);
   }
+});
+
+test("setAlertPreference liga/desliga o alerta de 1 usuário específico, sem afetar outros", async () => {
+  const target = await seedUser();
+  const other = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: { userId: other.id, emailEnabled: true },
+    });
+
+    const result = await service.setAlertPreference(
+      "admin-1",
+      target.id,
+      true,
+    );
+    assert.equal(result.emailEnabled, true);
+
+    const targetPreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: target.id },
+    });
+    assert.equal(targetPreference?.emailEnabled, true);
+
+    const otherPreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: other.id },
+    });
+    assert.equal(otherPreference?.emailEnabled, true);
+
+    await service.setAlertPreference("admin-1", target.id, false);
+    const disabled = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: target.id },
+    });
+    assert.equal(disabled?.emailEnabled, false);
+  } finally {
+    await cleanupUser(target.id);
+    await cleanupUser(other.id);
+  }
+});
+
+test("setAlertPreference lança NotFoundException pra userId que não existe", async () => {
+  await assert.rejects(() =>
+    service.setAlertPreference("admin-1", "user-inexistente", true),
+  );
 });
 
 test("previewAlertRollout reporta quantos vão mudar de estado e quantos ficam de fora por já ter dado unsubscribe", async () => {
@@ -1059,15 +1093,6 @@ test("previewAlertRollout reporta quantos vão mudar de estado e quantos ficam d
     await cleanupUser(willBeEnabled.id);
     await cleanupUser(unsubscribed.id);
   }
-});
-
-test("updateAlertRolloutPolicy recusa segment fora de ALL/PAID (TRACKED_* não tem o que reconciliar continuamente)", async () => {
-  await assert.rejects(() =>
-    service.updateAlertRolloutPolicy("admin-1", {
-      active: true,
-      segment: "TRACKED_ONLY",
-    }),
-  );
 });
 
 test("getAlertRolloutPolicy / updateAlertRolloutPolicy roundtrip through the singleton row", async () => {

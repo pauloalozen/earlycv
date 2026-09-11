@@ -14,19 +14,14 @@ import {
   updateAlertRolloutPolicyAction,
 } from "../actions";
 
+// Mesmas 2 opções servem pra ativação em massa e pra política contínua —
+// "lista já cadastrada manualmente" deixou de ser um segmento distinto
+// (ver AGENTS/docs: depois de "ativar toda a base" uma vez, a lista manual
+// e a base inteira convergem). Ativação de usuário individual agora é o
+// botão por linha na tabela, não um segmento aqui.
 const SEGMENT_OPTIONS: { value: AlertRolloutSegment; label: string }[] = [
   { value: "ALL", label: "Toda a base" },
   { value: "PAID", label: "Quem já pagou algum plano" },
-  {
-    value: "TRACKED_PAID",
-    label: "Lista já cadastrada manualmente + pagantes",
-  },
-  { value: "TRACKED_ONLY", label: "Só a lista já cadastrada manualmente" },
-];
-
-const POLICY_SEGMENT_OPTIONS: { value: "ALL" | "PAID"; label: string }[] = [
-  { value: "ALL", label: "Toda a base" },
-  { value: "PAID", label: "Quem pagar algum plano" },
 ];
 
 export function AlertRolloutSection({
@@ -181,11 +176,7 @@ export function AlertRolloutSection({
           >
             Segmento
             <select
-              defaultValue={
-                policy.segment === "ALL" || policy.segment === "PAID"
-                  ? policy.segment
-                  : "ALL"
-              }
+              defaultValue={policy.segment}
               name="segment"
               style={{
                 height: 34,
@@ -194,7 +185,7 @@ export function AlertRolloutSection({
                 padding: "0 10px",
               }}
             >
-              {POLICY_SEGMENT_OPTIONS.map((opt) => (
+              {SEGMENT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

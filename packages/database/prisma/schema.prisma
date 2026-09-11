@@ -2160,17 +2160,14 @@ model MonitorDigestEmailContent {
   updatedByAdminId String?
 }
 
-// ALL/PAID são os únicos válidos numa MonitorAlertRolloutPolicy (validado em
-// código, não aqui) — servem pra reconciliação contínua de usuários novos.
-// TRACKED_PAID/TRACKED_ONLY só existem pra ação pontual "aplicar agora" no
-// admin, sobre a lista já cadastrada manualmente (MonitorAlertPreference
-// existente) — essa lista só cresce por ação manual do admin, não tem o
-// que reconciliar automaticamente pra usuário novo.
+// TRACKED_PAID/TRACKED_ONLY (lista já cadastrada manualmente) existiram só
+// na primeira versão e foram removidos: depois de "ativar toda a base" uma
+// vez, a lista manual e a base inteira convergem, e a distinção parou de
+// fazer sentido — ativação por usuário individual agora tem seu próprio
+// botão por linha na tabela (ver AdminMonitorService.setAlertPreference).
 enum MonitorAlertBulkSegment {
   ALL
   PAID
-  TRACKED_PAID
-  TRACKED_ONLY
 }
 
 // Singleton (id fixo "default") — política de auto-inscrição contínua no

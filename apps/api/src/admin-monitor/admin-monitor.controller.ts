@@ -38,6 +38,7 @@ import { ListTrackedAlertUsersDto } from "./dto/list-tracked-alert-users.dto";
 import { PageQueryDto } from "./dto/page-query.dto";
 import { PreviewAlertRolloutDto } from "./dto/preview-alert-rollout.dto";
 import { SendDigestNowDto } from "./dto/send-digest-now.dto";
+import { SetAlertPreferenceDto } from "./dto/set-alert-preference.dto";
 import { TrackAlertUserDto } from "./dto/track-alert-user.dto";
 import { UpdateAlertRolloutPolicyDto } from "./dto/update-alert-rollout-policy.dto";
 import { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
@@ -180,6 +181,18 @@ export class AdminMonitorController {
     @AuthenticatedUser() admin: AuthenticatedRequestUser,
   ) {
     return this.adminMonitorService.trackAlertUser(admin.id, body.userId);
+  }
+
+  @Post("alert-preference/set")
+  setAlertPreference(
+    @Body(new ValidationPipe(validationOptions)) body: SetAlertPreferenceDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.setAlertPreference(
+      admin.id,
+      body.userId,
+      body.emailEnabled,
+    );
   }
 
   @Post("digest/send-now")
