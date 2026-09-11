@@ -117,6 +117,8 @@ export function DiscoveryTabClient() {
   const [showValidateModal, setShowValidateModal] = useState(false);
   const [validateLimitInput, setValidateLimitInput] = useState("30");
   const [promotingAll, setPromotingAll] = useState(false);
+  const [clearingPending, setClearingPending] = useState(false);
+  const [showClearPendingModal, setShowClearPendingModal] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [manualFormRowId, setManualFormRowId] = useState<string | null>(null);
   const [manualCareersUrl, setManualCareersUrl] = useState("");
@@ -390,6 +392,29 @@ export function DiscoveryTabClient() {
     }
   }
 
+  async function handleClearPending() {
+    setShowClearPendingModal(false);
+    setClearingPending(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/ingestion/discovery/clear-pending", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.message ?? "Falha ao limpar fila.");
+        return;
+      }
+      setMessage(
+        `${data.deletedCount} candidato(s) pendente(s) removido(s) da fila.`,
+      );
+      await fetchRows();
+    } finally {
+      setClearingPending(false);
+    }
+  }
+
   function openManualForm(id: string) {
     setManualFormRowId(id);
     setManualCareersUrl("");
@@ -517,6 +542,15 @@ export function DiscoveryTabClient() {
             type="button"
           >
             Exportar CSV
+          </button>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={clearingPending || (statusCounts.PENDING ?? 0) === 0}
+            onClick={() => setShowClearPendingModal(true)}
+            style={{ color: "#b91c1c" }}
+            type="button"
+          >
+            {clearingPending ? "Limpando..." : "Limpar fila"}
           </button>
         </div>
       </div>
@@ -1011,6 +1045,71 @@ export function DiscoveryTabClient() {
                 type="button"
               >
                 Rodar {validateLimitInput || "N"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearPendingModal && (
+        <div
+          style={{
+            alignItems: "center",
+            background: "rgba(10,10,10,0.4)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            position: "fixed",
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              background: AT.card,
+              border: `1px solid ${AT.border}`,
+              borderRadius: 10,
+              boxShadow: "0 8px 32px rgba(10,10,10,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              padding: 20,
+              width: 340,
+            }}
+          >
+            <h3 style={{ color: AT.ink, fontSize: 14, fontWeight: 600 }}>
+              Limpar fila
+            </h3>
+            <p style={{ color: AT.muted, fontSize: 12 }}>
+              Remove os{" "}
+              <strong style={{ color: AT.ink }}>
+                {statusCounts.PENDING ?? 0}
+              </strong>{" "}
+              candidato(s) ainda PENDENTE(s) (não processado(s)). Não afeta o
+              histórico já processado (validados, importados, inválidos,
+              descartados etc). Essa ação não pode ser desfeita.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                marginTop: 4,
+              }}
+            >
+              <button
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                onClick={() => setShowClearPendingModal(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className={buttonVariants({ size: "sm" })}
+                onClick={handleClearPending}
+                style={{ background: "#b91c1c", borderColor: "#b91c1c" }}
+                type="button"
+              >
+                Limpar {statusCounts.PENDING ?? 0} pendente(s)
               </button>
             </div>
           </div>

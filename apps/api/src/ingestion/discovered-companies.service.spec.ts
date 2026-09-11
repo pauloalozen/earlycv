@@ -176,6 +176,13 @@ function createFixture(options?: {
         candidates.set(where.id, updated);
         return updated;
       },
+      deleteMany: async ({ where }: { where?: ListWhere } = {}) => {
+        const toDelete = [...candidates.values()].filter((c) =>
+          matchesWhere(c, where),
+        );
+        for (const candidate of toDelete) candidates.delete(candidate.id);
+        return { count: toDelete.length };
+      },
     },
     company: {
       findUnique: async ({ where }: { where: { normalizedName: string } }) =>
@@ -1102,4 +1109,24 @@ test("dismiss marca DISMISSED e recusa candidato já IMPORTED", async () => {
 
   await candidates.set(candidate.id, { ...candidate, status: "IMPORTED" });
   await assert.rejects(() => service.dismiss(candidate.id));
+});
+
+test("clearPending apaga só os PENDING, nunca o histórico já processado", async () => {
+  const { service, candidates } = createFixture();
+  await service.importCandidatesCsv({
+    csvText: "nome\nPendente A\nPendente B\nJa Processada",
+  });
+  const [pendingA, pendingB, processed] = [...candidates.values()];
+
+  await candidates.set(processed.id, { ...processed, status: "VALIDATED" });
+
+  const result = await service.clearPending();
+  assert.equal(result.deletedCount, 2);
+
+  const remaining = [...candidates.values()];
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].id, processed.id);
+  assert.equal(remaining[0].status, "VALIDATED");
+  assert.equal(candidates.has(pendingA.id), false);
+  assert.equal(candidates.has(pendingB.id), false);
 });

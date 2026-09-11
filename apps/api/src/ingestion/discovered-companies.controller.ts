@@ -144,4 +144,13 @@ export class DiscoveredCompaniesController {
   dismiss(@Param("id") id: string) {
     return this.discoveredCompaniesService.dismiss(id);
   }
+
+  // Apaga só os candidatos PENDING (fila ainda não processada) — nunca
+  // toca no histórico (VALIDATED/NO_ACTIVE_JOBS/NO_TECH_JOBS/INVALID/
+  // IMPORTED/DISMISSED).
+  @Post("clear-pending")
+  @HttpCode(200)
+  clearPending() {
+    return this.discoveredCompaniesService.clearPending();
+  }
 }

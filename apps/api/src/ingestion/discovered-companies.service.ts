@@ -839,6 +839,17 @@ export class DiscoveredCompaniesService {
     });
   }
 
+  // Botão "Limpar fila" — apaga só o que ainda não foi processado
+  // (PENDING), nunca o histórico (VALIDATED/NO_ACTIVE_JOBS/NO_TECH_JOBS/
+  // INVALID/IMPORTED/DISMISSED). deleteMany já escopa por status: não tem
+  // como isso alcançar uma linha processada, mesmo com fila grande.
+  async clearPending(): Promise<{ deletedCount: number }> {
+    const { count } = await this.database.discoveredCompany.deleteMany({
+      where: { status: "PENDING" },
+    });
+    return { deletedCount: count };
+  }
+
   async dismiss(id: string) {
     const candidate = await this.getOrThrow(id);
 
