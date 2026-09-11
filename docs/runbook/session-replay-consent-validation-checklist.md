@@ -5,7 +5,7 @@ Use this checklist after deploying consent changes to validate that PostHog sess
 ## Preconditions
 
 - Consent feature flag enabled in target environment.
-- PostHog proxy host reachable (`https://c.earlycv.com.br`).
+- PostHog proxy host reachable (`https://a.earlycv.com.br`).
 - Test account available for authenticated routes.
 
 ## Scenarios

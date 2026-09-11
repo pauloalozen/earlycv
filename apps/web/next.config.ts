@@ -31,7 +31,7 @@ const cspReportOnlyDirectives = [
   "font-src 'self'",
   [
     "connect-src 'self'",
-    "https://c.earlycv.com.br",
+    "https://a.earlycv.com.br",
     "https://app.posthog.com",
     "https://eu.posthog.com",
     "https://us.i.posthog.com",

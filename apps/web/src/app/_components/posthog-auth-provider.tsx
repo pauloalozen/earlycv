@@ -95,7 +95,7 @@ function getPosthogConfig() {
   const apiHost =
     process.env.NEXT_PUBLIC_POSTHOG_API_HOST?.trim() ||
     process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() ||
-    "https://c.earlycv.com.br";
+    "https://a.earlycv.com.br";
   const uiHost =
     process.env.NEXT_PUBLIC_POSTHOG_UI_HOST?.trim() ||
     process.env.NEXT_PUBLIC_POSTHOG_UIHOST?.trim() ||
