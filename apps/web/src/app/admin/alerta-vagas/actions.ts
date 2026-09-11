@@ -193,21 +193,27 @@ export async function applyAlertRolloutAction(formData: FormData) {
     formData.get("redirectPath") ?? ROOT_REDIRECT_PATH,
   );
 
+  // redirect() lança internamente pro Next desviar a resposta — nunca
+  // chamado de dentro do try/catch, senão o próprio catch abaixo o
+  // capturaria como um erro genérico (mesmo cuidado de sendDigestNowAction
+  // acima).
+  let outcome: { status: "success" | "error"; message: string };
   try {
     const result = await applyAlertRollout(segment, enable);
-    revalidatePath(ROOT_REDIRECT_PATH);
-    redirect(
-      buildAdminRedirect(
-        redirectPath,
-        "success",
-        `${result.changedCount} usuário(s) ${enable ? "ativado(s)" : "desativado(s)"} (${result.matchingCount} no segmento).`,
-      ),
-    );
+    outcome = {
+      status: "success",
+      message: `${result.changedCount} usuário(s) ${enable ? "ativado(s)" : "desativado(s)"} (${result.matchingCount} no segmento).`,
+    };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Falha ao aplicar em massa.";
-    redirect(buildAdminRedirect(redirectPath, "error", message));
+    outcome = {
+      status: "error",
+      message:
+        error instanceof Error ? error.message : "Falha ao aplicar em massa.",
+    };
   }
+
+  revalidatePath(ROOT_REDIRECT_PATH);
+  redirect(buildAdminRedirect(redirectPath, outcome.status, outcome.message));
 }
 
 export async function updateAlertRolloutPolicyAction(formData: FormData) {
