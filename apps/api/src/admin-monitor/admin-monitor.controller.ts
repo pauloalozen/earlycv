@@ -29,14 +29,17 @@ import { AdminMonitorService } from "./admin-monitor.service";
 // usuário/vaga deste controller — biome converteria de volta pra `import
 // type` no autofix se não fosse pelo biome-ignore abaixo).
 // biome-ignore-start lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype (ver comentário acima)
+import { ApplyAlertRolloutDto } from "./dto/apply-alert-rollout.dto";
 import { ListAdminMonitorJobsDto } from "./dto/list-admin-monitor-jobs.dto";
 import { ListAdminMonitorRecommendationsDto } from "./dto/list-admin-monitor-recommendations.dto";
 import { ListAdminMonitorUsersDto } from "./dto/list-admin-monitor-users.dto";
 import { ListDigestHistoryDto } from "./dto/list-digest-history.dto";
 import { ListTrackedAlertUsersDto } from "./dto/list-tracked-alert-users.dto";
 import { PageQueryDto } from "./dto/page-query.dto";
+import { PreviewAlertRolloutDto } from "./dto/preview-alert-rollout.dto";
 import { SendDigestNowDto } from "./dto/send-digest-now.dto";
 import { TrackAlertUserDto } from "./dto/track-alert-user.dto";
+import { UpdateAlertRolloutPolicyDto } from "./dto/update-alert-rollout-policy.dto";
 import { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
 import { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
 
@@ -223,5 +226,42 @@ export class AdminMonitorController {
     @AuthenticatedUser() admin: AuthenticatedRequestUser,
   ) {
     return this.adminMonitorService.updateDigestContent(admin.id, body);
+  }
+
+  @Get("alert-rollout/preview")
+  previewAlertRollout(
+    @Query(new ValidationPipe(validationOptions))
+    query: PreviewAlertRolloutDto,
+  ) {
+    return this.adminMonitorService.previewAlertRollout(
+      query.segment,
+      query.enable,
+    );
+  }
+
+  @Post("alert-rollout/apply")
+  applyAlertRollout(
+    @Body(new ValidationPipe(validationOptions)) body: ApplyAlertRolloutDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.applyAlertRollout(
+      admin.id,
+      body.segment,
+      body.enable,
+    );
+  }
+
+  @Get("alert-rollout/policy")
+  getAlertRolloutPolicy() {
+    return this.adminMonitorService.getAlertRolloutPolicy();
+  }
+
+  @Post("alert-rollout/policy")
+  updateAlertRolloutPolicy(
+    @Body(new ValidationPipe(validationOptions))
+    body: UpdateAlertRolloutPolicyDto,
+    @AuthenticatedUser() admin: AuthenticatedRequestUser,
+  ) {
+    return this.adminMonitorService.updateAlertRolloutPolicy(admin.id, body);
   }
 }

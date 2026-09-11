@@ -2160,6 +2160,37 @@ model MonitorDigestEmailContent {
   updatedByAdminId String?
 }
 
+// ALL/PAID são os únicos válidos numa MonitorAlertRolloutPolicy (validado em
+// código, não aqui) — servem pra reconciliação contínua de usuários novos.
+// TRACKED_PAID/TRACKED_ONLY só existem pra ação pontual "aplicar agora" no
+// admin, sobre a lista já cadastrada manualmente (MonitorAlertPreference
+// existente) — essa lista só cresce por ação manual do admin, não tem o
+// que reconciliar automaticamente pra usuário novo.
+enum MonitorAlertBulkSegment {
+  ALL
+  PAID
+  TRACKED_PAID
+  TRACKED_ONLY
+}
+
+// Singleton (id fixo "default") — política de auto-inscrição contínua no
+// Alerta de Vaga Certa pra usuário novo/pagante novo, editável via
+// /admin/alerta-vagas. Nasce com uma migration que já insere a linha
+// default (active: false) — zero mudança de comportamento até algum admin
+// ativar. Ver MonitorAlertRolloutReconciler (monitor-alert-rollout.reconciler.ts).
+model MonitorAlertRolloutPolicy {
+  id       String                  @id @default("default")
+  active   Boolean                 @default(false)
+  segment  MonitorAlertBulkSegment @default(ALL)
+  // null = sem corte, vale indefinidamente enquanto active=true.
+  cutoffAt DateTime?
+
+  lastAppliedAt DateTime?
+
+  updatedAt        DateTime @updatedAt
+  updatedByAdminId String?
+}
+
 model JobEnrichment {
   id    String @id @default(cuid())
   jobId String @unique

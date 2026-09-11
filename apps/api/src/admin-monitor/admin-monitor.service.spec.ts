@@ -134,6 +134,22 @@ async function seedCompanyAndJob(overrides: { withEnrichment?: boolean } = {}) {
   return { company, job };
 }
 
+async function seedCompletedPurchase(userId: string) {
+  const t = tag();
+  return prisma.planPurchase.create({
+    data: {
+      userId,
+      planType: "starter",
+      amountInCents: 1000,
+      paymentProvider: "mercadopago",
+      paymentReference: `ref-${t}`,
+      status: "completed",
+      paidAt: new Date(),
+      creditsGranted: 1,
+    },
+  });
+}
+
 async function cleanupUser(userId: string) {
   await prisma.monitorDigestEvent
     .deleteMany({ where: { digest: { userId } } })
@@ -884,6 +900,199 @@ test("getDigestContent / updateDigestContent roundtrip through the singleton row
     });
     await prisma.monitorAdminActionLog
       .deleteMany({ where: { entityType: "MonitorDigestEmailContent" } })
+      .catch(() => undefined);
+  }
+});
+
+test("getDigestEmailStats.eventsLast24h counts distinct digests per event type, not raw events — 2 clicks on the same email still count as 1", async () => {
+  const user = await seedUser();
+  try {
+    const digest = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "DAILY",
+        status: "SENT",
+        scheduledFor: new Date(),
+      },
+    });
+
+    await prisma.monitorDigestEvent.createMany({
+      data: [
+        {
+          digestId: digest.id,
+          providerMessageId: "msg-1",
+          providerEventId: "evt-delivered-1",
+          type: "DELIVERED",
+          occurredAt: new Date(),
+        },
+        {
+          digestId: digest.id,
+          providerMessageId: "msg-1",
+          providerEventId: "evt-clicked-1",
+          type: "CLICKED",
+          occurredAt: new Date(),
+        },
+        {
+          digestId: digest.id,
+          providerMessageId: "msg-1",
+          providerEventId: "evt-clicked-2",
+          type: "CLICKED",
+          occurredAt: new Date(),
+        },
+      ],
+    });
+
+    const stats = await service.getDigestEmailStats();
+
+    assert.equal(stats.eventsLast24h.DELIVERED, 1);
+    // Cliques duplicados no MESMO digest contam como 1 digest clicado, não
+    // 2 — é a métrica "quantos e-mails tiveram clique", não "quantos
+    // cliques".
+    assert.equal(stats.eventsLast24h.CLICKED, 1);
+  } finally {
+    await cleanupUser(user.id);
+  }
+});
+
+test("applyAlertRollout(ALL, enable=true) inscreve todo mundo, mas NUNCA reinscreve quem já deu unsubscribe", async () => {
+  const neverTracked = await seedUser();
+  const alreadyUnsubscribed = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: alreadyUnsubscribed.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+      },
+    });
+
+    const result = await service.applyAlertRollout("admin-1", "ALL", true);
+    assert.ok(result.matchingCount >= 2);
+
+    const untouched = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: alreadyUnsubscribed.id },
+    });
+    assert.equal(untouched?.emailEnabled, false);
+    assert.ok(untouched?.unsubscribedAt);
+
+    const newlyEnrolled = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: neverTracked.id },
+    });
+    assert.equal(newlyEnrolled?.emailEnabled, true);
+  } finally {
+    await cleanupUser(neverTracked.id);
+    await cleanupUser(alreadyUnsubscribed.id);
+  }
+});
+
+test("applyAlertRollout(PAID, enable=true) só afeta usuários com PlanPurchase completed", async () => {
+  const payingUser = await seedUser();
+  const freeUser = await seedUser();
+  try {
+    await seedCompletedPurchase(payingUser.id);
+
+    await service.applyAlertRollout("admin-1", "PAID", true);
+
+    const payingPreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: payingUser.id },
+    });
+    assert.equal(payingPreference?.emailEnabled, true);
+
+    const freePreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: freeUser.id },
+    });
+    assert.equal(freePreference, null);
+  } finally {
+    await cleanupUser(payingUser.id);
+    await cleanupUser(freeUser.id);
+  }
+});
+
+test("applyAlertRollout(TRACKED_ONLY, enable=false) só desliga quem já estava na lista manual, e nunca toca unsubscribedAt", async () => {
+  const tracked = await seedUser();
+  const untracked = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: { userId: tracked.id, emailEnabled: true },
+    });
+
+    await service.applyAlertRollout("admin-1", "TRACKED_ONLY", false);
+
+    const trackedPreference = await prisma.monitorAlertPreference.findUnique(
+      { where: { userId: tracked.id } },
+    );
+    assert.equal(trackedPreference?.emailEnabled, false);
+    assert.equal(trackedPreference?.unsubscribedAt, null);
+
+    const untrackedPreference =
+      await prisma.monitorAlertPreference.findUnique({
+        where: { userId: untracked.id },
+      });
+    assert.equal(untrackedPreference, null);
+  } finally {
+    await cleanupUser(tracked.id);
+    await cleanupUser(untracked.id);
+  }
+});
+
+test("previewAlertRollout reporta quantos vão mudar de estado e quantos ficam de fora por já ter dado unsubscribe", async () => {
+  const alreadyEnabled = await seedUser();
+  const willBeEnabled = await seedUser();
+  const unsubscribed = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: { userId: alreadyEnabled.id, emailEnabled: true },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: unsubscribed.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+      },
+    });
+
+    const preview = await service.previewAlertRollout("ALL", true);
+    assert.ok(preview.willChangeCount >= 1);
+    assert.ok(preview.skippedUnsubscribedCount >= 1);
+  } finally {
+    await cleanupUser(alreadyEnabled.id);
+    await cleanupUser(willBeEnabled.id);
+    await cleanupUser(unsubscribed.id);
+  }
+});
+
+test("updateAlertRolloutPolicy recusa segment fora de ALL/PAID (TRACKED_* não tem o que reconciliar continuamente)", async () => {
+  await assert.rejects(() =>
+    service.updateAlertRolloutPolicy("admin-1", {
+      active: true,
+      segment: "TRACKED_ONLY",
+    }),
+  );
+});
+
+test("getAlertRolloutPolicy / updateAlertRolloutPolicy roundtrip through the singleton row", async () => {
+  const original = await service.getAlertRolloutPolicy();
+  try {
+    const cutoffAt = new Date("2026-09-30T23:59:59.000Z");
+    const updated = await service.updateAlertRolloutPolicy("admin-1", {
+      active: true,
+      segment: "PAID",
+      cutoffAt,
+    });
+    assert.equal(updated.active, true);
+    assert.equal(updated.segment, "PAID");
+    assert.equal(updated.cutoffAt?.toISOString(), cutoffAt.toISOString());
+
+    const reread = await service.getAlertRolloutPolicy();
+    assert.equal(reread.active, true);
+  } finally {
+    await service.updateAlertRolloutPolicy("admin-1", {
+      active: original.active,
+      segment: original.segment,
+      cutoffAt: original.cutoffAt,
+    });
+    await prisma.monitorAdminActionLog
+      .deleteMany({ where: { entityType: "MonitorAlertRolloutPolicy" } })
       .catch(() => undefined);
   }
 });

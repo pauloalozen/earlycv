@@ -359,3 +359,32 @@ mesmo guard, mesmo audit log):
   de liberação manual na UI é só visual, não decide acesso real. Isso tem
   que ficar claro no PR pra ninguém achar que o feature de liberação por
   usuário já está funcionando.
+
+## Addendum 2026-09-11 — ativação em massa por segmento
+
+Adicionado: botão pra ativar/desativar o Alerta pra um segmento inteiro de
+usuários de uma vez (`ALL`/`PAID`/`TRACKED_PAID`/`TRACKED_ONLY`), com
+preview de contagem antes de confirmar, e uma política de auto-inscrição
+contínua (`MonitorAlertRolloutPolicy`, segmento `ALL`/`PAID` + data de
+corte opcional) pra usuário novo/pagante novo continuar entrando
+automaticamente depois da ativação inicial.
+
+Decisões de risco (produção com pagantes):
+- **Nunca reinscreve quem já deu unsubscribe** (`unsubscribedAt`
+  preenchido) — nem na ativação em massa, nem na reconciliação contínua.
+  Ativação em massa: exclusão explícita na query. Reconciliação: só cria
+  linha pra quem nunca teve nenhuma (nunca `update`), então quem já tem
+  linha — unsubscribed ou desativado manualmente — nunca é tocado.
+- **Gatilho de auto-inscrição é um job periódico** (`MonitorAlertRolloutReconciler`,
+  `@Cron("*/5 * * * *")`, mesmo padrão de lock de
+  `MonitorDigestScheduler`), não um hook em `auth.service.ts`/
+  `plans.service.ts` — os fluxos críticos de signup/pagamento nunca sabem
+  que essa política existe. Trade-off aceito: atraso de minutos, não
+  instantâneo.
+- Ativação em massa sempre mostra preview (`matchingCount`/
+  `willChangeCount`/`skippedUnsubscribedCount`) antes de aplicar — nunca
+  dispara sem confirmação, dado o volume potencial (toda a base).
+
+Ver `apps/api/src/admin-monitor/admin-monitor.service.ts` (§14,
+`applyAlertRollout`/`previewAlertRollout`/`getAlertRolloutPolicy`/
+`updateAlertRolloutPolicy`) e `apps/api/src/monitor/monitor-alert-rollout.reconciler.ts`.

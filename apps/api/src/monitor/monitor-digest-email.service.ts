@@ -8,6 +8,7 @@ import {
 import { MAX_RECOMMENDATIONS_PER_DIGEST } from "./monitor-digest-content.service";
 import {
   buildMonitorDigestLink,
+  buildMonitorJobLink,
   buildMonitorLogoUrl,
   buildMonitorUnsubscribeLink,
 } from "./monitor-digest-links";
@@ -130,7 +131,7 @@ export class MonitorDigestEmailService {
     const lines = preview.map(({ recommendation: rec }) => {
       const level =
         OPPORTUNITY_LEVEL_LABELS[rec.opportunityLevel] ?? "Aderente";
-      return `- ${rec.job.title} — ${rec.job.company.name} (${level})\n  ${buildMonitorDigestLink(digest.id, rec.id)}`;
+      return `- ${rec.job.title} — ${rec.job.company.name} (${level})\n  ${buildMonitorJobLink(rec.job.slug, digest.id, rec.id)}`;
     });
 
     const text = [
@@ -188,7 +189,7 @@ export class MonitorDigestEmailService {
       recommendation: {
         id: string;
         opportunityLevel: number;
-        job: { title: string; company: { name: string } };
+        job: { title: string; slug: string | null; company: { name: string } };
       };
     }>;
     remaining: number;
@@ -201,7 +202,7 @@ export class MonitorDigestEmailService {
       .map(({ recommendation: rec }) => {
         const level =
           OPPORTUNITY_LEVEL_LABELS[rec.opportunityLevel] ?? "Aderente";
-        const link = buildMonitorDigestLink(input.digestId, rec.id);
+        const link = buildMonitorJobLink(rec.job.slug, input.digestId, rec.id);
         return `
           <tr>
             <td style="padding:12px 0;border-bottom:1px solid #eee;">

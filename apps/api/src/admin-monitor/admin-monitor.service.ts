@@ -1,10 +1,15 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { MonitorMatchJobStatus, Prisma } from "@prisma/client";
+import type {
+  MonitorAlertBulkSegment,
+  MonitorMatchJobStatus,
+  Prisma,
+} from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { MonitorAlertPreferenceService } from "../monitor/monitor-alert-preference.service";
@@ -28,8 +33,17 @@ import {
 } from "../radar/matching.engine";
 import type { AdminMonitorRecommendationStatusFilter } from "./dto/list-admin-monitor-recommendations.dto";
 import type { DigestHistorySourceFilter } from "./dto/list-digest-history.dto";
+import type { UpdateAlertRolloutPolicyDto } from "./dto/update-alert-rollout-policy.dto";
 import type { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
 import type { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
+
+// Só ALL/PAID fazem sentido pra política contínua — TRACKED_PAID/
+// TRACKED_ONLY dependem da lista já cadastrada manualmente (que só cresce
+// por ação do admin), não tem usuário "novo" pra reconciliar contra ela.
+const ROLLOUT_POLICY_SEGMENTS = new Set<MonitorAlertBulkSegment>([
+  "ALL",
+  "PAID",
+]);
 
 const INTERVAL_FREQUENCIES = new Set([
   "EVERY_2_DAYS",
@@ -119,6 +133,24 @@ function countsByKey<K extends string, G extends { _count: { _all: number } }>(
   >;
   for (const group of groups) {
     result[keyOf(group)] = group._count._all;
+  }
+  return result;
+}
+
+// Pra grupos que já são 1 linha por combinação distinta (ex: groupBy
+// by:["type","digestId"], sem _count) — soma quantas linhas caem em cada
+// key, em vez de ler um _count que não existe.
+function tallyByKey<K extends string, G>(
+  keys: readonly K[],
+  groups: G[],
+  keyOf: (group: G) => K,
+): Record<K, number> {
+  const result = Object.fromEntries(keys.map((k) => [k, 0])) as Record<
+    K,
+    number
+  >;
+  for (const group of groups) {
+    result[keyOf(group)] += 1;
   }
   return result;
 }
@@ -305,10 +337,17 @@ export class AdminMonitorService {
       this.database.monitorDigest.count({
         where: { status: "SENT", sentAt: { gte: since24h } },
       }),
+      // by: ["type", "digestId"] em vez de só ["type"] — cada linha aqui já
+      // é 1 combinação única (type, digestId), então o tamanho do array por
+      // type é o número de digests distintos com aquele evento, não o total
+      // de eventos. Sem isso, 1 e-mail com 2 cliques contava como 2 no card
+      // "Clicked (24h)" (achado real: Paulo clicou 2x no mesmo e-mail e o
+      // card foi de 1 pra 2). digestId: not null exclui eventos órfãos (o
+      // webhook não achou o digest correspondente) — não têm como contar
+      // como "1 digest distinto" se não sabemos qual digest é.
       this.database.monitorDigestEvent.groupBy({
-        by: ["type"],
-        _count: { _all: true },
-        where: { occurredAt: { gte: since24h } },
+        by: ["type", "digestId"],
+        where: { occurredAt: { gte: since24h }, digestId: { not: null } },
       }),
       this.database.monitorDigest.count({
         where: { status: "PROCESSING", updatedAt: { lt: staleThreshold } },
@@ -328,7 +367,7 @@ export class AdminMonitorService {
         (g) => g.status,
       ),
       sentLast24h,
-      eventsLast24h: countsByKey(
+      eventsLast24h: tallyByKey(
         MONITOR_DIGEST_EVENT_TYPES,
         eventGroupsLast24h,
         (g) => g.type,
@@ -1384,6 +1423,180 @@ export class AdminMonitorService {
         subjectLength: dto.subject.length,
         introTextLength: dto.introText.length,
       },
+    );
+
+    return updated;
+  }
+
+  // Resolve os userIds de cada segmento — 1 query por segmento, sem
+  // "select *": só id, que é tudo que os chamadores precisam pra
+  // createMany/updateMany em MonitorAlertPreference.
+  private async resolveAlertRolloutSegmentUserIds(
+    segment: MonitorAlertBulkSegment,
+  ): Promise<string[]> {
+    const where: Prisma.UserWhereInput =
+      segment === "ALL"
+        ? {}
+        : segment === "PAID"
+          ? { planPurchases: { some: { status: "completed" } } }
+          : segment === "TRACKED_PAID"
+            ? {
+                planPurchases: { some: { status: "completed" } },
+                monitorAlertPreference: { isNot: null },
+              }
+            : { monitorAlertPreference: { isNot: null } }; // TRACKED_ONLY
+
+    const users = await this.database.user.findMany({
+      where,
+      select: { id: true },
+    });
+    return users.map((u) => u.id);
+  }
+
+  // Preview antes de aplicar — nunca liga/desliga em massa sem mostrar
+  // antes quantos usuários são afetados de fato (matchingCount) vs quantos
+  // vão MUDAR de estado (willChangeCount), e quantos ficam de fora por já
+  // ter dado unsubscribe (só relevante quando enable=true).
+  async previewAlertRollout(segment: MonitorAlertBulkSegment, enable: boolean) {
+    const userIds = await this.resolveAlertRolloutSegmentUserIds(segment);
+    if (userIds.length === 0) {
+      return {
+        segment,
+        matchingCount: 0,
+        willChangeCount: 0,
+        skippedUnsubscribedCount: 0,
+      };
+    }
+
+    const preferences = await this.database.monitorAlertPreference.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, emailEnabled: true, unsubscribedAt: true },
+    });
+    const byUserId = new Map(preferences.map((p) => [p.userId, p]));
+
+    let willChangeCount = 0;
+    let skippedUnsubscribedCount = 0;
+    for (const userId of userIds) {
+      const pref = byUserId.get(userId);
+      if (enable) {
+        if (pref?.unsubscribedAt) {
+          skippedUnsubscribedCount += 1;
+          continue;
+        }
+        if (!pref || !pref.emailEnabled) willChangeCount += 1;
+      } else if (pref?.emailEnabled) {
+        willChangeCount += 1;
+      }
+    }
+
+    return {
+      segment,
+      matchingCount: userIds.length,
+      willChangeCount,
+      skippedUnsubscribedCount,
+    };
+  }
+
+  // Aplicação em massa de fato — enable=true nunca reinscreve quem já deu
+  // unsubscribe (unsubscribedAt preenchido): esse é um sinal explícito do
+  // próprio usuário, uma ação administrativa em massa não sobrescreve isso.
+  // enable=false nunca toca unsubscribedAt (esse campo é só pro clique real
+  // de "cancelar e-mails", não pra ação do admin).
+  async applyAlertRollout(
+    adminId: string,
+    segment: MonitorAlertBulkSegment,
+    enable: boolean,
+  ) {
+    const userIds = await this.resolveAlertRolloutSegmentUserIds(segment);
+
+    let changedCount = 0;
+    if (userIds.length > 0) {
+      if (enable) {
+        const created = await this.database.monitorAlertPreference.createMany(
+          {
+            data: userIds.map((userId) => ({ userId, emailEnabled: true })),
+            skipDuplicates: true,
+          },
+        );
+        const updated = await this.database.monitorAlertPreference.updateMany(
+          {
+            where: { userId: { in: userIds }, unsubscribedAt: null },
+            data: { emailEnabled: true },
+          },
+        );
+        changedCount = created.count + updated.count;
+      } else {
+        const updated = await this.database.monitorAlertPreference.updateMany(
+          {
+            where: { userId: { in: userIds } },
+            data: { emailEnabled: false },
+          },
+        );
+        changedCount = updated.count;
+      }
+    }
+
+    await this.logAction(
+      adminId,
+      "alert_rollout_applied",
+      "MonitorAlertRolloutPolicy",
+      segment,
+      "ok",
+      { segment, enable, matchingCount: userIds.length, changedCount },
+    );
+
+    return { segment, enable, matchingCount: userIds.length, changedCount };
+  }
+
+  async getAlertRolloutPolicy() {
+    const policy = await this.database.monitorAlertRolloutPolicy.findUnique({
+      where: { id: "default" },
+    });
+    return (
+      policy ?? {
+        id: "default",
+        active: false,
+        segment: "ALL" as MonitorAlertBulkSegment,
+        cutoffAt: null,
+        lastAppliedAt: null,
+      }
+    );
+  }
+
+  async updateAlertRolloutPolicy(
+    adminId: string,
+    dto: UpdateAlertRolloutPolicyDto,
+  ) {
+    if (!ROLLOUT_POLICY_SEGMENTS.has(dto.segment)) {
+      throw new BadRequestException(
+        "segment must be ALL or PAID for the continuous rollout policy",
+      );
+    }
+
+    const updated = await this.database.monitorAlertRolloutPolicy.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        active: dto.active,
+        segment: dto.segment,
+        cutoffAt: dto.cutoffAt ?? null,
+        updatedByAdminId: adminId,
+      },
+      update: {
+        active: dto.active,
+        segment: dto.segment,
+        cutoffAt: dto.cutoffAt ?? null,
+        updatedByAdminId: adminId,
+      },
+    });
+
+    await this.logAction(
+      adminId,
+      "alert_rollout_policy_updated",
+      "MonitorAlertRolloutPolicy",
+      "default",
+      "ok",
+      { active: dto.active, segment: dto.segment, cutoffAt: dto.cutoffAt },
     );
 
     return updated;

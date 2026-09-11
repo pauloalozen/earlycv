@@ -5,11 +5,15 @@ import { redirect } from "next/navigation";
 
 import { buildAdminRedirect } from "@/lib/admin-ingestion-flow";
 import {
+  type AlertRolloutSegment,
+  applyAlertRollout,
   type DigestSchedule,
+  previewAlertRollout,
   resendAdminMonitorDigest,
   searchAdminMonitorUsers,
   sendMonitorDigestNow,
   trackAlertUser,
+  updateAlertRolloutPolicy,
   updateMonitorDigestContent,
   updateMonitorDigestSchedule,
 } from "@/lib/admin-monitor-api";
@@ -169,5 +173,64 @@ export async function resendDigestAction(formData: FormData) {
   revalidatePath(ROOT_REDIRECT_PATH);
   redirect(
     buildAdminRedirect(redirectPath, "success", "Digest reenfileirado."),
+  );
+}
+
+// Chamado direto pelo modal de confirmação (sem <form>), antes de aplicar
+// de fato — o admin precisa ver quantos usuários serão afetados antes de
+// confirmar uma ação em massa.
+export async function previewAlertRolloutAction(
+  segment: AlertRolloutSegment,
+  enable: boolean,
+) {
+  return previewAlertRollout(segment, enable);
+}
+
+export async function applyAlertRolloutAction(formData: FormData) {
+  const segment = String(formData.get("segment") ?? "") as AlertRolloutSegment;
+  const enable = formData.get("enable") === "true";
+  const redirectPath = String(
+    formData.get("redirectPath") ?? ROOT_REDIRECT_PATH,
+  );
+
+  try {
+    const result = await applyAlertRollout(segment, enable);
+    revalidatePath(ROOT_REDIRECT_PATH);
+    redirect(
+      buildAdminRedirect(
+        redirectPath,
+        "success",
+        `${result.changedCount} usuário(s) ${enable ? "ativado(s)" : "desativado(s)"} (${result.matchingCount} no segmento).`,
+      ),
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Falha ao aplicar em massa.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
+export async function updateAlertRolloutPolicyAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? ROOT_REDIRECT_PATH,
+  );
+  const active = formData.get("active") === "true";
+  const segment = String(formData.get("segment") ?? "ALL") as "ALL" | "PAID";
+  const cutoffAtRaw = String(formData.get("cutoffAt") ?? "").trim();
+  const cutoffAt = cutoffAtRaw
+    ? new Date(`${cutoffAtRaw}T23:59:59`).toISOString()
+    : null;
+
+  try {
+    await updateAlertRolloutPolicy({ active, segment, cutoffAt });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Falha ao salvar a política.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+
+  revalidatePath(ROOT_REDIRECT_PATH);
+  redirect(
+    buildAdminRedirect(redirectPath, "success", "Política de inscrição salva."),
   );
 }

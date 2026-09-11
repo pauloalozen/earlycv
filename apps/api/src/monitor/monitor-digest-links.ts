@@ -17,18 +17,41 @@ export function buildMonitorLogoUrl(): string {
   return `${getFrontendBaseUrl()}/favicon-192x192.png`;
 }
 
-export function buildMonitorDigestLink(
+// CTA "Ver minhas oportunidades" — única sem vaga específica, sempre vai
+// pra listagem do Alerta.
+export function buildMonitorDigestLink(digestId: string): string {
+  const params = new URLSearchParams({
+    utm_source: UTM_SOURCE,
+    utm_medium: UTM_MEDIUM,
+    utm_campaign: UTM_CAMPAIGN,
+    utm_content: digestId,
+  });
+  return `${getFrontendBaseUrl()}/alerta-vaga-certa?${params.toString()}`;
+}
+
+// Link de cada recomendação individual no e-mail — antes ia pra
+// /alerta-vaga-certa (a listagem inteira) com ?rec=<id> só como parâmetro
+// decorativo, sem levar pra vaga nenhuma. Agora vai direto pra página da
+// vaga (/radar/{slug}, mesma rota pública usada em qualquer outro lugar do
+// site) — jobSlug pode ser null pra vaga antiga sem slug gerado; nesse
+// caso cai no fallback da listagem em vez de gerar um link quebrado
+// /radar/null.
+export function buildMonitorJobLink(
+  jobSlug: string | null,
   digestId: string,
-  recommendationId?: string,
+  recommendationId: string,
 ): string {
   const params = new URLSearchParams({
     utm_source: UTM_SOURCE,
     utm_medium: UTM_MEDIUM,
     utm_campaign: UTM_CAMPAIGN,
     utm_content: digestId,
-    ...(recommendationId ? { rec: recommendationId } : {}),
+    rec: recommendationId,
   });
-  return `${getFrontendBaseUrl()}/alerta-vaga-certa?${params.toString()}`;
+  if (!jobSlug) {
+    return `${getFrontendBaseUrl()}/alerta-vaga-certa?${params.toString()}`;
+  }
+  return `${getFrontendBaseUrl()}/radar/${jobSlug}?${params.toString()}`;
 }
 
 export function buildMonitorUnsubscribeLink(token: string): string {

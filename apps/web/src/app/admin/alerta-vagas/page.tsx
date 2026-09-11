@@ -13,11 +13,13 @@ import {
 import { AdminShellHeader } from "@/app/admin/_components/admin-shell-header";
 import { AdminTokenState } from "@/app/admin/_components/admin-token-state";
 import {
+  type AlertRolloutPolicy,
   type DigestContent,
   type DigestEmailStats,
   type DigestFrequency,
   type DigestHistoryItem,
   type DigestSchedule,
+  getAlertRolloutPolicy,
   getMonitorDigestContent,
   getMonitorDigestHistory,
   getMonitorDigestSchedule,
@@ -30,6 +32,7 @@ import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { buttonVariants } from "../_components/admin-button";
+import { AlertRolloutSection } from "./_components/alert-rollout-section";
 import { TrackUserCombobox } from "./_components/track-user-combobox";
 import {
   resendDigestAction,
@@ -150,24 +153,27 @@ export default async function AdminAlertaVagasPage({
   let stats: DigestEmailStats;
   let schedule: DigestSchedule;
   let content: DigestContent;
+  let rolloutPolicy: AlertRolloutPolicy;
   try {
-    [trackedUsers, history, stats, schedule, content] = await Promise.all([
-      listTrackedAlertUsers({ query, limit: 20 }, token),
-      getMonitorDigestHistory(
-        {
-          userQuery: historyQuery,
-          source:
-            historySource === "MANUAL" || historySource === "AUTOMATIC"
-              ? historySource
-              : undefined,
-          limit: 20,
-        },
-        token,
-      ),
-      getMonitorDigestStats(token),
-      getMonitorDigestSchedule(token),
-      getMonitorDigestContent(token),
-    ]);
+    [trackedUsers, history, stats, schedule, content, rolloutPolicy] =
+      await Promise.all([
+        listTrackedAlertUsers({ query, limit: 20 }, token),
+        getMonitorDigestHistory(
+          {
+            userQuery: historyQuery,
+            source:
+              historySource === "MANUAL" || historySource === "AUTOMATIC"
+                ? historySource
+                : undefined,
+            limit: 20,
+          },
+          token,
+        ),
+        getMonitorDigestStats(token),
+        getMonitorDigestSchedule(token),
+        getMonitorDigestContent(token),
+        getAlertRolloutPolicy(token),
+      ]);
   } catch {
     const state = buildAdminStateModel("unexpected-error", ROOT_PATH);
     return (
@@ -199,6 +205,11 @@ export default async function AdminAlertaVagasPage({
       />
 
       <StatusBanner status={status} message={message} />
+
+      <AlertRolloutSection
+        policy={rolloutPolicy}
+        redirectPath={currentRedirectPath}
+      />
 
       {/* ── Elegibilidade e disparo manual ─────────────────────────── */}
       <section style={{ marginBottom: 40 }}>

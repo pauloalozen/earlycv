@@ -10,6 +10,7 @@ import { SavedJobsModule } from "../saved-jobs/saved-jobs.module";
 import { MonitorController } from "./monitor.controller";
 import { MonitorAccessController } from "./monitor-access.controller";
 import { MonitorAlertPreferenceService } from "./monitor-alert-preference.service";
+import { MonitorAlertRolloutReconciler } from "./monitor-alert-rollout.reconciler";
 import { MonitorDigestScheduler } from "./monitor-digest.scheduler";
 import { MonitorDigestWorker } from "./monitor-digest.worker";
 import { MonitorDigestContentService } from "./monitor-digest-content.service";
@@ -49,6 +50,7 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
     MonitorProfileMatchService,
     MonitorProfileMatchingWorker,
     MonitorAlertPreferenceService,
+    MonitorAlertRolloutReconciler,
     MonitorDigestContentService,
     MonitorDigestEmailService,
     MonitorDigestScheduler,

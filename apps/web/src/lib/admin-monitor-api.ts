@@ -629,3 +629,85 @@ export function updateMonitorDigestContent(dto: DigestContent, token?: string) {
     body: JSON.stringify(dto),
   });
 }
+
+export type AlertRolloutSegment =
+  | "ALL"
+  | "PAID"
+  | "TRACKED_PAID"
+  | "TRACKED_ONLY";
+
+export type AlertRolloutPreview = {
+  segment: AlertRolloutSegment;
+  matchingCount: number;
+  willChangeCount: number;
+  skippedUnsubscribedCount: number;
+};
+
+export type AlertRolloutApplyResult = {
+  segment: AlertRolloutSegment;
+  enable: boolean;
+  matchingCount: number;
+  changedCount: number;
+};
+
+export type AlertRolloutPolicy = {
+  id: string;
+  active: boolean;
+  segment: AlertRolloutSegment;
+  cutoffAt: string | null;
+  lastAppliedAt: string | null;
+};
+
+export function previewAlertRollout(
+  segment: AlertRolloutSegment,
+  enable: boolean,
+  token?: string,
+) {
+  const qs = new URLSearchParams({ segment, enable: String(enable) });
+  return apiRequest<AlertRolloutPreview>(
+    `/admin/monitor/alert-rollout/preview?${qs.toString()}`,
+    token,
+  );
+}
+
+export function applyAlertRollout(
+  segment: AlertRolloutSegment,
+  enable: boolean,
+  token?: string,
+) {
+  return apiRequest<AlertRolloutApplyResult>(
+    "/admin/monitor/alert-rollout/apply",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ segment, enable }),
+    },
+  );
+}
+
+export function getAlertRolloutPolicy(token?: string) {
+  return apiRequest<AlertRolloutPolicy>(
+    "/admin/monitor/alert-rollout/policy",
+    token,
+  );
+}
+
+export function updateAlertRolloutPolicy(
+  dto: {
+    active: boolean;
+    segment: "ALL" | "PAID";
+    cutoffAt: string | null;
+  },
+  token?: string,
+) {
+  return apiRequest<AlertRolloutPolicy>(
+    "/admin/monitor/alert-rollout/policy",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dto),
+    },
+  );
+}
