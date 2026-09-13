@@ -12,7 +12,13 @@ function createFixture() {
   >();
   const digests = new Map<
     string,
-    { id: string; userId: string; providerMessageId: string }
+    {
+      id: string;
+      userId: string;
+      providerMessageId: string;
+      status: string;
+      sentAt: Date | null;
+    }
   >();
   const preferenceUpdates: { userId: string; data: Record<string, unknown> }[] =
     [];
@@ -21,6 +27,7 @@ function createFixture() {
     userId: string | null;
     metadata: Record<string, unknown>;
   }[] = [];
+  const digestUpdates: { id: string; data: Record<string, unknown> }[] = [];
 
   const database = {
     monitorDigest: {
@@ -28,6 +35,22 @@ function createFixture() {
         Array.from(digests.values()).find(
           (d) => d.providerMessageId === where.providerMessageId,
         ) ?? null,
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        digests.get(where.id) ?? null,
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const current = digests.get(where.id);
+        assert.ok(current, `digest ${where.id} must exist`);
+        digestUpdates.push({ id: where.id, data });
+        const next = { ...current, ...data };
+        digests.set(where.id, next);
+        return next;
+      },
     },
     monitorDigestEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -87,13 +110,25 @@ function createFixture() {
 
   return {
     database,
+    digestUpdates,
     digests,
     events,
     preferenceUpdates,
     recordedEvents,
     service,
-    seedDigest(id: string, userId: string, providerMessageId: string) {
-      digests.set(id, { id, userId, providerMessageId });
+    seedDigest(
+      id: string,
+      userId: string,
+      providerMessageId: string,
+      overrides: { status?: string; sentAt?: Date | null } = {},
+    ) {
+      digests.set(id, {
+        id,
+        userId,
+        providerMessageId,
+        status: overrides.status ?? "SENT",
+        sentAt: overrides.sentAt ?? new Date(),
+      });
     },
   };
 }
@@ -239,6 +274,191 @@ test("a payload without email_id is rejected", async () => {
   const result = await fixture.service.processEvent("svix-1", {
     type: "email.delivered",
     data: {},
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, "missing_email_id");
+});
+
+// --- processSesEvent (SNS/SES) -------------------------------------------
+
+test("a SES Delivery event is correlated by the digestId tag (works even without a matching providerMessageId)", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Delivery",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
+  });
+
+  assert.equal(result.processed, true);
+  assert.equal(fixture.events.get("sns-msg-1")?.digestId, "digest-1");
+  assert.deepEqual(
+    fixture.recordedEvents.map((e) => e.eventName),
+    ["monitor_digest_delivered"],
+  );
+  assert.equal(fixture.recordedEvents[0].metadata.provider, "SES");
+});
+
+test("a SES event with correlationType=MONITOR_DIGEST but no correlationId falls back to correlating by providerMessageId, same as Resend", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Open",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: { correlationType: ["MONITOR_DIGEST"] },
+    },
+  });
+
+  assert.equal(result.processed, true);
+  assert.equal(fixture.events.get("sns-msg-1")?.digestId, "digest-1");
+});
+
+test("a SES event with no correlationType tag at all is ignored safely — never tries to locate a MonitorDigest, never errors", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Delivery",
+    mail: { messageId: "email_ses_abc" },
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, "unsupported_correlation_type");
+  assert.equal(fixture.events.size, 0);
+});
+
+test("a SES event with a foreign correlationType (future category, e.g. MARKETING) is ignored safely", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Delivery",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: { correlationType: ["MARKETING"], correlationId: ["campaign-1"] },
+    },
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, "unsupported_correlation_type");
+  assert.equal(fixture.events.size, 0);
+});
+
+test("the same SNS MessageId delivered twice is processed only once — idempotent", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+  const payload = {
+    eventType: "Delivery",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
+  };
+
+  const first = await fixture.service.processSesEvent("sns-msg-1", payload);
+  const second = await fixture.service.processSesEvent("sns-msg-1", payload);
+
+  assert.equal(first.processed, true);
+  assert.equal(second.processed, false);
+  assert.equal(second.reason, "duplicate");
+});
+
+test("a Send event resolves a digest stuck in OUTCOME_UNKNOWN to SENT", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc", {
+    status: "OUTCOME_UNKNOWN",
+    sentAt: null,
+  });
+
+  await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Send",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
+  });
+
+  const updated = fixture.digests.get("digest-1");
+  assert.equal(updated?.status, "SENT");
+  assert.ok(updated?.sentAt);
+  assert.deepEqual(fixture.digestUpdates[0].data.outcomeUnknownAt, null);
+});
+
+test("a Reject event resolves a digest stuck in OUTCOME_UNKNOWN to FAILED", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc", {
+    status: "OUTCOME_UNKNOWN",
+  });
+
+  await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Reject",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
+  });
+
+  assert.equal(fixture.digests.get("digest-1")?.status, "FAILED");
+});
+
+test("a Bounce/Complaint event never touches status when the digest is NOT in OUTCOME_UNKNOWN (already SENT) — only disables the preference, as before", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc", {
+    status: "SENT",
+  });
+
+  await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Bounce",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
+  });
+
+  assert.equal(fixture.digests.get("digest-1")?.status, "SENT");
+  assert.equal(fixture.preferenceUpdates.length, 1);
+  assert.equal(fixture.preferenceUpdates[0].data.emailEnabled, false);
+});
+
+test("an unsupported SES eventType is rejected without creating an event", async () => {
+  const fixture = createFixture();
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "RenderingFailure",
+    mail: { messageId: "email_ses_abc" },
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, "unsupported_type");
+});
+
+test("a SES payload without mail.messageId is rejected", async () => {
+  const fixture = createFixture();
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Delivery",
+    mail: { tags: { correlationType: ["MONITOR_DIGEST"] } },
   });
 
   assert.equal(result.processed, false);

@@ -8,8 +8,10 @@ import {
   type AlertRolloutSegment,
   applyAlertRollout,
   type DigestSchedule,
+  type EmailBulkSendMode,
   previewAlertRollout,
   resendAdminMonitorDigest,
+  type SesRolloutSegment,
   searchAdminMonitorUsers,
   sendMonitorDigestNow,
   setAlertPreference,
@@ -143,6 +145,12 @@ export async function updateDigestScheduleAction(formData: FormData) {
   const dailyHour = Number(formData.get("dailyHour"));
   const dailyMinute = Number(formData.get("dailyMinute"));
   const weeklyDayOfWeek = Number(formData.get("weeklyDayOfWeek"));
+  const sesMode = String(formData.get("sesMode") ?? "LEGACY_RESEND");
+  const sesRolloutSegmentRaw = formData.get("sesRolloutSegment");
+  const sesRolloutSegment =
+    sesRolloutSegmentRaw && sesRolloutSegmentRaw !== ""
+      ? (String(sesRolloutSegmentRaw) as SesRolloutSegment)
+      : null;
 
   try {
     await updateMonitorDigestSchedule({
@@ -150,6 +158,8 @@ export async function updateDigestScheduleAction(formData: FormData) {
       dailyMinute,
       frequency: frequency as DigestSchedule["frequency"],
       weeklyDayOfWeek,
+      sesMode: sesMode as EmailBulkSendMode,
+      sesRolloutSegment,
     });
   } catch (error) {
     const message =

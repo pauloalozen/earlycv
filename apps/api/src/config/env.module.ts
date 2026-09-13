@@ -20,6 +20,28 @@ export type AppEnv = {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_CALLBACK_URL: string;
+  // Amazon SES (digest do Monitor/JOB_ALERT) — todos opcionais no schema
+  // porque só são exigidos quando SES_EMAIL_ENABLED=true; essa validação
+  // condicional acontece em EmailConfigService.assertSesConfigured(), não
+  // aqui, pra nunca derrubar o boot da API em ambiente sem SES configurado
+  // (dev/test, ou produção antes do rollout). Nunca logar
+  // AWS_SES_ACCESS_KEY_ID/AWS_SES_SECRET_ACCESS_KEY.
+  SES_EMAIL_ENABLED: boolean;
+  AWS_SES_REGION?: string;
+  AWS_SES_ACCESS_KEY_ID?: string;
+  AWS_SES_SECRET_ACCESS_KEY?: string;
+  // Genérico de propósito — um único Configuration Set pra todo envio em
+  // massa via SES (JOB_ALERT hoje; PRODUCT_ANNOUNCEMENT/MARKETING/
+  // ADMIN_COMMUNICATION quando existirem), nunca nomeado por categoria.
+  AWS_SES_CONFIGURATION_SET?: string;
+  // Perfil de remetente POR CATEGORIA — só JOB_ALERT nesta entrega. Uma
+  // categoria nova ganha suas próprias 3 variáveis (ex.:
+  // AWS_SES_MARKETING_FROM_EMAIL), nunca reaproveita as de outra.
+  AWS_SES_JOB_ALERT_FROM_EMAIL?: string;
+  AWS_SES_JOB_ALERT_FROM_NAME?: string;
+  AWS_SES_JOB_ALERT_REPLY_TO?: string;
+  AWS_SES_CUSTOM_MAIL_FROM_DOMAIN?: string;
+  AWS_SES_SNS_TOPIC_ARN?: string;
 };
 
 export const APP_ENV = Symbol("APP_ENV");
@@ -72,6 +94,19 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     LINKEDIN_CLIENT_ID: { optional: true },
     LINKEDIN_CLIENT_SECRET: { optional: true },
     LINKEDIN_CALLBACK_URL: { optional: true },
+    SES_EMAIL_ENABLED: {
+      default: "false",
+      parse: (value: string) => envToBoolean(value),
+    },
+    AWS_SES_REGION: { optional: true },
+    AWS_SES_ACCESS_KEY_ID: { optional: true },
+    AWS_SES_SECRET_ACCESS_KEY: { optional: true },
+    AWS_SES_CONFIGURATION_SET: { optional: true },
+    AWS_SES_JOB_ALERT_FROM_EMAIL: { optional: true },
+    AWS_SES_JOB_ALERT_FROM_NAME: { optional: true },
+    AWS_SES_JOB_ALERT_REPLY_TO: { optional: true },
+    AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: { optional: true },
+    AWS_SES_SNS_TOPIC_ARN: { optional: true },
   });
 
   const env = readEnv(source);
@@ -90,6 +125,28 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     JWT_ACCESS_TTL: env.JWT_ACCESS_TTL,
     JWT_REFRESH_SECRET: env.JWT_REFRESH_SECRET as string,
     JWT_REFRESH_TTL: env.JWT_REFRESH_TTL,
+    SES_EMAIL_ENABLED: env.SES_EMAIL_ENABLED,
+    AWS_SES_REGION: env.AWS_SES_REGION as string | undefined,
+    AWS_SES_ACCESS_KEY_ID: env.AWS_SES_ACCESS_KEY_ID as string | undefined,
+    AWS_SES_SECRET_ACCESS_KEY: env.AWS_SES_SECRET_ACCESS_KEY as
+      | string
+      | undefined,
+    AWS_SES_CONFIGURATION_SET: env.AWS_SES_CONFIGURATION_SET as
+      | string
+      | undefined,
+    AWS_SES_JOB_ALERT_FROM_EMAIL: env.AWS_SES_JOB_ALERT_FROM_EMAIL as
+      | string
+      | undefined,
+    AWS_SES_JOB_ALERT_FROM_NAME: env.AWS_SES_JOB_ALERT_FROM_NAME as
+      | string
+      | undefined,
+    AWS_SES_JOB_ALERT_REPLY_TO: env.AWS_SES_JOB_ALERT_REPLY_TO as
+      | string
+      | undefined,
+    AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: env.AWS_SES_CUSTOM_MAIL_FROM_DOMAIN as
+      | string
+      | undefined,
+    AWS_SES_SNS_TOPIC_ARN: env.AWS_SES_SNS_TOPIC_ARN as string | undefined,
   };
 }
 

@@ -15,10 +15,7 @@ import * as argon2 from "argon2";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
-import {
-  EMAIL_DELIVERY_PORT,
-  type EmailDeliveryPort,
-} from "../email/email-delivery.port";
+import { EMAIL_SERVICE, type EmailService } from "../email/email.types";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
@@ -81,8 +78,8 @@ export class AuthService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(JwtService) private readonly jwtService: JwtService,
     @Inject(APP_ENV) private readonly env: AppEnv,
-    @Inject(EMAIL_DELIVERY_PORT)
-    private readonly emailDelivery: EmailDeliveryPort,
+    @Inject(EMAIL_SERVICE)
+    private readonly emailService: EmailService,
     @Inject(BusinessFunnelEventService)
     private readonly funnelEvents: Pick<
       BusinessFunnelEventService,
@@ -508,11 +505,13 @@ export class AuthService {
     const resetLink = `${frontendUrl}/redefinir-senha?token=${rawToken}`;
     const logoUrl = "https://earlycv.com.br/assets/logo.png";
 
-    await this.emailDelivery.send({
-      to: user.email,
-      subject: "Redefinir sua senha — EarlyCV",
-      text: `Você solicitou a redefinição de senha.\n\nClique no link abaixo para criar uma nova senha (válido por 1 hora):\n\n${resetLink}\n\nSe não foi você, ignore este email.`,
-      html: `<!DOCTYPE html>
+    await this.emailService.send({
+      category: "AUTHENTICATION",
+      message: {
+        to: user.email,
+        subject: "Redefinir sua senha — EarlyCV",
+        text: `Você solicitou a redefinição de senha.\n\nClique no link abaixo para criar uma nova senha (válido por 1 hora):\n\n${resetLink}\n\nSe não foi você, ignore este email.`,
+        html: `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -557,6 +556,7 @@ export class AuthService {
   </table>
 </body>
 </html>`,
+      },
     });
 
     return { ok: true };
@@ -711,11 +711,13 @@ export class AuthService {
 
     const logoUrl = "https://earlycv.com.br/assets/logo.png";
 
-    await this.emailDelivery.send({
-      to: email,
-      subject: "Seu código de verificação EarlyCV",
-      text: `Seu código de verificação é ${code}. Ele expira em 15 minutos.`,
-      html: `<!DOCTYPE html>
+    await this.emailService.send({
+      category: "AUTHENTICATION",
+      message: {
+        to: email,
+        subject: "Seu código de verificação EarlyCV",
+        text: `Seu código de verificação é ${code}. Ele expira em 15 minutos.`,
+        html: `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -757,6 +759,7 @@ export class AuthService {
   </table>
 </body>
 </html>`,
+      },
     });
   }
 

@@ -32,10 +32,26 @@ function buildRecommendation(
   };
 }
 
+type SentMessage = {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  headers?: Record<string, string>;
+  idempotencyKey?: string;
+  tags?: Record<string, string>;
+};
+
 function createFixture(options: {
   recommendationCount: number;
   emailEnabled?: boolean;
   entitled?: boolean;
+  // Default SES_ROLLOUT+isSesEnabled=true: a maioria destes testes é sobre
+  // o CONTEÚDO do e-mail (assunto, links, headers), não sobre roteamento
+  // por modo — exercitam o caminho EmailService (SES) por padrão. Os
+  // testes de modo, no fim do arquivo, sobrescrevem isso explicitamente.
+  sesMode?: "LEGACY_RESEND" | "SES_ROLLOUT" | "SES_LIVE" | "PAUSED";
+  sesEnabled?: boolean;
 }) {
   const digest = {
     id: "digest-1",
@@ -47,14 +63,10 @@ function createFixture(options: {
     ),
   };
 
-  const sendCalls: {
-    to: string;
-    subject: string;
-    text: string;
-    html?: string;
-    headers?: Record<string, string>;
-    idempotencyKey?: string;
-  }[] = [];
+  const sendCalls: SentMessage[] = [];
+  const sendCategories: string[] = [];
+  const resendCalls: SentMessage[] = [];
+  let sendResultOverride: Record<string, unknown> | null = null;
 
   const database = {
     monitorDigest: {
@@ -71,20 +83,41 @@ function createFixture(options: {
     monitorDigestEmailContent: {
       findUnique: async () => null,
     },
+    monitorDigestScheduleConfig: {
+      findUnique: async () => ({ sesMode: options.sesMode ?? "SES_ROLLOUT" }),
+    },
   };
 
-  const emailDelivery = {
-    send: async (message: {
-      to: string;
-      subject: string;
-      text: string;
-      html?: string;
-      headers?: Record<string, string>;
-      idempotencyKey?: string;
-    }) => {
-      sendCalls.push(message);
-      return { providerMessageId: "email_abc123" };
+  const emailService = {
+    send: async (params: { category: string; message: SentMessage }) => {
+      sendCalls.push(params.message);
+      sendCategories.push(params.category);
+      return (
+        sendResultOverride ?? {
+          outcome: "SENT",
+          provider: "SES",
+          providerMessageId: "email_abc123",
+        }
+      );
     },
+  };
+
+  const resendAdapter = {
+    name: "RESEND" as const,
+    send: async (message: SentMessage) => {
+      resendCalls.push(message);
+      return (
+        sendResultOverride ?? {
+          outcome: "SENT",
+          provider: "RESEND",
+          providerMessageId: "resend_abc123",
+        }
+      );
+    },
+  };
+
+  const emailConfig = {
+    isSesEnabled: () => options.sesEnabled ?? true,
   };
 
   const entitlementService = {
@@ -96,11 +129,22 @@ function createFixture(options: {
 
   const service = new MonitorDigestEmailService(
     database as never,
-    emailDelivery as never,
+    emailService as never,
+    resendAdapter as never,
+    emailConfig as never,
     entitlementService as never,
   );
 
-  return { database, sendCalls, service };
+  return {
+    database,
+    sendCalls,
+    sendCategories,
+    resendCalls,
+    service,
+    setSendResult(result: Record<string, unknown>) {
+      sendResultOverride = result;
+    },
+  };
 }
 
 test("sends the digest email and returns the provider's message id", async () => {
@@ -108,7 +152,13 @@ test("sends the digest email and returns the provider's message id", async () =>
 
   const result = await service.sendDigest("digest-1");
 
-  assert.deepEqual(result, { sent: true, providerMessageId: "email_abc123" });
+  assert.equal(result.sent, true);
+  assert.equal((result as { outcome: string }).outcome, "SENT");
+  assert.equal((result as { provider: string }).provider, "SES");
+  assert.equal(
+    (result as { providerMessageId: string }).providerMessageId,
+    "email_abc123",
+  );
   assert.equal(sendCalls.length, 1);
   assert.equal(sendCalls[0].to, "user@example.com");
 });
@@ -268,4 +318,111 @@ test("does not send (and reports not_entitled) when the user has lost Monitor en
 
   assert.deepEqual(result, { sent: false, skippedReason: "not_entitled" });
   assert.equal(sendCalls.length, 0);
+});
+
+test("calls EmailService with category JOB_ALERT and correlationType/correlationId tags for provider-side correlation", async () => {
+  const { sendCalls, sendCategories, service } = createFixture({
+    recommendationCount: 1,
+  });
+
+  await service.sendDigest("digest-1");
+
+  assert.deepEqual(sendCategories, ["JOB_ALERT"]);
+  assert.equal(sendCalls[0].tags?.correlationType, "MONITOR_DIGEST");
+  assert.equal(sendCalls[0].tags?.correlationId, "digest-1");
+});
+
+test("propagates the provider's outcome (FAILED/OUTCOME_UNKNOWN) untouched — the worker decides the MonitorDigest status, not this service", async () => {
+  const { service, setSendResult } = createFixture({
+    recommendationCount: 1,
+  });
+  setSendResult({
+    outcome: "OUTCOME_UNKNOWN",
+    provider: "SES",
+    providerMessageId: null,
+    errorMessage: "socket hang up",
+  });
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.equal(result.sent, true);
+  assert.equal((result as { outcome: string }).outcome, "OUTCOME_UNKNOWN");
+  assert.equal(
+    (result as { errorMessage?: string }).errorMessage,
+    "socket hang up",
+  );
+});
+
+// sesMode (MonitorDigestScheduleConfig) decide POR QUAL CAMINHO o e-mail
+// sai — lido de novo aqui (não só no scheduler), porque pode ter mudado
+// entre o scheduler criar o PENDING e o worker processar.
+
+test("sesMode=LEGACY_RESEND: envia via o adapter Resend direto, nunca chama EmailService/SES", async () => {
+  const { sendCalls, resendCalls, service } = createFixture({
+    recommendationCount: 1,
+    sesMode: "LEGACY_RESEND",
+  });
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.equal(result.sent, true);
+  assert.equal((result as { provider: string }).provider, "RESEND");
+  assert.equal(sendCalls.length, 0);
+  assert.equal(resendCalls.length, 1);
+  assert.equal(resendCalls[0].to, "user@example.com");
+});
+
+test("sesMode=SES_LIVE: envia via EmailService (SES), mesmo caminho que SES_ROLLOUT", async () => {
+  const { sendCalls, resendCalls, service } = createFixture({
+    recommendationCount: 1,
+    sesMode: "SES_LIVE",
+  });
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.equal(result.sent, true);
+  assert.equal((result as { provider: string }).provider, "SES");
+  assert.equal(sendCalls.length, 1);
+  assert.equal(resendCalls.length, 0);
+});
+
+test("sesMode=PAUSED: não envia por nenhum caminho — skippedReason=ses_mode_paused", async () => {
+  const { sendCalls, resendCalls, service } = createFixture({
+    recommendationCount: 1,
+    sesMode: "PAUSED",
+  });
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.deepEqual(result, { sent: false, skippedReason: "ses_mode_paused" });
+  assert.equal(sendCalls.length, 0);
+  assert.equal(resendCalls.length, 0);
+});
+
+test("sesMode=SES_ROLLOUT mas SES_EMAIL_ENABLED=false (infra não pronta): trata como pausado, nunca cai pro Resend", async () => {
+  const { sendCalls, resendCalls, service } = createFixture({
+    recommendationCount: 1,
+    sesMode: "SES_ROLLOUT",
+    sesEnabled: false,
+  });
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.deepEqual(result, { sent: false, skippedReason: "ses_not_available" });
+  assert.equal(sendCalls.length, 0);
+  assert.equal(resendCalls.length, 0);
+});
+
+test("sem a linha singleton de MonitorDigestScheduleConfig: cai pro default seguro LEGACY_RESEND (defesa em profundidade)", async () => {
+  const { database, sendCalls, resendCalls, service } = createFixture({
+    recommendationCount: 1,
+  });
+  database.monitorDigestScheduleConfig.findUnique = async () => null;
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.equal(result.sent, true);
+  assert.equal((result as { provider: string }).provider, "RESEND");
+  assert.equal(sendCalls.length, 0);
+  assert.equal(resendCalls.length, 1);
 });

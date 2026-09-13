@@ -14,13 +14,43 @@ const RESEND_EVENT_TYPE_MAP: Record<string, MonitorDigestEventType> = {
   "email.complained": "COMPLAINED",
 };
 
+// SES publica "Send"/"Reject" além dos 5 tipos que o Resend também tem —
+// são os únicos relevantes pra resolver um MonitorDigest preso em
+// OUTCOME_UNKNOWN (ver resolveOutcomeUnknownIfApplicable abaixo). Resend
+// nunca precisou disso porque a resposta HTTP síncrona dele já confirma.
+const SES_EVENT_TYPE_MAP: Record<string, MonitorDigestEventType> = {
+  Send: "SENT",
+  Delivery: "DELIVERED",
+  Open: "OPENED",
+  Click: "CLICKED",
+  Bounce: "BOUNCED",
+  Complaint: "COMPLAINED",
+  Reject: "REJECTED",
+};
+
 const POSTHOG_EVENT_NAME: Record<MonitorDigestEventType, string> = {
   DELIVERED: "monitor_digest_delivered",
   OPENED: "monitor_digest_opened",
   CLICKED: "monitor_digest_clicked",
   BOUNCED: "monitor_digest_bounced",
   COMPLAINED: "monitor_digest_complained",
+  SENT: "monitor_digest_provider_accepted",
+  REJECTED: "monitor_digest_provider_rejected",
 };
+
+// Eventos que CONFIRMAM o que aconteceu com o envio — usados só pra
+// resolver um MonitorDigest que ficou em OUTCOME_UNKNOWN (timeout/erro de
+// rede na resposta síncrona). SENT/DELIVERED confirmam que foi aceito;
+// BOUNCED/COMPLAINED/REJECTED confirmam que não foi entregue.
+const OUTCOME_UNKNOWN_RESOLVES_TO_SENT = new Set<MonitorDigestEventType>([
+  "SENT",
+  "DELIVERED",
+]);
+const OUTCOME_UNKNOWN_RESOLVES_TO_FAILED = new Set<MonitorDigestEventType>([
+  "BOUNCED",
+  "COMPLAINED",
+  "REJECTED",
+]);
 
 export type ResendWebhookPayload = {
   type: string;
@@ -32,9 +62,29 @@ export type ResendWebhookPayload = {
   };
 };
 
+// Formato documentado pela AWS ("Contents of event data that Amazon SES
+// publishes") — só os campos que este service de fato usa.
+export type SesEventPayload = {
+  eventType: string;
+  mail?: {
+    messageId?: string;
+    timestamp?: string;
+    // Cada tag pode ter múltiplos valores (por isso array) — nós só
+    // emitimos um valor por tag ao enviar (ver email.types.ts), mas o
+    // formato do lado da AWS sempre é lista.
+    tags?: Record<string, string[]>;
+  };
+  click?: { link?: string };
+  [key: string]: unknown;
+};
+
 export type ProcessWebhookResult = {
   processed: boolean;
-  reason?: "duplicate" | "unsupported_type" | "missing_email_id";
+  reason?:
+    | "duplicate"
+    | "unsupported_type"
+    | "missing_email_id"
+    | "unsupported_correlation_type";
 };
 
 @Injectable()
@@ -85,6 +135,7 @@ export class MonitorDigestWebhookService {
           providerMessageId,
           providerEventId: svixId,
           type: eventType,
+          provider: "RESEND",
           metadataJson: (payload.data ?? {}) as Prisma.InputJsonValue,
           occurredAt: payload.created_at
             ? new Date(payload.created_at)
@@ -111,15 +162,156 @@ export class MonitorDigestWebhookService {
       });
     }
 
-    await this.recordPosthogEvent(eventType, digest, payload);
+    await this.recordPosthogEvent(eventType, digest, "RESEND", {
+      link: payload.data?.link,
+      routePath: "/api/monitor/webhooks/resend",
+    });
 
     return { processed: true };
+  }
+
+  // Evento SES via SNS (ver monitor-public.controller.ts e
+  // ses-webhook-verifier.ts — assinatura/TopicArn já validados antes de
+  // chegar aqui). snsMessageId é a chave de idempotência (equivalente ao
+  // svix-id do Resend): SNS pode reentregar a mesma notificação, sempre
+  // com o mesmo MessageId de topo.
+  async processSesEvent(
+    snsMessageId: string,
+    payload: SesEventPayload,
+  ): Promise<ProcessWebhookResult> {
+    const eventType = SES_EVENT_TYPE_MAP[payload.eventType];
+    if (!eventType) {
+      return { processed: false, reason: "unsupported_type" };
+    }
+
+    // Este webhook só processa e-mails do Monitor (correlationType ===
+    // "MONITOR_DIGEST", setado em monitor-digest-email.service.ts). Toda
+    // categoria de envio em massa via SES usa o mesmo Configuration
+    // Set/tópico SNS (ver EmailConfigService.getSesSenderProfile) — um
+    // correlationType ausente ou de outra categoria (futuro
+    // PRODUCT_ANNOUNCEMENT/MARKETING/ADMIN_COMMUNICATION) é ignorado com
+    // segurança aqui: nunca tenta localizar MonitorDigest, nunca grava
+    // MonitorDigestEvent, nunca responde erro — cada categoria futura terá
+    // seu próprio processamento de evento, quando existir.
+    const correlationType = payload.mail?.tags?.correlationType?.[0];
+    if (correlationType !== "MONITOR_DIGEST") {
+      return { processed: false, reason: "unsupported_correlation_type" };
+    }
+
+    const providerMessageId = payload.mail?.messageId;
+    if (!providerMessageId) {
+      return { processed: false, reason: "missing_email_id" };
+    }
+
+    // Correlação: tag correlationId primeiro (sobrevive mesmo se
+    // providerMessageId nunca foi persistido — caso clássico de
+    // OUTCOME_UNKNOWN, onde a resposta síncrona do SendEmailCommand se
+    // perdeu antes de gravarmos o MessageId), providerMessageId como
+    // fallback (mesmo padrão do Resend).
+    const correlationId = payload.mail?.tags?.correlationId?.[0];
+    const digest = correlationId
+      ? await this.database.monitorDigest.findUnique({
+          where: { id: correlationId },
+        })
+      : await this.database.monitorDigest.findFirst({
+          where: { providerMessageId },
+        });
+
+    if (!digest) {
+      this.logger.warn(
+        `ses digest webhook: no MonitorDigest found (tag correlationId=${correlationId ?? "none"}, providerMessageId=${providerMessageId}, type=${payload.eventType})`,
+      );
+    }
+
+    try {
+      await this.database.monitorDigestEvent.create({
+        data: {
+          digestId: digest?.id ?? null,
+          providerMessageId,
+          providerEventId: snsMessageId,
+          type: eventType,
+          provider: "SES",
+          metadataJson: payload as unknown as Prisma.InputJsonValue,
+          occurredAt: payload.mail?.timestamp
+            ? new Date(payload.mail.timestamp)
+            : new Date(),
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return { processed: false, reason: "duplicate" };
+      }
+      throw error;
+    }
+
+    if (digest) {
+      await this.resolveOutcomeUnknownIfApplicable(digest, eventType);
+    }
+
+    if ((eventType === "BOUNCED" || eventType === "COMPLAINED") && digest) {
+      // Mesma higiene de lista que o Resend já faz.
+      await this.database.monitorAlertPreference.updateMany({
+        where: { userId: digest.userId },
+        data: { emailEnabled: false, unsubscribedAt: new Date() },
+      });
+    }
+
+    await this.recordPosthogEvent(eventType, digest, "SES", {
+      link: payload.click?.link,
+      routePath: "/api/monitor/webhooks/ses",
+    });
+
+    return { processed: true };
+  }
+
+  // Só age se o digest ainda estiver em OUTCOME_UNKNOWN — pra qualquer
+  // outro status (já SENT/FAILED/SKIPPED), o evento só é registrado em
+  // MonitorDigestEvent (acima) pra observabilidade, sem mexer no status.
+  // Isto é o que evita o digest ficar preso esperando a janela do
+  // MonitorDigestOutcomeReconciler quando o provider já respondeu.
+  private async resolveOutcomeUnknownIfApplicable(
+    digest: { id: string; status: string; sentAt: Date | null },
+    eventType: MonitorDigestEventType,
+  ) {
+    if (digest.status !== "OUTCOME_UNKNOWN") {
+      return;
+    }
+
+    if (OUTCOME_UNKNOWN_RESOLVES_TO_SENT.has(eventType)) {
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "SENT",
+          sentAt: digest.sentAt ?? new Date(),
+          provider: "SES",
+          outcomeUnknownAt: null,
+          lastError: null,
+        },
+      });
+      return;
+    }
+
+    if (OUTCOME_UNKNOWN_RESOLVES_TO_FAILED.has(eventType)) {
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "FAILED",
+          provider: "SES",
+          outcomeUnknownAt: null,
+          lastError: `outcome resolved via ${eventType} event`,
+        },
+      });
+    }
   }
 
   private async recordPosthogEvent(
     eventType: MonitorDigestEventType,
     digest: { id: string; userId: string } | null,
-    payload: ResendWebhookPayload,
+    provider: "RESEND" | "SES",
+    extra: { link?: string; routePath: string },
   ) {
     const userId = digest?.userId ?? null;
     const digestId = digest?.id ?? null;
@@ -138,6 +330,7 @@ export class MonitorDigestWebhookService {
           eventVersion: 1,
           metadata: {
             digestId,
+            provider,
             product_origin: "monitor_email",
             ...(accessType ? { monitor_access_type: accessType } : {}),
             // Abertura é indicativa, nunca "leitura real" — Apple Mail
@@ -145,8 +338,8 @@ export class MonitorDigestWebhookService {
             // open rate. Documentado aqui pra quem for consumir o evento
             // no PostHog não reinterpretar como confirmação de leitura.
             ...(eventType === "OPENED" ? { indicative: true } : {}),
-            ...(eventType === "CLICKED" && payload.data?.link
-              ? { link: payload.data.link }
+            ...(eventType === "CLICKED" && extra.link
+              ? { link: extra.link }
               : {}),
           },
         },
@@ -154,7 +347,7 @@ export class MonitorDigestWebhookService {
           correlationId: `monitor-digest-webhook:${digestId ?? "unknown"}`,
           ip: null,
           requestId: `monitor-digest-webhook:${digestId ?? "unknown"}`,
-          routePath: "/api/monitor/webhooks/resend",
+          routePath: extra.routePath,
           sessionInternalId: null,
           sessionPublicToken: null,
           userAgentHash: null,

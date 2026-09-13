@@ -1,0 +1,15 @@
+-- Drift pré-existente entre schema.prisma e o histórico de migrations,
+-- detectado incidentalmente pelo `prisma migrate dev` ao gerar a migration
+-- de e-mail multi-provider (20260913143816_email_multi_provider_ses) — não
+-- relacionado a e-mail/Monitor. Isolado nesta migration própria por
+-- pedido explícito: uma migration de e-mail não deve carregar correção
+-- incidental de drift de outro domínio. Sem efeito em dado, só normaliza
+-- o nome do índice.
+--
+-- IF EXISTS: o drift só existia no banco de teste local onde a migration
+-- original foi gerada (nome antigo do índice) — outros bancos (homolog,
+-- e presumivelmente produção) já tinham o nome novo desde sempre. Sem o
+-- IF EXISTS, `prisma migrate deploy` falha com "relation ... does not
+-- exist" em qualquer banco que não tenha esse drift específico.
+-- RenameIndex
+ALTER INDEX IF EXISTS "TalentExperienceObservation_talentProfileId_cvStructuredP_key" RENAME TO "TalentExperienceObservation_talentProfileId_cvStructuredPro_key";

@@ -5,6 +5,7 @@ import { Cron } from "@nestjs/schedule";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
+import { MAX_DIGEST_SEND_ATTEMPTS } from "./monitor-digest.constants";
 import { MonitorDigestEmailService } from "./monitor-digest-email.service";
 import { MonitorEntitlementService } from "./monitor-entitlement.service";
 
@@ -12,7 +13,7 @@ const LOCK_ID = "monitor-digest-worker";
 const LOCK_TTL_MS = 5 * 60_000;
 const BASE_TICK_CRON = "*/30 * * * * *";
 const BATCH_SIZE = 10;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = MAX_DIGEST_SEND_ATTEMPTS;
 const STALE_PROCESSING_THRESHOLD_MS = 10 * 60_000;
 
 // Envia os digests que o MonitorDigestScheduler marcou PENDING — worker
@@ -122,7 +123,52 @@ export class MonitorDigestWorker {
         );
         await this.database.monitorDigest.update({
           where: { id: digest.id },
-          data: { status: "SKIPPED" },
+          data: { status: "SKIPPED", lastError: result.skippedReason },
+        });
+        return;
+      }
+
+      if (result.outcome === "OUTCOME_UNKNOWN") {
+        // Timeout/erro de rede ambíguo — NUNCA retry imediato (poderia
+        // duplicar um envio que o provider já processou). Fica parado até
+        // (a) um evento do provider confirmar o que aconteceu
+        // (monitor-digest-webhook.service.ts resolve pra SENT/FAILED), ou
+        // (b) a janela esgotar sem evento algum
+        // (MonitorDigestOutcomeReconciler decide requeue, respeitando o
+        // mesmo teto de tentativas).
+        this.logger.warn(
+          `monitor digest ${digest.id} outcome unknown (timeout/network): ${result.errorMessage ?? "sem detalhe"}`,
+        );
+        await this.database.monitorDigest.update({
+          where: { id: digest.id },
+          data: {
+            status: "OUTCOME_UNKNOWN",
+            provider: result.provider,
+            providerMessageId: result.providerMessageId,
+            lastError: result.errorMessage ?? null,
+            outcomeUnknownAt: new Date(),
+          },
+        });
+        return;
+      }
+
+      if (result.outcome === "FAILED") {
+        // Erro CONFIRMADO do provider antes de aceitar o envio (nunca
+        // ambíguo) — mesmo orçamento de tentativas que qualquer outra
+        // falha confirmada.
+        const attempts = digest.attempts + 1;
+        const failed = attempts >= MAX_ATTEMPTS;
+        this.logger.warn(
+          `monitor digest ${digest.id} (user ${digest.userId}) rejected by provider (attempt ${attempts}): ${result.errorMessage ?? "sem detalhe"}`,
+        );
+        await this.database.monitorDigest.update({
+          where: { id: digest.id },
+          data: {
+            attempts,
+            lastError: result.errorMessage ?? "provider rejected the send",
+            provider: result.provider,
+            status: failed ? "FAILED" : "PENDING",
+          },
         });
         return;
       }
@@ -132,8 +178,10 @@ export class MonitorDigestWorker {
         data: {
           status: "SENT",
           sentAt: new Date(),
+          provider: result.provider,
           providerMessageId: result.providerMessageId,
           lastError: null,
+          outcomeUnknownAt: null,
         },
       });
 

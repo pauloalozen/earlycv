@@ -11,6 +11,9 @@ type DigestRecord = {
   updatedAt: Date;
   sentAt?: Date | null;
   providerMessageId?: string | null;
+  provider?: string | null;
+  outcomeUnknownAt?: Date | null;
+  lastError?: string | null;
 };
 
 function createFixture() {
@@ -45,7 +48,12 @@ function createFixture() {
     release: async () => undefined,
   };
 
-  let sendResult: unknown = { sent: true, providerMessageId: "email_123" };
+  let sendResult: unknown = {
+    sent: true,
+    outcome: "SENT",
+    provider: "SES",
+    providerMessageId: "email_123",
+  };
   let sendImpl: ((digestId: string) => Promise<unknown>) | null = null;
   const emailService = {
     sendDigest: async (digestId: string) =>
@@ -134,14 +142,15 @@ test("when the email service reports sent:false (e.g. unsubscribed between sched
 
   const updated = fixture.digests.get(digest.id);
   assert.equal(updated?.status, "SKIPPED");
+  assert.equal(updated?.lastError, "email_disabled");
   assert.deepEqual(fixture.recordedEvents, []);
 });
 
-test("provider failure increments attempts and requeues PENDING (retry), never affecting other digests", async () => {
+test("an UNEXPECTED thrown exception (e.g. a bug, a DB error mid-send) increments attempts and requeues PENDING (retry), never affecting other digests", async () => {
   const fixture = createFixture();
   const digest = fixture.seed({ attempts: 0 });
   fixture.setSendImpl(async () => {
-    throw new Error("resend unavailable");
+    throw new Error("unexpected failure");
   });
 
   await fixture.worker.processPendingBatch();
@@ -152,11 +161,11 @@ test("provider failure increments attempts and requeues PENDING (retry), never a
   assert.deepEqual(fixture.recordedEvents, []);
 });
 
-test("provider failure marks FAILED once attempts reach the max — never sent, never duplicated on a later run", async () => {
+test("an UNEXPECTED thrown exception marks FAILED once attempts reach the max — never sent, never duplicated on a later run", async () => {
   const fixture = createFixture();
   const digest = fixture.seed({ attempts: 2 });
   fixture.setSendImpl(async () => {
-    throw new Error("resend unavailable");
+    throw new Error("unexpected failure");
   });
 
   await fixture.worker.processPendingBatch();
@@ -164,6 +173,48 @@ test("provider failure marks FAILED once attempts reach the max — never sent, 
   const updated = fixture.digests.get(digest.id);
   assert.equal(updated?.status, "FAILED");
   assert.equal(updated?.attempts, 3);
+});
+
+test("a CONFIRMED provider rejection (outcome FAILED, never thrown) increments attempts and requeues PENDING, same budget as an unexpected exception", async () => {
+  const fixture = createFixture();
+  const digest = fixture.seed({ attempts: 0 });
+  fixture.setSendResult({
+    sent: true,
+    outcome: "FAILED",
+    provider: "SES",
+    providerMessageId: null,
+    errorMessage: "MessageRejected",
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  const updated = fixture.digests.get(digest.id);
+  assert.equal(updated?.status, "PENDING");
+  assert.equal(updated?.attempts, 1);
+  assert.deepEqual(fixture.recordedEvents, []);
+});
+
+test("an AMBIGUOUS provider outcome (OUTCOME_UNKNOWN — timeout/network) is never retried immediately and never counted as monitor_digest_sent", async () => {
+  const fixture = createFixture();
+  const digest = fixture.seed({ attempts: 0 });
+  fixture.setSendResult({
+    sent: true,
+    outcome: "OUTCOME_UNKNOWN",
+    provider: "SES",
+    providerMessageId: null,
+    errorMessage: "socket hang up",
+  });
+
+  await fixture.worker.processPendingBatch();
+
+  const updated = fixture.digests.get(digest.id);
+  assert.equal(updated?.status, "OUTCOME_UNKNOWN");
+  // attempts NÃO incrementa aqui — o worker nunca decide reenviar sozinho
+  // por causa de um resultado ambíguo; isso é exclusivamente trabalho do
+  // MonitorDigestOutcomeReconciler, depois da janela de espera.
+  assert.equal(updated?.attempts, 0);
+  assert.ok(updated?.outcomeUnknownAt);
+  assert.deepEqual(fixture.recordedEvents, []);
 });
 
 test("recovers a stale PROCESSING digest — the same batch may immediately retry it, but the recovery step itself must have reset attempts/status, never leaving it silently stuck in PROCESSING", async () => {
