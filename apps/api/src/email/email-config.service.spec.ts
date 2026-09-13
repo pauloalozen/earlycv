@@ -23,11 +23,15 @@ function buildEnv(overrides: Partial<AppEnv> = {}): AppEnv {
 
 test("EmailConfigService.isSesEnabled reflects SES_EMAIL_ENABLED", () => {
   assert.equal(
-    new EmailConfigService(buildEnv({ SES_EMAIL_ENABLED: true })).isSesEnabled(),
+    new EmailConfigService(
+      buildEnv({ SES_EMAIL_ENABLED: true }),
+    ).isSesEnabled(),
     true,
   );
   assert.equal(
-    new EmailConfigService(buildEnv({ SES_EMAIL_ENABLED: false })).isSesEnabled(),
+    new EmailConfigService(
+      buildEnv({ SES_EMAIL_ENABLED: false }),
+    ).isSesEnabled(),
     false,
   );
 });
@@ -37,16 +41,19 @@ test("EmailConfigService.getSesConfig throws listing every missing field, never 
     buildEnv({ SES_EMAIL_ENABLED: true, AWS_SES_REGION: "us-east-1" }),
   );
 
-  assert.throws(() => service.getSesConfig(), (error: unknown) => {
-    assert.ok(error instanceof Error);
-    assert.match(error.message, /accessKeyId/);
-    assert.match(error.message, /secretAccessKey/);
-    assert.match(error.message, /configurationSetName/);
-    assert.match(error.message, /fromEmail/);
-    assert.match(error.message, /fromName/);
-    assert.doesNotMatch(error.message, /\bregion\b/);
-    return true;
-  });
+  assert.throws(
+    () => service.getSesConfig(),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /accessKeyId/);
+      assert.match(error.message, /secretAccessKey/);
+      assert.match(error.message, /configurationSetName/);
+      assert.match(error.message, /fromEmail/);
+      assert.match(error.message, /fromName/);
+      assert.doesNotMatch(error.message, /\bregion\b/);
+      return true;
+    },
+  );
 });
 
 test("EmailConfigService.getSesConfig returns the full config when everything is present", () => {
@@ -73,7 +80,9 @@ test("EmailConfigService.getSesConfig returns the full config when everything is
 });
 
 test("EmailConfigService never fails when SES is disabled, even with zero config — auth/billing must keep working", () => {
-  const service = new EmailConfigService(buildEnv({ SES_EMAIL_ENABLED: false }));
+  const service = new EmailConfigService(
+    buildEnv({ SES_EMAIL_ENABLED: false }),
+  );
   assert.equal(service.isSesEnabled(), false);
   assert.equal(service.getCustomMailFromDomain(), undefined);
   assert.equal(service.getExpectedSnsTopicArn(), undefined);
