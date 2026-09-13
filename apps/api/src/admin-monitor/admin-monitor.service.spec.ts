@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { FakeEmailDeliveryService } from "../email/fake-email-delivery.service";
 import { MonitorAlertPreferenceService } from "../monitor/monitor-alert-preference.service";
 import { MonitorDigestContentService } from "../monitor/monitor-digest-content.service";
 import { MonitorDigestEmailService } from "../monitor/monitor-digest-email.service";
@@ -38,9 +37,20 @@ const alertPreferenceService = new MonitorAlertPreferenceService(
   entitlementService,
 );
 const digestContentService = new MonitorDigestContentService(database);
+// MonitorDigestEmailService injeta EmailService (fachada multi-provider),
+// não mais EmailDeliveryPort direto — este spec testa AdminMonitorService,
+// não roteamento de provider, então o fake sempre resolve SENT
+// (mesmo padrão de monitor-digest-email.service.spec.ts).
+const fakeEmailService = {
+  send: async () => ({
+    outcome: "SENT" as const,
+    provider: "SES" as const,
+    providerMessageId: `fake-${randomUUID()}`,
+  }),
+};
 const digestEmailService = new MonitorDigestEmailService(
   database,
-  new FakeEmailDeliveryService(),
+  fakeEmailService,
   entitlementService,
 );
 

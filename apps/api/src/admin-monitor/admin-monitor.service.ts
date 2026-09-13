@@ -12,6 +12,7 @@ import type {
 
 import { DatabaseService } from "../database/database.service";
 import { MonitorAlertPreferenceService } from "../monitor/monitor-alert-preference.service";
+import { OUTCOME_UNKNOWN_RECONCILIATION_WINDOW_MS } from "../monitor/monitor-digest.constants";
 import { MonitorDigestContentService } from "../monitor/monitor-digest-content.service";
 import {
   DEFAULT_INTRO_TEXT,
@@ -49,6 +50,7 @@ const DEFAULT_SCHEDULE_CONFIG = {
   intervalAnchorDate: null as Date | null,
   weeklyDayOfWeek: 1,
   timezone: "America/Sao_Paulo",
+  sesRolloutSegment: null as MonitorAlertBulkSegment | null,
 };
 
 const DEFAULT_LIMIT = 50;
@@ -80,7 +82,12 @@ const MONITOR_DIGEST_STATUSES = [
   "SENT",
   "FAILED",
   "SKIPPED",
+  // Timeout/erro de rede ambíguo no envio via SES (ver
+  // monitor-digest.worker.ts) — distinto de FAILED, que é erro confirmado.
+  "OUTCOME_UNKNOWN",
 ] as const;
+
+const MONITOR_DIGEST_PROVIDERS = ["RESEND", "SES"] as const;
 
 const MONITOR_DIGEST_EVENT_TYPES = [
   "DELIVERED",
@@ -88,6 +95,10 @@ const MONITOR_DIGEST_EVENT_TYPES = [
   "CLICKED",
   "BOUNCED",
   "COMPLAINED",
+  // SES-only (ver monitor-digest-webhook.service.ts) — Resend nunca emite
+  // estes dois porque sua resposta HTTP síncrona já confirma o envio.
+  "SENT",
+  "REJECTED",
 ] as const;
 
 // Eventos do funil relevantes para reconstruir a jornada do Monitor de um
@@ -316,14 +327,25 @@ export class AdminMonitorService {
 
     const [
       digestGroups,
+      providerGroups,
       sentLast24h,
       eventGroupsLast24h,
       stuckProcessing,
       failedDigests,
+      outcomeUnknownDigests,
     ] = await Promise.all([
       this.database.monitorDigest.groupBy({
         by: ["status"],
         _count: { _all: true },
+      }),
+      // Só entre digests já enviados/rejeitados — SKIPPED/PENDING sempre
+      // gravam provider=RESEND por default de coluna (nunca chegaram a
+      // escolher provider algum), agrupá-los junto inflaria RESEND
+      // artificialmente enquanto SES ainda está em rollout controlado.
+      this.database.monitorDigest.groupBy({
+        by: ["provider"],
+        _count: { _all: true },
+        where: { status: { in: ["SENT", "FAILED", "OUTCOME_UNKNOWN"] } },
       }),
       this.database.monitorDigest.count({
         where: { status: "SENT", sentAt: { gte: since24h } },
@@ -349,6 +371,16 @@ export class AdminMonitorService {
         take: 100,
         include: { user: { select: { id: true, email: true, name: true } } },
       }),
+      // OUTCOME_UNKNOWN esgotado (attempts no teto) precisa de reenvio
+      // manual — nunca sai sozinho desse estado (ver
+      // MonitorDigestOutcomeReconciler). Listado à parte de failedDigests
+      // porque a causa raiz é distinta (ambígua, não confirmada).
+      this.database.monitorDigest.findMany({
+        where: { status: "OUTCOME_UNKNOWN" },
+        orderBy: [{ outcomeUnknownAt: "desc" }],
+        take: 100,
+        include: { user: { select: { id: true, email: true, name: true } } },
+      }),
     ]);
 
     return {
@@ -356,6 +388,11 @@ export class AdminMonitorService {
         MONITOR_DIGEST_STATUSES,
         digestGroups,
         (g) => g.status,
+      ),
+      byProvider: countsByKey(
+        MONITOR_DIGEST_PROVIDERS,
+        providerGroups,
+        (g) => g.provider,
       ),
       sentLast24h,
       eventsLast24h: tallyByKey(
@@ -366,6 +403,9 @@ export class AdminMonitorService {
       stuckProcessing,
       staleProcessingThresholdMs: STALE_PROCESSING_THRESHOLD_MS,
       failedDigests,
+      outcomeUnknownDigests,
+      outcomeUnknownReconciliationWindowMs:
+        OUTCOME_UNKNOWN_RECONCILIATION_WINDOW_MS,
     };
   }
 
@@ -1324,6 +1364,8 @@ export class AdminMonitorService {
           source: true,
           triggeredByAdminId: true,
           createdAt: true,
+          provider: true,
+          outcomeUnknownAt: true,
           user: { select: { id: true, email: true, name: true } },
         },
         orderBy: [{ createdAt: "desc" }],
@@ -1360,6 +1402,8 @@ export class AdminMonitorService {
         sentAt: digest.sentAt,
         createdAt: digest.createdAt,
         source: digest.source,
+        provider: digest.provider,
+        outcomeUnknownAt: digest.outcomeUnknownAt,
         triggeredByAdmin: digest.triggeredByAdminId
           ? (adminById.get(digest.triggeredByAdminId) ?? null)
           : null,
@@ -1530,26 +1574,20 @@ export class AdminMonitorService {
     let changedCount = 0;
     if (userIds.length > 0) {
       if (enable) {
-        const created = await this.database.monitorAlertPreference.createMany(
-          {
-            data: userIds.map((userId) => ({ userId, emailEnabled: true })),
-            skipDuplicates: true,
-          },
-        );
-        const updated = await this.database.monitorAlertPreference.updateMany(
-          {
-            where: { userId: { in: userIds }, unsubscribedAt: null },
-            data: { emailEnabled: true },
-          },
-        );
+        const created = await this.database.monitorAlertPreference.createMany({
+          data: userIds.map((userId) => ({ userId, emailEnabled: true })),
+          skipDuplicates: true,
+        });
+        const updated = await this.database.monitorAlertPreference.updateMany({
+          where: { userId: { in: userIds }, unsubscribedAt: null },
+          data: { emailEnabled: true },
+        });
         changedCount = created.count + updated.count;
       } else {
-        const updated = await this.database.monitorAlertPreference.updateMany(
-          {
-            where: { userId: { in: userIds } },
-            data: { emailEnabled: false },
-          },
-        );
+        const updated = await this.database.monitorAlertPreference.updateMany({
+          where: { userId: { in: userIds } },
+          data: { emailEnabled: false },
+        });
         changedCount = updated.count;
       }
     }

@@ -1,5 +1,8 @@
-import { MonitorDigestFrequency } from "@prisma/client";
-import { IsEnum, IsInt, Max, Min } from "class-validator";
+import {
+  MonitorAlertBulkSegment,
+  MonitorDigestFrequency,
+} from "@prisma/client";
+import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
 
 export class UpdateDigestScheduleDto {
   // Cadência global de todos os usuários — antes era escolha individual
@@ -25,4 +28,13 @@ export class UpdateDigestScheduleDto {
   @Min(0)
   @Max(6)
   weeklyDayOfWeek!: number;
+
+  // Coorte controlada do rollout SES do digest (JOB_ALERT) — ver
+  // MonitorDigestScheduleConfig.sesRolloutSegment no schema. Omitido =
+  // não muda (semântica de update do Prisma); enviado como null =
+  // desliga a coorte de propósito (ninguém recebe via SES). Nada disto
+  // afeta a cadência em si (frequency/dailyHour/etc acima).
+  @IsOptional()
+  @IsEnum(MonitorAlertBulkSegment)
+  sesRolloutSegment?: MonitorAlertBulkSegment | null;
 }
