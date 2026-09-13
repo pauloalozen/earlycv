@@ -2095,6 +2095,15 @@ enum MonitorDigestEventType {
   CLICKED
   BOUNCED
   COMPLAINED
+  // SENT/REJECTED adicionados para os eventos SES "Send"/"Reject" — únicos
+  // relevantes pra resolver um MonitorDigest preso em OUTCOME_UNKNOWN
+  // (timeout/erro de rede na resposta síncrona do SendEmailCommand): "Send"
+  // confirma que o SES aceitou a mensagem (resolve pra SENT), "Reject"
+  // confirma que o SES recusou (resolve pra FAILED). Resend não emite
+  // eventos equivalentes a estes dois (a resposta HTTP síncrona dele já é
+  // a confirmação), por isso não existiam até agora.
+  SENT
+  REJECTED
 }
 
 // Eventos de webhook do Resend (Svix) — providerEventId é o header

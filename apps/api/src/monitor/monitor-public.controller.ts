@@ -14,9 +14,14 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 
+import { EmailConfigService } from "../email/email-config.service";
 import { MonitorAlertPreferenceService } from "./monitor-alert-preference.service";
 import { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
 import { verifyResendWebhookSignature } from "./resend-webhook-verifier";
+import {
+  type SnsMessage,
+  verifySnsMessageSignature,
+} from "./ses-webhook-verifier";
 
 // Rotas SEM autenticação — deliberadamente numa classe separada de
 // MonitorController (que exige JwtAuthGuard + MonitorEntitlementGuard em
@@ -33,6 +38,8 @@ export class MonitorPublicController {
     private readonly webhookService: MonitorDigestWebhookService,
     @Inject(MonitorAlertPreferenceService)
     private readonly alertPreferenceService: MonitorAlertPreferenceService,
+    @Inject(EmailConfigService)
+    private readonly emailConfig: EmailConfigService,
   ) {}
 
   @Post("webhooks/resend")
@@ -67,6 +74,87 @@ export class MonitorPublicController {
     if (!result.processed) {
       this.logger.log(
         `monitor digest webhook not processed: ${result.reason} (type=${payload.type})`,
+      );
+    }
+
+    return { ok: true };
+  }
+
+  // Recebe eventos SES via SNS (Send/Delivery/Open/Click/Bounce/Complaint/
+  // Reject do Configuration Set do digest). Três camadas independentes de
+  // validação, TODAS obrigatórias (ver ses-webhook-verifier.ts pro
+  // detalhe de cada uma):
+  //   1. Assinatura RSA da mensagem SNS (contra o certificado hospedado
+  //      pela própria AWS — nunca um fetch de URL arbitrária do payload).
+  //   2. TopicArn precisa bater com AWS_SES_SNS_TOPIC_ARN configurado.
+  //   3. Corpo processável como o formato de evento SES documentado.
+  // SubscriptionConfirmation NUNCA é confirmada automaticamente (nunca
+  // visitamos SubscribeURL sozinhos) — só logamos, bem visível, pra
+  // confirmação manual durante a configuração da infraestrutura.
+  @Post("webhooks/ses")
+  async sesWebhook(@Req() req: RawBodyRequest<Request>) {
+    if (!req.rawBody) {
+      throw new UnauthorizedException("missing raw body");
+    }
+
+    const expectedTopicArn = this.emailConfig.getExpectedSnsTopicArn();
+    if (!expectedTopicArn) {
+      // Sem AWS_SES_SNS_TOPIC_ARN configurado não há como autorizar a
+      // origem — recusa por padrão, nunca aceita "qualquer" tópico.
+      throw new UnauthorizedException("ses webhook not configured");
+    }
+
+    let message: SnsMessage;
+    try {
+      message = JSON.parse(req.rawBody.toString("utf8"));
+    } catch {
+      throw new UnauthorizedException("invalid SNS payload");
+    }
+
+    if (message.TopicArn !== expectedTopicArn) {
+      this.logger.warn(`ses webhook: unexpected TopicArn=${message.TopicArn}`);
+      throw new UnauthorizedException("unexpected TopicArn");
+    }
+
+    const validSignature = await verifySnsMessageSignature(message);
+    if (!validSignature) {
+      throw new UnauthorizedException("invalid SNS signature");
+    }
+
+    if (message.Type === "SubscriptionConfirmation") {
+      this.logger.warn(
+        `SNS SubscriptionConfirmation pendente para TopicArn=${message.TopicArn} — confirme manualmente (abrir SubscribeURL ou 'aws sns confirm-subscription'): ${message.SubscribeURL}`,
+      );
+      return { ok: true, action: "manual_confirmation_required" };
+    }
+
+    if (message.Type === "UnsubscribeConfirmation") {
+      this.logger.warn(
+        `SNS UnsubscribeConfirmation recebida para TopicArn=${message.TopicArn} — confirme se foi intencional`,
+      );
+      return { ok: true };
+    }
+
+    if (message.Type !== "Notification") {
+      this.logger.log(`ses webhook: unhandled SNS Type=${message.Type}`);
+      return { ok: true };
+    }
+
+    let sesEvent: Record<string, unknown>;
+    try {
+      sesEvent = JSON.parse(message.Message);
+    } catch {
+      this.logger.warn("ses webhook: Notification body is not valid JSON");
+      return { ok: true };
+    }
+
+    const result = await this.webhookService.processSesEvent(
+      message.MessageId,
+      sesEvent as Parameters<typeof this.webhookService.processSesEvent>[1],
+    );
+    if (!result.processed) {
+      this.logger.log(
+        `ses digest webhook not processed: ${result.reason} (type=${(sesEvent as { eventType?: string }).eventType})`,
       );
     }
 

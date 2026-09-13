@@ -40,6 +40,11 @@ const useResend =
     DefaultEmailService,
     { provide: EMAIL_SERVICE, useExisting: DefaultEmailService },
   ],
-  exports: [FakeEmailDeliveryService, EMAIL_DELIVERY_PORT, EMAIL_SERVICE],
+  exports: [
+    FakeEmailDeliveryService,
+    EMAIL_DELIVERY_PORT,
+    EMAIL_SERVICE,
+    EmailConfigService,
+  ],
 })
 export class EmailModule {}
