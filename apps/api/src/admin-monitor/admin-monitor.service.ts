@@ -50,6 +50,7 @@ const DEFAULT_SCHEDULE_CONFIG = {
   intervalAnchorDate: null as Date | null,
   weeklyDayOfWeek: 1,
   timezone: "America/Sao_Paulo",
+  sesMode: "LEGACY_RESEND" as const,
   sesRolloutSegment: null as MonitorAlertBulkSegment | null,
 };
 
@@ -1500,13 +1501,33 @@ export class AdminMonitorService {
   // Resolve os userIds de cada segmento — 1 query por segmento, sem
   // "select *": só id, que é tudo que os chamadores precisam pra
   // createMany/updateMany em MonitorAlertPreference.
+  //
+  // BUG CORRIGIDO (2026-09-13): antes disto era um ternário `segment ===
+  // "ALL" ? {} : {planPurchases...}` — qualquer segmento diferente de
+  // "ALL", incluindo "INTERNAL", caía silenciosamente no branch de "PAID".
+  // Passou despercebido enquanto só ALL/PAID existiam de fato no rollout
+  // do Alerta; virou crítico quando MonitorDigestScheduleConfig.sesMode
+  // (rollout do SES) passou a depender semanticamente de "INTERNAL"
+  // resolver pro conjunto certo de usuários (ver monitor-digest.scheduler.ts,
+  // que por isso tem sua PRÓPRIA resolução, independente desta). Switch
+  // explícito, sem branch "else" que capture segmentos por omissão.
   private async resolveAlertRolloutSegmentUserIds(
     segment: MonitorAlertBulkSegment,
   ): Promise<string[]> {
-    const where: Prisma.UserWhereInput =
-      segment === "ALL"
-        ? {}
-        : { planPurchases: { some: { status: "completed" } } }; // PAID
+    const where: Prisma.UserWhereInput = ((): Prisma.UserWhereInput => {
+      switch (segment) {
+        case "ALL":
+          return {};
+        case "PAID":
+          return { planPurchases: { some: { status: "completed" } } };
+        case "INTERNAL":
+          return { internalRole: { in: ["admin", "superadmin"] } };
+        default: {
+          const exhaustive: never = segment;
+          throw new Error(`unknown MonitorAlertBulkSegment: ${exhaustive}`);
+        }
+      }
+    })();
 
     const users = await this.database.user.findMany({
       where,

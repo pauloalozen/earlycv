@@ -1,4 +1,5 @@
 import {
+  EmailBulkSendMode,
   MonitorAlertBulkSegment,
   MonitorDigestFrequency,
 } from "@prisma/client";
@@ -29,11 +30,21 @@ export class UpdateDigestScheduleDto {
   @Max(6)
   weeklyDayOfWeek!: number;
 
-  // Coorte controlada do rollout SES do digest (JOB_ALERT) — ver
-  // MonitorDigestScheduleConfig.sesRolloutSegment no schema. Omitido =
-  // não muda (semântica de update do Prisma); enviado como null =
-  // desliga a coorte de propósito (ninguém recebe via SES). Nada disto
-  // afeta a cadência em si (frequency/dailyHour/etc acima).
+  // Modo operacional do envio em massa do digest — ver
+  // MonitorDigestScheduleConfig.sesMode no schema. Omitido = não muda.
+  // Default de deploy é LEGACY_RESEND (preserva produção atual); trocar
+  // pra SES_ROLLOUT/SES_LIVE é decisão explícita do admin, depois que
+  // AWS/SNS/webhook estiverem prontos.
+  @IsOptional()
+  @IsEnum(EmailBulkSendMode)
+  sesMode?: EmailBulkSendMode;
+
+  // Coorte controlada do rollout SES do digest (JOB_ALERT) — só relevante
+  // quando sesMode=SES_ROLLOUT (ver MonitorDigestScheduleConfig.
+  // sesRolloutSegment no schema). Omitido = não muda (semântica de update
+  // do Prisma); enviado como null = desliga a coorte de propósito
+  // (ninguém entra ainda). Nada disto afeta a cadência em si
+  // (frequency/dailyHour/etc acima).
   @IsOptional()
   @IsEnum(MonitorAlertBulkSegment)
   sesRolloutSegment?: MonitorAlertBulkSegment | null;

@@ -37,9 +37,11 @@ const alertPreferenceService = new MonitorAlertPreferenceService(
   entitlementService,
 );
 const digestContentService = new MonitorDigestContentService(database);
-// MonitorDigestEmailService injeta EmailService (fachada multi-provider),
-// não mais EmailDeliveryPort direto — este spec testa AdminMonitorService,
-// não roteamento de provider, então o fake sempre resolve SENT
+// MonitorDigestEmailService injeta EmailService (fachada multi-provider) +
+// o adapter Resend direto (usado quando sesMode=LEGACY_RESEND, o default
+// sem a linha singleton de MonitorDigestScheduleConfig — o caminho deste
+// spec, que não seeda esse config) — este spec testa AdminMonitorService,
+// não roteamento de provider, então ambos os fakes sempre resolvem SENT
 // (mesmo padrão de monitor-digest-email.service.spec.ts).
 const fakeEmailService = {
   send: async () => ({
@@ -48,9 +50,20 @@ const fakeEmailService = {
     providerMessageId: `fake-${randomUUID()}`,
   }),
 };
+const fakeResendAdapter = {
+  name: "RESEND" as const,
+  send: async () => ({
+    outcome: "SENT" as const,
+    provider: "RESEND" as const,
+    providerMessageId: `fake-${randomUUID()}`,
+  }),
+};
+const fakeEmailConfig = { isSesEnabled: () => true };
 const digestEmailService = new MonitorDigestEmailService(
   database,
   fakeEmailService,
+  fakeResendAdapter,
+  fakeEmailConfig,
   entitlementService,
 );
 
@@ -1018,6 +1031,43 @@ test("applyAlertRollout(PAID, enable=true) só afeta usuários com PlanPurchase 
   }
 });
 
+test("applyAlertRollout(INTERNAL, enable=true) só afeta User.internalRole IN (admin, superadmin) — regressão do bug que tratava INTERNAL como PAID", async () => {
+  const internalUser = await seedUser();
+  const payingRegularUser = await seedUser();
+  const regularUser = await seedUser();
+  try {
+    await prisma.user.update({
+      where: { id: internalUser.id },
+      data: { internalRole: "admin" },
+    });
+    // Paga E é regular (não staff) — se o bug (INTERNAL tratado como PAID)
+    // reaparecer, este usuário seria incluído por engano.
+    await seedCompletedPurchase(payingRegularUser.id);
+
+    await service.applyAlertRollout("admin-1", "INTERNAL", true);
+
+    const internalPreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: internalUser.id },
+    });
+    assert.equal(internalPreference?.emailEnabled, true);
+
+    const payingRegularPreference =
+      await prisma.monitorAlertPreference.findUnique({
+        where: { userId: payingRegularUser.id },
+      });
+    assert.equal(payingRegularPreference, null);
+
+    const regularPreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: regularUser.id },
+    });
+    assert.equal(regularPreference, null);
+  } finally {
+    await cleanupUser(internalUser.id);
+    await cleanupUser(payingRegularUser.id);
+    await cleanupUser(regularUser.id);
+  }
+});
+
 test("applyAlertRollout(ALL, enable=false) desliga todo mundo do segmento, e nunca toca unsubscribedAt", async () => {
   const tracked = await seedUser();
   try {
@@ -1027,9 +1077,9 @@ test("applyAlertRollout(ALL, enable=false) desliga todo mundo do segmento, e nun
 
     await service.applyAlertRollout("admin-1", "ALL", false);
 
-    const trackedPreference = await prisma.monitorAlertPreference.findUnique(
-      { where: { userId: tracked.id } },
-    );
+    const trackedPreference = await prisma.monitorAlertPreference.findUnique({
+      where: { userId: tracked.id },
+    });
     assert.equal(trackedPreference?.emailEnabled, false);
     assert.equal(trackedPreference?.unsubscribedAt, null);
   } finally {
@@ -1045,11 +1095,7 @@ test("setAlertPreference liga/desliga o alerta de 1 usuário específico, sem af
       data: { userId: other.id, emailEnabled: true },
     });
 
-    const result = await service.setAlertPreference(
-      "admin-1",
-      target.id,
-      true,
-    );
+    const result = await service.setAlertPreference("admin-1", target.id, true);
     assert.equal(result.emailEnabled, true);
 
     const targetPreference = await prisma.monitorAlertPreference.findUnique({
