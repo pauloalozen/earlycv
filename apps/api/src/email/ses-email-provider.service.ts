@@ -15,9 +15,10 @@ import { EmailConfigService } from "./email-config.service";
 // módulo.
 //
 // Identidade de remetente (from/replyTo/configurationSet) SEMPRE vem já
-// resolvida em `message` pela fachada (DefaultEmailService, que consulta
-// EmailConfigService.getSesSenderProfile(category) antes de chamar isto) —
-// este provider nunca lê fromEmail/fromName/configurationSet de config
+// resolvida em `message` por DefaultEmailRoutingPolicy.resolve (que
+// consulta EmailConfigService.getSesSenderProfile(category) antes da
+// fachada chamar isto) — este provider nunca lê fromEmail/fromName/
+// configurationSet de config
 // algum. É isso que garante que adicionar uma categoria nova (ex.:
 // MARKETING) nunca exige tocar este arquivo.
 //

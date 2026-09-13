@@ -3,6 +3,7 @@ import type {
   EmailCategory,
   EmailProvider,
   EmailRoutingPolicy,
+  ResolvedEmailRoute,
 } from "./email.types";
 import { EmailConfigService } from "./email-config.service";
 import { EmailDeliveryProviderAdapter } from "./email-delivery-provider.adapter";
@@ -26,6 +27,13 @@ import { SesEmailProviderService } from "./ses-email-provider.service";
 // roteador.
 const RESEND_CATEGORIES = new Set<EmailCategory>(["AUTHENTICATION", "BILLING"]);
 
+// É esta classe (não a fachada) que resolve a cadeia inteira EmailCategory
+// -> provider -> senderProfile -> tags: DefaultEmailService só orquestra o
+// resultado (merge no EmailMessage + chamar provider.send), sem saber que
+// "SES" existe. senderProfile/tags só aparecem pra categorias de envio em
+// massa (Resend usa seu próprio remetente fixo, fora do escopo desta
+// entrega). Adicionar uma categoria nova (ex.: MARKETING) é só um novo
+// case em EmailConfigService.getSesSenderProfile — esta classe nunca muda.
 @Injectable()
 export class DefaultEmailRoutingPolicy implements EmailRoutingPolicy {
   // Tipados pela interface EmailProvider (não pela classe concreta) — o
@@ -40,12 +48,15 @@ export class DefaultEmailRoutingPolicy implements EmailRoutingPolicy {
     @Inject(SesEmailProviderService)
     private readonly sesProvider: EmailProvider,
     @Inject(EmailConfigService)
-    private readonly config: Pick<EmailConfigService, "isSesEnabled">,
+    private readonly config: Pick<
+      EmailConfigService,
+      "isSesEnabled" | "getSesSenderProfile"
+    >,
   ) {}
 
-  resolve(category: EmailCategory): EmailProvider {
+  resolve(category: EmailCategory): ResolvedEmailRoute {
     if (RESEND_CATEGORIES.has(category)) {
-      return this.resendAdapter;
+      return { provider: this.resendAdapter };
     }
 
     // JOB_ALERT | PRODUCT_ANNOUNCEMENT | MARKETING | ADMIN_COMMUNICATION —
@@ -55,6 +66,12 @@ export class DefaultEmailRoutingPolicy implements EmailRoutingPolicy {
         `${category} requer SES_EMAIL_ENABLED=true — sem fallback automático para Resend por decisão de produto`,
       );
     }
-    return this.sesProvider;
+
+    const senderProfile = this.config.getSesSenderProfile(category);
+    return {
+      provider: this.sesProvider,
+      senderProfile,
+      tags: { category },
+    };
   }
 }

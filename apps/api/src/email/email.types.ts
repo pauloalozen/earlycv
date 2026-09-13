@@ -52,16 +52,30 @@ export type EmailMessage = {
   // Reject/Open/Click) — correlação sobrevive mesmo sem providerMessageId
   // (caso OUTCOME_UNKNOWN).
   tags?: Record<string, string>;
-  // Identidade de remetente — SEMPRE resolvida pela fachada a partir de
-  // EmailConfigService.getSesSenderProfile(category) antes de chamar um
+  // Identidade de remetente — SEMPRE resolvida por EmailRoutingPolicy.resolve
+  // (a partir de EmailSenderProfile, ver abaixo) antes de chamar um
   // provider SES; nunca setada pelo chamador, nunca lida do config pelo
-  // próprio SesEmailProviderService (ele só usa o que já vier aqui). É
-  // assim que adicionar uma categoria nova nunca exige mudar o provider.
-  // Resend ignora estes 3 campos (usa seu próprio remetente fixo, fora do
-  // escopo desta entrega).
+  // próprio SesEmailProviderService (ele só usa o que já vier aqui, sem
+  // nenhum `if` por categoria). É assim que adicionar uma categoria nova
+  // nunca exige mudar o provider. Resend ignora estes 3 campos (usa seu
+  // próprio remetente fixo, fora do escopo desta entrega).
   from?: { email: string; name: string };
   replyTo?: string;
   configurationSet?: string;
+};
+
+// Identidade de remetente de UMA categoria de envio em massa — quem o
+// destinatário vê e pra onde uma resposta vai. Resolvido por
+// EmailConfigService.getSesSenderProfile(category) (só JOB_ALERT
+// implementado nesta entrega; qualquer outra categoria lança erro claro,
+// nunca libera envio por existir no type EmailCategory) e injetado pela
+// EmailRoutingPolicy na mensagem — nunca lido diretamente por
+// SesEmailProviderService.
+export type EmailSenderProfile = {
+  fromEmail: string;
+  fromName: string;
+  replyTo?: string;
+  configurationSet: string;
 };
 
 export type EmailSendOutcome = "SENT" | "FAILED" | "OUTCOME_UNKNOWN";
@@ -80,8 +94,19 @@ export interface EmailProvider {
   send(message: EmailMessage): Promise<EmailSendResult>;
 }
 
+// O que resolver(categoria) devolve: EmailCategory -> provider ->
+// senderProfile -> tags, tudo numa única decisão. senderProfile/tags só
+// fazem sentido pra provider SES (Resend usa seu próprio remetente fixo)
+// — undefined nesse caso. DefaultEmailService só orquestra isto (merge no
+// EmailMessage + chamar provider.send); não sabe qual provider é SES.
+export type ResolvedEmailRoute = {
+  provider: EmailProvider;
+  senderProfile?: EmailSenderProfile;
+  tags?: Record<string, string>;
+};
+
 export interface EmailRoutingPolicy {
-  resolve(category: EmailCategory): EmailProvider;
+  resolve(category: EmailCategory): ResolvedEmailRoute;
 }
 
 // Fachada única — NÃO persiste nada (sem tabela EmailLog genérica nesta

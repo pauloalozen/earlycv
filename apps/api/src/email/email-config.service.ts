@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 
 import { APP_ENV, type AppEnv } from "../config/env.module";
-import type { EmailCategory } from "./email.types";
+import type { EmailCategory, EmailSenderProfile } from "./email.types";
 
 // Config de transporte AWS — pura, sem nada de identidade de remetente.
 // Compartilhada por QUALQUER categoria que resolva pra SES.
@@ -9,18 +9,6 @@ export type SesClientConfig = {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
-};
-
-// Identidade de remetente por categoria — quem o destinatário vê e pra
-// onde uma resposta vai. Nunca lido diretamente por SesEmailProviderService
-// (ele só usa o que a fachada já injetou na mensagem); só existe aqui
-// porque é aqui que cada categoria futura ganha seu próprio perfil sem
-// tocar o provider.
-export type SesSenderProfile = {
-  fromEmail: string;
-  fromName: string;
-  replyTo?: string;
-  configurationSetName: string;
 };
 
 // Config tipada do SES — lida do AppEnv (validado no boot pelo EnvModule),
@@ -67,21 +55,21 @@ export class EmailConfigService {
   // categoria deve conseguir enviar (mesmo que EmailRoutingPolicy resolva
   // SES pra ela). Adicionar PRODUCT_ANNOUNCEMENT/MARKETING no futuro é só
   // acrescentar um novo `case` aqui — SesEmailProviderService nunca muda.
-  getSesSenderProfile(category: EmailCategory): SesSenderProfile {
+  getSesSenderProfile(category: EmailCategory): EmailSenderProfile {
     if (category !== "JOB_ALERT") {
       throw new Error(
         `SES sender profile não configurado para a categoria "${category}" — nenhum call site deveria estar enviando por ela ainda`,
       );
     }
 
-    const required: Partial<SesSenderProfile> = {
+    const required: Partial<EmailSenderProfile> = {
       fromEmail: this.env.AWS_SES_JOB_ALERT_FROM_EMAIL,
       fromName: this.env.AWS_SES_JOB_ALERT_FROM_NAME,
-      configurationSetName: this.env.AWS_SES_CONFIGURATION_SET,
+      configurationSet: this.env.AWS_SES_CONFIGURATION_SET,
     };
 
     const missingKeys = (
-      Object.keys(required) as Array<keyof SesSenderProfile>
+      Object.keys(required) as Array<keyof EmailSenderProfile>
     ).filter((key) => !required[key]);
 
     if (missingKeys.length > 0) {
@@ -92,10 +80,7 @@ export class EmailConfigService {
 
     return {
       ...(required as Required<
-        Pick<
-          SesSenderProfile,
-          "fromEmail" | "fromName" | "configurationSetName"
-        >
+        Pick<EmailSenderProfile, "fromEmail" | "fromName" | "configurationSet">
       >),
       replyTo: this.env.AWS_SES_JOB_ALERT_REPLY_TO,
     };

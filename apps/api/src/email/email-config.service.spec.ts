@@ -107,7 +107,7 @@ test("EmailConfigService.getSesSenderProfile(JOB_ALERT) throws listing every mis
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /fromName/);
-      assert.match(error.message, /configurationSetName/);
+      assert.match(error.message, /configurationSet/);
       assert.doesNotMatch(error.message, /fromEmail/);
       return true;
     },
@@ -128,7 +128,7 @@ test("EmailConfigService.getSesSenderProfile(JOB_ALERT) returns the full profile
   assert.deepEqual(service.getSesSenderProfile("JOB_ALERT"), {
     fromEmail: "vagas@alertas.earlycv.com.br",
     fromName: "EarlyCV — Alerta de Vagas",
-    configurationSetName: "earlycv-bulk-email",
+    configurationSet: "earlycv-bulk-email",
     replyTo: "contato@earlycv.com.br",
   });
 });

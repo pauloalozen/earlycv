@@ -5,25 +5,23 @@ import type {
   EmailSendResult,
   EmailService as EmailServiceContract,
 } from "./email.types";
-import { EmailConfigService } from "./email-config.service";
 import { DefaultEmailRoutingPolicy } from "./email-routing.policy";
 
 // Fachada única de envio — responsabilidades: receber categoria+mensagem,
-// resolver o provider via a policy, delegar o envio, devolver resultado
-// padronizado, logar. NÃO persiste nada (sem tabela EmailLog genérica
-// nesta entrega) — cada domínio chamador continua responsável pela própria
-// persistência (Monitor grava em MonitorDigest/MonitorDigestEvent,
-// pagamento em PaymentRecoveryEmail — fora do escopo desta entrega,
-// autenticação não registra envio, como hoje).
+// resolver a rota (provider + senderProfile + tags) via a policy, montar
+// a mensagem final, delegar o envio, devolver resultado padronizado,
+// logar. NÃO persiste nada (sem tabela EmailLog genérica nesta entrega) —
+// cada domínio chamador continua responsável pela própria persistência
+// (Monitor grava em MonitorDigest/MonitorDigestEvent, pagamento em
+// PaymentRecoveryEmail — fora do escopo desta entrega, autenticação não
+// registra envio, como hoje).
 //
-// Único lugar que sabe "categoria → identidade de remetente": quando o
-// provider resolvido é SES, busca o SesSenderProfile da categoria
-// (EmailConfigService.getSesSenderProfile) e injeta from/replyTo/
-// configurationSet + a tag `category` na mensagem ANTES de chamar o
-// provider — o chamador (ex.: MonitorDigestEmailService) nunca seta esses
-// campos, só suas próprias tags de correlação (correlationType/
-// correlationId). SesEmailProviderService nunca faz essa resolução
-// sozinho; é assim que uma categoria nova nunca exige tocar o provider.
+// Deliberadamente SEM NENHUM `if` de categoria ou de provider aqui — quem
+// decide "esta categoria usa SES, com este remetente" é
+// DefaultEmailRoutingPolicy.resolve (ver email-routing.policy.ts); esta
+// classe só aplica o que a rota devolveu. O chamador (ex.:
+// MonitorDigestEmailService) nunca seta from/replyTo/configurationSet,
+// só suas próprias tags de correlação (correlationType/correlationId).
 @Injectable()
 export class DefaultEmailService implements EmailServiceContract {
   private readonly logger = new Logger(DefaultEmailService.name);
@@ -31,22 +29,28 @@ export class DefaultEmailService implements EmailServiceContract {
   constructor(
     @Inject(DefaultEmailRoutingPolicy)
     private readonly policy: DefaultEmailRoutingPolicy,
-    @Inject(EmailConfigService)
-    private readonly config: Pick<EmailConfigService, "getSesSenderProfile">,
   ) {}
 
   async send(params: {
     category: EmailCategory;
     message: EmailMessage;
   }): Promise<EmailSendResult> {
-    const provider = this.policy.resolve(params.category);
+    const route = this.policy.resolve(params.category);
 
-    const message: EmailMessage =
-      provider.name === "SES"
-        ? this.withSesSenderProfile(params.category, params.message)
-        : params.message;
+    const message: EmailMessage = route.senderProfile
+      ? {
+          ...params.message,
+          from: {
+            email: route.senderProfile.fromEmail,
+            name: route.senderProfile.fromName,
+          },
+          replyTo: route.senderProfile.replyTo,
+          configurationSet: route.senderProfile.configurationSet,
+          tags: { ...params.message.tags, ...route.tags },
+        }
+      : params.message;
 
-    const result = await provider.send(message);
+    const result = await route.provider.send(message);
 
     const logPayload = {
       category: params.category,
@@ -66,19 +70,5 @@ export class DefaultEmailService implements EmailServiceContract {
     }
 
     return result;
-  }
-
-  private withSesSenderProfile(
-    category: EmailCategory,
-    message: EmailMessage,
-  ): EmailMessage {
-    const profile = this.config.getSesSenderProfile(category);
-    return {
-      ...message,
-      from: { email: profile.fromEmail, name: profile.fromName },
-      replyTo: profile.replyTo,
-      configurationSet: profile.configurationSetName,
-      tags: { ...message.tags, category },
-    };
   }
 }
