@@ -7,7 +7,7 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { EmailConfigService } from "../email/email-config.service";
+import type { EmailBulkSendMode } from "../email/email.types";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { MonitorDigestContentService } from "./monitor-digest-content.service";
 import {
@@ -23,7 +23,9 @@ const INTERNAL_ROLES = ["admin", "superadmin"] as const;
 
 // Espelha o seed da migration (MonitorDigestScheduleConfig id="default")
 // — só usado se a linha singleton não existir por algum motivo (defesa em
-// profundidade, nunca o caminho esperado em operação normal).
+// profundidade, nunca o caminho esperado em operação normal). sesMode
+// LEGACY_RESEND aqui é o mesmo default seguro da coluna no banco —
+// preserva o comportamento de produção atual mesmo nesse caminho raro.
 const DEFAULT_SCHEDULE_CONFIG = {
   dailyHour: 11,
   dailyMinute: 0,
@@ -31,6 +33,7 @@ const DEFAULT_SCHEDULE_CONFIG = {
   intervalAnchorDate: null as Date | null,
   weeklyDayOfWeek: 1,
   timezone: "America/Sao_Paulo",
+  sesMode: "LEGACY_RESEND" as EmailBulkSendMode,
   sesRolloutSegment: null as MonitorAlertBulkSegment | null,
 };
 
@@ -54,8 +57,6 @@ export class MonitorDigestScheduler {
     private readonly contentService: MonitorDigestContentService,
     @Inject(MonitorEntitlementService)
     private readonly entitlementService: MonitorEntitlementService,
-    @Inject(EmailConfigService)
-    private readonly emailConfig: EmailConfigService,
   ) {}
 
   // Polling por minuto em vez de um único @Cron fixo: assim o horário
@@ -98,9 +99,11 @@ export class MonitorDigestScheduler {
     now: Date,
     config: {
       frequency: MonitorDigestFrequency;
-      // Opcional só pra não forçar todo call site de teste pré-existente
-      // (que não sabe nada sobre SES) a passar este campo — undefined e
-      // null têm o mesmo efeito aqui: ninguém entra na coorte do SES.
+      // Ambos opcionais só pra não forçar todo call site de teste
+      // pré-existente (que não sabe nada sobre SES) a passar estes campos
+      // — omitidos, o efeito é idêntico ao default seguro da coluna real
+      // (LEGACY_RESEND, todo elegível via Resend).
+      sesMode?: EmailBulkSendMode | null;
       sesRolloutSegment?: MonitorAlertBulkSegment | null;
     },
   ): Promise<{ created: number }> {
@@ -119,6 +122,7 @@ export class MonitorDigestScheduler {
       const created = await this.discoverForFrequency(
         config.frequency,
         scheduledFor,
+        config.sesMode ?? "LEGACY_RESEND",
         config.sesRolloutSegment ?? null,
       );
       return { created };
@@ -127,23 +131,34 @@ export class MonitorDigestScheduler {
     }
   }
 
-  // Coorte controlada do rollout SES do digest (JOB_ALERT) — ver comentário
-  // de MonitorDigestScheduleConfig.sesRolloutSegment no schema. Só decide
-  // QUEM entra na coorte; se SES está desligado ou a coorte ainda não foi
-  // configurada (segment=null), ninguém entra — e quem fica de fora nunca
-  // cai pro Resend, é gravado SKIPPED direto (ver discoverForUser).
+  // Quem entra na coorte de envio deste ciclo — ver comentário completo de
+  // MonitorDigestScheduleConfig.sesMode/sesRolloutSegment no schema.
+  // null = todo mundo (nenhuma gate necessária); Set vazio = ninguém.
+  //   LEGACY_RESEND / SES_LIVE -> todo elegível (null).
+  //   PAUSED                  -> ninguém (Set vazio).
+  //   SES_ROLLOUT              -> resolve o segmento (ver abaixo).
   //
   // Escolha deliberada de NÃO reaproveitar
-  // AdminMonitorService.resolveAlertRolloutSegmentUserIds: aquele método
-  // hoje só resolve ALL/PAID (o branch "else" trata qualquer segmento que
-  // não seja ALL como PAID) e ainda não foi atualizado para o valor
-  // INTERNAL do enum — reaproveitá-lo aqui faria um sesRolloutSegment=
-  // "INTERNAL" silenciosamente resolver como PAID. Resolução própria,
-  // completa para os 3 valores do enum.
-  private async resolveSesRolloutCohort(
+  // AdminMonitorService.resolveAlertRolloutSegmentUserIds pra SES_ROLLOUT:
+  // aquele método hoje só resolve ALL/PAID (o branch "else" trata qualquer
+  // segmento que não seja ALL como PAID) e não é atualizado nesta entrega
+  // — reaproveitá-lo aqui faria um sesRolloutSegment="INTERNAL"
+  // silenciosamente resolver como PAID. Resolução própria, completa para
+  // os 3 valores do enum.
+  private async resolveCohort(
+    sesMode: EmailBulkSendMode,
     segment: MonitorAlertBulkSegment | null,
   ): Promise<Set<string> | null> {
-    if (!this.emailConfig.isSesEnabled() || segment === null) {
+    if (sesMode === "PAUSED") {
+      return new Set();
+    }
+
+    if (sesMode === "LEGACY_RESEND" || sesMode === "SES_LIVE") {
+      return null;
+    }
+
+    // SES_ROLLOUT
+    if (segment === null) {
       return new Set();
     }
 
@@ -166,6 +181,7 @@ export class MonitorDigestScheduler {
   private async discoverForFrequency(
     frequency: MonitorDigestFrequency,
     scheduledFor: Date,
+    sesMode: EmailBulkSendMode,
     sesRolloutSegment: MonitorAlertBulkSegment | null,
   ): Promise<number> {
     const preferences = await this.database.monitorAlertPreference.findMany({
@@ -175,7 +191,12 @@ export class MonitorDigestScheduler {
     const entitledUserIds = await this.entitlementService.filterEntitledUserIds(
       preferences.map((preference) => preference.userId),
     );
-    const sesCohort = await this.resolveSesRolloutCohort(sesRolloutSegment);
+    const cohort = await this.resolveCohort(sesMode, sesRolloutSegment);
+    // lastError só pra observabilidade (o worker/admin não interpretam o
+    // texto) — diferencia "pausado por modo" de "elegível mas fora da
+    // coorte do rollout", os dois casos em que cohort exclui alguém.
+    const outOfCohortReason =
+      sesMode === "PAUSED" ? "ses_mode_paused" : "ses_rollout_outside_cohort";
 
     let created = 0;
 
@@ -183,13 +204,14 @@ export class MonitorDigestScheduler {
       if (!entitledUserIds.has(preference.userId)) {
         continue;
       }
-      const inCohort = sesCohort === null || sesCohort.has(preference.userId);
+      const inCohort = cohort === null || cohort.has(preference.userId);
       try {
         const didCreate = await this.discoverForUser(
           preference.userId,
           frequency,
           scheduledFor,
           inCohort,
+          outOfCohortReason,
         );
         if (didCreate) created += 1;
       } catch (error) {
@@ -210,6 +232,7 @@ export class MonitorDigestScheduler {
     frequency: MonitorDigestFrequency,
     scheduledFor: Date,
     inCohort: boolean,
+    outOfCohortReason: string,
   ): Promise<boolean> {
     const existing = await this.database.monitorDigest.findUnique({
       where: {
@@ -220,13 +243,20 @@ export class MonitorDigestScheduler {
       return false;
     }
 
-    // Fora da coorte controlada do rollout SES: grava SKIPPED direto, sem
+    // Fora da coorte deste ciclo (modo pausado, ou fora do segmento do
+    // rollout SES): grava SKIPPED direto, com o motivo em lastError, sem
     // calcular recomendações elegíveis (a decisão de não enviar aqui não
     // depende do conteúdo) — nunca cria PENDING, que o worker processaria
-    // e bateria na recusa defensiva de DefaultEmailRoutingPolicy.resolve.
+    // à toa.
     if (!inCohort) {
       await this.database.monitorDigest.create({
-        data: { userId, frequency, scheduledFor, status: "SKIPPED" },
+        data: {
+          userId,
+          frequency,
+          scheduledFor,
+          status: "SKIPPED",
+          lastError: outOfCohortReason,
+        },
       });
       return false;
     }

@@ -22,6 +22,7 @@ function createFixture() {
       frequency: string;
       scheduledFor: Date;
       status: string;
+      lastError: string | null;
     }
   >();
   const eligibleByUser = new Map<string, { id: string }[]>();
@@ -78,6 +79,7 @@ function createFixture() {
           frequency: data.frequency as string,
           scheduledFor: data.scheduledFor as Date,
           status: data.status as string,
+          lastError: (data.lastError as string | undefined) ?? null,
         };
         digests.set(
           keyOf(record.userId, record.frequency, record.scheduledFor),
@@ -104,20 +106,11 @@ function createFixture() {
       new Set(userIds.filter((id) => !deniedUserIds.has(id))),
   };
 
-  // Default true + sesRolloutSegment="ALL" nos testes legados (que não são
-  // sobre SES) — testes específicos de coorte abaixo chamam
-  // setSesEnabled(...) explicitamente para os cenários que importam.
-  let sesEnabled = true;
-  const emailConfig = {
-    isSesEnabled: () => sesEnabled,
-  };
-
   const scheduler = new MonitorDigestScheduler(
     database as never,
     lockRepository as never,
     contentService as never,
     entitlementService as never,
-    emailConfig as never,
   );
 
   return {
@@ -128,9 +121,6 @@ function createFixture() {
     scheduler,
     setDeniedUserIds(userIds: string[]) {
       deniedUserIds = new Set(userIds);
-    },
-    setSesEnabled(enabled: boolean) {
-      sesEnabled = enabled;
     },
     seedUser(
       id: string,
@@ -166,6 +156,12 @@ function createFixture() {
 // os usuários com email ligado são descobertos juntos, numa única
 // passada. Não existe mais granularidade por usuário (ver
 // MonitorAlertPreference, que só guarda emailEnabled).
+//
+// Nenhum destes testes passa sesMode/sesRolloutSegment — o default,
+// LEGACY_RESEND, é exatamente o mesmo comportamento de antes do SES
+// existir (todo elegível, sem coorte), então a mecânica de descoberta em
+// si (frequência, idempotência, entitlement) é testada sem nenhum
+// conhecimento de SES.
 
 test("DAILY: user with eligible recommendations gets a PENDING digest for today", async () => {
   const fixture = createFixture();
@@ -174,7 +170,7 @@ test("DAILY: user with eligible recommendations gets a PENDING digest for today"
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "ALL" },
+    { frequency: "DAILY" },
   );
 
   assert.equal(result.created, 1);
@@ -190,12 +186,13 @@ test("DAILY: user with no eligible recommendations gets a SKIPPED digest, not PE
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "ALL" },
+    { frequency: "DAILY" },
   );
 
   assert.equal(result.created, 0);
   const [digest] = Array.from(fixture.digests.values());
   assert.equal(digest.status, "SKIPPED");
+  assert.equal(digest.lastError, null);
 });
 
 test("running discoverDue twice for the same day never creates a second digest for the same user (idempotent)", async () => {
@@ -205,14 +202,12 @@ test("running discoverDue twice for the same day never creates a second digest f
 
   await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"), {
     frequency: "DAILY",
-    sesRolloutSegment: "ALL",
   });
   // Segunda "vaga" aparece depois — não deveria gerar um segundo digest
   // pro mesmo dia mesmo assim.
   fixture.seedEligible("user-1", 5);
   await fixture.scheduler.discoverDue(new Date("2026-08-27T14:00:00Z"), {
     frequency: "DAILY",
-    sesRolloutSegment: "ALL",
   });
 
   assert.equal(fixture.digests.size, 1);
@@ -228,7 +223,7 @@ test("WEEKLY: creates a digest scoped to the Monday of the ISO week (scheduledFo
   // decide o scheduledFor, não se hoje é dia de WEEKLY.
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "WEEKLY", sesRolloutSegment: "ALL" },
+    { frequency: "WEEKLY" },
   );
 
   assert.equal(result.created, 1);
@@ -244,7 +239,7 @@ test("EVERY_3_DAYS: creates a digest scoped to the current UTC day, same as DAIL
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "EVERY_3_DAYS", sesRolloutSegment: "ALL" },
+    { frequency: "EVERY_3_DAYS" },
   );
 
   assert.equal(result.created, 1);
@@ -260,7 +255,6 @@ test("a user with emailEnabled=false is never picked up, regardless of the globa
 
   await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"), {
     frequency: "DAILY",
-    sesRolloutSegment: "ALL",
   });
 
   assert.equal(fixture.digests.size, 0);
@@ -274,7 +268,7 @@ test("a user without Monitor entitlement is never picked up, even with eligible 
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "ALL" },
+    { frequency: "DAILY" },
   );
 
   assert.equal(result.created, 0);
@@ -290,55 +284,68 @@ test("multiple enabled users are all discovered together under the same global f
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "ALL" },
+    { frequency: "DAILY" },
   );
 
   assert.equal(result.created, 2);
   assert.equal(fixture.digests.size, 2);
 });
 
-// Coorte controlada do rollout SES (MonitorDigestScheduleConfig.
-// sesRolloutSegment) — sem relação com o teto do Resend: aqui é sobre
-// QUEM gera um MonitorDigest de verdade nesta fase controlada. Fora da
-// coorte = SKIPPED direto, nunca PENDING (nunca cai pro Resend).
+// Modo operacional (EmailBulkSendMode) + coorte do rollout SES — sem
+// relação com o teto do Resend em si: aqui é sobre QUEM gera um
+// MonitorDigest PENDING de verdade em cada modo. Fora da coorte/pausado =
+// SKIPPED direto, nunca PENDING (nunca cai pro Resend por fallback).
 
-test("sesRolloutSegment=null (default seguro): ninguém recebe, mesmo com SES ligado e usuário elegível", async () => {
+test("sesMode=LEGACY_RESEND (default): todo elegível entra, sem consultar User", async () => {
   const fixture = createFixture();
-  fixture.setSesEnabled(true);
+  fixture.seedPreference("user-1");
+  fixture.seedEligible("user-1", 1);
+  // Nenhum seedUser — se o código consultasse User em LEGACY_RESEND,
+  // encontraria zero registros e o teste falharia.
+
+  const result = await fixture.scheduler.discoverDue(
+    new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY", sesMode: "LEGACY_RESEND" },
+  );
+
+  assert.equal(result.created, 1);
+});
+
+test("sesMode=PAUSED: ninguém recebe, mesmo elegível — SKIPPED com lastError=ses_mode_paused", async () => {
+  const fixture = createFixture();
+  fixture.seedPreference("user-1");
+  fixture.seedEligible("user-1", 3);
+
+  const result = await fixture.scheduler.discoverDue(
+    new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY", sesMode: "PAUSED" },
+  );
+
+  assert.equal(result.created, 0);
+  const [digest] = Array.from(fixture.digests.values());
+  assert.equal(digest.status, "SKIPPED");
+  assert.equal(digest.lastError, "ses_mode_paused");
+});
+
+test("sesMode=SES_ROLLOUT, sesRolloutSegment=null (default seguro): ninguém entra ainda", async () => {
+  const fixture = createFixture();
   fixture.seedPreference("user-1");
   fixture.seedEligible("user-1", 3);
   fixture.seedUser("user-1");
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: null },
+    { frequency: "DAILY", sesMode: "SES_ROLLOUT", sesRolloutSegment: null },
   );
 
   assert.equal(result.created, 0);
   const [digest] = Array.from(fixture.digests.values());
   assert.equal(digest.status, "SKIPPED");
+  assert.equal(digest.lastError, "ses_rollout_outside_cohort");
 });
 
-test("SES_EMAIL_ENABLED=false: ninguém recebe mesmo com sesRolloutSegment=ALL configurado", async () => {
+test("sesMode=SES_ROLLOUT, sesRolloutSegment=INTERNAL: só User.internalRole IN (admin, superadmin) entra na coorte", async () => {
   const fixture = createFixture();
-  fixture.setSesEnabled(false);
-  fixture.seedPreference("user-1");
-  fixture.seedEligible("user-1", 3);
-  fixture.seedUser("user-1");
-
-  const result = await fixture.scheduler.discoverDue(
-    new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "ALL" },
-  );
-
-  assert.equal(result.created, 0);
-  const [digest] = Array.from(fixture.digests.values());
-  assert.equal(digest.status, "SKIPPED");
-});
-
-test("sesRolloutSegment=INTERNAL: só User.internalRole IN (admin, superadmin) entra na coorte", async () => {
-  const fixture = createFixture();
-  fixture.setSesEnabled(true);
   fixture.seedPreference("user-admin");
   fixture.seedPreference("user-regular");
   fixture.seedEligible("user-admin", 1);
@@ -348,7 +355,11 @@ test("sesRolloutSegment=INTERNAL: só User.internalRole IN (admin, superadmin) e
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "INTERNAL" },
+    {
+      frequency: "DAILY",
+      sesMode: "SES_ROLLOUT",
+      sesRolloutSegment: "INTERNAL",
+    },
   );
 
   assert.equal(result.created, 1);
@@ -360,11 +371,11 @@ test("sesRolloutSegment=INTERNAL: só User.internalRole IN (admin, superadmin) e
   );
   assert.equal(admin?.status, "PENDING");
   assert.equal(regular?.status, "SKIPPED");
+  assert.equal(regular?.lastError, "ses_rollout_outside_cohort");
 });
 
-test("sesRolloutSegment=PAID: só usuário com planPurchase completed entra na coorte", async () => {
+test("sesMode=SES_ROLLOUT, sesRolloutSegment=PAID: só usuário com planPurchase completed entra na coorte", async () => {
   const fixture = createFixture();
-  fixture.setSesEnabled(true);
   fixture.seedPreference("user-paid");
   fixture.seedPreference("user-free");
   fixture.seedEligible("user-paid", 1);
@@ -374,6 +385,7 @@ test("sesRolloutSegment=PAID: só usuário com planPurchase completed entra na c
 
   await fixture.scheduler.discoverDue(new Date("2026-08-27T13:00:00Z"), {
     frequency: "DAILY",
+    sesMode: "SES_ROLLOUT",
     sesRolloutSegment: "PAID",
   });
 
@@ -383,9 +395,8 @@ test("sesRolloutSegment=PAID: só usuário com planPurchase completed entra na c
   assert.equal(free?.status, "SKIPPED");
 });
 
-test("sesRolloutSegment=ALL: todo mundo elegível entra, sem consultar User (sentinela null economiza a query)", async () => {
+test("sesMode=SES_ROLLOUT, sesRolloutSegment=ALL: todo mundo elegível entra, sem consultar User", async () => {
   const fixture = createFixture();
-  fixture.setSesEnabled(true);
   fixture.seedPreference("user-1");
   fixture.seedPreference("user-2");
   fixture.seedEligible("user-1", 1);
@@ -395,8 +406,23 @@ test("sesRolloutSegment=ALL: todo mundo elegível entra, sem consultar User (sen
 
   const result = await fixture.scheduler.discoverDue(
     new Date("2026-08-27T13:00:00Z"),
-    { frequency: "DAILY", sesRolloutSegment: "ALL" },
+    { frequency: "DAILY", sesMode: "SES_ROLLOUT", sesRolloutSegment: "ALL" },
   );
 
   assert.equal(result.created, 2);
+});
+
+test("sesMode=SES_LIVE: todo elegível entra, sesRolloutSegment é ignorado mesmo se setado", async () => {
+  const fixture = createFixture();
+  fixture.seedPreference("user-1");
+  fixture.seedEligible("user-1", 1);
+  // sesRolloutSegment=null propositalmente — SES_LIVE não deveria olhar
+  // pra este campo de jeito nenhum.
+
+  const result = await fixture.scheduler.discoverDue(
+    new Date("2026-08-27T13:00:00Z"),
+    { frequency: "DAILY", sesMode: "SES_LIVE", sesRolloutSegment: null },
+  );
+
+  assert.equal(result.created, 1);
 });
