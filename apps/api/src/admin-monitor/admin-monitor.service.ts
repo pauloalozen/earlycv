@@ -1409,12 +1409,40 @@ export class AdminMonitorService {
       };
     }
 
-    if (result.sent) {
+    if (result.sent && result.outcome === "OUTCOME_UNKNOWN") {
+      // Mesma semântica do MonitorDigestWorker: timeout/erro de rede
+      // ambíguo nunca é gravado como SENT — fica OUTCOME_UNKNOWN até um
+      // evento do provider confirmar ou o reconciler decidir (ver
+      // monitor-digest.worker.ts).
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "OUTCOME_UNKNOWN",
+          provider: result.provider,
+          providerMessageId: result.providerMessageId,
+          lastError: result.errorMessage ?? null,
+          outcomeUnknownAt: new Date(),
+        },
+      });
+    } else if (result.sent && result.outcome === "FAILED") {
+      // Erro CONFIRMADO do provider antes de aceitar o envio — nunca
+      // gravado como SENT (mesma distinção do worker automático).
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "FAILED",
+          attempts: 1,
+          provider: result.provider,
+          lastError: result.errorMessage ?? "provider rejected the send",
+        },
+      });
+    } else if (result.sent) {
       await this.database.monitorDigest.update({
         where: { id: digest.id },
         data: {
           status: "SENT",
           sentAt: new Date(),
+          provider: result.provider,
           providerMessageId: result.providerMessageId,
         },
       });

@@ -471,7 +471,7 @@ export default async function AdminAlertaVagasPage({
             description="Todos os digests já processados, manuais e automáticos, com o provider real de envio (Resend ou SES) — dado histórico do Resend é preservado, nunca recalculado ou descartado."
           />
 
-          <form method="GET" style={{ marginBottom: 10 }}>
+          <form method="GET" style={{ marginBottom: 14 }}>
             <input type="hidden" name="query" value={query ?? ""} />
             <input
               type="hidden"
@@ -493,11 +493,6 @@ export default async function AdminAlertaVagasPage({
               name="historyStatus"
               value={historyStatus ?? ""}
             />
-            <input
-              type="hidden"
-              name="statsProvider"
-              value={statsProvider ?? ""}
-            />
             <AdminFilterBar>
               <span style={{ fontSize: 11, color: AT.muted }}>Período:</span>
               {PERIOD_OPTIONS.map((option) => (
@@ -517,13 +512,29 @@ export default async function AdminAlertaVagasPage({
                   {option.label}
                 </button>
               ))}
+              <span style={{ fontSize: 11, color: AT.muted, marginLeft: 10 }}>
+                Provider:
+              </span>
+              <select
+                name="statsProvider"
+                defaultValue={statsProvider ?? ""}
+                style={inputStyle}
+              >
+                <option value="">Todos</option>
+                <option value="RESEND">Resend</option>
+                <option value="SES">SES</option>
+              </select>
+              <button type="submit" className={buttonVariants({ size: "sm" })}>
+                Filtrar
+              </button>
             </AdminFilterBar>
           </form>
 
-          <AdminStatsRow cols={6}>
+          <AdminStatsRow cols={4}>
             <AdminStatCard
               label="Processados"
               value={String(stats.summary.processed)}
+              sub="entraram no funil de envio"
             />
             <AdminStatCard
               label="Aceitos pelo provider"
@@ -533,6 +544,30 @@ export default async function AdminAlertaVagasPage({
               label="Entregues"
               value={String(stats.summary.delivered)}
               sub={`taxa de entrega: ${fmtRate(stats.summary.rates.deliveryRate)}`}
+            />
+            <AdminStatCard
+              label="Abertos (únicos)"
+              value={String(stats.summary.openedUnique)}
+              sub={`${fmtRate(stats.summary.rates.openRate)} — subestimado no Apple Mail (Mail Privacy Protection pré-carrega o pixel)`}
+            />
+            <AdminStatCard
+              label="Clicados (únicos)"
+              value={String(stats.summary.clickedUnique)}
+              sub={`taxa de clique: ${fmtRate(stats.summary.rates.clickRate)}`}
+            />
+            <AdminStatCard
+              label="Rejeitados pelo provider"
+              value={String(stats.summary.rejected)}
+            />
+            <AdminStatCard
+              label="Bounces"
+              value={String(stats.summary.bounced)}
+              sub={`taxa de bounce: ${fmtRate(stats.summary.rates.bounceRate)}`}
+            />
+            <AdminStatCard
+              label="Complaints"
+              value={String(stats.summary.complained)}
+              sub={`taxa de complaint: ${fmtRate(stats.summary.rates.complaintRate)}`}
             />
             <AdminStatCard
               label="Falharam"
@@ -546,29 +581,6 @@ export default async function AdminAlertaVagasPage({
             <AdminStatCard
               label="Descadastros"
               value={String(stats.summary.unsubscribed)}
-            />
-          </AdminStatsRow>
-
-          <AdminStatsRow cols={4}>
-            <AdminStatCard
-              label="Aberturas (únicas)"
-              value={String(stats.summary.openedUnique)}
-              sub={`${fmtRate(stats.summary.rates.openRate)} — subestimado no Apple Mail (Mail Privacy Protection pré-carrega o pixel)`}
-            />
-            <AdminStatCard
-              label="Cliques (únicos)"
-              value={String(stats.summary.clickedUnique)}
-              sub={`taxa de clique: ${fmtRate(stats.summary.rates.clickRate)}`}
-            />
-            <AdminStatCard
-              label="Bounces"
-              value={String(stats.summary.bounced)}
-              sub={`taxa de bounce: ${fmtRate(stats.summary.rates.bounceRate)}`}
-            />
-            <AdminStatCard
-              label="Complaints"
-              value={String(stats.summary.complained)}
-              sub={`taxa de complaint: ${fmtRate(stats.summary.rates.complaintRate)}`}
             />
           </AdminStatsRow>
 

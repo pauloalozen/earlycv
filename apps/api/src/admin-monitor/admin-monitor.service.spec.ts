@@ -770,6 +770,59 @@ test("sendDigestNow sends synchronously and records source=ADMIN_MANUAL with the
   }
 });
 
+// Regressão: sendDigestNow gravava só providerMessageId, nunca `provider`
+// — a coluna ficava no default RESEND do schema mesmo quando o envio saiu
+// de fato pelo SES (sesMode=SES_LIVE), fazendo o digest aparecer como
+// Resend na listagem do admin. fakeEmailService sempre resolve
+// provider=SES (ver topo do arquivo); aqui forçamos sesMode=SES_LIVE pra
+// garantir que MonitorDigestEmailService realmente rotea por ali, não
+// pelo fakeResendAdapter (default sem a linha de config).
+test("sendDigestNow persists provider=SES on the digest when the send actually went through SES", async () => {
+  withGhostModeOn();
+  const originalSecret = process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET;
+  process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET = "test-secret";
+  const user = await seedUser();
+  const { company, job } = await seedCompanyAndJob();
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { internalRole: "admin" },
+    });
+    await service.trackAlertUser("admin-1", user.id);
+    await prisma.userJobRecommendation.create({
+      data: { userId: user.id, jobId: job.id, score: 90, opportunityLevel: 5 },
+    });
+    await prisma.monitorDigestScheduleConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", sesMode: "SES_LIVE" },
+      update: { sesMode: "SES_LIVE" },
+    });
+
+    const result = await service.sendDigestNow("admin-99", user.id);
+
+    assert.equal(result.sent, true);
+    const digest = await prisma.monitorDigest.findUnique({
+      where: { id: result.digestId as string },
+    });
+    assert.equal(digest?.status, "SENT");
+    assert.equal(digest?.provider, "SES");
+  } finally {
+    restoreGhostMode();
+    process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET = originalSecret;
+    await prisma.monitorDigestScheduleConfig.update({
+      where: { id: "default" },
+      data: { sesMode: "LEGACY_RESEND" },
+    });
+    await prisma.monitorAdminActionLog
+      .deleteMany({
+        where: { metadataJson: { path: ["userId"], equals: user.id } },
+      })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+    await cleanupJob(job.id, company.id);
+  }
+});
+
 test("sendDigestNow reports no_eligible_recommendations without creating a PENDING digest when there is nothing to send", async () => {
   withGhostModeOn();
   const user = await seedUser();
