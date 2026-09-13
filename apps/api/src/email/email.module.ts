@@ -45,6 +45,11 @@ const useResend =
     EMAIL_DELIVERY_PORT,
     EMAIL_SERVICE,
     EmailConfigService,
+    // Exportado pra MonitorDigestEmailService poder chamar o Resend
+    // direto quando MonitorDigestScheduleConfig.sesMode=LEGACY_RESEND,
+    // bypassando a fachada/roteamento por categoria de propósito (ver
+    // comentário em monitor-digest-email.service.ts).
+    EmailDeliveryProviderAdapter,
   ],
 })
 export class EmailModule {}

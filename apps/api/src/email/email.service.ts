@@ -5,6 +5,7 @@ import type {
   EmailSendResult,
   EmailService as EmailServiceContract,
 } from "./email.types";
+import { EmailConfigService } from "./email-config.service";
 import { DefaultEmailRoutingPolicy } from "./email-routing.policy";
 
 // Fachada única de envio — responsabilidades: receber categoria+mensagem,
@@ -14,6 +15,15 @@ import { DefaultEmailRoutingPolicy } from "./email-routing.policy";
 // persistência (Monitor grava em MonitorDigest/MonitorDigestEvent,
 // pagamento em PaymentRecoveryEmail — fora do escopo desta entrega,
 // autenticação não registra envio, como hoje).
+//
+// Único lugar que sabe "categoria → identidade de remetente": quando o
+// provider resolvido é SES, busca o SesSenderProfile da categoria
+// (EmailConfigService.getSesSenderProfile) e injeta from/replyTo/
+// configurationSet + a tag `category` na mensagem ANTES de chamar o
+// provider — o chamador (ex.: MonitorDigestEmailService) nunca seta esses
+// campos, só suas próprias tags de correlação (correlationType/
+// correlationId). SesEmailProviderService nunca faz essa resolução
+// sozinho; é assim que uma categoria nova nunca exige tocar o provider.
 @Injectable()
 export class DefaultEmailService implements EmailServiceContract {
   private readonly logger = new Logger(DefaultEmailService.name);
@@ -21,6 +31,8 @@ export class DefaultEmailService implements EmailServiceContract {
   constructor(
     @Inject(DefaultEmailRoutingPolicy)
     private readonly policy: DefaultEmailRoutingPolicy,
+    @Inject(EmailConfigService)
+    private readonly config: Pick<EmailConfigService, "getSesSenderProfile">,
   ) {}
 
   async send(params: {
@@ -28,7 +40,13 @@ export class DefaultEmailService implements EmailServiceContract {
     message: EmailMessage;
   }): Promise<EmailSendResult> {
     const provider = this.policy.resolve(params.category);
-    const result = await provider.send(params.message);
+
+    const message: EmailMessage =
+      provider.name === "SES"
+        ? this.withSesSenderProfile(params.category, params.message)
+        : params.message;
+
+    const result = await provider.send(message);
 
     const logPayload = {
       category: params.category,
@@ -48,5 +66,19 @@ export class DefaultEmailService implements EmailServiceContract {
     }
 
     return result;
+  }
+
+  private withSesSenderProfile(
+    category: EmailCategory,
+    message: EmailMessage,
+  ): EmailMessage {
+    const profile = this.config.getSesSenderProfile(category);
+    return {
+      ...message,
+      from: { email: profile.fromEmail, name: profile.fromName },
+      replyTo: profile.replyTo,
+      configurationSet: profile.configurationSetName,
+      tags: { ...message.tags, category },
+    };
   }
 }

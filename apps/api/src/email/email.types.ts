@@ -1,14 +1,32 @@
 // Tipos compartilhados da fachada de e-mail multi-provider (Resend + SES).
 // EmailCategory decide o roteamento (ver email-routing.policy.ts) — nunca
 // comparação de assunto/template/string espalhada pelo código.
+//
+// PRODUCT_ANNOUNCEMENT/MARKETING existem só como vocabulário — nenhum
+// call site usa ainda, e resolvê-las (EmailConfigService.getSesSenderProfile)
+// lança erro claro até que sejam implementadas de fato, cada uma com sua
+// própria seleção de destinatários/consentimento (fora do escopo desta
+// entrega). Elas não liberam envio nenhum por existirem no type.
 export type EmailCategory =
   | "AUTHENTICATION"
   | "BILLING"
   | "JOB_ALERT"
+  | "PRODUCT_ANNOUNCEMENT" // reservado — sem uso nesta entrega
+  | "MARKETING" // reservado — sem uso nesta entrega
   | "ADMIN_COMMUNICATION"; // reservado — sem uso nesta entrega
 
 // Espelha o enum Prisma EmailProviderName.
 export type EmailProviderName = "RESEND" | "SES";
+
+// Espelha o enum Prisma EmailBulkSendMode — ver comentário completo em
+// MonitorDigestScheduleConfig.sesMode no schema. Vocabulário genérico do
+// domínio de e-mail (não específico do Monitor), mesmo que hoje só o
+// Monitor tenha um campo de configuração usando este tipo.
+export type EmailBulkSendMode =
+  | "LEGACY_RESEND"
+  | "SES_ROLLOUT"
+  | "SES_LIVE"
+  | "PAUSED";
 
 export type EmailMessage = {
   to: string;
@@ -22,12 +40,28 @@ export type EmailMessage = {
   // (header HTTP `Idempotency-Key`); SES v2 não tem equivalente nativo
   // (ver decisão em ses-email-provider.service.ts). Opcional.
   idempotencyKey?: string;
-  // Tags de correlação (ex.: { digestId }) — Resend ignora; SES mapeia
-  // para EmailTags no SendEmailCommand, o que faz a tag voltar em
+  // Tags de correlação do CHAMADOR (ex.: { correlationType:
+  // "MONITOR_DIGEST", correlationId: digestId }) — nomes genéricos de
+  // propósito, nunca "digestId" solto, porque este tipo é compartilhado
+  // por toda categoria futura (PRODUCT_ANNOUNCEMENT/MARKETING terão seu
+  // próprio correlationType). A fachada (DefaultEmailService) acrescenta a
+  // tag `category` automaticamente antes de enviar — o chamador nunca
+  // precisa (nem deve) setá-la aqui. Resend ignora; SES mapeia pra
+  // EmailTags no SendEmailCommand, o que faz as tags voltarem em
   // `mail.tags` em TODO evento publicado (Send/Delivery/Bounce/Complaint/
-  // Reject/Open/Click), permitindo correlacionar um evento assíncrono ao
-  // digest de origem mesmo quando o MessageId não está disponível.
+  // Reject/Open/Click) — correlação sobrevive mesmo sem providerMessageId
+  // (caso OUTCOME_UNKNOWN).
   tags?: Record<string, string>;
+  // Identidade de remetente — SEMPRE resolvida pela fachada a partir de
+  // EmailConfigService.getSesSenderProfile(category) antes de chamar um
+  // provider SES; nunca setada pelo chamador, nunca lida do config pelo
+  // próprio SesEmailProviderService (ele só usa o que já vier aqui). É
+  // assim que adicionar uma categoria nova nunca exige mudar o provider.
+  // Resend ignora estes 3 campos (usa seu próprio remetente fixo, fora do
+  // escopo desta entrega).
+  from?: { email: string; name: string };
+  replyTo?: string;
+  configurationSet?: string;
 };
 
 export type EmailSendOutcome = "SENT" | "FAILED" | "OUTCOME_UNKNOWN";

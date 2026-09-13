@@ -36,46 +36,100 @@ test("EmailConfigService.isSesEnabled reflects SES_EMAIL_ENABLED", () => {
   );
 });
 
-test("EmailConfigService.getSesConfig throws listing every missing field, never partial config silently", () => {
+test("EmailConfigService.getSesClientConfig throws listing every missing field, never partial config silently", () => {
   const service = new EmailConfigService(
     buildEnv({ SES_EMAIL_ENABLED: true, AWS_SES_REGION: "us-east-1" }),
   );
 
   assert.throws(
-    () => service.getSesConfig(),
+    () => service.getSesClientConfig(),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /accessKeyId/);
       assert.match(error.message, /secretAccessKey/);
-      assert.match(error.message, /configurationSetName/);
-      assert.match(error.message, /fromEmail/);
-      assert.match(error.message, /fromName/);
       assert.doesNotMatch(error.message, /\bregion\b/);
       return true;
     },
   );
 });
 
-test("EmailConfigService.getSesConfig returns the full config when everything is present", () => {
+test("EmailConfigService.getSesClientConfig returns pure transport config — no identity of sender", () => {
   const service = new EmailConfigService(
     buildEnv({
       SES_EMAIL_ENABLED: true,
       AWS_SES_REGION: "us-east-1",
       AWS_SES_ACCESS_KEY_ID: "AKIA...",
       AWS_SES_SECRET_ACCESS_KEY: "secret",
-      AWS_SES_CONFIGURATION_SET: "earlycv-job-alert",
-      AWS_SES_FROM_EMAIL: "vagas@alertas.earlycv.com.br",
-      AWS_SES_FROM_NAME: "EarlyCV — Alerta de Vagas",
     }),
   );
 
-  assert.deepEqual(service.getSesConfig(), {
+  assert.deepEqual(service.getSesClientConfig(), {
     region: "us-east-1",
     accessKeyId: "AKIA...",
     secretAccessKey: "secret",
-    configurationSetName: "earlycv-job-alert",
+  });
+});
+
+test("EmailConfigService.getSesSenderProfile throws for any category other than JOB_ALERT — nenhuma outra categoria libera envio", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      SES_EMAIL_ENABLED: true,
+      AWS_SES_JOB_ALERT_FROM_EMAIL: "vagas@alertas.earlycv.com.br",
+      AWS_SES_JOB_ALERT_FROM_NAME: "EarlyCV — Alerta de Vagas",
+      AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
+    }),
+  );
+
+  for (const category of [
+    "AUTHENTICATION",
+    "BILLING",
+    "PRODUCT_ANNOUNCEMENT",
+    "MARKETING",
+    "ADMIN_COMMUNICATION",
+  ] as const) {
+    assert.throws(
+      () => service.getSesSenderProfile(category),
+      /não configurado/,
+    );
+  }
+});
+
+test("EmailConfigService.getSesSenderProfile(JOB_ALERT) throws listing every missing field", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      SES_EMAIL_ENABLED: true,
+      AWS_SES_JOB_ALERT_FROM_EMAIL: "x@y.com",
+    }),
+  );
+
+  assert.throws(
+    () => service.getSesSenderProfile("JOB_ALERT"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /fromName/);
+      assert.match(error.message, /configurationSetName/);
+      assert.doesNotMatch(error.message, /fromEmail/);
+      return true;
+    },
+  );
+});
+
+test("EmailConfigService.getSesSenderProfile(JOB_ALERT) returns the full profile, replyTo optional", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      SES_EMAIL_ENABLED: true,
+      AWS_SES_JOB_ALERT_FROM_EMAIL: "vagas@alertas.earlycv.com.br",
+      AWS_SES_JOB_ALERT_FROM_NAME: "EarlyCV — Alerta de Vagas",
+      AWS_SES_JOB_ALERT_REPLY_TO: "contato@earlycv.com.br",
+      AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
+    }),
+  );
+
+  assert.deepEqual(service.getSesSenderProfile("JOB_ALERT"), {
     fromEmail: "vagas@alertas.earlycv.com.br",
     fromName: "EarlyCV — Alerta de Vagas",
+    configurationSetName: "earlycv-bulk-email",
+    replyTo: "contato@earlycv.com.br",
   });
 });
 

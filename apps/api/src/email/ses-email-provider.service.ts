@@ -8,11 +8,18 @@ import type {
 } from "./email.types";
 import { EmailConfigService } from "./email-config.service";
 
-// Provider SES v2 — usado hoje só pela categoria JOB_ALERT (digest do
-// Monitor). Cliente construído sob demanda a cada send() (não no
-// constructor) porque getSesConfig() pode lançar se SES_EMAIL_ENABLED=true
-// mas a config estiver incompleta — isolar essa falha ao envio em si,
-// nunca ao boot do módulo.
+// Provider SES v2 — genérico, sem saber de categoria/Monitor/digest.
+// Cliente construído sob demanda a cada send() (não no constructor) porque
+// getSesClientConfig() pode lançar se SES_EMAIL_ENABLED=true mas a config
+// estiver incompleta — isolar essa falha ao envio em si, nunca ao boot do
+// módulo.
+//
+// Identidade de remetente (from/replyTo/configurationSet) SEMPRE vem já
+// resolvida em `message` pela fachada (DefaultEmailService, que consulta
+// EmailConfigService.getSesSenderProfile(category) antes de chamar isto) —
+// este provider nunca lê fromEmail/fromName/configurationSet de config
+// algum. É isso que garante que adicionar uma categoria nova (ex.:
+// MARKETING) nunca exige tocar este arquivo.
 //
 // Distinção FAILED vs OUTCOME_UNKNOWN: um erro com `$metadata.httpStatusCode`
 // numérico veio de uma resposta de verdade da AWS (rejeição confirmada,
@@ -29,25 +36,40 @@ export class SesEmailProviderService implements EmailProvider {
 
   constructor(
     @Inject(EmailConfigService)
-    private readonly config: Pick<EmailConfigService, "getSesConfig">,
+    private readonly config: Pick<EmailConfigService, "getSesClientConfig">,
   ) {}
 
   async send(message: EmailMessage): Promise<EmailSendResult> {
-    const sesConfig = this.config.getSesConfig();
+    if (!message.from || !message.configurationSet) {
+      // Defensivo: só a fachada deveria chamar este provider, e ela sempre
+      // resolve isto antes. Chegar aqui sem from/configurationSet é bug de
+      // quem chamou, não um estado ambíguo de rede — falha confirmada, sem
+      // sequer tentar a AWS.
+      throw new Error(
+        "SesEmailProviderService.send chamado sem from/configurationSet resolvidos — só a fachada (DefaultEmailService) deveria chamar este provider",
+      );
+    }
+
+    const clientConfig = this.config.getSesClientConfig();
     const client = new SESv2Client({
-      region: sesConfig.region,
+      region: clientConfig.region,
       credentials: {
-        accessKeyId: sesConfig.accessKeyId,
-        secretAccessKey: sesConfig.secretAccessKey,
+        accessKeyId: clientConfig.accessKeyId,
+        secretAccessKey: clientConfig.secretAccessKey,
       },
     });
 
-    const headers = message.headers
-      ? Object.entries(message.headers).map(([Name, Value]) => ({
-          Name,
-          Value,
-        }))
-      : undefined;
+    const headers = [
+      ...(message.headers
+        ? Object.entries(message.headers).map(([Name, Value]) => ({
+            Name,
+            Value,
+          }))
+        : []),
+      ...(message.replyTo
+        ? [{ Name: "Reply-To", Value: message.replyTo }]
+        : []),
+    ];
     const emailTags = message.tags
       ? Object.entries(message.tags).map(([Name, Value]) => ({ Name, Value }))
       : undefined;
@@ -55,9 +77,9 @@ export class SesEmailProviderService implements EmailProvider {
     try {
       const result = await client.send(
         new SendEmailCommand({
-          FromEmailAddress: `"${sesConfig.fromName}" <${sesConfig.fromEmail}>`,
+          FromEmailAddress: `"${message.from.name}" <${message.from.email}>`,
           Destination: { ToAddresses: [message.to] },
-          ConfigurationSetName: sesConfig.configurationSetName,
+          ConfigurationSetName: message.configurationSet,
           EmailTags: emailTags,
           Content: {
             Simple: {
@@ -68,7 +90,7 @@ export class SesEmailProviderService implements EmailProvider {
                   ? { Html: { Data: message.html, Charset: "UTF-8" } }
                   : {}),
               },
-              Headers: headers,
+              Headers: headers.length > 0 ? headers : undefined,
             },
           },
         }),

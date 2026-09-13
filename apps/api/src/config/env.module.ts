@@ -30,9 +30,16 @@ export type AppEnv = {
   AWS_SES_REGION?: string;
   AWS_SES_ACCESS_KEY_ID?: string;
   AWS_SES_SECRET_ACCESS_KEY?: string;
+  // Genérico de propósito — um único Configuration Set pra todo envio em
+  // massa via SES (JOB_ALERT hoje; PRODUCT_ANNOUNCEMENT/MARKETING/
+  // ADMIN_COMMUNICATION quando existirem), nunca nomeado por categoria.
   AWS_SES_CONFIGURATION_SET?: string;
-  AWS_SES_FROM_EMAIL?: string;
-  AWS_SES_FROM_NAME?: string;
+  // Perfil de remetente POR CATEGORIA — só JOB_ALERT nesta entrega. Uma
+  // categoria nova ganha suas próprias 3 variáveis (ex.:
+  // AWS_SES_MARKETING_FROM_EMAIL), nunca reaproveita as de outra.
+  AWS_SES_JOB_ALERT_FROM_EMAIL?: string;
+  AWS_SES_JOB_ALERT_FROM_NAME?: string;
+  AWS_SES_JOB_ALERT_REPLY_TO?: string;
   AWS_SES_CUSTOM_MAIL_FROM_DOMAIN?: string;
   AWS_SES_SNS_TOPIC_ARN?: string;
 };
@@ -95,8 +102,9 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_ACCESS_KEY_ID: { optional: true },
     AWS_SES_SECRET_ACCESS_KEY: { optional: true },
     AWS_SES_CONFIGURATION_SET: { optional: true },
-    AWS_SES_FROM_EMAIL: { optional: true },
-    AWS_SES_FROM_NAME: { optional: true },
+    AWS_SES_JOB_ALERT_FROM_EMAIL: { optional: true },
+    AWS_SES_JOB_ALERT_FROM_NAME: { optional: true },
+    AWS_SES_JOB_ALERT_REPLY_TO: { optional: true },
     AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: { optional: true },
     AWS_SES_SNS_TOPIC_ARN: { optional: true },
   });
@@ -126,8 +134,15 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_CONFIGURATION_SET: env.AWS_SES_CONFIGURATION_SET as
       | string
       | undefined,
-    AWS_SES_FROM_EMAIL: env.AWS_SES_FROM_EMAIL as string | undefined,
-    AWS_SES_FROM_NAME: env.AWS_SES_FROM_NAME as string | undefined,
+    AWS_SES_JOB_ALERT_FROM_EMAIL: env.AWS_SES_JOB_ALERT_FROM_EMAIL as
+      | string
+      | undefined,
+    AWS_SES_JOB_ALERT_FROM_NAME: env.AWS_SES_JOB_ALERT_FROM_NAME as
+      | string
+      | undefined,
+    AWS_SES_JOB_ALERT_REPLY_TO: env.AWS_SES_JOB_ALERT_REPLY_TO as
+      | string
+      | undefined,
     AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: env.AWS_SES_CUSTOM_MAIL_FROM_DOMAIN as
       | string
       | undefined,

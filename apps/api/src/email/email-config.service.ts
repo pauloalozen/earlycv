@@ -1,14 +1,26 @@
 import { Inject, Injectable } from "@nestjs/common";
 
 import { APP_ENV, type AppEnv } from "../config/env.module";
+import type { EmailCategory } from "./email.types";
 
-export type SesConfig = {
+// Config de transporte AWS — pura, sem nada de identidade de remetente.
+// Compartilhada por QUALQUER categoria que resolva pra SES.
+export type SesClientConfig = {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
-  configurationSetName: string;
+};
+
+// Identidade de remetente por categoria — quem o destinatário vê e pra
+// onde uma resposta vai. Nunca lido diretamente por SesEmailProviderService
+// (ele só usa o que a fachada já injetou na mensagem); só existe aqui
+// porque é aqui que cada categoria futura ganha seu próprio perfil sem
+// tocar o provider.
+export type SesSenderProfile = {
   fromEmail: string;
   fromName: string;
+  replyTo?: string;
+  configurationSetName: string;
 };
 
 // Config tipada do SES — lida do AppEnv (validado no boot pelo EnvModule),
@@ -16,8 +28,7 @@ export type SesConfig = {
 // do AppEnv porque só fazem sentido quando SES_EMAIL_ENABLED=true; exigir
 // isso no boot da API inteira derrubaria produção sem digest algum
 // configurado ainda. A checagem "obrigatório quando ligado" acontece aqui,
-// sob demanda, isolada ao módulo de e-mail (ver SesEmailProviderService,
-// que chama getSesConfig() só quando de fato precisa enviar).
+// sob demanda, isolada ao módulo de e-mail.
 @Injectable()
 export class EmailConfigService {
   constructor(@Inject(APP_ENV) private readonly env: AppEnv) {}
@@ -30,18 +41,15 @@ export class EmailConfigService {
   // no boot geral por falta de config SES (auth/pagamento continuam
   // funcionando mesmo com SES mal configurado). NUNCA logar accessKeyId
   // nem secretAccessKey, nem incluí-los na mensagem de erro.
-  getSesConfig(): SesConfig {
-    const required: Partial<SesConfig> = {
+  getSesClientConfig(): SesClientConfig {
+    const required: Partial<SesClientConfig> = {
       region: this.env.AWS_SES_REGION,
       accessKeyId: this.env.AWS_SES_ACCESS_KEY_ID,
       secretAccessKey: this.env.AWS_SES_SECRET_ACCESS_KEY,
-      configurationSetName: this.env.AWS_SES_CONFIGURATION_SET,
-      fromEmail: this.env.AWS_SES_FROM_EMAIL,
-      fromName: this.env.AWS_SES_FROM_NAME,
     };
 
     const missingKeys = (
-      Object.keys(required) as Array<keyof SesConfig>
+      Object.keys(required) as Array<keyof SesClientConfig>
     ).filter((key) => !required[key]);
 
     if (missingKeys.length > 0) {
@@ -50,7 +58,47 @@ export class EmailConfigService {
       );
     }
 
-    return required as SesConfig;
+    return required as SesClientConfig;
+  }
+
+  // Perfil de remetente por categoria — implementado só para JOB_ALERT
+  // nesta entrega, de propósito: nenhuma outra categoria tem seleção de
+  // destinatários/consentimento implementados ainda, então nenhuma outra
+  // categoria deve conseguir enviar (mesmo que EmailRoutingPolicy resolva
+  // SES pra ela). Adicionar PRODUCT_ANNOUNCEMENT/MARKETING no futuro é só
+  // acrescentar um novo `case` aqui — SesEmailProviderService nunca muda.
+  getSesSenderProfile(category: EmailCategory): SesSenderProfile {
+    if (category !== "JOB_ALERT") {
+      throw new Error(
+        `SES sender profile não configurado para a categoria "${category}" — nenhum call site deveria estar enviando por ela ainda`,
+      );
+    }
+
+    const required: Partial<SesSenderProfile> = {
+      fromEmail: this.env.AWS_SES_JOB_ALERT_FROM_EMAIL,
+      fromName: this.env.AWS_SES_JOB_ALERT_FROM_NAME,
+      configurationSetName: this.env.AWS_SES_CONFIGURATION_SET,
+    };
+
+    const missingKeys = (
+      Object.keys(required) as Array<keyof SesSenderProfile>
+    ).filter((key) => !required[key]);
+
+    if (missingKeys.length > 0) {
+      throw new Error(
+        `SES sender profile de JOB_ALERT incompleto: ${missingKeys.join(", ")}`,
+      );
+    }
+
+    return {
+      ...(required as Required<
+        Pick<
+          SesSenderProfile,
+          "fromEmail" | "fromName" | "configurationSetName"
+        >
+      >),
+      replyTo: this.env.AWS_SES_JOB_ALERT_REPLY_TO,
+    };
   }
 
   // Só para documentação/diagnóstico (ex.: exibir no admin, validar

@@ -8,15 +8,24 @@ import { EmailConfigService } from "./email-config.service";
 import { EmailDeliveryProviderAdapter } from "./email-delivery-provider.adapter";
 import { SesEmailProviderService } from "./ses-email-provider.service";
 
-// Mapa fixo por categoria — nunca comparação de assunto/template/string.
-// JOB_ALERT é a única categoria que pode ir para SES, e só quando
-// SES_EMAIL_ENABLED=true: por decisão explícita (sem fallback automático
-// entre providers), se JOB_ALERT for solicitado com SES desligado, este
-// método FALHA em vez de silenciosamente rotear pro Resend — o Resend não
-// tem capacidade pro volume de digest, então usá-lo aqui esconderia o
-// problema de limite diário que motivou esta migração. Quem decide "não
-// enviar agora" é o chamador (MonitorDigestWorker), verificando
-// isSesEnabled()/coorte ANTES de chamar EmailService — nunca este roteador.
+// Mapa fixo por categoria — nunca comparação de assunto/template/string, e
+// nunca mais mexido ao adicionar uma categoria de envio em massa nova
+// (PRODUCT_ANNOUNCEMENT/MARKETING/ADMIN_COMMUNICATION já estão aqui,
+// mapeadas pro destino final esperado, mesmo sem nenhum call site usá-las
+// ainda — isso é só taxonomia, não libera envio nenhum: continuam sem
+// seleção de destinatários/consentimento/fluxo próprio implementados).
+//
+// Toda categoria de envio em massa (SES) passa pela mesma checagem
+// isSesEnabled(): por decisão explícita (sem fallback automático entre
+// providers), se SES estiver desligado este método FALHA em vez de
+// silenciosamente rotear pro Resend — o Resend não tem capacidade pro
+// volume de envio em massa, usá-lo aqui esconderia o problema de limite
+// diário que motivou esta migração. Quem decide "não enviar agora" por
+// modo/coorte é o chamador (ex.: MonitorDigestEmailService, que só chama
+// este roteador com JOB_ALERT quando o modo já exige SES) — nunca este
+// roteador.
+const RESEND_CATEGORIES = new Set<EmailCategory>(["AUTHENTICATION", "BILLING"]);
+
 @Injectable()
 export class DefaultEmailRoutingPolicy implements EmailRoutingPolicy {
   // Tipados pela interface EmailProvider (não pela classe concreta) — o
@@ -35,22 +44,17 @@ export class DefaultEmailRoutingPolicy implements EmailRoutingPolicy {
   ) {}
 
   resolve(category: EmailCategory): EmailProvider {
-    switch (category) {
-      case "AUTHENTICATION":
-      case "BILLING":
-      case "ADMIN_COMMUNICATION":
-        return this.resendAdapter;
-      case "JOB_ALERT":
-        if (!this.config.isSesEnabled()) {
-          throw new Error(
-            "JOB_ALERT requer SES_EMAIL_ENABLED=true — sem fallback automático para Resend por decisão de produto",
-          );
-        }
-        return this.sesProvider;
-      default: {
-        const exhaustive: never = category;
-        throw new Error(`unknown email category: ${exhaustive}`);
-      }
+    if (RESEND_CATEGORIES.has(category)) {
+      return this.resendAdapter;
     }
+
+    // JOB_ALERT | PRODUCT_ANNOUNCEMENT | MARKETING | ADMIN_COMMUNICATION —
+    // todo o resto do enum é envio em massa, sempre SES quando habilitado.
+    if (!this.config.isSesEnabled()) {
+      throw new Error(
+        `${category} requer SES_EMAIL_ENABLED=true — sem fallback automático para Resend por decisão de produto`,
+      );
+    }
+    return this.sesProvider;
   }
 }

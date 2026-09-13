@@ -19,7 +19,7 @@ function buildConfig(
   return { isSesEnabled: () => sesEnabled };
 }
 
-test("DefaultEmailRoutingPolicy routes AUTHENTICATION, BILLING and ADMIN_COMMUNICATION to Resend regardless of SES state", () => {
+test("DefaultEmailRoutingPolicy routes AUTHENTICATION and BILLING to Resend regardless of SES state", () => {
   const resend = fakeProvider("RESEND");
   const ses = fakeProvider("SES");
 
@@ -32,22 +32,35 @@ test("DefaultEmailRoutingPolicy routes AUTHENTICATION, BILLING and ADMIN_COMMUNI
 
     assert.equal(policy.resolve("AUTHENTICATION"), resend);
     assert.equal(policy.resolve("BILLING"), resend);
-    assert.equal(policy.resolve("ADMIN_COMMUNICATION"), resend);
   }
 });
 
-test("DefaultEmailRoutingPolicy routes JOB_ALERT to SES only when SES is enabled", () => {
+test("DefaultEmailRoutingPolicy routes every bulk category (JOB_ALERT, PRODUCT_ANNOUNCEMENT, MARKETING, ADMIN_COMMUNICATION) to SES when enabled", () => {
   const resend = fakeProvider("RESEND");
   const ses = fakeProvider("SES");
   const policy = new DefaultEmailRoutingPolicy(resend, ses, buildConfig(true));
 
-  assert.equal(policy.resolve("JOB_ALERT"), ses);
+  for (const category of [
+    "JOB_ALERT",
+    "PRODUCT_ANNOUNCEMENT",
+    "MARKETING",
+    "ADMIN_COMMUNICATION",
+  ] as const) {
+    assert.equal(policy.resolve(category), ses);
+  }
 });
 
-test("DefaultEmailRoutingPolicy REFUSES JOB_ALERT when SES is disabled — never silently falls back to Resend (no automatic fallback by product decision)", () => {
+test("DefaultEmailRoutingPolicy REFUSES every bulk category when SES is disabled — never silently falls back to Resend (no automatic fallback by product decision)", () => {
   const resend = fakeProvider("RESEND");
   const ses = fakeProvider("SES");
   const policy = new DefaultEmailRoutingPolicy(resend, ses, buildConfig(false));
 
-  assert.throws(() => policy.resolve("JOB_ALERT"), /SES_EMAIL_ENABLED/);
+  for (const category of [
+    "JOB_ALERT",
+    "PRODUCT_ANNOUNCEMENT",
+    "MARKETING",
+    "ADMIN_COMMUNICATION",
+  ] as const) {
+    assert.throws(() => policy.resolve(category), /SES_EMAIL_ENABLED/);
+  }
 });
