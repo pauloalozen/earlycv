@@ -19,6 +19,3 @@ ALTER TABLE "MonitorDigestScheduleConfig" ADD COLUMN     "sesRolloutSegment" "Mo
 
 -- CreateIndex
 CREATE INDEX "MonitorDigest_status_outcomeUnknownAt_idx" ON "MonitorDigest"("status", "outcomeUnknownAt");
-
--- RenameIndex
-ALTER INDEX "TalentExperienceObservation_talentProfileId_cvStructuredP_key" RENAME TO "TalentExperienceObservation_talentProfileId_cvStructuredPro_key";

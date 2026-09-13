@@ -2003,6 +2003,19 @@ enum EmailProviderName {
   SES
 }
 
+// Ver comentário completo em MonitorDigestScheduleConfig.sesMode. Definido
+// aqui (não dentro do bloco do Monitor) porque é vocabulário genérico do
+// domínio de e-mail — categorias de envio em massa futuras
+// (PRODUCT_ANNOUNCEMENT, MARKETING, ADMIN_COMMUNICATION) usam o mesmo tipo
+// quando forem implementadas, mesmo que cada uma acabe tendo seu próprio
+// campo de configuração (este aqui é hoje exclusivo do Monitor).
+enum EmailBulkSendMode {
+  LEGACY_RESEND
+  SES_ROLLOUT
+  SES_LIVE
+  PAUSED
+}
+
 // Quem gerou este MonitorDigest — distingue o disparo do
 // MonitorDigestScheduler (rotina normal) de um disparo manual pedido por
 // um admin na aba /admin/alerta-vagas (ver admin-monitor.service.ts). Só
@@ -2185,17 +2198,35 @@ model MonitorDigestScheduleConfig {
   intervalAnchorDate DateTime?
   timezone           String              @default("America/Sao_Paulo")
 
-  // Coorte controlada do rollout SES pro digest (JOB_ALERT) — não tem
+  // Modo operacional do envio em massa do digest (JOB_ALERT) — separado de
+  // "SES está configurado" (EmailConfigService.isSesEnabled(), infra) e de
+  // "quem entra na coorte" (sesRolloutSegment, abaixo). Default seguro
+  // LEGACY_RESEND: mergear/deployar esta feature NUNCA muda o
+  // comportamento em produção por si só — o Monitor continua exatamente
+  // como está hoje (Resend, todo mundo elegível) até um admin trocar o
+  // modo explicitamente em /admin/alerta-vagas, depois que AWS/SNS/webhook
+  // estiverem prontos. Ver monitor-digest.scheduler.ts (gate de quem ganha
+  // PENDING) e monitor-digest-email.service.ts (por qual caminho enviar).
+  //   LEGACY_RESEND -> todo elegível, via Resend (EmailDeliveryProviderAdapter
+  //                    direto, sem passar pela fachada EmailService) — é
+  //                    literalmente o comportamento pré-migração.
+  //   SES_ROLLOUT   -> só a coorte de sesRolloutSegment recebe, via SES
+  //                    (EmailService, categoria JOB_ALERT); fora da coorte
+  //                    não recebe nada, nunca cai pro Resend.
+  //   SES_LIVE      -> todo elegível recebe via SES (sesRolloutSegment
+  //                    ignorado).
+  //   PAUSED        -> ninguém recebe (SKIPPED com motivo explícito).
+  sesMode EmailBulkSendMode @default(LEGACY_RESEND)
+
+  // Coorte controlada do rollout SES pro digest (JOB_ALERT) — só relevante
+  // quando sesMode=SES_ROLLOUT (ignorado em qualquer outro modo). Não tem
   // relação com MonitorAlertRolloutPolicy.segment (aquele decide quem GANHA
   // MonitorAlertPreference; este decide, entre quem já tem emailEnabled,
-  // quem recebe via SES). Semântica explícita, sem sobrecarregar null:
-  //   null       -> SES_EMAIL_ENABLED não importa: ninguém recebe via SES
-  //                 ainda (default seguro, força escolha explícita do admin).
+  // quem recebe via SES).
+  //   null       -> em SES_ROLLOUT, ninguém entra ainda (default seguro,
+  //                 força escolha explícita do admin).
   //   INTERNAL   -> só User.internalRole IN (admin, superadmin).
   //   ALL / PAID -> mesma população de resolveAlertRolloutSegmentUserIds.
-  // Fora da coorte = usuário elegível não recebe NADA nesta fase (nunca cai
-  // pro Resend — ver monitor-digest.scheduler.ts). Ignorado por completo
-  // quando SES_EMAIL_ENABLED=false.
   sesRolloutSegment MonitorAlertBulkSegment?
 
   updatedAt        DateTime @updatedAt
