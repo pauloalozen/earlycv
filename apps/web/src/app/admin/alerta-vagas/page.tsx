@@ -534,53 +534,62 @@ export default async function AdminAlertaVagasPage({
             <AdminStatCard
               label="Processados"
               value={String(stats.summary.processed)}
-              sub="entraram no funil de envio"
+              tooltip="Digests que entraram no funil de envio neste período (inclui os que ainda falharam ou foram pulados)."
             />
             <AdminStatCard
               label="Aceitos pelo provider"
               value={String(stats.summary.accepted)}
+              tooltip="Envios que o provider (Resend ou SES) aceitou processar, antes de qualquer confirmação de entrega."
             />
             <AdminStatCard
               label="Entregues"
               value={String(stats.summary.delivered)}
-              sub={`taxa de entrega: ${fmtRate(stats.summary.rates.deliveryRate)}`}
+              sub={fmtRate(stats.summary.rates.deliveryRate)}
+              tooltip="Taxa de entrega = entregues / aceitos pelo provider."
             />
             <AdminStatCard
               label="Abertos (únicos)"
               value={String(stats.summary.openedUnique)}
-              sub={`${fmtRate(stats.summary.rates.openRate)} — subestimado no Apple Mail (Mail Privacy Protection pré-carrega o pixel)`}
+              sub={fmtRate(stats.summary.rates.openRate)}
+              tooltip="Taxa de abertura = abertos únicos / entregues. Pode estar inflada: o Apple Mail Privacy Protection pré-carrega o pixel de rastreio mesmo sem abertura real pelo usuário."
             />
             <AdminStatCard
               label="Clicados (únicos)"
               value={String(stats.summary.clickedUnique)}
-              sub={`taxa de clique: ${fmtRate(stats.summary.rates.clickRate)}`}
+              sub={fmtRate(stats.summary.rates.clickRate)}
+              tooltip="Taxa de clique = clicados únicos / entregues."
             />
             <AdminStatCard
               label="Rejeitados pelo provider"
               value={String(stats.summary.rejected)}
+              tooltip="Rejeitado pelo provider antes da entrega (ex.: filtro de conteúdo/spam do SES) — nunca chegou a ser entregue."
             />
             <AdminStatCard
               label="Bounces"
               value={String(stats.summary.bounced)}
-              sub={`taxa de bounce: ${fmtRate(stats.summary.rates.bounceRate)}`}
+              sub={fmtRate(stats.summary.rates.bounceRate)}
+              tooltip="Taxa de bounce = bounces / aceitos pelo provider."
             />
             <AdminStatCard
               label="Complaints"
               value={String(stats.summary.complained)}
-              sub={`taxa de complaint: ${fmtRate(stats.summary.rates.complaintRate)}`}
+              sub={fmtRate(stats.summary.rates.complaintRate)}
+              tooltip="Taxa de complaint = complaints / entregues."
             />
             <AdminStatCard
               label="Falharam"
               value={String(stats.summary.failed)}
+              tooltip="Erro confirmado do provider antes de aceitar o envio (esgotou as tentativas)."
             />
             <AdminStatCard
               label="Resultado desconhecido"
               value={String(stats.summary.outcomeUnknown)}
-              sub="aguardando confirmação assíncrona"
+              tooltip="Timeout ou erro de rede ambíguo — aguardando confirmação assíncrona do provider antes de decidir sucesso ou falha."
             />
             <AdminStatCard
               label="Descadastros"
               value={String(stats.summary.unsubscribed)}
+              tooltip="Usuários que cancelaram o recebimento do Alerta de Vaga Certa neste período."
             />
           </AdminStatsRow>
 

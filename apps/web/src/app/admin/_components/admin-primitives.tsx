@@ -28,6 +28,10 @@ type AdminStatCardProps = {
   delta?: string;
   label: string;
   sub?: string;
+  // Explicação mais longa (metodologia do cálculo, ressalva de dado,
+  // etc.) — vai só no title (tooltip nativo do browser), nunca no corpo
+  // do card, pra não empilhar texto e desalinhar a grade de cards.
+  tooltip?: string;
   value: string;
 };
 
@@ -36,6 +40,7 @@ export function AdminStatCard({
   value,
   delta,
   sub,
+  tooltip,
 }: AdminStatCardProps) {
   const deltaPositive = delta?.startsWith("+");
   const deltaNegative = delta?.startsWith("-");
@@ -53,16 +58,42 @@ export function AdminStatCard({
       }}
     >
       <div
+        title={tooltip}
         style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
           fontFamily: '"Geist Mono", monospace',
           fontSize: 10,
           letterSpacing: 1.1,
           color: AT.muted2,
           fontWeight: 500,
           textTransform: "uppercase",
+          cursor: tooltip ? "help" : undefined,
         }}
       >
         {label}
+        {tooltip && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 12,
+              height: 12,
+              borderRadius: "50%",
+              border: `1px solid ${AT.faint}`,
+              fontSize: 8.5,
+              fontWeight: 600,
+              color: AT.muted2,
+              textTransform: "none",
+              letterSpacing: 0,
+              flexShrink: 0,
+            }}
+          >
+            i
+          </span>
+        )}
       </div>
       <div
         style={{
