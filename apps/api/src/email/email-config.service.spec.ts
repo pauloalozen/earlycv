@@ -17,6 +17,7 @@ function buildEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     GOOGLE_CLIENT_SECRET: "secret",
     GOOGLE_CALLBACK_URL: "https://example.com",
     SES_EMAIL_ENABLED: false,
+    AWS_SES_SNS_LOG_SUBSCRIPTION_URL: false,
     ...overrides,
   };
 }

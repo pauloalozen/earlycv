@@ -1,5 +1,6 @@
 import type { RawBodyRequest } from "@nestjs/common";
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -90,7 +91,13 @@ export class MonitorPublicController {
   //   3. Corpo processável como o formato de evento SES documentado.
   // SubscriptionConfirmation NUNCA é confirmada automaticamente (nunca
   // visitamos SubscribeURL sozinhos) — só logamos, bem visível, pra
-  // confirmação manual durante a configuração da infraestrutura.
+  // confirmação manual durante a configuração da infraestrutura. O
+  // SubscribeURL em si (carrega o token) só entra no log se
+  // AWS_SES_SNS_LOG_SUBSCRIPTION_URL=true (default false).
+  //
+  // Content-Type: o SNS publica notificações como text/plain, não
+  // application/json — ver sns-text-body-parser.ts (registrado no
+  // bootstrap) pro parser que garante req.rawBody populado nesse caso.
   @Post("webhooks/ses")
   async sesWebhook(@Req() req: RawBodyRequest<Request>) {
     if (!req.rawBody) {
@@ -104,11 +111,14 @@ export class MonitorPublicController {
       throw new UnauthorizedException("ses webhook not configured");
     }
 
+    // Corpo malformado é erro de FORMATO da requisição (400), não de
+    // autenticação (401) — diferente de TopicArn/assinatura inválidos
+    // abaixo, que são, de fato, tentativas de autenticação que falharam.
     let message: SnsMessage;
     try {
       message = JSON.parse(req.rawBody.toString("utf8"));
     } catch {
-      throw new UnauthorizedException("invalid SNS payload");
+      throw new BadRequestException("invalid SNS payload");
     }
 
     if (message.TopicArn !== expectedTopicArn) {
@@ -122,8 +132,16 @@ export class MonitorPublicController {
     }
 
     if (message.Type === "SubscriptionConfirmation") {
+      // SubscribeURL carrega o token de confirmação da subscription —
+      // NUNCA vai pro log comum por padrão (AWS_SES_SNS_LOG_SUBSCRIPTION_URL
+      // default false). Ligar a variável só durante a janela de
+      // configuração inicial da infra, e desligar assim que a assinatura
+      // for confirmada — ver procedimento no runbook/PR.
+      const revealUrl = this.emailConfig.isSnsSubscriptionUrlLoggingEnabled();
       this.logger.warn(
-        `SNS SubscriptionConfirmation pendente para TopicArn=${message.TopicArn} — confirme manualmente (abrir SubscribeURL ou 'aws sns confirm-subscription'): ${message.SubscribeURL}`,
+        revealUrl
+          ? `SNS SubscriptionConfirmation pendente para TopicArn=${message.TopicArn} — confirme manualmente (abrir SubscribeURL ou 'aws sns confirm-subscription'): ${message.SubscribeURL}`
+          : `SNS SubscriptionConfirmation pendente para TopicArn=${message.TopicArn} (MessageId=${message.MessageId}) — SubscribeURL omitido do log por padrão. Ligue AWS_SES_SNS_LOG_SUBSCRIPTION_URL=true temporariamente pra revelar a URL nesta mensagem, confirme a assinatura, e desligue a variável em seguida.`,
       );
       return { ok: true, action: "manual_confirmation_required" };
     }

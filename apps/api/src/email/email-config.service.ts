@@ -102,4 +102,12 @@ export class EmailConfigService {
   getExpectedSnsTopicArn(): string | undefined {
     return this.env.AWS_SES_SNS_TOPIC_ARN;
   }
+
+  // Default false: NUNCA expõe o SubscribeURL (carrega o token de
+  // confirmação da subscription) em log comum. Ligar temporariamente só
+  // durante a configuração inicial da infra SNS, desligar depois de
+  // confirmar a assinatura (ver MonitorPublicController.sesWebhook).
+  isSnsSubscriptionUrlLoggingEnabled(): boolean {
+    return this.env.AWS_SES_SNS_LOG_SUBSCRIPTION_URL;
+  }
 }
