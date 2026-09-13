@@ -42,6 +42,12 @@ export type AppEnv = {
   AWS_SES_JOB_ALERT_REPLY_TO?: string;
   AWS_SES_CUSTOM_MAIL_FROM_DOMAIN?: string;
   AWS_SES_SNS_TOPIC_ARN?: string;
+  // Controle temporário do log de SubscriptionConfirmation do SNS — default
+  // false NUNCA expõe o SubscribeURL (que carrega o token de confirmação)
+  // em log comum. Ligar só durante a configuração inicial da
+  // infraestrutura (ver MonitorPublicController.sesWebhook), desligar
+  // depois de confirmar a assinatura.
+  AWS_SES_SNS_LOG_SUBSCRIPTION_URL: boolean;
 };
 
 export const APP_ENV = Symbol("APP_ENV");
@@ -107,6 +113,10 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_JOB_ALERT_REPLY_TO: { optional: true },
     AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: { optional: true },
     AWS_SES_SNS_TOPIC_ARN: { optional: true },
+    AWS_SES_SNS_LOG_SUBSCRIPTION_URL: {
+      default: "false",
+      parse: (value: string) => envToBoolean(value),
+    },
   });
 
   const env = readEnv(source);
@@ -147,6 +157,7 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
       | string
       | undefined,
     AWS_SES_SNS_TOPIC_ARN: env.AWS_SES_SNS_TOPIC_ARN as string | undefined,
+    AWS_SES_SNS_LOG_SUBSCRIPTION_URL: env.AWS_SES_SNS_LOG_SUBSCRIPTION_URL,
   };
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, UnauthorizedException } from "@nestjs/common";
 
 import { MonitorPublicController } from "./monitor-public.controller";
 
@@ -60,7 +60,7 @@ test("POST /monitor/webhooks/ses rejects when the raw body is missing", async ()
   );
 });
 
-test("POST /monitor/webhooks/ses rejects an unparseable body without leaking into signature verification", async () => {
+test("POST /monitor/webhooks/ses rejects an unparseable body with 400 (malformed request), not 401 — never leaks into signature verification", async () => {
   const controller = createController("arn:aws:sns:us-east-1:123:topic");
 
   await assert.rejects(
@@ -68,6 +68,6 @@ test("POST /monitor/webhooks/ses rejects an unparseable body without leaking int
       controller.sesWebhook({
         rawBody: Buffer.from("not json", "utf8"),
       } as never),
-    UnauthorizedException,
+    BadRequestException,
   );
 });
