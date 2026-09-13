@@ -86,16 +86,23 @@ async function main() {
 
     // Script de teste local: sempre passa por FakeEmailDeliveryService (via
     // o mesmo adapter que a fachada de produção usaria pra Resend/Fake) —
-    // nunca chama o SES real, categoria é ignorada por este stub.
+    // nunca chama o SES real, categoria é ignorada por este stub. sesMode
+    // do singleton (default LEGACY_RESEND) decide qual dos dois braços do
+    // service é exercitado; isSesEnabled=false garante que mesmo um
+    // sesMode=SES_ROLLOUT/SES_LIVE configurado manualmente no banco local
+    // não tenta o SES real por engano.
+    const resendAdapter = new EmailDeliveryProviderAdapter(
+      new FakeEmailDeliveryService(),
+    );
     const fakeEmailService: EmailService = {
-      send: ({ message }) =>
-        new EmailDeliveryProviderAdapter(new FakeEmailDeliveryService()).send(
-          message,
-        ),
+      send: ({ message }) => resendAdapter.send(message),
     };
+    const fakeEmailConfig = { isSesEnabled: () => false };
     const emailService = new MonitorDigestEmailService(
       database,
       fakeEmailService,
+      resendAdapter,
+      fakeEmailConfig,
       new MonitorEntitlementService(database),
     );
     const result = await emailService.sendDigest(digest.id);

@@ -3,10 +3,15 @@ import { Inject, Injectable } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import {
   EMAIL_SERVICE,
+  type EmailBulkSendMode,
+  type EmailMessage,
+  type EmailProvider,
   type EmailProviderName,
   type EmailSendOutcome,
   type EmailService,
 } from "../email/email.types";
+import { EmailConfigService } from "../email/email-config.service";
+import { EmailDeliveryProviderAdapter } from "../email/email-delivery-provider.adapter";
 import { MAX_RECOMMENDATIONS_PER_DIGEST } from "./monitor-digest-content.service";
 import {
   buildMonitorDigestLink,
@@ -56,6 +61,15 @@ export class MonitorDigestEmailService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailService,
+    // Só usado quando MonitorDigestScheduleConfig.sesMode=LEGACY_RESEND —
+    // aí o envio bypassa a fachada/roteamento de categoria por completo e
+    // vai direto pro Resend, exatamente como antes desta migração existir.
+    // Nunca passa por EmailConfigService.getSesSenderProfile (não faz
+    // sentido pro Resend).
+    @Inject(EmailDeliveryProviderAdapter)
+    private readonly resendAdapter: EmailProvider,
+    @Inject(EmailConfigService)
+    private readonly emailConfig: Pick<EmailConfigService, "isSesEnabled">,
     @Inject(MonitorEntitlementService)
     private readonly entitlementService: MonitorEntitlementService,
   ) {}
@@ -169,37 +183,50 @@ export class MonitorDigestEmailService {
       introText,
     });
 
-    const result = await this.emailService.send({
-      category: "JOB_ALERT",
-      message: {
-        to: digest.user.email,
-        subject,
-        text,
-        html,
-        // RFC 8058 (one-click unsubscribe): List-Unsubscribe aponta pro
-        // MESMO endpoint do link visível no corpo — GET mostra confirmação
-        // sem mutar nada, POST (que é como os clientes de e-mail acionam
-        // one-click) desliga de fato. List-Unsubscribe-Post sinaliza
-        // explicitamente suporte a POST de um clique, sem exigir abrir o
-        // link no browser.
-        headers: {
-          "List-Unsubscribe": `<${unsubscribeLink}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
-        // Chave estável derivada só do digestId (cuid opaco, sem PII) —
-        // continua a mesma em qualquer retry deste MESMO MonitorDigest
-        // (o worker nunca recria a linha, só reprocessa). Resend reconhece
-        // como a mesma requisição via Idempotency-Key; SES não tem
-        // equivalente nativo (ignora este campo), por isso a tag abaixo.
-        idempotencyKey: `monitor-digest:${digest.id}`,
-        // Tag de correlação — SES devolve isto em `mail.tags` em TODO
-        // evento publicado (Send/Delivery/Bounce/Complaint/Reject/Open/
-        // Click), permitindo ao webhook (monitor-digest-webhook.service.ts)
-        // achar este MonitorDigest mesmo quando o MessageId não está
-        // disponível ou não bate (ver MonitorDigestOutcomeReconciler).
-        tags: { digestId: digest.id },
+    const message = {
+      to: digest.user.email,
+      subject,
+      text,
+      html,
+      // RFC 8058 (one-click unsubscribe): List-Unsubscribe aponta pro
+      // MESMO endpoint do link visível no corpo — GET mostra confirmação
+      // sem mutar nada, POST (que é como os clientes de e-mail acionam
+      // one-click) desliga de fato. List-Unsubscribe-Post sinaliza
+      // explicitamente suporte a POST de um clique, sem exigir abrir o
+      // link no browser.
+      headers: {
+        "List-Unsubscribe": `<${unsubscribeLink}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
-    });
+      // Chave estável derivada só do digestId (cuid opaco, sem PII) —
+      // continua a mesma em qualquer retry deste MESMO MonitorDigest
+      // (o worker nunca recria a linha, só reprocessa). Resend reconhece
+      // como a mesma requisição via Idempotency-Key; SES não tem
+      // equivalente nativo (ignora este campo), por isso as tags abaixo.
+      idempotencyKey: `monitor-digest:${digest.id}`,
+      // correlationType genérico (não "digestId" solto): o webhook SES só
+      // tenta correlacionar com MonitorDigest quando correlationType ===
+      // "MONITOR_DIGEST" — qualquer outro tipo (de uma categoria futura)
+      // ele ignora com segurança, sem tentar procurar aqui. Tags voltam em
+      // `mail.tags` em TODO evento publicado (Send/Delivery/Bounce/
+      // Complaint/Reject/Open/Click), sobrevivendo mesmo sem
+      // providerMessageId disponível (caso OUTCOME_UNKNOWN).
+      tags: { correlationType: "MONITOR_DIGEST", correlationId: digest.id },
+    };
+
+    const sesMode = await this.resolveSesMode();
+    const result = await this.sendByMode(sesMode, message);
+    if (!result) {
+      // PAUSED, ou modo exige SES mas SES não está disponível — ver
+      // sendByMode. Diferente de "fora da coorte" (decidido no scheduler,
+      // nunca chega a criar PENDING) e diferente de FAILED/OUTCOME_UNKNOWN
+      // (que exigem ter de fato tentado enviar).
+      return {
+        sent: false,
+        skippedReason:
+          sesMode === "PAUSED" ? "ses_mode_paused" : "ses_not_available",
+      };
+    }
 
     return {
       sent: true,
@@ -208,6 +235,41 @@ export class MonitorDigestEmailService {
       providerMessageId: result.providerMessageId,
       errorMessage: result.errorMessage,
     };
+  }
+
+  private async resolveSesMode() {
+    const config = await this.database.monitorDigestScheduleConfig.findUnique({
+      where: { id: "default" },
+      select: { sesMode: true },
+    });
+    // Sem a linha singleton (defesa em profundidade, nunca o caminho
+    // esperado): LEGACY_RESEND é o default seguro, igual ao da migration.
+    return config?.sesMode ?? "LEGACY_RESEND";
+  }
+
+  // Lido de novo aqui (não só no scheduler): sesMode pode ter mudado entre
+  // o scheduler criar o PENDING e o worker processar. Retorna null quando
+  // não deve enviar por modo/infra (PAUSED, ou SES exigido mas
+  // indisponível) — nunca lança, nunca deixa o worker interpretar isso
+  // como falha.
+  private async sendByMode(sesMode: EmailBulkSendMode, message: EmailMessage) {
+    if (sesMode === "PAUSED") {
+      return null;
+    }
+
+    if (sesMode === "LEGACY_RESEND") {
+      return this.resendAdapter.send(message);
+    }
+
+    // SES_ROLLOUT | SES_LIVE
+    if (!this.emailConfig.isSesEnabled()) {
+      // Modo pede SES mas a infra não está pronta/configurada — trata como
+      // pausado (nunca cai pro Resend, por decisão de produto: o volume do
+      // digest é justamente o que o Resend não aguenta).
+      return null;
+    }
+
+    return this.emailService.send({ category: "JOB_ALERT", message });
   }
 
   private buildHtml(input: {

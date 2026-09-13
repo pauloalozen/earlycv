@@ -13,6 +13,7 @@ type DigestRecord = {
   providerMessageId?: string | null;
   provider?: string | null;
   outcomeUnknownAt?: Date | null;
+  lastError?: string | null;
 };
 
 function createFixture() {
@@ -141,6 +142,7 @@ test("when the email service reports sent:false (e.g. unsubscribed between sched
 
   const updated = fixture.digests.get(digest.id);
   assert.equal(updated?.status, "SKIPPED");
+  assert.equal(updated?.lastError, "email_disabled");
   assert.deepEqual(fixture.recordedEvents, []);
 });
 

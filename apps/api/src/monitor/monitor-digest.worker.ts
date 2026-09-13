@@ -123,7 +123,7 @@ export class MonitorDigestWorker {
         );
         await this.database.monitorDigest.update({
           where: { id: digest.id },
-          data: { status: "SKIPPED" },
+          data: { status: "SKIPPED", lastError: result.skippedReason },
         });
         return;
       }
