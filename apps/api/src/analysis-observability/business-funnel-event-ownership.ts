@@ -102,6 +102,11 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   monitor_digest_bounced: "backend",
   monitor_digest_complained: "backend",
   monitor_digest_unsubscribed: "backend",
+  // E-mail multi-provider (SES) — vêm do webhook SES/SNS
+  // (MonitorDigestWebhookService), nunca do Resend (resposta síncrona já
+  // confirma o envio, nunca precisou de um evento assíncrono pra isso).
+  monitor_digest_provider_accepted: "backend",
+  monitor_digest_provider_rejected: "backend",
   // Interview Prep
   interview_prep_drawer_opened: "frontend",
   interview_prep_generate_clicked: "frontend",

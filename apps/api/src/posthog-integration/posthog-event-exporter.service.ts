@@ -75,6 +75,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   monitor_digest_bounced: "monitor_digest_bounced",
   monitor_digest_complained: "monitor_digest_complained",
   monitor_digest_unsubscribed: "monitor_digest_unsubscribed",
+  monitor_digest_provider_accepted: "monitor_digest_provider_accepted",
+  monitor_digest_provider_rejected: "monitor_digest_provider_rejected",
   // Candidaturas
   candidaturas_page_viewed: "candidaturas_page_viewed",
   candidatura_created: "candidatura_created",

@@ -109,6 +109,12 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   monitor_digest_bounced: 1,
   monitor_digest_complained: 1,
   monitor_digest_unsubscribed: 1,
+  // Meu Monitor — e-mail multi-provider (SES): SENT/REJECTED só existem
+  // pro provider SES (a resposta síncrona do Resend já confirma o envio,
+  // nunca precisou de um evento de webhook pra isso) — ver
+  // POSTHOG_EVENT_NAME em monitor-digest-webhook.service.ts.
+  monitor_digest_provider_accepted: 1,
+  monitor_digest_provider_rejected: 1,
   // Interview Prep
   interview_prep_drawer_opened: 1,
   interview_prep_generate_clicked: 1,

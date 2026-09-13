@@ -28,7 +28,16 @@ const SES_EVENT_TYPE_MAP: Record<string, MonitorDigestEventType> = {
   Reject: "REJECTED",
 };
 
-const POSTHOG_EVENT_NAME: Record<MonitorDigestEventType, string> = {
+// Exportado só pra teste — garante que
+// monitor-digest-webhook.service.registry.spec.ts valide TODO nome de
+// evento que este service de fato emite contra o registry versionado
+// real (analysis-event-version.registry.ts), a partir da mesma fonte de
+// verdade, nunca uma lista duplicada que poderia divergir e mascarar um
+// evento novo sem entrada no registry (foi exatamente isso que causou o
+// "business funnel event is missing from event version registry" visto
+// em produção — monitor_digest_provider_accepted/rejected, os dois
+// eventos novos do fluxo SES, não tinham entrada nenhuma).
+export const POSTHOG_EVENT_NAME: Record<MonitorDigestEventType, string> = {
   DELIVERED: "monitor_digest_delivered",
   OPENED: "monitor_digest_opened",
   CLICKED: "monitor_digest_clicked",
