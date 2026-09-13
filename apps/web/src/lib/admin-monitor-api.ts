@@ -24,13 +24,17 @@ export type MonitorDigestStatus =
   | "PROCESSING"
   | "SENT"
   | "FAILED"
-  | "SKIPPED";
+  | "SKIPPED"
+  | "OUTCOME_UNKNOWN";
 export type MonitorDigestEventType =
+  | "SENT"
   | "DELIVERED"
   | "OPENED"
   | "CLICKED"
   | "BOUNCED"
-  | "COMPLAINED";
+  | "COMPLAINED"
+  | "REJECTED";
+export type EmailProviderName = "RESEND" | "SES";
 export type MonitorProfileStatus = "INITIALIZING" | "ACTIVE" | "REFRESHING";
 
 export type AdminMonitorOverview = {
@@ -485,6 +489,12 @@ export type DigestFrequency =
   | "EVERY_4_DAYS"
   | "WEEKLY";
 
+export type DigestHistoryLastEvent = {
+  type: MonitorDigestEventType;
+  provider: EmailProviderName;
+  occurredAt: string;
+};
+
 export type DigestHistoryItem = {
   id: string;
   frequency: DigestFrequency;
@@ -493,6 +503,14 @@ export type DigestHistoryItem = {
   sentAt: string | null;
   createdAt: string;
   source: DigestHistorySource;
+  provider: EmailProviderName;
+  outcomeUnknownAt: string | null;
+  attempts: number;
+  lastError: string | null;
+  providerMessageId: string | null;
+  recommendationCount: number;
+  subject: string | null;
+  lastEvent: DigestHistoryLastEvent | null;
   triggeredByAdmin: { id: string; name: string; email: string } | null;
   user: { id: string; email: string; name: string };
 };
@@ -530,20 +548,82 @@ export type DigestContent = {
   introText: string;
 };
 
+export type DigestEmailStatsRates = {
+  // null quando o denominador é 0 (nunca NaN/Infinity) — UI deve mostrar
+  // "—" nesse caso, não "0%".
+  deliveryRate: number | null;
+  openRate: number | null;
+  clickRate: number | null;
+  bounceRate: number | null;
+  complaintRate: number | null;
+};
+
+export type DigestEmailStatsSummary = {
+  processed: number;
+  accepted: number;
+  delivered: number;
+  failed: number;
+  outcomeUnknown: number;
+  bounced: number;
+  complained: number;
+  rejected: number;
+  openedUnique: number;
+  clickedUnique: number;
+  unsubscribed: number;
+  rates: DigestEmailStatsRates;
+};
+
+export type DigestFailedItem = {
+  id: string;
+  userId: string;
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string;
+  user: { id: string; email: string; name: string };
+};
+
 export type DigestEmailStats = {
+  // Janela do bloco `summary` — default 1 (24h) quando omitida no request.
+  periodDays: number;
+  provider: EmailProviderName | null;
+  summary: DigestEmailStatsSummary;
+  // Globais (todo o histórico), independentes do filtro de período.
   byStatus: Record<MonitorDigestStatus, number>;
+  byProvider: Record<EmailProviderName, number>;
   sentLast24h: number;
   eventsLast24h: Record<MonitorDigestEventType, number>;
   stuckProcessing: number;
   staleProcessingThresholdMs: number;
-  failedDigests: {
+  failedDigests: DigestFailedItem[];
+  outcomeUnknownDigests: DigestFailedItem[];
+  outcomeUnknownReconciliationWindowMs: number;
+};
+
+export type DigestTimelineEvent = {
+  id: string;
+  type: MonitorDigestEventType;
+  label: string;
+  provider: EmailProviderName;
+  providerEventId: string | null;
+  occurredAt: string;
+  summary: string | null;
+};
+
+export type DigestTimeline = {
+  digest: {
     id: string;
-    userId: string;
+    status: MonitorDigestStatus;
+    provider: EmailProviderName;
+    providerMessageId: string | null;
     attempts: number;
     lastError: string | null;
-    updatedAt: string;
+    createdAt: string;
+    sentAt: string | null;
+    outcomeUnknownAt: string | null;
+    source: DigestHistorySource;
     user: { id: string; email: string; name: string };
-  }[];
+  };
+  events: DigestTimelineEvent[];
 };
 
 export function listTrackedAlertUsers(
@@ -612,6 +692,10 @@ export function getMonitorDigestHistory(
     limit?: number;
     userQuery?: string;
     source?: "MANUAL" | "AUTOMATIC";
+    provider?: EmailProviderName;
+    status?: MonitorDigestStatus;
+    from?: string;
+    to?: string;
   } = {},
   token?: string,
 ) {
@@ -620,6 +704,10 @@ export function getMonitorDigestHistory(
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.userQuery) qs.set("userQuery", params.userQuery);
   if (params.source) qs.set("source", params.source);
+  if (params.provider) qs.set("provider", params.provider);
+  if (params.status) qs.set("status", params.status);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
   const suffix = qs.toString();
   return apiRequest<{
     page: number;
@@ -629,8 +717,25 @@ export function getMonitorDigestHistory(
   }>(`/admin/monitor/digest/history${suffix ? `?${suffix}` : ""}`, token);
 }
 
-export function getMonitorDigestStats(token?: string) {
-  return apiRequest<DigestEmailStats>("/admin/monitor/digest/stats", token);
+export function getMonitorDigestStats(
+  params: { periodDays?: number; provider?: EmailProviderName } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.periodDays) qs.set("periodDays", String(params.periodDays));
+  if (params.provider) qs.set("provider", params.provider);
+  const suffix = qs.toString();
+  return apiRequest<DigestEmailStats>(
+    `/admin/monitor/digest/stats${suffix ? `?${suffix}` : ""}`,
+    token,
+  );
+}
+
+export function getMonitorDigestTimeline(digestId: string, token?: string) {
+  return apiRequest<DigestTimeline>(
+    `/admin/monitor/digests/${digestId}/timeline`,
+    token,
+  );
 }
 
 export function getMonitorDigestSchedule(token?: string) {

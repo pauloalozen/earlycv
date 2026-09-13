@@ -5,7 +5,10 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type {
+  EmailProviderName,
   MonitorAlertBulkSegment,
+  MonitorDigestEventType,
+  MonitorDigestStatus,
   MonitorMatchJobStatus,
   Prisma,
 } from "@prisma/client";
@@ -15,6 +18,7 @@ import { MonitorAlertPreferenceService } from "../monitor/monitor-alert-preferen
 import { OUTCOME_UNKNOWN_RECONCILIATION_WINDOW_MS } from "../monitor/monitor-digest.constants";
 import { MonitorDigestContentService } from "../monitor/monitor-digest-content.service";
 import {
+  buildDigestSubject,
   DEFAULT_INTRO_TEXT,
   DEFAULT_SUBJECT_TEMPLATE,
   MonitorDigestEmailService,
@@ -31,11 +35,17 @@ import {
   type ScorableProfile,
   scoreToOpportunityLevel,
 } from "../radar/matching.engine";
+import type { GetDigestEmailStatsDto } from "./dto/get-digest-email-stats.dto";
 import type { AdminMonitorRecommendationStatusFilter } from "./dto/list-admin-monitor-recommendations.dto";
 import type { DigestHistorySourceFilter } from "./dto/list-digest-history.dto";
 import type { UpdateAlertRolloutPolicyDto } from "./dto/update-alert-rollout-policy.dto";
 import type { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
 import type { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
+import {
+  DIGEST_EVENT_TYPE_LABEL,
+  summarizeDigestEventMetadata,
+  truncateForDisplay,
+} from "./monitor-digest-observability.util";
 
 const INTERVAL_FREQUENCIES = new Set([
   "EVERY_2_DAYS",
@@ -156,6 +166,16 @@ function tallyByKey<K extends string, G>(
     result[keyOf(group)] += 1;
   }
   return result;
+}
+
+// Taxa numerador/denominador — null (nunca 0, nunca Infinity/NaN) quando o
+// denominador é 0, pra UI distinguir "0% de verdade" de "sem base pra
+// calcular ainda" (ex.: nenhum digest aceito no período).
+function safeRate(numerator: number, denominator: number): number | null {
+  if (denominator <= 0) {
+    return null;
+  }
+  return numerator / denominator;
 }
 
 // Recommendation com os campos mínimos que a UI de diagnóstico precisa —
@@ -321,10 +341,27 @@ export class AdminMonitorService {
   // pelo Monitor (ver comentário em getOverview). Junta o que antes estava
   // espalhado entre getOverview (contagem por status, 24h) e getFailures
   // (digests FAILED, processamento travado).
+  //
+  // `filters.periodDays`/`filters.provider` controlam só o bloco `summary`
+  // (+ eventsLast24h, que passa a respeitar o mesmo período apesar do
+  // nome histórico) — byStatus/byProvider continuam globais (todo o
+  // histórico), stuckProcessing/failedDigests/outcomeUnknownDigests
+  // continuam "agora", sem período: são filas operacionais, não uma
+  // métrica de janela de tempo.
   // ---------------------------------------------------------------------
-  async getDigestEmailStats() {
-    const since24h = new Date(Date.now() - 24 * 60 * 60_000);
+  async getDigestEmailStats(filters: GetDigestEmailStatsDto = {}) {
+    // Number(...) explícito mesmo com @Type(() => Number) no DTO: query
+    // string sempre chega como string na Request; não confiar em o
+    // ValidationPipe ter substituído o valor original antes deste ponto.
+    const periodDays =
+      filters.periodDays != null ? Number(filters.periodDays) : 1;
+    const since = new Date(Date.now() - periodDays * 24 * 60 * 60_000);
     const staleThreshold = new Date(Date.now() - STALE_PROCESSING_THRESHOLD_MS);
+    const providerWhere: Prisma.MonitorDigestWhereInput = filters.provider
+      ? { provider: filters.provider }
+      : {};
+    const eventProviderWhere: Prisma.MonitorDigestEventWhereInput =
+      filters.provider ? { provider: filters.provider } : {};
 
     const [
       digestGroups,
@@ -334,6 +371,12 @@ export class AdminMonitorService {
       stuckProcessing,
       failedDigests,
       outcomeUnknownDigests,
+      processed,
+      accepted,
+      failedInPeriod,
+      outcomeUnknownInPeriod,
+      eventGroupsInPeriod,
+      unsubscribedInPeriod,
     ] = await Promise.all([
       this.database.monitorDigest.groupBy({
         by: ["status"],
@@ -349,7 +392,10 @@ export class AdminMonitorService {
         where: { status: { in: ["SENT", "FAILED", "OUTCOME_UNKNOWN"] } },
       }),
       this.database.monitorDigest.count({
-        where: { status: "SENT", sentAt: { gte: since24h } },
+        where: {
+          status: "SENT",
+          sentAt: { gte: new Date(Date.now() - 24 * 60 * 60_000) },
+        },
       }),
       // by: ["type", "digestId"] em vez de só ["type"] — cada linha aqui já
       // é 1 combinação única (type, digestId), então o tamanho do array por
@@ -361,7 +407,10 @@ export class AdminMonitorService {
       // como "1 digest distinto" se não sabemos qual digest é.
       this.database.monitorDigestEvent.groupBy({
         by: ["type", "digestId"],
-        where: { occurredAt: { gte: since24h }, digestId: { not: null } },
+        where: {
+          occurredAt: { gte: new Date(Date.now() - 24 * 60 * 60_000) },
+          digestId: { not: null },
+        },
       }),
       this.database.monitorDigest.count({
         where: { status: "PROCESSING", updatedAt: { lt: staleThreshold } },
@@ -382,9 +431,82 @@ export class AdminMonitorService {
         take: 100,
         include: { user: { select: { id: true, email: true, name: true } } },
       }),
+      // --- bloco de resumo por período (novo) ---
+      this.database.monitorDigest.count({
+        where: { createdAt: { gte: since }, ...providerWhere },
+      }),
+      this.database.monitorDigest.count({
+        where: { status: "SENT", createdAt: { gte: since }, ...providerWhere },
+      }),
+      this.database.monitorDigest.count({
+        where: {
+          status: "FAILED",
+          createdAt: { gte: since },
+          ...providerWhere,
+        },
+      }),
+      this.database.monitorDigest.count({
+        where: {
+          status: "OUTCOME_UNKNOWN",
+          createdAt: { gte: since },
+          ...providerWhere,
+        },
+      }),
+      this.database.monitorDigestEvent.groupBy({
+        by: ["type", "digestId"],
+        where: {
+          occurredAt: { gte: since },
+          digestId: { not: null },
+          ...eventProviderWhere,
+        },
+      }),
+      // Descadastro é por preferência do usuário (MonitorAlertPreference),
+      // não por digest — não dá pra filtrar por provider (não é um dado
+      // que a preferência carrega), mostrado sempre no agregado geral do
+      // período.
+      this.database.monitorAlertPreference.count({
+        where: { unsubscribedAt: { gte: since } },
+      }),
     ]);
 
+    const eventTallyInPeriod = tallyByKey(
+      MONITOR_DIGEST_EVENT_TYPES,
+      eventGroupsInPeriod,
+      (g) => g.type,
+    );
+    const delivered = eventTallyInPeriod.DELIVERED;
+    const openedUnique = eventTallyInPeriod.OPENED;
+    const clickedUnique = eventTallyInPeriod.CLICKED;
+    const bounced = eventTallyInPeriod.BOUNCED;
+    const complained = eventTallyInPeriod.COMPLAINED;
+    const rejected = eventTallyInPeriod.REJECTED;
+
     return {
+      periodDays,
+      provider: filters.provider ?? null,
+      summary: {
+        processed,
+        accepted,
+        delivered,
+        failed: failedInPeriod,
+        outcomeUnknown: outcomeUnknownInPeriod,
+        bounced,
+        complained,
+        rejected,
+        openedUnique,
+        clickedUnique,
+        unsubscribed: unsubscribedInPeriod,
+        rates: {
+          // Base correta por taxa, nunca soma de eventos duplicados
+          // (already deduplicado por digest em eventTallyInPeriod). null
+          // quando o denominador é 0 — nunca 0/0 nem Infinity.
+          deliveryRate: safeRate(delivered, accepted),
+          openRate: safeRate(openedUnique, delivered),
+          clickRate: safeRate(clickedUnique, delivered),
+          bounceRate: safeRate(bounced, accepted),
+          complaintRate: safeRate(complained, delivered),
+        },
+      },
       byStatus: countsByKey(
         MONITOR_DIGEST_STATUSES,
         digestGroups,
@@ -1287,12 +1409,40 @@ export class AdminMonitorService {
       };
     }
 
-    if (result.sent) {
+    if (result.sent && result.outcome === "OUTCOME_UNKNOWN") {
+      // Mesma semântica do MonitorDigestWorker: timeout/erro de rede
+      // ambíguo nunca é gravado como SENT — fica OUTCOME_UNKNOWN até um
+      // evento do provider confirmar ou o reconciler decidir (ver
+      // monitor-digest.worker.ts).
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "OUTCOME_UNKNOWN",
+          provider: result.provider,
+          providerMessageId: result.providerMessageId,
+          lastError: result.errorMessage ?? null,
+          outcomeUnknownAt: new Date(),
+        },
+      });
+    } else if (result.sent && result.outcome === "FAILED") {
+      // Erro CONFIRMADO do provider antes de aceitar o envio — nunca
+      // gravado como SENT (mesma distinção do worker automático).
+      await this.database.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: "FAILED",
+          attempts: 1,
+          provider: result.provider,
+          lastError: result.errorMessage ?? "provider rejected the send",
+        },
+      });
+    } else if (result.sent) {
       await this.database.monitorDigest.update({
         where: { id: digest.id },
         data: {
           status: "SENT",
           sentAt: new Date(),
+          provider: result.provider,
           providerMessageId: result.providerMessageId,
         },
       });
@@ -1331,6 +1481,10 @@ export class AdminMonitorService {
     limit?: number;
     userQuery?: string;
     source?: DigestHistorySourceFilter;
+    provider?: EmailProviderName;
+    status?: MonitorDigestStatus;
+    from?: string;
+    to?: string;
   }) {
     const { page, limit, skip } = paginate(params.page, params.limit);
     const userQuery = params.userQuery?.trim();
@@ -1351,9 +1505,19 @@ export class AdminMonitorService {
             },
           }
         : {}),
+      ...(params.provider ? { provider: params.provider } : {}),
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.from || params.to
+        ? {
+            createdAt: {
+              ...(params.from ? { gte: new Date(params.from) } : {}),
+              ...(params.to ? { lte: new Date(params.to) } : {}),
+            },
+          }
+        : {}),
     };
 
-    const [digests, total] = await Promise.all([
+    const [digests, total, content] = await Promise.all([
       this.database.monitorDigest.findMany({
         where,
         select: {
@@ -1367,13 +1531,23 @@ export class AdminMonitorService {
           createdAt: true,
           provider: true,
           outcomeUnknownAt: true,
+          attempts: true,
+          lastError: true,
+          providerMessageId: true,
           user: { select: { id: true, email: true, name: true } },
+          _count: { select: { recommendations: true } },
         },
         orderBy: [{ createdAt: "desc" }],
         skip,
         take: limit,
       }),
       this.database.monitorDigest.count({ where }),
+      // Reconstrução do assunto (não persistido por digest — ver
+      // buildDigestSubject) usa o template ATUAL, uma única query pra
+      // toda a página, nunca uma por linha.
+      this.database.monitorDigestEmailContent.findUnique({
+        where: { id: "default" },
+      }),
     ]);
 
     const adminIds = Array.from(
@@ -1391,6 +1565,41 @@ export class AdminMonitorService {
       : [];
     const adminById = new Map(admins.map((admin) => [admin.id, admin]));
 
+    // Último evento conhecido por digest — 1 query pra toda a página
+    // (nunca N+1), reduzida em memória pro mais recente por digestId
+    // (Prisma não tem "latest per group" nativo sem SQL cru).
+    const digestIds = digests.map((digest) => digest.id);
+    const recentEvents = digestIds.length
+      ? await this.database.monitorDigestEvent.findMany({
+          where: { digestId: { in: digestIds } },
+          orderBy: [{ occurredAt: "desc" }],
+          select: {
+            digestId: true,
+            type: true,
+            provider: true,
+            occurredAt: true,
+          },
+        })
+      : [];
+    const lastEventByDigestId = new Map<
+      string,
+      {
+        type: MonitorDigestEventType;
+        provider: EmailProviderName;
+        occurredAt: Date;
+      }
+    >();
+    for (const event of recentEvents) {
+      if (!event.digestId || lastEventByDigestId.has(event.digestId)) {
+        continue;
+      }
+      lastEventByDigestId.set(event.digestId, {
+        type: event.type,
+        provider: event.provider,
+        occurredAt: event.occurredAt,
+      });
+    }
+
     return {
       page,
       limit,
@@ -1405,10 +1614,93 @@ export class AdminMonitorService {
         source: digest.source,
         provider: digest.provider,
         outcomeUnknownAt: digest.outcomeUnknownAt,
+        attempts: digest.attempts,
+        lastError: truncateForDisplay(digest.lastError),
+        providerMessageId: truncateForDisplay(digest.providerMessageId),
+        recommendationCount: digest._count.recommendations,
+        // 0 recomendações (SKIPPED sem nada elegível) nunca chegou a
+        // compor um e-mail de verdade — nenhum assunto foi montado,
+        // mostrar null em vez de um "Encontramos 0 oportunidades"
+        // fabricado.
+        subject:
+          digest._count.recommendations > 0
+            ? buildDigestSubject(digest._count.recommendations, content)
+            : null,
+        lastEvent: lastEventByDigestId.get(digest.id) ?? null,
         triggeredByAdmin: digest.triggeredByAdminId
           ? (adminById.get(digest.triggeredByAdminId) ?? null)
           : null,
         user: digest.user,
+      })),
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // Timeline de um digest — provider aceito/rejeitado + todo evento de
+  // webhook recebido (Resend ou SES), em ordem cronológica. Nunca expõe
+  // metadataJson bruto (que pra SES é o envelope inteiro do evento,
+  // incluindo mail.destination/commonHeaders — dados do destinatário) —
+  // só um resumo curto e seguro por tipo (ver
+  // summarizeDigestEventMetadata). IDs de provider truncados, igual ao
+  // histórico.
+  // ---------------------------------------------------------------------
+  async getDigestTimeline(digestId: string) {
+    const digest = await this.database.monitorDigest.findUnique({
+      where: { id: digestId },
+      select: {
+        id: true,
+        status: true,
+        provider: true,
+        providerMessageId: true,
+        attempts: true,
+        lastError: true,
+        createdAt: true,
+        sentAt: true,
+        outcomeUnknownAt: true,
+        source: true,
+        user: { select: { id: true, email: true, name: true } },
+      },
+    });
+
+    if (!digest) {
+      throw new NotFoundException("digest not found");
+    }
+
+    const events = await this.database.monitorDigestEvent.findMany({
+      where: { digestId },
+      orderBy: [{ occurredAt: "asc" }],
+      select: {
+        id: true,
+        type: true,
+        provider: true,
+        providerEventId: true,
+        occurredAt: true,
+        metadataJson: true,
+      },
+    });
+
+    return {
+      digest: {
+        id: digest.id,
+        status: digest.status,
+        provider: digest.provider,
+        providerMessageId: truncateForDisplay(digest.providerMessageId),
+        attempts: digest.attempts,
+        lastError: truncateForDisplay(digest.lastError),
+        createdAt: digest.createdAt,
+        sentAt: digest.sentAt,
+        outcomeUnknownAt: digest.outcomeUnknownAt,
+        source: digest.source,
+        user: digest.user,
+      },
+      events: events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        label: DIGEST_EVENT_TYPE_LABEL[event.type],
+        provider: event.provider,
+        providerEventId: truncateForDisplay(event.providerEventId),
+        occurredAt: event.occurredAt,
+        summary: summarizeDigestEventMetadata(event.type, event.metadataJson),
       })),
     };
   }

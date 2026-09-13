@@ -40,6 +40,24 @@ export const DEFAULT_SUBJECT_TEMPLATE =
 const SINGULAR_SUBJECT = "Encontramos 1 nova oportunidade para você";
 export const DEFAULT_INTRO_TEXT = "";
 
+// Extraído em função pura pra ser reutilizado por AdminMonitorService
+// (reconstrução do assunto de um digest já enviado, pra exibir na
+// listagem do admin) — mesma lógica exata usada no envio de verdade,
+// nunca uma segunda implementação que poderia divergir. Reconstrução, não
+// valor persistido: assume que o template de conteúdo não mudou desde o
+// envio (mesma premissa já existente no sistema — MonitorDigestEmailContent
+// não é versionado por digest).
+export function buildDigestSubject(
+  total: number,
+  content: { subject: string } | null,
+): string {
+  if (total === 1) {
+    return SINGULAR_SUBJECT;
+  }
+  const subjectTemplate = content?.subject ?? DEFAULT_SUBJECT_TEMPLATE;
+  return subjectTemplate.replace("{count}", String(total));
+}
+
 export type SendDigestResult =
   | {
       sent: true;
@@ -146,12 +164,8 @@ export class MonitorDigestEmailService {
     const content = await this.database.monitorDigestEmailContent.findUnique({
       where: { id: "default" },
     });
-    const subjectTemplate = content?.subject ?? DEFAULT_SUBJECT_TEMPLATE;
     const introText = content?.introText ?? DEFAULT_INTRO_TEXT;
-    const subject =
-      total === 1
-        ? SINGULAR_SUBJECT
-        : subjectTemplate.replace("{count}", String(total));
+    const subject = buildDigestSubject(total, content);
 
     const lines = preview.map(({ recommendation: rec }) => {
       const level =

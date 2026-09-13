@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   AdminCard,
   AdminFilterBar,
@@ -14,6 +15,7 @@ import {
 } from "@/app/admin/_components/admin-primitives";
 import { AdminShellHeader } from "@/app/admin/_components/admin-shell-header";
 import { AdminTokenState } from "@/app/admin/_components/admin-token-state";
+
 import {
   type AlertRolloutPolicy,
   type DigestContent,
@@ -22,12 +24,14 @@ import {
   type DigestHistoryItem,
   type DigestSchedule,
   type EmailBulkSendMode,
+  type EmailProviderName,
   getAlertRolloutPolicy,
   getMonitorDigestContent,
   getMonitorDigestHistory,
   getMonitorDigestSchedule,
   getMonitorDigestStats,
   listTrackedAlertUsers,
+  type MonitorDigestStatus,
   type SesRolloutSegment,
   type TrackedAlertUser,
 } from "@/lib/admin-monitor-api";
@@ -48,14 +52,6 @@ import {
 export const metadata = buildAdminMetadata("Alerta de Vagas");
 
 const ROOT_PATH = "/admin/alerta-vagas";
-
-const FREQUENCY_LABEL: Record<string, string> = {
-  DAILY: "diária",
-  EVERY_2_DAYS: "a cada 2 dias",
-  EVERY_3_DAYS: "a cada 3 dias",
-  EVERY_4_DAYS: "a cada 4 dias",
-  WEEKLY: "semanal",
-};
 
 const FREQUENCY_OPTIONS: { value: DigestFrequency; label: string }[] = [
   { value: "DAILY", label: "Diário" },
@@ -104,12 +100,44 @@ const STATUS_TONE: Record<
   SKIPPED: "warn",
   PENDING: "info",
   PROCESSING: "info",
+  OUTCOME_UNKNOWN: "warn",
 };
+
+const PROVIDER_LABEL: Record<EmailProviderName, string> = {
+  RESEND: "Resend",
+  SES: "SES",
+};
+
+const EVENT_LABEL: Record<string, string> = {
+  SENT: "aceito",
+  DELIVERED: "entregue",
+  OPENED: "aberto",
+  CLICKED: "clicado",
+  BOUNCED: "bounce",
+  COMPLAINED: "complaint",
+  REJECTED: "rejeitado",
+};
+
+const PERIOD_OPTIONS = [
+  { value: "1", label: "24h" },
+  { value: "7", label: "7 dias" },
+  { value: "30", label: "30 dias" },
+  { value: "90", label: "90 dias" },
+];
+
+function fmtRate(value: number | null) {
+  if (value === null) return "—";
+  return `${(value * 100).toFixed(1)}%`;
+}
 
 type SearchParams = Promise<{
   query?: string;
   historyQuery?: string;
   historySource?: string;
+  historyProvider?: string;
+  historyStatus?: string;
+  periodDays?: string;
+  statsProvider?: string;
   status?: string;
   message?: string;
 }>;
@@ -159,9 +187,46 @@ export default async function AdminAlertaVagasPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { query, historyQuery, historySource, status, message } =
-    await searchParams;
+  const {
+    query,
+    historyQuery,
+    historySource,
+    historyProvider,
+    historyStatus,
+    periodDays,
+    statsProvider,
+    status,
+    message,
+  } = await searchParams;
   const token = await getBackofficeSessionToken();
+
+  const parsedPeriodDays =
+    periodDays === "1" ||
+    periodDays === "7" ||
+    periodDays === "30" ||
+    periodDays === "90"
+      ? Number(periodDays)
+      : 1;
+  const parsedStatsProvider =
+    statsProvider === "RESEND" || statsProvider === "SES"
+      ? statsProvider
+      : undefined;
+  const parsedHistoryProvider =
+    historyProvider === "RESEND" || historyProvider === "SES"
+      ? historyProvider
+      : undefined;
+  const parsedHistoryStatus: MonitorDigestStatus | undefined = (
+    [
+      "PENDING",
+      "PROCESSING",
+      "SENT",
+      "FAILED",
+      "SKIPPED",
+      "OUTCOME_UNKNOWN",
+    ] as const
+  ).includes(historyStatus as MonitorDigestStatus)
+    ? (historyStatus as MonitorDigestStatus)
+    : undefined;
 
   if (!token) {
     const state = buildAdminStateModel("missing-token", ROOT_PATH);
@@ -189,11 +254,16 @@ export default async function AdminAlertaVagasPage({
               historySource === "MANUAL" || historySource === "AUTOMATIC"
                 ? historySource
                 : undefined,
+            provider: parsedHistoryProvider,
+            status: parsedHistoryStatus,
             limit: 20,
           },
           token,
         ),
-        getMonitorDigestStats(token),
+        getMonitorDigestStats(
+          { periodDays: parsedPeriodDays, provider: parsedStatsProvider },
+          token,
+        ),
         getMonitorDigestSchedule(token),
         getMonitorDigestContent(token),
         getAlertRolloutPolicy(token),
@@ -211,6 +281,10 @@ export default async function AdminAlertaVagasPage({
     query,
     historyQuery,
     historySource,
+    historyProvider,
+    historyStatus,
+    periodDays,
+    statsProvider,
   });
 
   return (
@@ -394,34 +468,128 @@ export default async function AdminAlertaVagasPage({
         <section style={{ marginBottom: 40 }}>
           <SectionHeading
             title="Histórico de envios"
-            description="Todos os digests já processados, manuais e automáticos."
+            description="Todos os digests já processados, manuais e automáticos, com o provider real de envio (Resend ou SES) — dado histórico do Resend é preservado, nunca recalculado ou descartado."
           />
 
-          <AdminStatsRow cols={6}>
+          <form method="GET" style={{ marginBottom: 14 }}>
+            <input type="hidden" name="query" value={query ?? ""} />
+            <input
+              type="hidden"
+              name="historyQuery"
+              value={historyQuery ?? ""}
+            />
+            <input
+              type="hidden"
+              name="historySource"
+              value={historySource ?? ""}
+            />
+            <input
+              type="hidden"
+              name="historyProvider"
+              value={historyProvider ?? ""}
+            />
+            <input
+              type="hidden"
+              name="historyStatus"
+              value={historyStatus ?? ""}
+            />
+            <AdminFilterBar>
+              <span style={{ fontSize: 11, color: AT.muted }}>Período:</span>
+              {PERIOD_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="submit"
+                  name="periodDays"
+                  value={option.value}
+                  className={buttonVariants({
+                    size: "sm",
+                    variant:
+                      parsedPeriodDays === Number(option.value)
+                        ? "default"
+                        : "outline",
+                  })}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <span style={{ fontSize: 11, color: AT.muted, marginLeft: 10 }}>
+                Provider:
+              </span>
+              <select
+                name="statsProvider"
+                defaultValue={statsProvider ?? ""}
+                style={inputStyle}
+              >
+                <option value="">Todos</option>
+                <option value="RESEND">Resend</option>
+                <option value="SES">SES</option>
+              </select>
+              <button type="submit" className={buttonVariants({ size: "sm" })}>
+                Filtrar
+              </button>
+            </AdminFilterBar>
+          </form>
+
+          <AdminStatsRow cols={4}>
             <AdminStatCard
-              label="Enviados (24h)"
-              value={String(stats.sentLast24h)}
+              label="Processados"
+              value={String(stats.summary.processed)}
+              tooltip="Digests que entraram no funil de envio neste período (inclui os que ainda falharam ou foram pulados)."
             />
             <AdminStatCard
-              label="Delivered (24h)"
-              value={String(stats.eventsLast24h.DELIVERED)}
+              label="Aceitos pelo provider"
+              value={String(stats.summary.accepted)}
+              tooltip="Envios que o provider (Resend ou SES) aceitou processar, antes de qualquer confirmação de entrega."
             />
             <AdminStatCard
-              label="Opened (24h)"
-              value={String(stats.eventsLast24h.OPENED)}
-              sub="indicativo"
+              label="Entregues"
+              value={String(stats.summary.delivered)}
+              sub={fmtRate(stats.summary.rates.deliveryRate)}
+              tooltip="Taxa de entrega = entregues / aceitos pelo provider."
             />
             <AdminStatCard
-              label="Clicked (24h)"
-              value={String(stats.eventsLast24h.CLICKED)}
+              label="Abertos (únicos)"
+              value={String(stats.summary.openedUnique)}
+              sub={fmtRate(stats.summary.rates.openRate)}
+              tooltip="Taxa de abertura = abertos únicos / entregues. Pode estar inflada: o Apple Mail Privacy Protection pré-carrega o pixel de rastreio mesmo sem abertura real pelo usuário."
             />
             <AdminStatCard
-              label="Bounced (24h)"
-              value={String(stats.eventsLast24h.BOUNCED)}
+              label="Clicados (únicos)"
+              value={String(stats.summary.clickedUnique)}
+              sub={fmtRate(stats.summary.rates.clickRate)}
+              tooltip="Taxa de clique = clicados únicos / entregues."
             />
             <AdminStatCard
-              label="Complained (24h)"
-              value={String(stats.eventsLast24h.COMPLAINED)}
+              label="Rejeitados pelo provider"
+              value={String(stats.summary.rejected)}
+              tooltip="Rejeitado pelo provider antes da entrega (ex.: filtro de conteúdo/spam do SES) — nunca chegou a ser entregue."
+            />
+            <AdminStatCard
+              label="Bounces"
+              value={String(stats.summary.bounced)}
+              sub={fmtRate(stats.summary.rates.bounceRate)}
+              tooltip="Taxa de bounce = bounces / aceitos pelo provider."
+            />
+            <AdminStatCard
+              label="Complaints"
+              value={String(stats.summary.complained)}
+              sub={fmtRate(stats.summary.rates.complaintRate)}
+              tooltip="Taxa de complaint = complaints / entregues."
+            />
+            <AdminStatCard
+              label="Falharam"
+              value={String(stats.summary.failed)}
+              tooltip="Erro confirmado do provider antes de aceitar o envio (esgotou as tentativas)."
+            />
+            <AdminStatCard
+              label="Resultado desconhecido"
+              value={String(stats.summary.outcomeUnknown)}
+              tooltip="Timeout ou erro de rede ambíguo — aguardando confirmação assíncrona do provider antes de decidir sucesso ou falha."
+            />
+            <AdminStatCard
+              label="Descadastros"
+              value={String(stats.summary.unsubscribed)}
+              tooltip="Usuários que cancelaram o recebimento do Alerta de Vaga Certa neste período."
             />
           </AdminStatsRow>
 
@@ -434,6 +602,12 @@ export default async function AdminAlertaVagasPage({
               marginBottom: 14,
             }}
           >
+            {Object.entries(stats.byProvider).map(([provider, count]) => (
+              <AdminPill key={provider} tone="dark" mono>
+                {PROVIDER_LABEL[provider as EmailProviderName] ?? provider}:{" "}
+                {count}
+              </AdminPill>
+            ))}
             {Object.entries(stats.byStatus).map(([status, count]) => (
               <AdminPill
                 key={status}
@@ -448,10 +622,22 @@ export default async function AdminAlertaVagasPage({
                 {stats.stuckProcessing} preso(s) em PROCESSING
               </AdminPill>
             )}
+            {stats.outcomeUnknownDigests.length > 0 && (
+              <AdminPill tone="warn">
+                {stats.outcomeUnknownDigests.length} em OUTCOME_UNKNOWN
+                (esgotaram tentativas)
+              </AdminPill>
+            )}
           </div>
 
           <form method="GET" style={{ marginBottom: 14 }}>
             <input type="hidden" name="query" value={query ?? ""} />
+            <input type="hidden" name="periodDays" value={periodDays ?? ""} />
+            <input
+              type="hidden"
+              name="statsProvider"
+              value={statsProvider ?? ""}
+            />
             <AdminFilterBar>
               <input
                 type="text"
@@ -469,6 +655,28 @@ export default async function AdminAlertaVagasPage({
                 <option value="MANUAL">Manual</option>
                 <option value="AUTOMATIC">Automático</option>
               </select>
+              <select
+                name="historyProvider"
+                defaultValue={historyProvider ?? ""}
+                style={inputStyle}
+              >
+                <option value="">Provider: todos</option>
+                <option value="RESEND">Resend</option>
+                <option value="SES">SES</option>
+              </select>
+              <select
+                name="historyStatus"
+                defaultValue={historyStatus ?? ""}
+                style={inputStyle}
+              >
+                <option value="">Status: todos</option>
+                <option value="SENT">Enviado</option>
+                <option value="FAILED">Falhou</option>
+                <option value="OUTCOME_UNKNOWN">Resultado desconhecido</option>
+                <option value="SKIPPED">Sem elegíveis</option>
+                <option value="PENDING">Pendente</option>
+                <option value="PROCESSING">Processando</option>
+              </select>
               <button type="submit" className={buttonVariants({ size: "sm" })}>
                 Filtrar
               </button>
@@ -480,9 +688,10 @@ export default async function AdminAlertaVagasPage({
               <tr>
                 <AdminTh>Data/hora</AdminTh>
                 <AdminTh>Usuário</AdminTh>
+                <AdminTh>Provider</AdminTh>
                 <AdminTh>Forma de envio</AdminTh>
-                <AdminTh>Frequência</AdminTh>
                 <AdminTh>Status</AdminTh>
+                <AdminTh>Último evento</AdminTh>
                 <AdminTh align="right">Ação</AdminTh>
               </tr>
             </thead>
@@ -493,18 +702,28 @@ export default async function AdminAlertaVagasPage({
                     {fmtDate(item.sentAt ?? item.createdAt)}
                   </AdminTd>
                   <AdminTd>
-                    <div style={{ fontSize: 13, color: AT.ink2 }}>
-                      {item.user.name}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: AT.muted2,
-                        fontFamily: '"Geist Mono", monospace',
-                      }}
+                    <Link
+                      href={`/admin/alerta-vagas/digest/${item.id}`}
+                      style={{ textDecoration: "none" }}
                     >
-                      {item.user.email}
-                    </div>
+                      <div style={{ fontSize: 13, color: AT.ink2 }}>
+                        {item.user.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: AT.muted2,
+                          fontFamily: '"Geist Mono", monospace',
+                        }}
+                      >
+                        {item.user.email}
+                      </div>
+                    </Link>
+                  </AdminTd>
+                  <AdminTd>
+                    <AdminPill tone="dark" mono>
+                      {PROVIDER_LABEL[item.provider]}
+                    </AdminPill>
                   </AdminTd>
                   <AdminTd>
                     <AdminPill
@@ -515,32 +734,53 @@ export default async function AdminAlertaVagasPage({
                         : "automático"}
                     </AdminPill>
                   </AdminTd>
-                  <AdminTd>{FREQUENCY_LABEL[item.frequency]}</AdminTd>
                   <AdminTd>
                     <AdminPill tone={STATUS_TONE[item.status] ?? "neutral"}>
                       {item.status.toLowerCase()}
                     </AdminPill>
                   </AdminTd>
+                  <AdminTd muted>
+                    {item.lastEvent
+                      ? `${EVENT_LABEL[item.lastEvent.type] ?? item.lastEvent.type.toLowerCase()} · ${fmtDate(item.lastEvent.occurredAt)}`
+                      : "—"}
+                  </AdminTd>
                   <AdminTd align="right">
-                    {item.status === "FAILED" && (
-                      <form action={resendDigestAction}>
-                        <input type="hidden" name="id" value={item.id} />
-                        <input
-                          type="hidden"
-                          name="redirectPath"
-                          value={currentRedirectPath}
-                        />
-                        <button
-                          type="submit"
-                          className={buttonVariants({
-                            variant: "outline",
-                            size: "sm",
-                          })}
-                        >
-                          Reenviar
-                        </button>
-                      </form>
-                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <Link
+                        href={`/admin/alerta-vagas/digest/${item.id}`}
+                        className={buttonVariants({
+                          variant: "outline",
+                          size: "sm",
+                        })}
+                      >
+                        Ver linha do tempo
+                      </Link>
+                      {item.status === "FAILED" && (
+                        <form action={resendDigestAction}>
+                          <input type="hidden" name="id" value={item.id} />
+                          <input
+                            type="hidden"
+                            name="redirectPath"
+                            value={currentRedirectPath}
+                          />
+                          <button
+                            type="submit"
+                            className={buttonVariants({
+                              variant: "outline",
+                              size: "sm",
+                            })}
+                          >
+                            Reenviar
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   </AdminTd>
                 </tr>
               ))}
