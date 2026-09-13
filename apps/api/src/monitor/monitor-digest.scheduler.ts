@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import type { MonitorDigestFrequency } from "@prisma/client";
+import type {
+  MonitorAlertBulkSegment,
+  MonitorDigestFrequency,
+} from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { EmailConfigService } from "../email/email-config.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { MonitorDigestContentService } from "./monitor-digest-content.service";
 import {
@@ -15,6 +19,7 @@ import { MonitorEntitlementService } from "./monitor-entitlement.service";
 
 const LOCK_ID = "monitor-digest-scheduler";
 const LOCK_TTL_MS = 5 * 60_000;
+const INTERNAL_ROLES = ["admin", "superadmin"] as const;
 
 // Espelha o seed da migration (MonitorDigestScheduleConfig id="default")
 // — só usado se a linha singleton não existir por algum motivo (defesa em
@@ -26,6 +31,7 @@ const DEFAULT_SCHEDULE_CONFIG = {
   intervalAnchorDate: null as Date | null,
   weeklyDayOfWeek: 1,
   timezone: "America/Sao_Paulo",
+  sesRolloutSegment: null as MonitorAlertBulkSegment | null,
 };
 
 // Descobre QUAIS digests são devidos hoje e grava as linhas
@@ -48,6 +54,8 @@ export class MonitorDigestScheduler {
     private readonly contentService: MonitorDigestContentService,
     @Inject(MonitorEntitlementService)
     private readonly entitlementService: MonitorEntitlementService,
+    @Inject(EmailConfigService)
+    private readonly emailConfig: EmailConfigService,
   ) {}
 
   // Polling por minuto em vez de um único @Cron fixo: assim o horário
@@ -88,7 +96,13 @@ export class MonitorDigestScheduler {
   // (ver MonitorAlertPreference, que só guarda emailEnabled agora).
   async discoverDue(
     now: Date,
-    config: { frequency: MonitorDigestFrequency },
+    config: {
+      frequency: MonitorDigestFrequency;
+      // Opcional só pra não forçar todo call site de teste pré-existente
+      // (que não sabe nada sobre SES) a passar este campo — undefined e
+      // null têm o mesmo efeito aqui: ninguém entra na coorte do SES.
+      sesRolloutSegment?: MonitorAlertBulkSegment | null;
+    },
   ): Promise<{ created: number }> {
     const owner = `monitor-digest-scheduler-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
@@ -105,6 +119,7 @@ export class MonitorDigestScheduler {
       const created = await this.discoverForFrequency(
         config.frequency,
         scheduledFor,
+        config.sesRolloutSegment ?? null,
       );
       return { created };
     } finally {
@@ -112,9 +127,46 @@ export class MonitorDigestScheduler {
     }
   }
 
+  // Coorte controlada do rollout SES do digest (JOB_ALERT) — ver comentário
+  // de MonitorDigestScheduleConfig.sesRolloutSegment no schema. Só decide
+  // QUEM entra na coorte; se SES está desligado ou a coorte ainda não foi
+  // configurada (segment=null), ninguém entra — e quem fica de fora nunca
+  // cai pro Resend, é gravado SKIPPED direto (ver discoverForUser).
+  //
+  // Escolha deliberada de NÃO reaproveitar
+  // AdminMonitorService.resolveAlertRolloutSegmentUserIds: aquele método
+  // hoje só resolve ALL/PAID (o branch "else" trata qualquer segmento que
+  // não seja ALL como PAID) e ainda não foi atualizado para o valor
+  // INTERNAL do enum — reaproveitá-lo aqui faria um sesRolloutSegment=
+  // "INTERNAL" silenciosamente resolver como PAID. Resolução própria,
+  // completa para os 3 valores do enum.
+  private async resolveSesRolloutCohort(
+    segment: MonitorAlertBulkSegment | null,
+  ): Promise<Set<string> | null> {
+    if (!this.emailConfig.isSesEnabled() || segment === null) {
+      return new Set();
+    }
+
+    if (segment === "ALL") {
+      return null;
+    }
+
+    const where =
+      segment === "INTERNAL"
+        ? { internalRole: { in: [...INTERNAL_ROLES] } }
+        : { planPurchases: { some: { status: "completed" as const } } }; // PAID
+
+    const users = await this.database.user.findMany({
+      where,
+      select: { id: true },
+    });
+    return new Set(users.map((u) => u.id));
+  }
+
   private async discoverForFrequency(
     frequency: MonitorDigestFrequency,
     scheduledFor: Date,
+    sesRolloutSegment: MonitorAlertBulkSegment | null,
   ): Promise<number> {
     const preferences = await this.database.monitorAlertPreference.findMany({
       where: { emailEnabled: true },
@@ -123,6 +175,7 @@ export class MonitorDigestScheduler {
     const entitledUserIds = await this.entitlementService.filterEntitledUserIds(
       preferences.map((preference) => preference.userId),
     );
+    const sesCohort = await this.resolveSesRolloutCohort(sesRolloutSegment);
 
     let created = 0;
 
@@ -130,11 +183,13 @@ export class MonitorDigestScheduler {
       if (!entitledUserIds.has(preference.userId)) {
         continue;
       }
+      const inCohort = sesCohort === null || sesCohort.has(preference.userId);
       try {
         const didCreate = await this.discoverForUser(
           preference.userId,
           frequency,
           scheduledFor,
+          inCohort,
         );
         if (didCreate) created += 1;
       } catch (error) {
@@ -154,6 +209,7 @@ export class MonitorDigestScheduler {
     userId: string,
     frequency: MonitorDigestFrequency,
     scheduledFor: Date,
+    inCohort: boolean,
   ): Promise<boolean> {
     const existing = await this.database.monitorDigest.findUnique({
       where: {
@@ -161,6 +217,17 @@ export class MonitorDigestScheduler {
       },
     });
     if (existing) {
+      return false;
+    }
+
+    // Fora da coorte controlada do rollout SES: grava SKIPPED direto, sem
+    // calcular recomendações elegíveis (a decisão de não enviar aqui não
+    // depende do conteúdo) — nunca cria PENDING, que o worker processaria
+    // e bateria na recusa defensiva de DefaultEmailRoutingPolicy.resolve.
+    if (!inCohort) {
+      await this.database.monitorDigest.create({
+        data: { userId, frequency, scheduledFor, status: "SKIPPED" },
+      });
       return false;
     }
 
