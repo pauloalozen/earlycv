@@ -601,6 +601,14 @@ test("CLAIM 5: usuário já tem Master ativo de OUTRA fonte — claim preserva g
         promotedReason: "FIRST_EVER",
       },
     });
+    // O Master original só conta como "já pronto, nunca deve ser tocado"
+    // (o que este teste verifica) se o UserProfile dele de fato chegou a
+    // "ready" — ver resolveMasterAndResume#userNeedsRepair. Sem isto, o
+    // usuário teria Master mas profile vazio, exatamente o caso que o
+    // claim agora deve REPARAR, não preservar.
+    await prisma.userProfile.create({
+      data: { userId, profileReadinessStatus: "ready" },
+    });
 
     const { cvJobRow, started } = await withGuestAllowlist([session], () =>
       startAndProcessGuestJob(h, runId, session, "v1"),

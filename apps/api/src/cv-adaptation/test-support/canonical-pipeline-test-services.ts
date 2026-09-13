@@ -87,6 +87,12 @@ export class FakeStorage {
   }
 }
 
+// experiences: [] faz ProfileReadinessService#compute nunca chegar em
+// "ready" (fica em "partial") — correto pra testes que só querem checar a
+// forma da extração, mas errado pra testes de invariante que precisam de
+// um Master JÁ "ready" (ver resolveMasterPromotionIntent/
+// resolveCanonicalMasterIntent: só preservam um Master ativo intocado
+// quando o profile dele está "ready" — ver fakeReadyCanonicalOutput).
 export function fakeCanonicalOutput(
   marker: string,
 ): MasterCvCanonicalExtractionOutput {
@@ -112,6 +118,36 @@ export function fakeCanonicalOutput(
     },
     confidence: {},
     evidence: {},
+  };
+}
+
+// Mesmo formato de fakeCanonicalOutput, mas com uma experiência preenchida
+// — a única diferença que faz ProfileReadinessService#compute retornar
+// "ready" em vez de "partial". Usar sempre que o teste precisa de um
+// Master JÁ pronto (ex.: invariante "análise não-Master nunca toca no
+// Master ativo" — só é uma invariante de verdade quando esse Master já
+// está "ready"; se estiver "partial", o comportamento correto desde
+// 2026-09-12 é reparar, não preservar).
+export function fakeReadyCanonicalOutput(
+  marker: string,
+): MasterCvCanonicalExtractionOutput {
+  const base = fakeCanonicalOutput(marker);
+  return {
+    ...base,
+    canonicalProfile: {
+      ...base.canonicalProfile,
+      experiences: [
+        {
+          role: marker,
+          company: marker,
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: [],
+          technologies: [],
+        },
+      ],
+    },
   };
 }
 

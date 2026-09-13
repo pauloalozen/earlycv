@@ -20,6 +20,7 @@ import {
   buildRealCvAdaptationService,
   database,
   fakeCanonicalOutput,
+  fakeReadyCanonicalOutput,
   JOB_DESCRIPTION_BASE,
   minimalAnalysisJson,
   minimalGenerationJson,
@@ -254,7 +255,10 @@ for (const variant of ["texto colado", "arquivo (via masterResumeId)"] as const)
       const user = await createUser(runId, artifacts);
       const storage = new FakeStorage();
       const cvWorkerA = buildProcessingWorker(
-        async () => fakeCanonicalOutput(`${runId} ORIGEM_A`),
+        // ready (não partial) — a invariante testada aqui é "Master JÁ
+        // pronto nunca é tocado por análise não-Master", não "qualquer
+        // Master, pronto ou não" (ver resolveCanonicalMasterIntent).
+        async () => fakeReadyCanonicalOutput(`${runId} ORIGEM_A`),
         storage,
       );
       const entrypoint = buildEntrypoint(storage);

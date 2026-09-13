@@ -19,6 +19,8 @@
     "jobs:backfill-slugs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-job-slugs.ts",
     "talent:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-talent-profiles.ts",
     "radar:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-radar-profiles.ts",
+    "mastercv:backfill": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-mastercv-profiles.ts",
+    "radar:repair": "NODE_OPTIONS='--conditions=development' tsx src/scripts/repair-radar-profiles.ts",
     "talent:enrich-ai": "NODE_OPTIONS='--conditions=development' tsx src/scripts/enrich-talent-profiles-ai.ts",
     "talent:reconstruct-history": "NODE_OPTIONS='--conditions=development' tsx src/scripts/reconstruct-talent-interaction-history.ts",
     "talent:metrics": "NODE_OPTIONS='--conditions=development' tsx src/scripts/talent-base-metrics.ts",

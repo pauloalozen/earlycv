@@ -244,7 +244,7 @@ export class CvAdaptationService {
     @Inject(CvMasterPromotionService)
     private readonly cvMasterPromotionForAnalysis?: Pick<
       CvMasterPromotionService,
-      "getActiveDesignation"
+      "getActiveDesignation" | "scheduleRadarRefresh"
     >,
     // Fase 2D: resolve o TalentSubject (sujeito anônimo) dono do
     // CvSource/CvProcessingJob de uma análise de visitante, quando
@@ -301,6 +301,51 @@ export class CvAdaptationService {
       return this.flagResolver.isEnabledFor(context);
     }
     return isCvStructuredProfilePipelineEnabled();
+  }
+
+  // Achado 2026-09-12 (caso real: usuária com 12+ análises, CV master
+  // cadastrado desde jun/2026, UserProfile nunca saiu de "empty"): a
+  // condição antiga (existingResumeCount === 0) só promove a master o
+  // PRIMEIRO Resume que o usuário já criou na vida — uma vez que ele tem
+  // qualquer Resume, mesmo apagado/substituído, essa condição nunca mais
+  // é true de novo, e o profile fica vazio pra sempre pra quem reanalisa
+  // sem clicar em "salvar como master" manualmente. Substituída por: não
+  // existe master ativo agora, OU existe mas o profile nunca ficou
+  // "ready" (extração falhou/nunca rodou) — nesses dois casos o CV desta
+  // análise vira master automaticamente. Só passa a exigir
+  // dto.saveAsMaster explícito quando já existe master ativo E o profile
+  // está "ready" (troca deliberada de CV, não reparo de estado quebrado).
+  private async resolveMasterPromotionIntent(
+    db: Pick<DatabaseService, "resume" | "userProfile">,
+    userId: string,
+    saveAsMaster: boolean | undefined,
+  ): Promise<{
+    shouldBecomeMaster: boolean;
+    masterIntent: "PROMOTE_IF_FIRST" | "PROMOTE_EXPLICIT";
+  }> {
+    if (saveAsMaster === true) {
+      return { shouldBecomeMaster: true, masterIntent: "PROMOTE_EXPLICIT" };
+    }
+    const [existingMaster, profile] = await Promise.all([
+      db.resume.findFirst({
+        where: { userId, isMaster: true, kind: "master" },
+        select: { id: true },
+      }),
+      db.userProfile.findUnique({
+        where: { userId },
+        select: { profileReadinessStatus: true },
+      }),
+    ]);
+    if (!existingMaster) {
+      return { shouldBecomeMaster: true, masterIntent: "PROMOTE_IF_FIRST" };
+    }
+    if (profile?.profileReadinessStatus !== "ready") {
+      // Já existe master, mas nunca populou o profile — não é o caso
+      // "primeiro CV" (PROMOTE_IF_FIRST vira no-op se já existe
+      // designação ativa), precisa substituir de fato.
+      return { shouldBecomeMaster: true, masterIntent: "PROMOTE_EXPLICIT" };
+    }
+    return { shouldBecomeMaster: false, masterIntent: "PROMOTE_IF_FIRST" };
   }
 
   // Fire-and-forget: um CV que virou master durante uma análise (primeiro
@@ -512,15 +557,15 @@ export class CvAdaptationService {
 
       const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
 
-      // Create master Resume record — primeiro CV do usuário vira master
-      // automaticamente, sem precisar de dto.saveAsMaster (que só existe
-      // pra decidir SUBSTITUIR um master já existente).
+      // Create master Resume record — ver resolveMasterPromotionIntent pra
+      // regra de quando este CV vira master automaticamente.
+      const { shouldBecomeMaster, masterIntent } =
+        await this.resolveMasterPromotionIntent(
+          this.database,
+          userId,
+          dto.saveAsMaster,
+        );
       const masterResume = await this.database.$transaction(async (tx) => {
-        const existingResumeCount = await tx.resume.count({
-          where: { userId },
-        });
-        const shouldBecomeMaster =
-          existingResumeCount === 0 || dto.saveAsMaster === true;
         if (shouldBecomeMaster) {
           await tx.resume.updateMany({
             where: { userId, isMaster: true },
@@ -553,8 +598,7 @@ export class CvAdaptationService {
         await this.enqueueCanonicalMasterProcessing({
           userId,
           rawText: masterCvText,
-          masterIntent:
-            dto.saveAsMaster === true ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
+          masterIntent,
           file,
           resumeId: masterResume.id,
         });
@@ -773,6 +817,12 @@ export class CvAdaptationService {
     // usuário — não existia nenhum master antes), dispara o preenchimento
     // de perfil depois que a análise em si já foi persistida.
     let newMasterResumeId: string | null = null;
+    // Idem, pro claim granular (ClaimSourceGrantService#claimWithinTransaction
+    // logo abaixo) — mesmo achado 2026-09-12 de cv-master-promotion.service.ts:
+    // UserRadarProfile.refresh() precisa rodar depois que este Master é
+    // promovido/reparado, senão o Monitor casa vaga com dado velho mesmo com
+    // UserProfile "ready".
+    let claimGranularPromotedUserId: string | null = null;
 
     const adaptation = await (async () => {
       try {
@@ -842,6 +892,9 @@ export class CvAdaptationService {
                 });
               if (claimed.master?.resumeId) {
                 preResolvedMasterResumeId = claimed.master.resumeId;
+              }
+              if (claimed.master?.promoted) {
+                claimGranularPromotedUserId = userId;
               }
             }
           }
@@ -996,6 +1049,13 @@ export class CvAdaptationService {
         throw error;
       }
     })();
+
+    if (claimGranularPromotedUserId) {
+      this.cvMasterPromotionForAnalysis?.scheduleRadarRefresh(
+        { changed: true },
+        { ownerType: "USER", userId: claimGranularPromotedUserId },
+      );
+    }
 
     if (newMasterResumeId) {
       this.triggerMasterCvExtraction({
@@ -1937,6 +1997,11 @@ export class CvAdaptationService {
     return { id: created.id };
   }
 
+  // Achado 2026-09-12: mesma causa raiz de resolveMasterPromotionIntent —
+  // "já existe designação ativa" não é suficiente pra nunca promover de
+  // novo. Se aquela designação nunca populou o UserProfile (extração
+  // falhou/nunca rodou), esta análise precisa reparar, não preservar o
+  // estado quebrado.
   private async resolveCanonicalMasterIntent(
     userId: string,
     explicitSaveAsMaster: boolean,
@@ -1944,12 +2009,19 @@ export class CvAdaptationService {
     if (explicitSaveAsMaster) {
       return "PROMOTE_EXPLICIT";
     }
-    const active =
-      await this.cvMasterPromotionForAnalysis?.getActiveDesignation({
+    const [active, profile] = await Promise.all([
+      this.cvMasterPromotionForAnalysis?.getActiveDesignation({
         ownerType: "USER",
         userId,
-      });
-    return active ? "NONE" : "PROMOTE_IF_FIRST";
+      }),
+      this.database.userProfile.findUnique({
+        where: { userId },
+        select: { profileReadinessStatus: true },
+      }),
+    ]);
+    if (!active) return "PROMOTE_IF_FIRST";
+    if (profile?.profileReadinessStatus !== "ready") return "PROMOTE_EXPLICIT";
+    return "NONE";
   }
 
   // Fase 2C.1 — fecha a lacuna deixada pela 2C: localiza (ou materializa
@@ -2940,11 +3012,12 @@ export class CvAdaptationService {
               });
             }
 
-            const existingResumeCount = await this.database.resume.count({
-              where: { userId },
-            });
-            const shouldBecomeMaster =
-              existingResumeCount === 0 || dto.saveAsMaster === true;
+            const { shouldBecomeMaster } =
+              await this.resolveMasterPromotionIntent(
+                this.database,
+                userId,
+                dto.saveAsMaster,
+              );
             becameMaster = shouldBecomeMaster;
 
             if (shouldBecomeMaster) {

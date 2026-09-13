@@ -281,6 +281,19 @@ function validateStringArray(value: unknown, path: string): string[] {
   return value.map((item, index) => validateString(item, `${path}[${index}]`));
 }
 
+// Achado 2026-09-12 (lote de produção do backfill de MASTERCV, ~7% dos CVs):
+// gpt-4o-mini às vezes retorna null (em vez de []) em experiences[].bullets/
+// technologies quando não tem bullet ou tecnologia pra listar naquela
+// experiência — são detalhe complementar, não identidade essencial da
+// experiência (papel/empresa/datas continuam validados estritamente logo
+// acima). Um valor null/não-array aqui virava a extração inteira falhar por
+// um detalhe secundário; agora vira lista vazia, mesma racional já aplicada
+// a radarProfile/confidence (sanitizeRadarProfile acima).
+function validateStringArrayLenient(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 function validateRecord(value: unknown, path: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid object at ${path}`);
@@ -504,11 +517,11 @@ function validateOutput(payload: unknown): MasterCvCanonicalExtractionOutput {
               entry.endDate,
               `canonicalProfile.experiences[${index}].endDate`,
             ),
-            bullets: validateStringArray(
+            bullets: validateStringArrayLenient(
               entry.bullets,
               `canonicalProfile.experiences[${index}].bullets`,
             ),
-            technologies: validateStringArray(
+            technologies: validateStringArrayLenient(
               entry.technologies,
               `canonicalProfile.experiences[${index}].technologies`,
             ),

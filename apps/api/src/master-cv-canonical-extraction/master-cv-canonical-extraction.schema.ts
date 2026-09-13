@@ -110,39 +110,47 @@ export function parseMasterCvCanonicalExtractionPayload(
       "Invalid extraction payload: canonicalProfile.experiences must be an array",
     );
   }
-  experiences.forEach((entry, index) => {
+  // bullets/technologies usam a variante tolerante (achado 2026-09-12, lote
+  // de produção do backfill): gpt-4o-mini às vezes retorna null nesses dois
+  // campos em vez de [] quando a experiência não tem bullet/tecnologia pra
+  // listar — são detalhe complementar da experiência, não identidade
+  // essencial, então null/valor não-array vira lista vazia em vez de
+  // derrubar a extração inteira (mesmo raciocínio já aplicado a
+  // evidence/asStringArrayLenient).
+  const sanitizedExperiences = experiences.map((entry, index) => {
     const experience = asRecord(
       entry,
       `canonicalProfile.experiences[${index}]`,
     );
-    asNullableString(
+    const role = asNullableString(
       experience.role,
       `canonicalProfile.experiences[${index}].role`,
     );
-    asNullableString(
+    const company = asNullableString(
       experience.company,
       `canonicalProfile.experiences[${index}].company`,
     );
-    asNullableString(
+    const location = asNullableString(
       experience.location,
       `canonicalProfile.experiences[${index}].location`,
     );
-    asNullableString(
+    const startDate = asNullableString(
       experience.startDate,
       `canonicalProfile.experiences[${index}].startDate`,
     );
-    asNullableString(
+    const endDate = asNullableString(
       experience.endDate,
       `canonicalProfile.experiences[${index}].endDate`,
     );
-    asStringArray(
+    const bullets = asStringArrayLenient(
       experience.bullets,
       `canonicalProfile.experiences[${index}].bullets`,
     );
-    asStringArray(
+    const technologies = asStringArrayLenient(
       experience.technologies,
       `canonicalProfile.experiences[${index}].technologies`,
     );
+    return { role, company, location, startDate, endDate, bullets, technologies };
   });
 
   const education = canonicalProfile.education;
@@ -250,6 +258,10 @@ export function parseMasterCvCanonicalExtractionPayload(
 
   return {
     ...root,
+    canonicalProfile: {
+      ...canonicalProfile,
+      experiences: sanitizedExperiences,
+    },
     evidence: sanitizedEvidence,
   } as MasterCvCanonicalExtractionOutput;
 }

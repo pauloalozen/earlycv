@@ -14,7 +14,7 @@
 // Em qualquer caso: no máximo uma CvMasterDesignation ativa
 // (supersededAt IS NULL) por dono, garantido pelos índices únicos parciais
 // da migration de Fase 1 (cv_master_designation_active_user/_guest).
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   type CvMasterDesignation,
   type CvMasterPromotionReason,
@@ -24,6 +24,7 @@ import {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import {
   isSubjectMismatchError,
   MasterDesignationSubjectMismatchError,
@@ -98,13 +99,55 @@ export class CvMasterPromotionService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CvUserProfileSyncService)
     private readonly userProfileSync: CvUserProfileSyncService,
+    // Achado 2026-09-12: este pipeline (CvMasterDesignation/
+    // CvStructuredProfile) sincroniza UserProfile mas nunca chamava
+    // UserRadarProfileService.refresh() — só o caminho legado
+    // (MasterCvCanonicalExtractionService#processJob) fazia isso. Resultado
+    // real: UserProfile virava "ready" com dado completo, mas
+    // UserRadarProfile (o que o Monitor de fato lê pra casar vaga) ficava
+    // parado no snapshot anterior (às vezes vazio, de uma ativação em massa
+    // anterior à extração) — getProfile() não se autocorrige aqui porque só
+    // faz self-heal quando areas.length === 0 (user-radar-profile.service.ts
+    // #getProfile). @Optional() pelo mesmo motivo do legado: nunca
+    // referenciado pelos testes que instanciam este service sem RadarModule.
+    @Optional()
+    @Inject(UserRadarProfileService)
+    private readonly radarProfileService?: Pick<
+      UserRadarProfileService,
+      "refresh"
+    >,
   ) {}
+
+  // Fire-and-forget de propósito, sempre chamado DEPOIS da transação que
+  // promoveu o Master já ter commitado — refresh() lê UserProfile fora da
+  // tx, então chamar antes do commit correria risco de ler o estado antigo.
+  // Público porque callers que usam promoteAndProjectWithinTransaction
+  // dentro da PRÓPRIA transação (ex.: ClaimSourceGrantService) precisam
+  // disparar isto depois que a transação DELES commitar — nunca de dentro
+  // dela.
+  scheduleRadarRefresh(
+    result: Pick<PromoteMasterResult, "changed">,
+    owner: MasterOwnerRef,
+  ): void {
+    if (!result.changed || owner.ownerType !== "USER" || !this.radarProfileService) {
+      return;
+    }
+    this.radarProfileService.refresh(owner.userId).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[cv-master-promotion] radar profile refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+        { userId: owner.userId },
+      );
+    });
+  }
 
   async promote(input: PromoteMasterInput): Promise<PromoteMasterResult> {
     try {
-      return await this.database.$transaction(async (tx) => {
+      const result = await this.database.$transaction(async (tx) => {
         return this.runPromotionCore(tx, input);
       });
+      this.scheduleRadarRefresh(result, input);
+      return result;
     } catch (error) {
       if (isSubjectMismatchError(error)) {
         throw new MasterDesignationSubjectMismatchError(
@@ -134,9 +177,11 @@ export class CvMasterPromotionService {
     input: PromoteMasterAndProjectInput,
   ): Promise<PromoteMasterAndProjectResult> {
     try {
-      return await this.database.$transaction((tx) =>
+      const result = await this.database.$transaction((tx) =>
         this.promoteAndProjectWithinTransaction(tx, input),
       );
+      this.scheduleRadarRefresh(result, input);
+      return result;
     } catch (error) {
       if (isSubjectMismatchError(error)) {
         throw new MasterDesignationSubjectMismatchError(

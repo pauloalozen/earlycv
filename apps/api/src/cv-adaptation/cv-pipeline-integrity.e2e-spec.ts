@@ -22,6 +22,7 @@ import {
   buildRealCvAdaptationService,
   database,
   fakeCanonicalOutput,
+  fakeReadyCanonicalOutput,
   JOB_DESCRIPTION_BASE,
   minimalAnalysisJson,
   minimalGenerationJson,
@@ -532,7 +533,10 @@ test("CONTINUIDADE 3b: exclusão do CvStructuredProfile de um CV NÃO-Master (ma
     // então seu CvStructuredProfile não tem nenhuma CvMasterDesignation
     // apontando pra ele.
     const cvWorkerA = buildProcessingWorker(
-      async () => fakeCanonicalOutput(`${runId} A`),
+      // ready (não partial) — B só permanece "não-Master" se A já for um
+      // Master de verdade (profile "ready"); um A "partial" seria
+      // (corretamente) reparado por B, quebrando a premissa do teste.
+      async () => fakeReadyCanonicalOutput(`${runId} A`),
       storage,
     );
     const setupA = await service.startAuthenticatedAnalysisJob(user.id, {

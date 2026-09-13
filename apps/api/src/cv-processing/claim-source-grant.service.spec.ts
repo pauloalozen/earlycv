@@ -357,6 +357,17 @@ test("claim COM Master já existente do usuário: Master do usuário é preserva
   const userActiveBefore = await prisma.cvMasterDesignation.findFirstOrThrow({
     where: { userId: user.id, supersededAt: null },
   });
+  // promoteAndProject acima não passou canonicalProfile/cvSourceId, então
+  // nunca sincronizou UserProfile — sem isto, o Master "próprio" contaria
+  // como não-pronto e o claim (corretamente) repararia em vez de preservar
+  // (ver resolveMasterAndResume#userNeedsRepair). Este teste verifica o
+  // caso "Master já pronto, nunca deve ser tocado", então precisa refletir
+  // um profile de fato "ready".
+  await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id, profileReadinessStatus: "ready" },
+    update: { profileReadinessStatus: "ready" },
+  });
 
   const analysisJob = await createClaimedAnalysisJob(
     user.id,

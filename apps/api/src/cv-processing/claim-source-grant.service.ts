@@ -77,9 +77,16 @@ export class ClaimSourceGrantService {
 
   async claim(input: ClaimSourceInput): Promise<ClaimSourceResult> {
     try {
-      return await this.database.$transaction((tx) =>
+      const result = await this.database.$transaction((tx) =>
         this.claimWithinTransaction(tx, input),
       );
+      if (result.master?.promoted) {
+        this.masterPromotion.scheduleRadarRefresh(
+          { changed: true },
+          { ownerType: "USER", userId: input.userId },
+        );
+      }
+      return result;
     } catch (error) {
       throw this.translateSubjectMismatch(
         error,
@@ -676,13 +683,31 @@ export class ClaimSourceGrantService {
       return null;
     }
 
+    // Achado 2026-09-12 (mesma causa raiz de resolveMasterPromotionIntent/
+    // resolveCanonicalMasterIntent): "usuário já tem Master ativo" não pode
+    // ser motivo suficiente pra nunca ativar o claim — se aquele Master
+    // ativo nunca populou o UserProfile (extração falhou/nunca rodou),
+    // preservar ele intacto só perpetua o buraco. Repara em vez de
+    // preservar: só mantém a designação do guest fora de atividade quando o
+    // usuário JÁ tem profile "ready" de verdade.
+    const userNeedsRepair =
+      userActive !== null &&
+      userActive.cvStructuredProfileId !== processingJob.cvStructuredProfileId &&
+      (
+        await tx.userProfile.findUnique({
+          where: { userId },
+          select: { profileReadinessStatus: true },
+        })
+      )?.profileReadinessStatus !== "ready";
+
     if (
       userActive &&
-      userActive.cvStructuredProfileId !== processingJob.cvStructuredProfileId
+      userActive.cvStructuredProfileId !== processingJob.cvStructuredProfileId &&
+      !userNeedsRepair
     ) {
-      // Usuário já tem Master ativo (de OUTRA fonte) — designação do guest
-      // preservada, nunca ativada (só o grant já criado dá acesso formal à
-      // fonte).
+      // Usuário já tem Master ativo (de OUTRA fonte) e profile já
+      // populado — designação do guest preservada, nunca ativada (só o
+      // grant já criado dá acesso formal à fonte).
       return { promoted: false, monitorProjectionJobId: null, resumeId: null };
     }
 
@@ -698,27 +723,31 @@ export class ClaimSourceGrantService {
         userId,
         cvStructuredProfileId: structuredProfile.id,
         resumeId,
-        masterIntent: "PROMOTE_IF_FIRST",
+        // PROMOTE_IF_FIRST quando o usuário não tem nenhum Master ativo
+        // ainda (caminho original). PROMOTE_EXPLICIT quando já existe um
+        // Master ativo de outra fonte mas o profile dele nunca ficou
+        // "ready" (userNeedsRepair acima) — precisa substituir de fato,
+        // não é o caso "primeiro Master" (que viraria no-op contra a
+        // designação já ativa).
+        masterIntent: userActive ? "PROMOTE_EXPLICIT" : "PROMOTE_IF_FIRST",
         promotedReason: "CLAIM_PROMOTION",
         canonicalProfile: structuredProfile.canonicalJson as never,
         confidence:
           (structuredProfile.confidenceJson as Record<string, number> | null) ??
           {},
         cvSourceId: source.id,
-        // Fase 3C item 1/5 — correção da premissa antiga de ensureResume
-        // (comentário abaixo, mantido pra contexto histórico): a invariante
-        // formalizada nesta fase (schema.prisma, comentário de
+        // Fase 3C item 1/5 — correção da premissa antiga de ensureResume:
+        // a invariante formalizada nesta fase (schema.prisma, comentário de
         // CvMasterDesignation) exige que o Resume da designação ativa
         // SEMPRE tenha isMaster=true — sem exceção pra claim. Sem
-        // syncResumeIsMaster aqui, um claim que promove o primeiro Master
-        // do usuário deixava CvMasterDesignation e Resume.isMaster
-        // divergentes (a mesma classe de bug do achado #2 do piloto 3B),
-        // e violaria a nova defesa estrutural (migration
-        // 20260905_cv_master_designation_integrity_defense) que exige isso
-        // no banco. Seguro aqui: masterIntent é sempre PROMOTE_IF_FIRST
-        // neste caminho (só chega até aqui quando o usuário ainda não tem
-        // designação ativa — ver checagem de userActive acima), então o
-        // flip nunca compete com um Master de outra fonte.
+        // syncResumeIsMaster aqui, um claim que promove Master deixava
+        // CvMasterDesignation e Resume.isMaster divergentes (a mesma classe
+        // de bug do achado #2 do piloto 3B), e violaria a defesa estrutural
+        // (migration 20260905_cv_master_designation_integrity_defense) que
+        // exige isso no banco. Seguro tanto no caminho PROMOTE_IF_FIRST
+        // (usuário sem designação ativa) quanto no PROMOTE_EXPLICIT de
+        // reparo (usuário com designação ativa, mas profile nunca ficou
+        // pronto) — os dois terminam com no máximo uma designação ativa.
         syncResumeIsMaster: true,
       });
 

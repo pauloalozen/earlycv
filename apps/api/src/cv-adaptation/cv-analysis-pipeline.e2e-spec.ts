@@ -139,6 +139,35 @@ function fakeCanonicalOutput(
   };
 }
 
+// Mesmo formato de fakeCanonicalOutput, mas com experiência preenchida —
+// única diferença que faz ProfileReadinessService#compute retornar "ready"
+// em vez de "partial". Necessário pros testes de invariante "Master já
+// pronto nunca é tocado" (ver resolveCanonicalMasterIntent, achado
+// 2026-09-12): com profile "partial" o comportamento correto passou a ser
+// reparar, não preservar.
+function fakeReadyCanonicalOutput(
+  fullName: string,
+): MasterCvCanonicalExtractionOutput {
+  const base = fakeCanonicalOutput(fullName);
+  return {
+    ...base,
+    canonicalProfile: {
+      ...base.canonicalProfile,
+      experiences: [
+        {
+          role: fullName,
+          company: fullName,
+          location: null,
+          startDate: null,
+          endDate: null,
+          bullets: [],
+          technologies: [],
+        },
+      ],
+    },
+  };
+}
+
 // Duplo de teste do gateway de proteção (turnstile + dedup por payload +
 // chamada real de IA). Implementa a MESMA garantia de idempotência por
 // payload que AnalysisProtectionFacade.executeProtectedAnalysis já oferece
@@ -1484,7 +1513,9 @@ test("3) texto diferente do Master, sem saveAsMaster — nunca promove (masterIn
   const user = await createUser();
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
-    async () => fakeCanonicalOutput("Original"),
+    // ready (não partial) — a invariante testada é "Master JÁ pronto
+    // nunca é tocado", não "qualquer Master, pronto ou não".
+    async () => fakeReadyCanonicalOutput("Original"),
     storage,
   );
   const protectedAnalyze = new FakeProtectedAnalyzeService();
@@ -1609,7 +1640,10 @@ test("6) reuso de Resume existente (variante 'arquivo') com saveAsMaster=true pr
   const user = await createUser();
   const storage = new FakeStorage();
   const cvWorker = buildProcessingWorker(
-    async () => fakeCanonicalOutput("Resume Antigo"),
+    // ready (não partial) — testa "Master já pronto, sem saveAsMaster,
+    // nunca promove"; com profile partial o comportamento correto
+    // seria reparar (fora do escopo deste teste).
+    async () => fakeReadyCanonicalOutput("Resume Antigo"),
     storage,
   );
   const protectedAnalyze = new FakeProtectedAnalyzeService();

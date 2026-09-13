@@ -4,6 +4,7 @@ import { DatabaseModule } from "../database/database.module";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { ProfileCanonicalMergeService } from "../profiles/profile-canonical-merge.service";
 import { ProfileReadinessService } from "../profiles/profile-readiness.service";
+import { RadarModule } from "../radar/radar.module";
 import { StorageModule } from "../storage/storage.module";
 import { TalentSubjectService } from "../talent-subjects/talent-subject.service";
 import { ClaimSourceGrantService } from "./claim-source-grant.service";
@@ -19,7 +20,7 @@ import { CvUserProfileSyncService } from "./cv-user-profile-sync.service";
 import { UserProfileMasterSyncService } from "./user-profile-master-sync.service";
 
 @Module({
-  imports: [DatabaseModule, StorageModule],
+  imports: [DatabaseModule, StorageModule, RadarModule],
   controllers: [CvProcessingJobsController],
   // IngestionLockRepository reinstanciado aqui (mesmo padrão de
   // monitor.module.ts) — stateless, coordena via linha em

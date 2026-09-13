@@ -33,9 +33,16 @@ import {
 } from "./test-support/canonical-pipeline-test-services";
 import { makeRunId } from "./test-support/canonical-pipeline-test-harness";
 
+// ready=true preenche experiences pra ProfileReadinessService#compute
+// retornar "ready" em vez de "partial" — necessário nos testes onde um CV
+// avulso (masterIntent NONE) precisa provar que nunca toca num Master já
+// pronto (ver resolveCanonicalMasterIntent, achado 2026-09-12: um Master
+// "partial" é reparado, não preservado, então só um Master "ready" prova a
+// invariante "nunca substitui").
 function buildOutput(
   runId: string,
   headline: string | null,
+  ready = false,
 ): MasterCvCanonicalExtractionOutput {
   return {
     canonicalProfile: {
@@ -46,9 +53,21 @@ function buildOutput(
       linkedinUrl: null,
       location: { city: null, state: null, country: null },
       professionalSummary: `${runId} resumo`,
-      experiences: [],
+      experiences: ready
+        ? [
+            {
+              role: headline ?? runId,
+              company: runId,
+              location: null,
+              startDate: null,
+              endDate: null,
+              bullets: [],
+              technologies: [],
+            },
+          ]
+        : [],
       education: [],
-      skills: [],
+      skills: ready ? [runId] : [],
       languages: [],
       certifications: [],
     },
@@ -89,8 +108,18 @@ async function cleanup(runId: string, cvSourceIds: string[], userId?: string): P
 }
 
 async function makeUser(runId: string) {
+  // profile: { create: {} } replica o registro real (auth.service.ts) —
+  // sem isso, CvUserProfileSyncService#syncWithinTransaction (só faz
+  // `update`, nunca `create`) vira no-op silencioso e o profile nunca sai
+  // de "inexistente", quebrando qualquer teste que dependa de
+  // profileReadinessStatus chegar a "ready".
   return database.user.create({
-    data: { email: `${runId}-${randomUUID()}@example.com`, passwordHash: "x", name: runId },
+    data: {
+      email: `${runId}-${randomUUID()}@example.com`,
+      passwordHash: "x",
+      name: runId,
+      profile: { create: {} },
+    },
   });
 }
 
@@ -138,7 +167,7 @@ test("CURRENTTITLE 2: CV não-Master com headline diferente — currentTitle NÃ
     const analysisWorker = buildAnalysisWorker(service);
 
     const cvWorker1 = buildProcessingWorker(
-      async () => buildOutput(`${runId}-1`, `${runId} Cargo Master`),
+      async () => buildOutput(`${runId}-1`, `${runId} Cargo Master`, true),
       storage,
     );
     const started1 = await service.startAuthenticatedAnalysisJob(user.id, {
@@ -197,7 +226,7 @@ test("CURRENTTITLE 3: promoção EXPLÍCITA de um CV que já existia (não era M
     const analysisWorker = buildAnalysisWorker(service);
 
     const cvWorker1 = buildProcessingWorker(
-      async () => buildOutput(`${runId}-1`, `${runId} Cargo Master Original`),
+      async () => buildOutput(`${runId}-1`, `${runId} Cargo Master Original`, true),
       storage,
     );
     const started1 = await service.startAuthenticatedAnalysisJob(user.id, {
