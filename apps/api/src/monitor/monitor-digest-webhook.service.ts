@@ -80,7 +80,11 @@ export type SesEventPayload = {
 
 export type ProcessWebhookResult = {
   processed: boolean;
-  reason?: "duplicate" | "unsupported_type" | "missing_email_id";
+  reason?:
+    | "duplicate"
+    | "unsupported_type"
+    | "missing_email_id"
+    | "unsupported_correlation_type";
 };
 
 @Injectable()
@@ -180,20 +184,34 @@ export class MonitorDigestWebhookService {
       return { processed: false, reason: "unsupported_type" };
     }
 
+    // Este webhook só processa e-mails do Monitor (correlationType ===
+    // "MONITOR_DIGEST", setado em monitor-digest-email.service.ts). Toda
+    // categoria de envio em massa via SES usa o mesmo Configuration
+    // Set/tópico SNS (ver EmailConfigService.getSesSenderProfile) — um
+    // correlationType ausente ou de outra categoria (futuro
+    // PRODUCT_ANNOUNCEMENT/MARKETING/ADMIN_COMMUNICATION) é ignorado com
+    // segurança aqui: nunca tenta localizar MonitorDigest, nunca grava
+    // MonitorDigestEvent, nunca responde erro — cada categoria futura terá
+    // seu próprio processamento de evento, quando existir.
+    const correlationType = payload.mail?.tags?.correlationType?.[0];
+    if (correlationType !== "MONITOR_DIGEST") {
+      return { processed: false, reason: "unsupported_correlation_type" };
+    }
+
     const providerMessageId = payload.mail?.messageId;
     if (!providerMessageId) {
       return { processed: false, reason: "missing_email_id" };
     }
 
-    // Correlação: tag digestId primeiro (sobrevive mesmo se
+    // Correlação: tag correlationId primeiro (sobrevive mesmo se
     // providerMessageId nunca foi persistido — caso clássico de
     // OUTCOME_UNKNOWN, onde a resposta síncrona do SendEmailCommand se
     // perdeu antes de gravarmos o MessageId), providerMessageId como
     // fallback (mesmo padrão do Resend).
-    const digestIdFromTag = payload.mail?.tags?.digestId?.[0];
-    const digest = digestIdFromTag
+    const correlationId = payload.mail?.tags?.correlationId?.[0];
+    const digest = correlationId
       ? await this.database.monitorDigest.findUnique({
-          where: { id: digestIdFromTag },
+          where: { id: correlationId },
         })
       : await this.database.monitorDigest.findFirst({
           where: { providerMessageId },
@@ -201,7 +219,7 @@ export class MonitorDigestWebhookService {
 
     if (!digest) {
       this.logger.warn(
-        `ses digest webhook: no MonitorDigest found (tag digestId=${digestIdFromTag ?? "none"}, providerMessageId=${providerMessageId}, type=${payload.eventType})`,
+        `ses digest webhook: no MonitorDigest found (tag correlationId=${correlationId ?? "none"}, providerMessageId=${providerMessageId}, type=${payload.eventType})`,
       );
     }
 

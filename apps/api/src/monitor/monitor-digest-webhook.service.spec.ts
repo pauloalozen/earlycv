@@ -290,7 +290,10 @@ test("a SES Delivery event is correlated by the digestId tag (works even without
     eventType: "Delivery",
     mail: {
       messageId: "email_ses_abc",
-      tags: { digestId: ["digest-1"] },
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
     },
   });
 
@@ -303,17 +306,51 @@ test("a SES Delivery event is correlated by the digestId tag (works even without
   assert.equal(fixture.recordedEvents[0].metadata.provider, "SES");
 });
 
-test("a SES event with no digestId tag falls back to correlating by providerMessageId, same as Resend", async () => {
+test("a SES event with correlationType=MONITOR_DIGEST but no correlationId falls back to correlating by providerMessageId, same as Resend", async () => {
   const fixture = createFixture();
   fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
 
   const result = await fixture.service.processSesEvent("sns-msg-1", {
     eventType: "Open",
-    mail: { messageId: "email_ses_abc" },
+    mail: {
+      messageId: "email_ses_abc",
+      tags: { correlationType: ["MONITOR_DIGEST"] },
+    },
   });
 
   assert.equal(result.processed, true);
   assert.equal(fixture.events.get("sns-msg-1")?.digestId, "digest-1");
+});
+
+test("a SES event with no correlationType tag at all is ignored safely — never tries to locate a MonitorDigest, never errors", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Delivery",
+    mail: { messageId: "email_ses_abc" },
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, "unsupported_correlation_type");
+  assert.equal(fixture.events.size, 0);
+});
+
+test("a SES event with a foreign correlationType (future category, e.g. MARKETING) is ignored safely", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+
+  const result = await fixture.service.processSesEvent("sns-msg-1", {
+    eventType: "Delivery",
+    mail: {
+      messageId: "email_ses_abc",
+      tags: { correlationType: ["MARKETING"], correlationId: ["campaign-1"] },
+    },
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, "unsupported_correlation_type");
+  assert.equal(fixture.events.size, 0);
 });
 
 test("the same SNS MessageId delivered twice is processed only once — idempotent", async () => {
@@ -321,7 +358,13 @@ test("the same SNS MessageId delivered twice is processed only once — idempote
   fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
   const payload = {
     eventType: "Delivery",
-    mail: { messageId: "email_ses_abc", tags: { digestId: ["digest-1"] } },
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
   };
 
   const first = await fixture.service.processSesEvent("sns-msg-1", payload);
@@ -341,7 +384,13 @@ test("a Send event resolves a digest stuck in OUTCOME_UNKNOWN to SENT", async ()
 
   await fixture.service.processSesEvent("sns-msg-1", {
     eventType: "Send",
-    mail: { messageId: "email_ses_abc", tags: { digestId: ["digest-1"] } },
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
   });
 
   const updated = fixture.digests.get("digest-1");
@@ -358,7 +407,13 @@ test("a Reject event resolves a digest stuck in OUTCOME_UNKNOWN to FAILED", asyn
 
   await fixture.service.processSesEvent("sns-msg-1", {
     eventType: "Reject",
-    mail: { messageId: "email_ses_abc", tags: { digestId: ["digest-1"] } },
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
   });
 
   assert.equal(fixture.digests.get("digest-1")?.status, "FAILED");
@@ -372,7 +427,13 @@ test("a Bounce/Complaint event never touches status when the digest is NOT in OU
 
   await fixture.service.processSesEvent("sns-msg-1", {
     eventType: "Bounce",
-    mail: { messageId: "email_ses_abc", tags: { digestId: ["digest-1"] } },
+    mail: {
+      messageId: "email_ses_abc",
+      tags: {
+        correlationType: ["MONITOR_DIGEST"],
+        correlationId: ["digest-1"],
+      },
+    },
   });
 
   assert.equal(fixture.digests.get("digest-1")?.status, "SENT");
@@ -397,6 +458,7 @@ test("a SES payload without mail.messageId is rejected", async () => {
 
   const result = await fixture.service.processSesEvent("sns-msg-1", {
     eventType: "Delivery",
+    mail: { tags: { correlationType: ["MONITOR_DIGEST"] } },
   });
 
   assert.equal(result.processed, false);
