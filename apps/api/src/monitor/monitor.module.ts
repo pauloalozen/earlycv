@@ -15,6 +15,7 @@ import { MonitorDigestScheduler } from "./monitor-digest.scheduler";
 import { MonitorDigestWorker } from "./monitor-digest.worker";
 import { MonitorDigestContentService } from "./monitor-digest-content.service";
 import { MonitorDigestEmailService } from "./monitor-digest-email.service";
+import { MonitorDigestOutcomeReconciler } from "./monitor-digest-outcome-reconciler.service";
 import { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
 import { MonitorEntitlementGuard } from "./monitor-entitlement.guard";
 import { MonitorEntitlementService } from "./monitor-entitlement.service";
@@ -55,6 +56,7 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
     MonitorDigestEmailService,
     MonitorDigestScheduler,
     MonitorDigestWorker,
+    MonitorDigestOutcomeReconciler,
     MonitorDigestWebhookService,
     MonitorEntitlementService,
     MonitorEntitlementGuard,

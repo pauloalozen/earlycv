@@ -54,7 +54,10 @@ function createFixture(options: {
     html?: string;
     headers?: Record<string, string>;
     idempotencyKey?: string;
+    tags?: Record<string, string>;
   }[] = [];
+  const sendCategories: string[] = [];
+  let sendResultOverride: Record<string, unknown> | null = null;
 
   const database = {
     monitorDigest: {
@@ -73,17 +76,28 @@ function createFixture(options: {
     },
   };
 
-  const emailDelivery = {
-    send: async (message: {
-      to: string;
-      subject: string;
-      text: string;
-      html?: string;
-      headers?: Record<string, string>;
-      idempotencyKey?: string;
+  const emailService = {
+    send: async (params: {
+      category: string;
+      message: {
+        to: string;
+        subject: string;
+        text: string;
+        html?: string;
+        headers?: Record<string, string>;
+        idempotencyKey?: string;
+        tags?: Record<string, string>;
+      };
     }) => {
-      sendCalls.push(message);
-      return { providerMessageId: "email_abc123" };
+      sendCalls.push(params.message);
+      sendCategories.push(params.category);
+      return (
+        sendResultOverride ?? {
+          outcome: "SENT",
+          provider: "SES",
+          providerMessageId: "email_abc123",
+        }
+      );
     },
   };
 
@@ -96,11 +110,19 @@ function createFixture(options: {
 
   const service = new MonitorDigestEmailService(
     database as never,
-    emailDelivery as never,
+    emailService as never,
     entitlementService as never,
   );
 
-  return { database, sendCalls, service };
+  return {
+    database,
+    sendCalls,
+    sendCategories,
+    service,
+    setSendResult(result: Record<string, unknown>) {
+      sendResultOverride = result;
+    },
+  };
 }
 
 test("sends the digest email and returns the provider's message id", async () => {
@@ -108,7 +130,13 @@ test("sends the digest email and returns the provider's message id", async () =>
 
   const result = await service.sendDigest("digest-1");
 
-  assert.deepEqual(result, { sent: true, providerMessageId: "email_abc123" });
+  assert.equal(result.sent, true);
+  assert.equal((result as { outcome: string }).outcome, "SENT");
+  assert.equal((result as { provider: string }).provider, "SES");
+  assert.equal(
+    (result as { providerMessageId: string }).providerMessageId,
+    "email_abc123",
+  );
   assert.equal(sendCalls.length, 1);
   assert.equal(sendCalls[0].to, "user@example.com");
 });
@@ -268,4 +296,36 @@ test("does not send (and reports not_entitled) when the user has lost Monitor en
 
   assert.deepEqual(result, { sent: false, skippedReason: "not_entitled" });
   assert.equal(sendCalls.length, 0);
+});
+
+test("calls EmailService with category JOB_ALERT and a digestId tag for provider-side correlation", async () => {
+  const { sendCalls, sendCategories, service } = createFixture({
+    recommendationCount: 1,
+  });
+
+  await service.sendDigest("digest-1");
+
+  assert.deepEqual(sendCategories, ["JOB_ALERT"]);
+  assert.equal(sendCalls[0].tags?.digestId, "digest-1");
+});
+
+test("propagates the provider's outcome (FAILED/OUTCOME_UNKNOWN) untouched — the worker decides the MonitorDigest status, not this service", async () => {
+  const { service, setSendResult } = createFixture({
+    recommendationCount: 1,
+  });
+  setSendResult({
+    outcome: "OUTCOME_UNKNOWN",
+    provider: "SES",
+    providerMessageId: null,
+    errorMessage: "socket hang up",
+  });
+
+  const result = await service.sendDigest("digest-1");
+
+  assert.equal(result.sent, true);
+  assert.equal((result as { outcome: string }).outcome, "OUTCOME_UNKNOWN");
+  assert.equal(
+    (result as { errorMessage?: string }).errorMessage,
+    "socket hang up",
+  );
 });

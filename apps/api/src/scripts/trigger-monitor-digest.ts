@@ -4,11 +4,16 @@
 import { PrismaClient } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import type { EmailService } from "../email/email.types";
+import { EmailDeliveryProviderAdapter } from "../email/email-delivery-provider.adapter";
 import { FakeEmailDeliveryService } from "../email/fake-email-delivery.service";
 import { MonitorDigestContentService } from "../monitor/monitor-digest-content.service";
 import { MonitorDigestEmailService } from "../monitor/monitor-digest-email.service";
+import {
+  startOfIsoWeekUtc,
+  startOfUtcDay,
+} from "../monitor/monitor-digest-schedule.util";
 import { MonitorEntitlementService } from "../monitor/monitor-entitlement.service";
-import { startOfIsoWeekUtc, startOfUtcDay } from "../monitor/monitor-digest-schedule.util";
 
 async function main() {
   const email = process.argv[2];
@@ -79,24 +84,45 @@ async function main() {
     });
     console.log(`[trigger-monitor-digest] digest criado id=${digest.id}`);
 
+    // Script de teste local: sempre passa por FakeEmailDeliveryService (via
+    // o mesmo adapter que a fachada de produção usaria pra Resend/Fake) —
+    // nunca chama o SES real, categoria é ignorada por este stub.
+    const fakeEmailService: EmailService = {
+      send: ({ message }) =>
+        new EmailDeliveryProviderAdapter(new FakeEmailDeliveryService()).send(
+          message,
+        ),
+    };
     const emailService = new MonitorDigestEmailService(
       database,
-      new FakeEmailDeliveryService(),
+      fakeEmailService,
       new MonitorEntitlementService(database),
     );
     const result = await emailService.sendDigest(digest.id);
     console.log("[trigger-monitor-digest] resultado do envio:", result);
 
-    if (result.sent) {
+    if (result.sent && result.outcome === "SENT") {
       await prisma.monitorDigest.update({
         where: { id: digest.id },
         data: {
           status: "SENT",
           sentAt: new Date(),
+          provider: result.provider,
           providerMessageId: result.providerMessageId,
         },
       });
       console.log("[trigger-monitor-digest] digest marcado como SENT");
+    } else if (result.sent) {
+      await prisma.monitorDigest.update({
+        where: { id: digest.id },
+        data: {
+          status: result.outcome === "FAILED" ? "FAILED" : "OUTCOME_UNKNOWN",
+          lastError: result.errorMessage ?? null,
+        },
+      });
+      console.log(
+        `[trigger-monitor-digest] envio não confirmado como enviado: outcome=${result.outcome}`,
+      );
     } else {
       await prisma.monitorDigest.update({
         where: { id: digest.id },

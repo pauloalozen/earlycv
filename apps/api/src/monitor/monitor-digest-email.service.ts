@@ -2,9 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import {
-  EMAIL_DELIVERY_PORT,
-  type EmailDeliveryPort,
-} from "../email/email-delivery.port";
+  EMAIL_SERVICE,
+  type EmailProviderName,
+  type EmailSendOutcome,
+  type EmailService,
+} from "../email/email.types";
 import { MAX_RECOMMENDATIONS_PER_DIGEST } from "./monitor-digest-content.service";
 import {
   buildMonitorDigestLink,
@@ -34,7 +36,16 @@ const SINGULAR_SUBJECT = "Encontramos 1 nova oportunidade para você";
 export const DEFAULT_INTRO_TEXT = "";
 
 export type SendDigestResult =
-  | { sent: true; providerMessageId: string | null }
+  | {
+      sent: true;
+      // outcome vem direto do EmailProvider (ver email.types.ts) — o
+      // worker é quem decide o status final do MonitorDigest a partir
+      // disso (SENT/FAILED/OUTCOME_UNKNOWN), nunca este service.
+      outcome: EmailSendOutcome;
+      provider: EmailProviderName;
+      providerMessageId: string | null;
+      errorMessage?: string;
+    }
   // skippedReason existe só pra log/observabilidade — o worker decide o
   // status do MonitorDigest (SKIPPED) sem precisar interpretar o texto.
   | { sent: false; skippedReason: string };
@@ -43,8 +54,8 @@ export type SendDigestResult =
 export class MonitorDigestEmailService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(EMAIL_DELIVERY_PORT)
-    private readonly emailDelivery: EmailDeliveryPort,
+    @Inject(EMAIL_SERVICE)
+    private readonly emailService: EmailService,
     @Inject(MonitorEntitlementService)
     private readonly entitlementService: MonitorEntitlementService,
   ) {}
@@ -158,29 +169,45 @@ export class MonitorDigestEmailService {
       introText,
     });
 
-    const result = await this.emailDelivery.send({
-      to: digest.user.email,
-      subject,
-      text,
-      html,
-      // RFC 8058 (one-click unsubscribe): List-Unsubscribe aponta pro MESMO
-      // endpoint do link visível no corpo — GET mostra confirmação sem
-      // mutar nada, POST (que é como os clientes de e-mail acionam
-      // one-click) desliga de fato. List-Unsubscribe-Post sinaliza
-      // explicitamente suporte a POST de um clique, sem exigir abrir o
-      // link no browser.
-      headers: {
-        "List-Unsubscribe": `<${unsubscribeLink}>`,
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    const result = await this.emailService.send({
+      category: "JOB_ALERT",
+      message: {
+        to: digest.user.email,
+        subject,
+        text,
+        html,
+        // RFC 8058 (one-click unsubscribe): List-Unsubscribe aponta pro
+        // MESMO endpoint do link visível no corpo — GET mostra confirmação
+        // sem mutar nada, POST (que é como os clientes de e-mail acionam
+        // one-click) desliga de fato. List-Unsubscribe-Post sinaliza
+        // explicitamente suporte a POST de um clique, sem exigir abrir o
+        // link no browser.
+        headers: {
+          "List-Unsubscribe": `<${unsubscribeLink}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+        // Chave estável derivada só do digestId (cuid opaco, sem PII) —
+        // continua a mesma em qualquer retry deste MESMO MonitorDigest
+        // (o worker nunca recria a linha, só reprocessa). Resend reconhece
+        // como a mesma requisição via Idempotency-Key; SES não tem
+        // equivalente nativo (ignora este campo), por isso a tag abaixo.
+        idempotencyKey: `monitor-digest:${digest.id}`,
+        // Tag de correlação — SES devolve isto em `mail.tags` em TODO
+        // evento publicado (Send/Delivery/Bounce/Complaint/Reject/Open/
+        // Click), permitindo ao webhook (monitor-digest-webhook.service.ts)
+        // achar este MonitorDigest mesmo quando o MessageId não está
+        // disponível ou não bate (ver MonitorDigestOutcomeReconciler).
+        tags: { digestId: digest.id },
       },
-      // Chave estável derivada só do digestId (cuid opaco, sem PII) —
-      // continua a mesma em qualquer retry deste MESMO MonitorDigest
-      // (o worker nunca recria a linha, só reprocessa), então o Resend
-      // reconhece retries como a mesma requisição em vez de reenviar.
-      idempotencyKey: `monitor-digest:${digest.id}`,
     });
 
-    return { sent: true, providerMessageId: result.providerMessageId };
+    return {
+      sent: true,
+      outcome: result.outcome,
+      provider: result.provider,
+      providerMessageId: result.providerMessageId,
+      errorMessage: result.errorMessage,
+    };
   }
 
   private buildHtml(input: {
