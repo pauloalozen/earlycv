@@ -156,6 +156,74 @@ export function AdminPill({
   );
 }
 
+// ─── AdminCard ────────────────────────────────────────────────────
+// Painel de formulário/conteúdo — mesmo estilo (fundo, borda, raio)
+// repetido em toda tela admin que tem um form de configuração
+// (agendamento, conteúdo de e-mail, modo de envio, etc.). `maxWidth`
+// opcional pra painéis de formulário estreito (ex.: um textarea).
+type AdminCardProps = {
+  children: ReactNode;
+  maxWidth?: number;
+  padding?: string;
+};
+
+export function AdminCard({
+  children,
+  maxWidth,
+  padding = "18px 20px",
+}: AdminCardProps) {
+  return (
+    <div
+      style={{
+        background: AT.card,
+        border: `1px solid ${AT.border}`,
+        borderRadius: 10,
+        padding,
+        maxWidth,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── AdminSectionGroup ────────────────────────────────────────────
+// Separador visual entre grupos de seções (ex.: "operacional" vs.
+// "configuração") — um rótulo pequeno em versalete sobre uma linha,
+// não uma caixa nova. Não substitui SectionHeading (título+descrição
+// de cada seção individual); só marca onde um grupo de seções começa.
+type AdminSectionGroupProps = { children: ReactNode; label: string };
+
+export function AdminSectionGroup({ children, label }: AdminSectionGroupProps) {
+  return (
+    <div style={{ marginBottom: 40 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: AT.muted2,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ height: 1, flex: 1, background: AT.border }} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // ─── AdminTable ───────────────────────────────────────────────────
 type AdminTableProps = { children: ReactNode };
 

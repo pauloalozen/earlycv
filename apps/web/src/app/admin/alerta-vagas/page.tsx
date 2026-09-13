@@ -1,8 +1,10 @@
 import {
+  AdminCard,
   AdminFilterBar,
   AdminPageWrap,
   AdminPagination,
   AdminPill,
+  AdminSectionGroup,
   AdminStatCard,
   AdminStatsRow,
   AdminTable,
@@ -19,17 +21,18 @@ import {
   type DigestFrequency,
   type DigestHistoryItem,
   type DigestSchedule,
+  type EmailBulkSendMode,
   getAlertRolloutPolicy,
   getMonitorDigestContent,
   getMonitorDigestHistory,
   getMonitorDigestSchedule,
   getMonitorDigestStats,
   listTrackedAlertUsers,
+  type SesRolloutSegment,
   type TrackedAlertUser,
 } from "@/lib/admin-monitor-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
-import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { buttonVariants } from "../_components/admin-button";
 import { AlertRolloutSection } from "./_components/alert-rollout-section";
@@ -60,6 +63,26 @@ const FREQUENCY_OPTIONS: { value: DigestFrequency; label: string }[] = [
   { value: "EVERY_3_DAYS", label: "A cada 3 dias" },
   { value: "EVERY_4_DAYS", label: "A cada 4 dias" },
   { value: "WEEKLY", label: "Semanal" },
+];
+
+const SES_MODE_LABEL: Record<EmailBulkSendMode, string> = {
+  LEGACY_RESEND: "Resend (padrão atual)",
+  SES_ROLLOUT: "SES — só a coorte abaixo",
+  SES_LIVE: "SES — todo mundo elegível",
+  PAUSED: "Pausado — ninguém recebe",
+};
+
+const SES_MODE_OPTIONS: { value: EmailBulkSendMode; label: string }[] = [
+  { value: "LEGACY_RESEND", label: SES_MODE_LABEL.LEGACY_RESEND },
+  { value: "SES_ROLLOUT", label: SES_MODE_LABEL.SES_ROLLOUT },
+  { value: "SES_LIVE", label: SES_MODE_LABEL.SES_LIVE },
+  { value: "PAUSED", label: SES_MODE_LABEL.PAUSED },
+];
+
+const SES_SEGMENT_OPTIONS: { value: SesRolloutSegment; label: string }[] = [
+  { value: "INTERNAL", label: "Só time interno (admin/superadmin)" },
+  { value: "PAID", label: "Quem já pagou algum plano" },
+  { value: "ALL", label: "Toda a base elegível" },
 ];
 
 const WEEKDAY_OPTIONS = [
@@ -195,78 +218,283 @@ export default async function AdminAlertaVagasPage({
       <AdminShellHeader
         eyebrow="Radar Oportunidades"
         title="Alerta de Vagas"
-        subtitle="Gestão operacional do Alerta de Vaga Certa: elegibilidade, disparo manual, histórico, agendamento e conteúdo do e-mail."
-        actions={
-          <AdminPill mono tone={isJobsGhostModeEnabled() ? "neutral" : "warn"}>
-            {isJobsGhostModeEnabled()
-              ? "JOBS_GHOST_MODE ativo"
-              : "JOBS_GHOST_MODE desligado"}
-          </AdminPill>
-        }
+        subtitle="Gestão operacional do Alerta de Vaga Certa: elegibilidade, disparo manual, histórico, agendamento, modo de envio e conteúdo do e-mail."
       />
 
       <StatusBanner status={status} message={message} />
 
-      <AlertRolloutSection
-        policy={rolloutPolicy}
-        redirectPath={currentRedirectPath}
-      />
-
-      {/* ── Elegibilidade e disparo manual ─────────────────────────── */}
-      <section style={{ marginBottom: 40 }}>
-        <SectionHeading
-          title="Elegibilidade e disparo manual"
-          description={
-            'Hoje o acesso ao Alerta depende só do papel interno (ghost mode). E-mail é o interruptor que o próprio usuário controla — a cadência é global, definida no Agendamento abaixo. "Liberação manual" ainda não decide nada — a coluna já está pronta pra quando essa regra existir. "Disparar agora" envia o digest desse usuário na hora, na cadência global configurada, de forma síncrona.'
-          }
+      <AdminSectionGroup label="Operação">
+        <AlertRolloutSection
+          policy={rolloutPolicy}
+          redirectPath={currentRedirectPath}
         />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: 8,
-            marginBottom: 14,
-          }}
-        >
-          <form method="GET">
+        {/* ── Elegibilidade e disparo manual ───────────────────────── */}
+        <section style={{ marginBottom: 40 }}>
+          <SectionHeading
+            title="Elegibilidade e disparo manual"
+            description='Acesso ao Alerta é aberto pra toda a base — o e-mail é o interruptor que o próprio usuário controla, e a cadência é global (definida em Agendamento). "Liberação manual" ainda não decide nada — a coluna já está pronta pra quando existir uma regra comercial de elegibilidade. "Disparar agora" envia o digest desse usuário na hora, de forma síncrona, pelo caminho definido em Modo de envio.'
+          />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 14,
+            }}
+          >
+            <form method="GET">
+              <AdminFilterBar>
+                <input
+                  type="text"
+                  name="query"
+                  defaultValue={query}
+                  placeholder="Buscar por nome ou e-mail"
+                  style={inputStyle}
+                />
+                <button
+                  type="submit"
+                  className={buttonVariants({ size: "sm" })}
+                >
+                  Buscar
+                </button>
+              </AdminFilterBar>
+            </form>
+            <TrackUserCombobox redirectPath={currentRedirectPath} />
+          </div>
+
+          <AdminTable>
+            <thead>
+              <tr>
+                <AdminTh>Usuário</AdminTh>
+                <AdminTh>Papel</AdminTh>
+                <AdminTh>Elegível hoje</AdminTh>
+                <AdminTh>E-mail</AdminTh>
+                <AdminTh>Liberação manual</AdminTh>
+                <AdminTh align="right">Ação</AdminTh>
+              </tr>
+            </thead>
+            <tbody>
+              {trackedUsers.users.map((user) => {
+                const canSend = user.entitledToday && user.emailEnabled;
+                return (
+                  <tr key={user.id}>
+                    <AdminTd>
+                      <div style={{ fontSize: 13, color: AT.ink2 }}>
+                        {user.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: AT.muted2,
+                          fontFamily: '"Geist Mono", monospace',
+                        }}
+                      >
+                        {user.email}
+                      </div>
+                    </AdminTd>
+                    <AdminTd>
+                      <AdminPill
+                        tone={user.internalRole === "none" ? "neutral" : "dark"}
+                      >
+                        {user.internalRole === "none"
+                          ? "usuário"
+                          : user.internalRole}
+                      </AdminPill>
+                    </AdminTd>
+                    <AdminTd>
+                      <AdminPill tone={user.entitledToday ? "ok" : "danger"}>
+                        {user.entitledToday ? "sim" : "não"}
+                      </AdminPill>
+                    </AdminTd>
+                    <AdminTd>
+                      <AdminPill tone={user.emailEnabled ? "ok" : "neutral"}>
+                        {user.emailEnabled ? "ativado" : "desativado"}
+                      </AdminPill>
+                    </AdminTd>
+                    <AdminTd>
+                      <AdminPill tone="warn">em breve</AdminPill>
+                    </AdminTd>
+                    <AdminTd align="right">
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        <form action={setAlertPreferenceAction}>
+                          <input type="hidden" name="userId" value={user.id} />
+                          <input
+                            type="hidden"
+                            name="emailEnabled"
+                            value={String(!user.emailEnabled)}
+                          />
+                          <input
+                            type="hidden"
+                            name="redirectPath"
+                            value={currentRedirectPath}
+                          />
+                          <button
+                            type="submit"
+                            className={buttonVariants({
+                              size: "sm",
+                              variant: "outline",
+                            })}
+                          >
+                            {user.emailEnabled ? "Desativar" : "Ativar"}
+                          </button>
+                        </form>
+                        <form action={sendDigestNowAction}>
+                          <input type="hidden" name="userId" value={user.id} />
+                          <input
+                            type="hidden"
+                            name="redirectPath"
+                            value={currentRedirectPath}
+                          />
+                          <button
+                            type="submit"
+                            disabled={!canSend}
+                            className={buttonVariants({ size: "sm" })}
+                            title={
+                              canSend
+                                ? undefined
+                                : "Usuário não é elegível hoje"
+                            }
+                          >
+                            Disparar agora →
+                          </button>
+                        </form>
+                      </div>
+                    </AdminTd>
+                  </tr>
+                );
+              })}
+              {trackedUsers.users.length === 0 && (
+                <tr>
+                  <AdminTd>
+                    <span style={{ color: AT.muted }}>
+                      Nenhum usuário incluído ainda — use "Incluir usuário"
+                      acima.
+                    </span>
+                  </AdminTd>
+                </tr>
+              )}
+            </tbody>
+          </AdminTable>
+          <AdminPagination summary={`${trackedUsers.total} usuário(s)`}>
+            {null}
+          </AdminPagination>
+        </section>
+
+        {/* ── Histórico de envios ─────────────────────────────────────── */}
+        <section style={{ marginBottom: 40 }}>
+          <SectionHeading
+            title="Histórico de envios"
+            description="Todos os digests já processados, manuais e automáticos."
+          />
+
+          <AdminStatsRow cols={6}>
+            <AdminStatCard
+              label="Enviados (24h)"
+              value={String(stats.sentLast24h)}
+            />
+            <AdminStatCard
+              label="Delivered (24h)"
+              value={String(stats.eventsLast24h.DELIVERED)}
+            />
+            <AdminStatCard
+              label="Opened (24h)"
+              value={String(stats.eventsLast24h.OPENED)}
+              sub="indicativo"
+            />
+            <AdminStatCard
+              label="Clicked (24h)"
+              value={String(stats.eventsLast24h.CLICKED)}
+            />
+            <AdminStatCard
+              label="Bounced (24h)"
+              value={String(stats.eventsLast24h.BOUNCED)}
+            />
+            <AdminStatCard
+              label="Complained (24h)"
+              value={String(stats.eventsLast24h.COMPLAINED)}
+            />
+          </AdminStatsRow>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            {Object.entries(stats.byStatus).map(([status, count]) => (
+              <AdminPill
+                key={status}
+                tone={STATUS_TONE[status] ?? "neutral"}
+                mono
+              >
+                {status}: {count}
+              </AdminPill>
+            ))}
+            {stats.stuckProcessing > 0 && (
+              <AdminPill tone="warn">
+                {stats.stuckProcessing} preso(s) em PROCESSING
+              </AdminPill>
+            )}
+          </div>
+
+          <form method="GET" style={{ marginBottom: 14 }}>
+            <input type="hidden" name="query" value={query ?? ""} />
             <AdminFilterBar>
               <input
                 type="text"
-                name="query"
-                defaultValue={query}
-                placeholder="Buscar por nome ou e-mail"
+                name="historyQuery"
+                defaultValue={historyQuery}
+                placeholder="Buscar por usuário"
                 style={inputStyle}
               />
+              <select
+                name="historySource"
+                defaultValue={historySource ?? ""}
+                style={inputStyle}
+              >
+                <option value="">Forma de envio: todas</option>
+                <option value="MANUAL">Manual</option>
+                <option value="AUTOMATIC">Automático</option>
+              </select>
               <button type="submit" className={buttonVariants({ size: "sm" })}>
-                Buscar
+                Filtrar
               </button>
             </AdminFilterBar>
           </form>
-          <TrackUserCombobox redirectPath={currentRedirectPath} />
-        </div>
 
-        <AdminTable>
-          <thead>
-            <tr>
-              <AdminTh>Usuário</AdminTh>
-              <AdminTh>Papel</AdminTh>
-              <AdminTh>Elegível hoje</AdminTh>
-              <AdminTh>E-mail</AdminTh>
-              <AdminTh>Liberação manual</AdminTh>
-              <AdminTh align="right">Ação</AdminTh>
-            </tr>
-          </thead>
-          <tbody>
-            {trackedUsers.users.map((user) => {
-              const canSend = user.entitledToday && user.emailEnabled;
-              return (
-                <tr key={user.id}>
+          <AdminTable>
+            <thead>
+              <tr>
+                <AdminTh>Data/hora</AdminTh>
+                <AdminTh>Usuário</AdminTh>
+                <AdminTh>Forma de envio</AdminTh>
+                <AdminTh>Frequência</AdminTh>
+                <AdminTh>Status</AdminTh>
+                <AdminTh align="right">Ação</AdminTh>
+              </tr>
+            </thead>
+            <tbody>
+              {history.items.map((item) => (
+                <tr key={item.id}>
+                  <AdminTd mono>
+                    {fmtDate(item.sentAt ?? item.createdAt)}
+                  </AdminTd>
                   <AdminTd>
                     <div style={{ fontSize: 13, color: AT.ink2 }}>
-                      {user.name}
+                      {item.user.name}
                     </div>
                     <div
                       style={{
@@ -275,46 +503,28 @@ export default async function AdminAlertaVagasPage({
                         fontFamily: '"Geist Mono", monospace',
                       }}
                     >
-                      {user.email}
+                      {item.user.email}
                     </div>
                   </AdminTd>
                   <AdminTd>
                     <AdminPill
-                      tone={user.internalRole === "none" ? "neutral" : "dark"}
+                      tone={item.source === "ADMIN_MANUAL" ? "info" : "neutral"}
                     >
-                      {user.internalRole === "none"
-                        ? "usuário"
-                        : user.internalRole}
+                      {item.source === "ADMIN_MANUAL"
+                        ? `manual · ${item.triggeredByAdmin?.name ?? item.triggeredByAdmin?.email ?? "admin"}`
+                        : "automático"}
                     </AdminPill>
                   </AdminTd>
+                  <AdminTd>{FREQUENCY_LABEL[item.frequency]}</AdminTd>
                   <AdminTd>
-                    <AdminPill tone={user.entitledToday ? "ok" : "danger"}>
-                      {user.entitledToday ? "sim" : "não"}
+                    <AdminPill tone={STATUS_TONE[item.status] ?? "neutral"}>
+                      {item.status.toLowerCase()}
                     </AdminPill>
-                  </AdminTd>
-                  <AdminTd>
-                    <AdminPill tone={user.emailEnabled ? "ok" : "neutral"}>
-                      {user.emailEnabled ? "ativado" : "desativado"}
-                    </AdminPill>
-                  </AdminTd>
-                  <AdminTd>
-                    <AdminPill tone="warn">em breve</AdminPill>
                   </AdminTd>
                   <AdminTd align="right">
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 6,
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      <form action={setAlertPreferenceAction}>
-                        <input type="hidden" name="userId" value={user.id} />
-                        <input
-                          type="hidden"
-                          name="emailEnabled"
-                          value={String(!user.emailEnabled)}
-                        />
+                    {item.status === "FAILED" && (
+                      <form action={resendDigestAction}>
+                        <input type="hidden" name="id" value={item.id} />
                         <input
                           type="hidden"
                           name="redirectPath"
@@ -323,409 +533,319 @@ export default async function AdminAlertaVagasPage({
                         <button
                           type="submit"
                           className={buttonVariants({
-                            size: "sm",
                             variant: "outline",
+                            size: "sm",
                           })}
                         >
-                          {user.emailEnabled ? "Desativar" : "Ativar"}
+                          Reenviar
                         </button>
                       </form>
-                      <form action={sendDigestNowAction}>
-                        <input type="hidden" name="userId" value={user.id} />
-                        <input
-                          type="hidden"
-                          name="redirectPath"
-                          value={currentRedirectPath}
-                        />
-                        <button
-                          type="submit"
-                          disabled={!canSend}
-                          className={buttonVariants({ size: "sm" })}
-                          title={
-                            canSend ? undefined : "Usuário não é elegível hoje"
-                          }
-                        >
-                          Disparar agora →
-                        </button>
-                      </form>
-                    </div>
+                    )}
                   </AdminTd>
                 </tr>
-              );
-            })}
-            {trackedUsers.users.length === 0 && (
-              <tr>
-                <AdminTd>
-                  <span style={{ color: AT.muted }}>
-                    Nenhum usuário incluído ainda — use "Incluir usuário" acima.
-                  </span>
-                </AdminTd>
-              </tr>
-            )}
-          </tbody>
-        </AdminTable>
-        <AdminPagination summary={`${trackedUsers.total} usuário(s)`}>
-          {null}
-        </AdminPagination>
-      </section>
+              ))}
+              {history.items.length === 0 && (
+                <tr>
+                  <AdminTd>
+                    <span style={{ color: AT.muted }}>Nenhum envio ainda.</span>
+                  </AdminTd>
+                </tr>
+              )}
+            </tbody>
+          </AdminTable>
+          <AdminPagination summary={`${history.total} envio(s)`}>
+            {null}
+          </AdminPagination>
+        </section>
+      </AdminSectionGroup>
 
-      {/* ── Histórico de envios ─────────────────────────────────────── */}
-      <section style={{ marginBottom: 40 }}>
-        <SectionHeading
-          title="Histórico de envios"
-          description="Todos os digests já processados, manuais e automáticos."
-        />
+      <AdminSectionGroup label="Configuração">
+        {/* ── Agendamento ─────────────────────────────────────────────── */}
+        <section style={{ marginBottom: 40 }}>
+          <SectionHeading
+            title="Agendamento dos disparos automáticos"
+            description="Define a cadência e o horário de envio pra todos os usuários — não é mais escolha individual (a tela do usuário só liga/desliga o e-mail). O worker que efetivamente envia roda continuamente, independente do horário abaixo."
+          />
 
-        <AdminStatsRow cols={6}>
-          <AdminStatCard
-            label="Enviados (24h)"
-            value={String(stats.sentLast24h)}
-          />
-          <AdminStatCard
-            label="Delivered (24h)"
-            value={String(stats.eventsLast24h.DELIVERED)}
-          />
-          <AdminStatCard
-            label="Opened (24h)"
-            value={String(stats.eventsLast24h.OPENED)}
-            sub="indicativo"
-          />
-          <AdminStatCard
-            label="Clicked (24h)"
-            value={String(stats.eventsLast24h.CLICKED)}
-          />
-          <AdminStatCard
-            label="Bounced (24h)"
-            value={String(stats.eventsLast24h.BOUNCED)}
-          />
-          <AdminStatCard
-            label="Complained (24h)"
-            value={String(stats.eventsLast24h.COMPLAINED)}
-          />
-        </AdminStatsRow>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            alignItems: "center",
-            marginBottom: 14,
-          }}
-        >
-          {Object.entries(stats.byStatus).map(([status, count]) => (
-            <AdminPill
-              key={status}
-              tone={STATUS_TONE[status] ?? "neutral"}
-              mono
-            >
-              {status}: {count}
-            </AdminPill>
-          ))}
-          {stats.stuckProcessing > 0 && (
-            <AdminPill tone="warn">
-              {stats.stuckProcessing} preso(s) em PROCESSING
-            </AdminPill>
-          )}
-        </div>
-
-        <form method="GET" style={{ marginBottom: 14 }}>
-          <input type="hidden" name="query" value={query ?? ""} />
-          <AdminFilterBar>
+          <form action={updateDigestScheduleAction}>
             <input
-              type="text"
-              name="historyQuery"
-              defaultValue={historyQuery}
-              placeholder="Buscar por usuário"
-              style={inputStyle}
+              type="hidden"
+              name="redirectPath"
+              value={currentRedirectPath}
             />
-            <select
-              name="historySource"
-              defaultValue={historySource ?? ""}
-              style={inputStyle}
-            >
-              <option value="">Forma de envio: todas</option>
-              <option value="MANUAL">Manual</option>
-              <option value="AUTOMATIC">Automático</option>
-            </select>
-            <button type="submit" className={buttonVariants({ size: "sm" })}>
-              Filtrar
-            </button>
-          </AdminFilterBar>
-        </form>
-
-        <AdminTable>
-          <thead>
-            <tr>
-              <AdminTh>Data/hora</AdminTh>
-              <AdminTh>Usuário</AdminTh>
-              <AdminTh>Forma de envio</AdminTh>
-              <AdminTh>Frequência</AdminTh>
-              <AdminTh>Status</AdminTh>
-              <AdminTh align="right">Ação</AdminTh>
-            </tr>
-          </thead>
-          <tbody>
-            {history.items.map((item) => (
-              <tr key={item.id}>
-                <AdminTd mono>{fmtDate(item.sentAt ?? item.createdAt)}</AdminTd>
-                <AdminTd>
-                  <div style={{ fontSize: 13, color: AT.ink2 }}>
-                    {item.user.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: AT.muted2,
-                      fontFamily: '"Geist Mono", monospace',
-                    }}
-                  >
-                    {item.user.email}
-                  </div>
-                </AdminTd>
-                <AdminTd>
-                  <AdminPill
-                    tone={item.source === "ADMIN_MANUAL" ? "info" : "neutral"}
-                  >
-                    {item.source === "ADMIN_MANUAL"
-                      ? `manual · ${item.triggeredByAdmin?.name ?? item.triggeredByAdmin?.email ?? "admin"}`
-                      : "automático"}
-                  </AdminPill>
-                </AdminTd>
-                <AdminTd>{FREQUENCY_LABEL[item.frequency]}</AdminTd>
-                <AdminTd>
-                  <AdminPill tone={STATUS_TONE[item.status] ?? "neutral"}>
-                    {item.status.toLowerCase()}
-                  </AdminPill>
-                </AdminTd>
-                <AdminTd align="right">
-                  {item.status === "FAILED" && (
-                    <form action={resendDigestAction}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <input
-                        type="hidden"
-                        name="redirectPath"
-                        value={currentRedirectPath}
-                      />
-                      <button
-                        type="submit"
-                        className={buttonVariants({
-                          variant: "outline",
-                          size: "sm",
-                        })}
-                      >
-                        Reenviar
-                      </button>
-                    </form>
-                  )}
-                </AdminTd>
-              </tr>
-            ))}
-            {history.items.length === 0 && (
-              <tr>
-                <AdminTd>
-                  <span style={{ color: AT.muted }}>Nenhum envio ainda.</span>
-                </AdminTd>
-              </tr>
-            )}
-          </tbody>
-        </AdminTable>
-        <AdminPagination summary={`${history.total} envio(s)`}>
-          {null}
-        </AdminPagination>
-      </section>
-
-      {/* ── Agendamento ─────────────────────────────────────────────── */}
-      <section style={{ marginBottom: 40 }}>
-        <SectionHeading
-          title="Agendamento dos disparos automáticos"
-          description="Define a cadência e o horário de envio pra todos os usuários — não é mais escolha individual (a tela do usuário só liga/desliga o e-mail). O worker que efetivamente envia roda continuamente, independente do horário abaixo."
-        />
-
-        <form action={updateDigestScheduleAction}>
-          <input
-            type="hidden"
-            name="redirectPath"
-            value={currentRedirectPath}
-          />
-          <div
-            style={{
-              background: AT.card,
-              border: `1px solid ${AT.border}`,
-              borderRadius: 10,
-              padding: "18px 20px",
-              display: "flex",
-              gap: 24,
-              flexWrap: "wrap",
-              alignItems: "flex-end",
-            }}
-          >
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 12, color: AT.muted }}>Cadência</span>
-              <select
-                name="frequency"
-                defaultValue={schedule.frequency}
-                style={{ ...inputStyle, minWidth: 150 }}
+            <AdminCard>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 24,
+                  flexWrap: "wrap",
+                  alignItems: "flex-end",
+                }}
               >
-                {FREQUENCY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 12, color: AT.muted }}>Hora (0-23)</span>
-              <input
-                type="number"
-                name="dailyHour"
-                min={0}
-                max={23}
-                defaultValue={schedule.dailyHour}
-                style={{
-                  ...inputStyle,
-                  width: 76,
-                  minWidth: 0,
-                  textAlign: "center",
-                }}
-              />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 12, color: AT.muted }}>
-                Minuto (0-59)
-              </span>
-              <input
-                type="number"
-                name="dailyMinute"
-                min={0}
-                max={59}
-                defaultValue={schedule.dailyMinute}
-                style={{
-                  ...inputStyle,
-                  width: 76,
-                  minWidth: 0,
-                  textAlign: "center",
-                }}
-              />
-            </label>
-            <span
+                <label
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: AT.muted }}>
+                    Cadência
+                  </span>
+                  <select
+                    name="frequency"
+                    defaultValue={schedule.frequency}
+                    style={{ ...inputStyle, minWidth: 150 }}
+                  >
+                    {FREQUENCY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: AT.muted }}>
+                    Hora (0-23)
+                  </span>
+                  <input
+                    type="number"
+                    name="dailyHour"
+                    min={0}
+                    max={23}
+                    defaultValue={schedule.dailyHour}
+                    style={{
+                      ...inputStyle,
+                      width: 76,
+                      minWidth: 0,
+                      textAlign: "center",
+                    }}
+                  />
+                </label>
+                <label
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: AT.muted }}>
+                    Minuto (0-59)
+                  </span>
+                  <input
+                    type="number"
+                    name="dailyMinute"
+                    min={0}
+                    max={59}
+                    defaultValue={schedule.dailyMinute}
+                    style={{
+                      ...inputStyle,
+                      width: 76,
+                      minWidth: 0,
+                      textAlign: "center",
+                    }}
+                  />
+                </label>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: AT.muted,
+                    fontFamily: '"Geist Mono", monospace',
+                  }}
+                >
+                  {schedule.timezone}
+                </span>
+                <label
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: AT.muted }}>
+                    Dia do digest semanal (só usado quando Cadência = Semanal)
+                  </span>
+                  <select
+                    name="weeklyDayOfWeek"
+                    defaultValue={schedule.weeklyDayOfWeek}
+                    style={{ ...inputStyle, minWidth: 160 }}
+                  >
+                    {WEEKDAY_OPTIONS.map((day) => (
+                      <option key={day.value} value={day.value}>
+                        {day.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </AdminCard>
+
+            <div
               style={{
-                fontSize: 12,
-                color: AT.muted,
-                fontFamily: '"Geist Mono", monospace',
+                marginTop: 12,
+                marginBottom: 24,
+                padding: "10px 14px",
+                background: AT.neutralBg,
+                borderRadius: 8,
               }}
             >
-              {schedule.timezone}
-            </span>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 12, color: AT.muted }}>
-                Dia do digest semanal (só usado quando Cadência = Semanal)
-              </span>
-              <select
-                name="weeklyDayOfWeek"
-                defaultValue={schedule.weeklyDayOfWeek}
-                style={{ ...inputStyle, minWidth: 160 }}
-              >
-                {WEEKDAY_OPTIONS.map((day) => (
-                  <option key={day.value} value={day.value}>
-                    {day.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className={buttonVariants({ size: "sm" })}>
-              Salvar agendamento
-            </button>
-          </div>
-        </form>
-        <div
-          style={{
-            marginTop: 12,
-            padding: "10px 14px",
-            background: AT.neutralBg,
-            borderRadius: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              color: AT.muted,
-              fontFamily: '"Geist Mono", monospace',
-            }}
-          >
-            Fila de envio: varredura a cada 30s · lote de 10 · até 3 tentativas
-            por digest · máximo de 5 vagas por e-mail (as demais continuam
-            elegíveis pro próximo digest e visíveis na fila completa do
-            usuário).
-          </span>
-        </div>
-      </section>
-
-      {/* ── Conteúdo do e-mail ──────────────────────────────────────── */}
-      <section>
-        <SectionHeading
-          title="Conteúdo do e-mail"
-          description="Assunto e texto de introdução do digest. As vagas recomendadas continuam montadas automaticamente abaixo dessa introdução."
-        />
-
-        <form action={updateDigestContentAction}>
-          <input
-            type="hidden"
-            name="redirectPath"
-            value={currentRedirectPath}
-          />
-          <div
-            style={{
-              background: AT.card,
-              border: `1px solid ${AT.border}`,
-              borderRadius: 10,
-              padding: "18px 20px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-              maxWidth: 640,
-            }}
-          >
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 12, color: AT.muted }}>
-                Assunto (use {"{count}"} pro número de vagas — ignorado quando
-                há só 1)
-              </span>
-              <input
-                type="text"
-                name="subject"
-                defaultValue={content.subject}
-                style={{ ...inputStyle, width: "100%" }}
-              />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 12, color: AT.muted }}>
-                Texto de introdução (opcional)
-              </span>
-              <textarea
-                name="introText"
-                defaultValue={content.introText}
-                rows={4}
+              <span
                 style={{
-                  padding: "10px 12px",
-                  borderRadius: 6,
-                  border: `1px solid ${AT.border}`,
-                  background: "#fff",
-                  fontSize: 12.5,
-                  lineHeight: 1.5,
-                  resize: "vertical",
-                  fontFamily: '"Geist", sans-serif',
+                  fontSize: 11,
+                  color: AT.muted,
+                  fontFamily: '"Geist Mono", monospace',
                 }}
+              >
+                Fila de envio: varredura a cada 30s · lote de 10 · até 3
+                tentativas por digest · máximo de 5 vagas por e-mail (as demais
+                continuam elegíveis pro próximo digest e visíveis na fila
+                completa do usuário).
+              </span>
+            </div>
+
+            {/* ── Modo de envio (SES) ────────────────────────────────── */}
+            <div style={{ marginBottom: 16 }}>
+              <SectionHeading
+                title="Modo de envio (SES)"
+                description='Por qual provider o digest sai — separado da cadência acima. Padrão de deploy é "Resend (padrão atual)": mudar o modo é decisão explícita, só depois que domínio/SNS/webhook do SES estiverem prontos. Fora da coorte (em SES_ROLLOUT) ou modo pausado: usuário elegível não recebe nada, nunca cai pro Resend como substituto.'
               />
-            </label>
+              <AdminCard>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 24,
+                    flexWrap: "wrap",
+                    alignItems: "flex-end",
+                  }}
+                >
+                  <label
+                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                  >
+                    <span style={{ fontSize: 12, color: AT.muted }}>Modo</span>
+                    <select
+                      name="sesMode"
+                      defaultValue={schedule.sesMode}
+                      style={{ ...inputStyle, minWidth: 220 }}
+                    >
+                      {SES_MODE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label
+                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                  >
+                    <span style={{ fontSize: 12, color: AT.muted }}>
+                      Coorte (só usada quando Modo = SES — só a coorte)
+                    </span>
+                    <select
+                      name="sesRolloutSegment"
+                      defaultValue={schedule.sesRolloutSegment ?? ""}
+                      style={{ ...inputStyle, minWidth: 220 }}
+                    >
+                      <option value="">Nenhuma (ninguém entra ainda)</option>
+                      {SES_SEGMENT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: AT.faint,
+                    margin: "12px 0 0",
+                  }}
+                >
+                  Modo atual:{" "}
+                  <strong style={{ color: AT.ink2 }}>
+                    {SES_MODE_LABEL[schedule.sesMode]}
+                  </strong>
+                  {schedule.sesMode === "SES_ROLLOUT" && (
+                    <>
+                      {" "}
+                      · coorte:{" "}
+                      <strong style={{ color: AT.ink2 }}>
+                        {schedule.sesRolloutSegment
+                          ? SES_SEGMENT_OPTIONS.find(
+                              (o) => o.value === schedule.sesRolloutSegment,
+                            )?.label
+                          : "nenhuma configurada — ninguém recebe"}
+                      </strong>
+                    </>
+                  )}
+                </p>
+              </AdminCard>
+            </div>
+
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button type="submit" className={buttonVariants({ size: "sm" })}>
-                Salvar conteúdo
+                Salvar agendamento e modo de envio
               </button>
             </div>
-          </div>
-        </form>
-      </section>
+          </form>
+        </section>
+
+        {/* ── Conteúdo do e-mail ──────────────────────────────────────── */}
+        <section>
+          <SectionHeading
+            title="Conteúdo do e-mail"
+            description="Assunto e texto de introdução do digest. As vagas recomendadas continuam montadas automaticamente abaixo dessa introdução."
+          />
+
+          <form action={updateDigestContentAction}>
+            <input
+              type="hidden"
+              name="redirectPath"
+              value={currentRedirectPath}
+            />
+            <AdminCard maxWidth={640}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 14 }}
+              >
+                <label
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: AT.muted }}>
+                    Assunto (use {"{count}"} pro número de vagas — ignorado
+                    quando há só 1)
+                  </span>
+                  <input
+                    type="text"
+                    name="subject"
+                    defaultValue={content.subject}
+                    style={{ ...inputStyle, width: "100%" }}
+                  />
+                </label>
+                <label
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: AT.muted }}>
+                    Texto de introdução (opcional)
+                  </span>
+                  <textarea
+                    name="introText"
+                    defaultValue={content.introText}
+                    rows={4}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 6,
+                      border: `1px solid ${AT.border}`,
+                      background: "#fff",
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                      resize: "vertical",
+                      fontFamily: '"Geist", sans-serif',
+                    }}
+                  />
+                </label>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    type="submit"
+                    className={buttonVariants({ size: "sm" })}
+                  >
+                    Salvar conteúdo
+                  </button>
+                </div>
+              </div>
+            </AdminCard>
+          </form>
+        </section>
+      </AdminSectionGroup>
     </AdminPageWrap>
   );
 }

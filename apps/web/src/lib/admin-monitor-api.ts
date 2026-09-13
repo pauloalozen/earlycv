@@ -497,6 +497,23 @@ export type DigestHistoryItem = {
   user: { id: string; email: string; name: string };
 };
 
+// Modo operacional do envio em massa do digest (JOB_ALERT) — separado da
+// cadência acima. LEGACY_RESEND (default) preserva o comportamento atual
+// de produção (Resend, todo mundo elegível); SES_ROLLOUT restringe a
+// `sesRolloutSegment`; SES_LIVE libera todo mundo via SES; PAUSED não
+// envia nada. Ver MonitorDigestScheduleConfig.sesMode no schema da API.
+export type EmailBulkSendMode =
+  | "LEGACY_RESEND"
+  | "SES_ROLLOUT"
+  | "SES_LIVE"
+  | "PAUSED";
+
+// Coorte do rollout SES — só relevante quando sesMode=SES_ROLLOUT. Tipo
+// próprio (não reaproveita AlertRolloutSegment, que é ALL|PAID e serve a
+// um conceito diferente: quem GANHA MonitorAlertPreference) porque este
+// campo já suporta INTERNAL (User.internalRole IN admin, superadmin).
+export type SesRolloutSegment = "ALL" | "PAID" | "INTERNAL";
+
 export type DigestSchedule = {
   frequency: DigestFrequency;
   dailyHour: number;
@@ -504,6 +521,8 @@ export type DigestSchedule = {
   weeklyDayOfWeek: number;
   intervalAnchorDate: string | null;
   timezone: string;
+  sesMode: EmailBulkSendMode;
+  sesRolloutSegment: SesRolloutSegment | null;
 };
 
 export type DigestContent = {
@@ -624,6 +643,10 @@ export function updateMonitorDigestSchedule(
     dailyHour: number;
     dailyMinute: number;
     weeklyDayOfWeek: number;
+    // Omitido = não muda (semântica de update da API); sesRolloutSegment
+    // enviado como null desliga a coorte de propósito.
+    sesMode?: EmailBulkSendMode;
+    sesRolloutSegment?: SesRolloutSegment | null;
   },
   token?: string,
 ) {
