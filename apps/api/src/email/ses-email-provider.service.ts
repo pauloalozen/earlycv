@@ -60,17 +60,17 @@ export class SesEmailProviderService implements EmailProvider {
       },
     });
 
-    const headers = [
-      ...(message.headers
-        ? Object.entries(message.headers).map(([Name, Value]) => ({
-            Name,
-            Value,
-          }))
-        : []),
-      ...(message.replyTo
-        ? [{ Name: "Reply-To", Value: message.replyTo }]
-        : []),
-    ];
+    // Reply-To NÃO é um header genérico suportado em Content.Simple.Headers
+    // no SES v2 (a API rejeita com "Header <Reply-To> is not supported" —
+    // erro real observado em produção) — existe um campo dedicado,
+    // ReplyToAddresses, no nível raiz do SendEmailCommand. Nunca colocar
+    // Reply-To dentro de `headers`.
+    const headers = message.headers
+      ? Object.entries(message.headers).map(([Name, Value]) => ({
+          Name,
+          Value,
+        }))
+      : [];
     const emailTags = message.tags
       ? Object.entries(message.tags).map(([Name, Value]) => ({ Name, Value }))
       : undefined;
@@ -81,6 +81,7 @@ export class SesEmailProviderService implements EmailProvider {
           FromEmailAddress: `"${message.from.name}" <${message.from.email}>`,
           Destination: { ToAddresses: [message.to] },
           ConfigurationSetName: message.configurationSet,
+          ReplyToAddresses: message.replyTo ? [message.replyTo] : undefined,
           EmailTags: emailTags,
           Content: {
             Simple: {
