@@ -30,6 +30,7 @@ import { AdminMonitorService } from "./admin-monitor.service";
 // type` no autofix se não fosse pelo biome-ignore abaixo).
 // biome-ignore-start lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype (ver comentário acima)
 import { ApplyAlertRolloutDto } from "./dto/apply-alert-rollout.dto";
+import { GetDigestEmailStatsDto } from "./dto/get-digest-email-stats.dto";
 import { ListAdminMonitorJobsDto } from "./dto/list-admin-monitor-jobs.dto";
 import { ListAdminMonitorRecommendationsDto } from "./dto/list-admin-monitor-recommendations.dto";
 import { ListAdminMonitorUsersDto } from "./dto/list-admin-monitor-users.dto";
@@ -211,8 +212,15 @@ export class AdminMonitorController {
   }
 
   @Get("digest/stats")
-  getDigestEmailStats() {
-    return this.adminMonitorService.getDigestEmailStats();
+  getDigestEmailStats(
+    @Query(new ValidationPipe(validationOptions)) query: GetDigestEmailStatsDto,
+  ) {
+    return this.adminMonitorService.getDigestEmailStats(query);
+  }
+
+  @Get("digests/:id/timeline")
+  getDigestTimeline(@Param("id") id: string) {
+    return this.adminMonitorService.getDigestTimeline(id);
   }
 
   @Get("digest/schedule")
