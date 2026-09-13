@@ -1984,6 +1984,23 @@ enum MonitorDigestStatus {
   SENT
   FAILED
   SKIPPED
+  // Envio para o provider retornou erro de rede/timeout — não dá pra saber
+  // se o e-mail chegou a ser aceito do lado de lá antes da resposta se
+  // perder. NUNCA reenviado imediatamente (evita duplicar); só resolvido
+  // por (a) um evento do provider chegando dentro da janela de
+  // reconciliação e correlacionando por tag/messageId (vira SENT/FAILED),
+  // ou (b) a janela esgotar sem evento (1 retry controlado, ver
+  // MonitorDigestOutcomeReconciler). Distinto de FAILED, que é erro
+  // confirmado ANTES do provider aceitar o envio.
+  OUTCOME_UNKNOWN
+}
+
+// RESEND é o único provider usado até esta migration — todo MonitorDigest
+// e MonitorDigestEvent existente é implicitamente RESEND (default abaixo
+// preserva o significado dos registros já gravados, sem backfill).
+enum EmailProviderName {
+  RESEND
+  SES
 }
 
 // Quem gerou este MonitorDigest — distingue o disparo do
@@ -2022,10 +2039,22 @@ model MonitorDigest {
   lastError String?
   sentAt    DateTime?
 
-  // Correlaciona com os webhooks do Resend (data.email_id). null até o
-  // envio de fato acontecer (ou pra digests SKIPPED, que nunca chegam a
-  // enviar).
+  // Correlaciona com os webhooks do Resend (data.email_id) ou com o
+  // MessageId do SES (v2 SendEmail). null até o envio de fato acontecer
+  // (ou pra digests SKIPPED, que nunca chegam a enviar).
   providerMessageId String?
+  // Qual provider foi de fato usado nesta tentativa — sem isso, não dá pra
+  // saber (só pelo formato do providerMessageId, frágil) se um digest
+  // específico saiu pelo Resend ou pelo SES depois da coexistência dos
+  // dois. Default RESEND preserva o significado de todo registro anterior
+  // a esta coluna.
+  provider EmailProviderName @default(RESEND)
+
+  // Timestamp de quando o envio entrou em OUTCOME_UNKNOWN (timeout/erro de
+  // rede ambíguo) — usado pelo MonitorDigestOutcomeReconciler pra calcular
+  // a janela de espera por evento confirmatório antes de decidir requeue.
+  // null em qualquer outro status.
+  outcomeUnknownAt DateTime?
 
   recommendations MonitorDigestRecommendation[]
   events          MonitorDigestEvent[]
@@ -2037,6 +2066,7 @@ model MonitorDigest {
   @@index([status, scheduledFor])
   @@index([userId, createdAt])
   @@index([providerMessageId])
+  @@index([status, outcomeUnknownAt])
 }
 
 // Quais UserJobRecommendation entraram em qual digest — join simples, sem
@@ -2086,6 +2116,12 @@ model MonitorDigestEvent {
   type              MonitorDigestEventType
   metadataJson      Json?
   occurredAt        DateTime
+
+  // Default RESEND preserva o significado de todo evento gravado antes
+  // desta coluna existir (todos vieram do webhook Resend/Svix). Eventos
+  // novos de origem SES gravam SES explicitamente (ver
+  // monitor-digest-webhook.service.ts).
+  provider EmailProviderName @default(RESEND)
 
   createdAt DateTime @default(now())
 
@@ -2140,6 +2176,19 @@ model MonitorDigestScheduleConfig {
   intervalAnchorDate DateTime?
   timezone           String              @default("America/Sao_Paulo")
 
+  // Coorte controlada do rollout SES pro digest (JOB_ALERT) — não tem
+  // relação com MonitorAlertRolloutPolicy.segment (aquele decide quem GANHA
+  // MonitorAlertPreference; este decide, entre quem já tem emailEnabled,
+  // quem recebe via SES). Semântica explícita, sem sobrecarregar null:
+  //   null       -> SES_EMAIL_ENABLED não importa: ninguém recebe via SES
+  //                 ainda (default seguro, força escolha explícita do admin).
+  //   INTERNAL   -> só User.internalRole IN (admin, superadmin).
+  //   ALL / PAID -> mesma população de resolveAlertRolloutSegmentUserIds.
+  // Fora da coorte = usuário elegível não recebe NADA nesta fase (nunca cai
+  // pro Resend — ver monitor-digest.scheduler.ts). Ignorado por completo
+  // quando SES_EMAIL_ENABLED=false.
+  sesRolloutSegment MonitorAlertBulkSegment?
+
   updatedAt        DateTime @updatedAt
   updatedByAdminId String?
 }
@@ -2165,9 +2214,19 @@ model MonitorDigestEmailContent {
 // vez, a lista manual e a base inteira convergem, e a distinção parou de
 // fazer sentido — ativação por usuário individual agora tem seu próprio
 // botão por linha na tabela (ver AdminMonitorService.setAlertPreference).
+// INTERNAL adicionado nesta migration = User.internalRole IN (admin,
+// superadmin) — mesmo mecanismo já usado por MonitorEntitlementService
+// (INTERNAL_ROLES) e por CV_STRUCTURED_PROFILE_PIPELINE_ALLOWLIST_USER_IDS
+// (admin/superadmin sempre ligado, independente de allowlist). Reaproveitado
+// aqui pra dar ao rollout do SES (MonitorDigestScheduleConfig.sesRolloutSegment)
+// uma coorte interna sem inventar um segundo mecanismo de identificação de
+// staff. Efeito colateral aceito: também passa a valer como segmento
+// possível em MonitorAlertRolloutPolicy (auto-inscrição no Alerta) — usar lá
+// é opcional, nunca obrigatório.
 enum MonitorAlertBulkSegment {
   ALL
   PAID
+  INTERNAL
 }
 
 // Singleton (id fixo "default") — política de auto-inscrição contínua no
