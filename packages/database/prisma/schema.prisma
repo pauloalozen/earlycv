@@ -94,6 +94,13 @@ enum JobStatus {
   removed
 }
 
+enum LinkedinCurationStatus {
+  NOT_CHECKED
+  NOT_FOUND_ON_LINKEDIN
+  FOUND_ON_LINKEDIN
+  INCONCLUSIVE
+}
+
 enum IngestionRunStatus {
   running
   completed
@@ -1794,11 +1801,35 @@ model Job {
   savedBy           SavedJob[]
   recommendations   UserJobRecommendation[]
   monitorMatchJob   MonitorMatchJob?
+  linkedinCuration  JobLinkedinCuration?
 
   @@index([companyId])
   @@index([jobSourceId])
   @@index([firstSeenAt])
   @@index([slug])
+}
+
+// Curadoria manual de "vagas capturadas mas aparentemente ainda não no
+// LinkedIn" pra divulgação diária (/admin/curadoria-vagas) — 1:1 opcional
+// com Job. Ausência de linha == NOT_CHECKED (compatibilidade com vagas
+// antigas sem retroatividade). Sem FK pra User em checkedByAdminId de
+// propósito: é só um identificador de auditoria (mesmo padrão de
+// MonitorAdminActionLog.adminId), não uma relação de negócio.
+model JobLinkedinCuration {
+  id    String @id @default(cuid())
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  status      LinkedinCurationStatus @default(NOT_CHECKED)
+  linkedinUrl String?
+
+  checkedByAdminId String?
+  checkedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }
 
 // Auditoria de chamadas à Google Indexing API (GoogleIndexingService) — uma
