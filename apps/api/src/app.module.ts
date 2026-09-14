@@ -22,6 +22,7 @@ import { Ga4Module } from "./ga4/ga4.module";
 import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
 import { JobApplicationsModule } from "./job-applications/job-applications.module";
+import { JobCurationModule } from "./job-curation/job-curation.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { MasterCvCanonicalExtractionModule } from "./master-cv-canonical-extraction/master-cv-canonical-extraction.module";
@@ -63,6 +64,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     CompaniesModule,
     JobSourcesModule,
     JobsModule,
+    JobCurationModule,
     ...(process.env.MASTER_CV_CANONICAL_EXTRACTION_ENABLED === "true"
       ? [MasterCvCanonicalExtractionModule]
       : []),
