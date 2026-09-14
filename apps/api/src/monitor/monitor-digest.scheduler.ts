@@ -224,9 +224,15 @@ export class MonitorDigestScheduler {
     return created;
   }
 
-  // Idempotência: a existência da linha (qualquer status) pra essa chave
+  // Idempotência: a existência de QUALQUER digest pra essa chave (de
+  // qualquer source, inclusive um disparo manual do admin no mesmo dia)
   // já basta pra pular — nunca recalcula recomendações elegíveis pra um
   // período já decidido, mesmo que o worker ainda não tenha enviado.
+  // findFirst (não findUnique): a chave só é única no banco pra
+  // source=SCHEDULER (índice parcial, ver schema.prisma) — disparos
+  // manuais podem acumular várias linhas pra essa mesma chave, e este
+  // check precisa continuar enxergando todas elas, não só a do
+  // scheduler.
   private async discoverForUser(
     userId: string,
     frequency: MonitorDigestFrequency,
@@ -234,10 +240,8 @@ export class MonitorDigestScheduler {
     inCohort: boolean,
     outOfCohortReason: string,
   ): Promise<boolean> {
-    const existing = await this.database.monitorDigest.findUnique({
-      where: {
-        userId_frequency_scheduledFor: { userId, frequency, scheduledFor },
-      },
+    const existing = await this.database.monitorDigest.findFirst({
+      where: { userId, frequency, scheduledFor },
     });
     if (existing) {
       return false;

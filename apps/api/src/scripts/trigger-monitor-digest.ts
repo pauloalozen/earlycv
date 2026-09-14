@@ -44,14 +44,12 @@ async function main() {
       `[trigger-monitor-digest] user=${user.id} frequency=${frequency} scheduledFor=${scheduledFor.toISOString()}`,
     );
 
-    const existing = await prisma.monitorDigest.findUnique({
-      where: {
-        userId_frequency_scheduledFor: {
-          userId: user.id,
-          frequency,
-          scheduledFor,
-        },
-      },
+    // findFirst (não findUnique): a chave só é única no banco pra
+    // source=SCHEDULER (índice parcial, ver schema.prisma) — este script
+    // cria com source=SCHEDULER (default), então continua correto apagar
+    // e recriar pra não colidir.
+    const existing = await prisma.monitorDigest.findFirst({
+      where: { userId: user.id, frequency, scheduledFor },
     });
     if (existing) {
       console.log(

@@ -823,6 +823,91 @@ test("sendDigestNow persists provider=SES on the digest when the send actually w
   }
 });
 
+// Regressão: sendDigestNow apagava (delete, com Cascade em
+// MonitorDigestEvent) o digest existente do mesmo usuário/dia antes de
+// criar o novo — um segundo disparo manual no mesmo dia destruía todo o
+// histórico de eventos do primeiro envio. A unicidade de (userId,
+// frequency, scheduledFor) agora só vale pra source=SCHEDULER (índice
+// parcial, ver schema.prisma), então disparos manuais acumulam.
+test("sendDigestNow never deletes a previous digest — two manual sends the same day accumulate, both with their events intact", async () => {
+  withGhostModeOn();
+  const originalSecret = process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET;
+  process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET = "test-secret";
+  const user = await seedUser();
+  const { company, job } = await seedCompanyAndJob();
+  // Segunda vaga/recomendação só pra garantir elegibilidade no segundo
+  // disparo — getEligibleRecommendations exclui recomendação já incluída
+  // num digest anterior, então reenviar a MESMA recomendação reportaria
+  // no_eligible_recommendations, o que não é o que este teste quer
+  // verificar (acúmulo de digests, não elegibilidade de conteúdo).
+  const { company: company2, job: job2 } = await seedCompanyAndJob();
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { internalRole: "admin" },
+    });
+    await service.trackAlertUser("admin-1", user.id);
+    await prisma.userJobRecommendation.create({
+      data: { userId: user.id, jobId: job.id, score: 90, opportunityLevel: 5 },
+    });
+
+    const first = await service.sendDigestNow("admin-99", user.id);
+    assert.equal(first.sent, true);
+
+    await prisma.userJobRecommendation.create({
+      data: {
+        userId: user.id,
+        jobId: job2.id,
+        score: 90,
+        opportunityLevel: 5,
+      },
+    });
+    await prisma.monitorDigestEvent.create({
+      data: {
+        digestId: first.digestId as string,
+        providerMessageId: "fake-first",
+        providerEventId: `fake-event-${randomUUID()}`,
+        type: "OPENED",
+        provider: "RESEND",
+        occurredAt: new Date(),
+      },
+    });
+
+    const second = await service.sendDigestNow("admin-99", user.id);
+    assert.equal(second.sent, true);
+    assert.notEqual(second.digestId, first.digestId);
+
+    const firstDigest = await prisma.monitorDigest.findUnique({
+      where: { id: first.digestId as string },
+    });
+    const secondDigest = await prisma.monitorDigest.findUnique({
+      where: { id: second.digestId as string },
+    });
+    assert.ok(firstDigest, "first digest must still exist, never deleted");
+    assert.equal(secondDigest?.status, "SENT");
+
+    const firstDigestEvents = await prisma.monitorDigestEvent.findMany({
+      where: { digestId: first.digestId as string },
+    });
+    assert.equal(
+      firstDigestEvents.length,
+      1,
+      "the first digest's event history must survive the second send",
+    );
+  } finally {
+    restoreGhostMode();
+    process.env.MONITOR_DIGEST_UNSUBSCRIBE_SECRET = originalSecret;
+    await prisma.monitorAdminActionLog
+      .deleteMany({
+        where: { metadataJson: { path: ["userId"], equals: user.id } },
+      })
+      .catch(() => undefined);
+    await cleanupUser(user.id);
+    await cleanupJob(job.id, company.id);
+    await cleanupJob(job2.id, company2.id);
+  }
+});
+
 test("sendDigestNow reports no_eligible_recommendations without creating a PENDING digest when there is nothing to send", async () => {
   withGhostModeOn();
   const user = await seedUser();
