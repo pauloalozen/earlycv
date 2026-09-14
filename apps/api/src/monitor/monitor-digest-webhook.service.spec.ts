@@ -3,12 +3,21 @@ import { test } from "node:test";
 
 import { Prisma } from "@prisma/client";
 
-import { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
+import {
+  MonitorDigestWebhookService,
+  resolveSesEventOccurredAt,
+  type SesEventPayload,
+} from "./monitor-digest-webhook.service";
 
 function createFixture() {
   const events = new Map<
     string,
-    { providerEventId: string; digestId: string | null; type: string }
+    {
+      providerEventId: string;
+      digestId: string | null;
+      type: string;
+      occurredAt: Date;
+    }
   >();
   const digests = new Map<
     string,
@@ -65,6 +74,7 @@ function createFixture() {
           providerEventId,
           digestId: (data.digestId as string | null) ?? null,
           type: data.type as string,
+          occurredAt: data.occurredAt as Date,
         };
         events.set(providerEventId, record);
         return record;
@@ -463,4 +473,129 @@ test("a SES payload without mail.messageId is rejected", async () => {
 
   assert.equal(result.processed, false);
   assert.equal(result.reason, "missing_email_id");
+});
+
+// --- resolveSesEventOccurredAt (regressão) --------------------------------
+// Bug real visto em produção: mail.timestamp é o momento do ENVIO, igual em
+// todo evento publicado sobre o mesmo e-mail. Usá-lo direto como occurredAt
+// fazia Delivery/Open/Click do MESMO digest ficarem todos com o mesmo
+// horário do Send original — a timeline do admin mostrava eventos fora de
+// ordem (um Aberto aparecendo depois do Clicado) e "último evento" da
+// listagem escolhia o evento errado por causa do empate no timestamp.
+
+test("resolveSesEventOccurredAt uses the event-specific timestamp, never mail.timestamp, for Delivery/Open/Click/Bounce/Complaint", () => {
+  const mailTimestamp = "2026-09-13T21:50:30.447Z";
+  const cases: Array<[SesEventPayload, string]> = [
+    [
+      {
+        eventType: "Delivery",
+        mail: { timestamp: mailTimestamp },
+        delivery: { timestamp: "2026-09-13T21:50:32.838Z" },
+      },
+      "2026-09-13T21:50:32.838Z",
+    ],
+    [
+      {
+        eventType: "Open",
+        mail: { timestamp: mailTimestamp },
+        open: { timestamp: "2026-09-13T21:51:10.668Z" },
+      },
+      "2026-09-13T21:51:10.668Z",
+    ],
+    [
+      {
+        eventType: "Click",
+        mail: { timestamp: mailTimestamp },
+        click: { timestamp: "2026-09-13T22:52:48.199Z" },
+      },
+      "2026-09-13T22:52:48.199Z",
+    ],
+    [
+      {
+        eventType: "Bounce",
+        mail: { timestamp: mailTimestamp },
+        bounce: { timestamp: "2026-09-13T21:50:35.000Z" },
+      },
+      "2026-09-13T21:50:35.000Z",
+    ],
+    [
+      {
+        eventType: "Complaint",
+        mail: { timestamp: mailTimestamp },
+        complaint: { timestamp: "2026-09-14T09:00:00.000Z" },
+      },
+      "2026-09-14T09:00:00.000Z",
+    ],
+  ];
+
+  for (const [payload, expected] of cases) {
+    assert.equal(
+      resolveSesEventOccurredAt(payload).toISOString(),
+      expected,
+      `eventType=${payload.eventType}`,
+    );
+  }
+});
+
+test("resolveSesEventOccurredAt falls back to mail.timestamp for Send/Reject (no dedicated timestamp field) or when the event-specific one is missing", () => {
+  const mailTimestamp = "2026-09-13T21:50:30.447Z";
+  assert.equal(
+    resolveSesEventOccurredAt({
+      eventType: "Send",
+      mail: { timestamp: mailTimestamp },
+    }).toISOString(),
+    mailTimestamp,
+  );
+  assert.equal(
+    resolveSesEventOccurredAt({
+      eventType: "Delivery",
+      mail: { timestamp: mailTimestamp },
+      delivery: {},
+    }).toISOString(),
+    mailTimestamp,
+  );
+});
+
+test("a SES Delivery/Open/Click sequence for the same digest is persisted with distinct, correctly-ordered occurredAt values", async () => {
+  const fixture = createFixture();
+  fixture.seedDigest("digest-1", "user-1", "email_ses_abc");
+  const mail = {
+    messageId: "email_ses_abc",
+    timestamp: "2026-09-13T21:50:30.447Z",
+    tags: {
+      correlationType: ["MONITOR_DIGEST"],
+      correlationId: ["digest-1"],
+    },
+  };
+
+  await fixture.service.processSesEvent("sns-msg-delivery", {
+    eventType: "Delivery",
+    mail,
+    delivery: { timestamp: "2026-09-13T21:50:32.838Z" },
+  });
+  await fixture.service.processSesEvent("sns-msg-open", {
+    eventType: "Open",
+    mail,
+    open: { timestamp: "2026-09-13T21:51:10.668Z" },
+  });
+  await fixture.service.processSesEvent("sns-msg-click", {
+    eventType: "Click",
+    mail,
+    click: { timestamp: "2026-09-13T22:52:48.199Z" },
+  });
+
+  const occurredAtByType = new Map(
+    Array.from(fixture.events.values()).map((e) => [
+      e.type,
+      e.occurredAt.toISOString(),
+    ]),
+  );
+  assert.equal(occurredAtByType.get("DELIVERED"), "2026-09-13T21:50:32.838Z");
+  assert.equal(occurredAtByType.get("OPENED"), "2026-09-13T21:51:10.668Z");
+  assert.equal(occurredAtByType.get("CLICKED"), "2026-09-13T22:52:48.199Z");
+  // As três são diferentes e crescem na ordem real dos eventos — nunca as
+  // três iguais a mail.timestamp, como no bug original.
+  const values = Array.from(occurredAtByType.values());
+  assert.equal(new Set(values).size, 3);
+  assert.ok(values[0] < values[1] && values[1] < values[2]);
 });

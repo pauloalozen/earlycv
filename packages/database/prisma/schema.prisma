@@ -2025,13 +2025,25 @@ enum MonitorDigestSource {
   ADMIN_MANUAL
 }
 
-// Um registro por (usuário, frequência, período) — @@unique é o mecanismo
-// de idempotência: o scheduler faz upsert nessa chave antes de montar o
-// conteúdo, então um worker reiniciado no meio do processamento nunca
-// produz um segundo e-mail pro mesmo período (ver
-// monitor-digest.scheduler.ts). scheduledFor é o início do período em UTC
-// (meia-noite do dia, pra DAILY; início da semana ISO, pra WEEKLY) — não é
-// "quando o cron rodou", é "qual período este digest representa".
+// scheduledFor é o início do período em UTC (meia-noite do dia, pra
+// DAILY; início da semana ISO, pra WEEKLY) — não é "quando o cron
+// rodou", é "qual período este digest representa".
+//
+// Idempotência de (userId, frequency, scheduledFor) é só pro SCHEDULER:
+// um índice único PARCIAL (aplicado via SQL cru na migration
+// 20260913_monitor_digest_manual_cumulative, não representável direto
+// no @@unique do Prisma) garante no banco que o cron nunca produz dois
+// digests pro mesmo período, mesmo se um worker reiniciar no meio do
+// processamento — `WHERE source = 'SCHEDULER'`. Disparos manuais
+// (ADMIN_MANUAL) ficam DE FORA dessa restrição de propósito: cada
+// disparo cria uma linha nova, nunca substitui/apaga a anterior (ver
+// AdminMonitorService.sendDigestNow) — antes disso, o admin reenviando
+// no mesmo dia apagava em cascata (MonitorDigestEvent.onDelete=Cascade)
+// todo o histórico de eventos do envio anterior, o que deixou de fazer
+// sentido depois que o painel /admin/alerta-vagas passou a auditar esse
+// histórico. O índice abaixo é só pra performance de leitura (findFirst
+// nas 3 colunas, usado tanto pelo scheduler quanto pelo script local) —
+// a unicidade de verdade vive no índice parcial do banco.
 model MonitorDigest {
   id     String @id @default(cuid())
   userId String
@@ -2075,7 +2087,7 @@ model MonitorDigest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, frequency, scheduledFor])
+  @@index([userId, frequency, scheduledFor])
   @@index([status, scheduledFor])
   @@index([userId, createdAt])
   @@index([providerMessageId])

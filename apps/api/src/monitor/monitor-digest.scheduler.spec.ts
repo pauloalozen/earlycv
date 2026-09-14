@@ -71,6 +71,18 @@ function createFixture() {
           where.userId_frequency_scheduledFor;
         return digests.get(keyOf(userId, frequency, scheduledFor)) ?? null;
       },
+      // discoverForUser passou a usar findFirst (a chave só é única no
+      // banco pra source=SCHEDULER, ver schema.prisma) — mesma busca por
+      // igualdade exata nos 3 campos, este fake nunca teve múltiplas
+      // linhas por chave mesmo.
+      findFirst: async ({
+        where,
+      }: {
+        where: { userId: string; frequency: string; scheduledFor: Date };
+      }) => {
+        const { userId, frequency, scheduledFor } = where;
+        return digests.get(keyOf(userId, frequency, scheduledFor)) ?? null;
+      },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         const id = `digest-${nextDigestId++}`;
         const record = {

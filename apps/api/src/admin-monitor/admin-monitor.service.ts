@@ -1342,15 +1342,15 @@ export class AdminMonitorService {
     const scheduledFor =
       frequency === "WEEKLY" ? startOfIsoWeekUtc(now) : startOfUtcDay(now);
 
-    const existing = await this.database.monitorDigest.findUnique({
-      where: {
-        userId_frequency_scheduledFor: { userId, frequency, scheduledFor },
-      },
-    });
-    if (existing) {
-      await this.database.monitorDigest.delete({ where: { id: existing.id } });
-    }
-
+    // Cumulativo por design: cada disparo manual cria uma linha NOVA,
+    // mesmo que já exista um digest (de qualquer status/source) pro
+    // mesmo usuário/dia/frequência — a unicidade de (userId, frequency,
+    // scheduledFor) no banco só vale pra source=SCHEDULER (índice
+    // parcial, ver schema.prisma), então isso nunca colide. Antes disso,
+    // reenviar no mesmo dia apagava (delete + Cascade em
+    // MonitorDigestEvent) todo o histórico de eventos do envio anterior
+    // — perda de dado real, incompatível com o painel de auditoria em
+    // /admin/alerta-vagas.
     const eligible =
       await this.digestContentService.getEligibleRecommendations(userId);
     if (eligible.length === 0) {
@@ -1572,7 +1572,11 @@ export class AdminMonitorService {
     const recentEvents = digestIds.length
       ? await this.database.monitorDigestEvent.findMany({
           where: { digestId: { in: digestIds } },
-          orderBy: [{ occurredAt: "desc" }],
+          // createdAt como desempate (ordem real de chegada do webhook) —
+          // occurredAt empatado já não deveria mais acontecer (ver
+          // resolveSesEventOccurredAt), mas dado histórico gravado antes
+          // dessa correção ainda tem eventos com o mesmo occurredAt.
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
           select: {
             digestId: true,
             type: true,
@@ -1668,7 +1672,9 @@ export class AdminMonitorService {
 
     const events = await this.database.monitorDigestEvent.findMany({
       where: { digestId },
-      orderBy: [{ occurredAt: "asc" }],
+      // createdAt desempata occurredAt igual (ver comentário na mesma
+      // ordenação em listDigestHistory acima).
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
         type: true,
