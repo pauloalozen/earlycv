@@ -22,6 +22,17 @@ export type AnalysisRequestContext = {
   ip: string | null;
   routePath: string | null;
   userAgentHash: string | null;
+  // posthogVisitorIp / posthogVisitorUserAgent: contexto de rede do
+  // visitante original, só pra classificação de tráfego (Regular/AI
+  // Agent/Bot) via $virt_traffic_type do PostHog nos eventos Analytics v2
+  // — conceito INDEPENDENTE de `ip`/`userAgentHash` acima (usados em
+  // rate-limit/anti-abuso) e de visitorId (identidade pseudônima). Vêm dos
+  // headers x-visitor-ip/x-visitor-user-agent, setados só pela rota Next
+  // de business-funnel-events (que vê o request direto do browser) —
+  // nunca derivados de `ip`/req.ip aqui, e nunca fabricados quando o
+  // header não vier (null nesse caso, sem fallback pro servidor).
+  posthogVisitorIp?: string | null;
+  posthogVisitorUserAgent?: string | null;
 };
 
 export const ANALYSIS_NOW = "ANALYSIS_NOW";

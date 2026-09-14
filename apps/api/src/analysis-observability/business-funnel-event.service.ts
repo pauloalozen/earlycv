@@ -358,6 +358,18 @@ export class BusinessFunnelEventService {
       ...(context.posthogSessionId
         ? { $session_id: context.posthogSessionId }
         : {}),
+      // $raw_user_agent / $ip: contexto de rede do visitante original, só
+      // pra classificação de tráfego (Regular/AI Agent/Bot) do PostHog —
+      // nomes de propriedade exigidos pelo PostHog pra computar
+      // $virt_traffic_type/$virt_bot_operator em tempo de query. Vêm
+      // depois do spread de sanitizedMetadata de propósito: nunca confiar
+      // em valor enviado pelo client dentro de metadata pra estas duas
+      // chaves. Omitidos (não null) quando o contexto original não está
+      // disponível — nunca cai pro user-agent/IP do próprio servidor.
+      ...(context.posthogVisitorUserAgent
+        ? { $raw_user_agent: context.posthogVisitorUserAgent }
+        : {}),
+      ...(context.posthogVisitorIp ? { $ip: context.posthogVisitorIp } : {}),
     };
 
     this.posthogExporter.exportBusinessFunnelEvent(

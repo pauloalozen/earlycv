@@ -408,6 +408,130 @@ test("keeps context $session_id when metadata sends null", async () => {
   assert.equal(exported[0].properties.$session_id, "ph-session-1");
 });
 
+// ─── Causa B: propagação de $raw_user_agent/$ip pro PostHog ──────────────
+
+function buildRecordingService(
+  exported: Array<{ properties: Record<string, unknown> }>,
+) {
+  return new BusinessFunnelEventService(
+    {
+      $transaction: async (
+        callback: (tx: {
+          businessFunnelEvent: {
+            create: (args: {
+              data: Record<string, unknown>;
+            }) => Promise<StoredBusinessFunnelEvent>;
+            findUnique: (args: {
+              where: { idempotencyKey: string };
+            }) => Promise<StoredBusinessFunnelEvent | null>;
+          };
+        }) => Promise<unknown>,
+      ) => {
+        return callback({
+          businessFunnelEvent: {
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              return {
+                id: "event-network-context",
+                createdAt: new Date("2026-04-21T15:30:00.000Z"),
+                ...data,
+              } as StoredBusinessFunnelEvent;
+            },
+            findUnique: async () => null,
+          },
+        });
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+    {
+      applyEvent: async () => {},
+    } as BusinessFunnelProjectionService,
+    {
+      exportBusinessFunnelEvent: (
+        _eventName: string,
+        properties: Record<string, unknown>,
+      ) => {
+        exported.push({ properties });
+      },
+      shouldExportBusinessFunnelEvent: () => true,
+      // biome-ignore lint/suspicious/noExplicitAny: test mock
+    } as any,
+  );
+}
+
+test("propagates $raw_user_agent and $ip to PostHog properties when the original visitor context is present", async () => {
+  const exported: Array<{ properties: Record<string, unknown> }> = [];
+  const service = buildRecordingService(exported);
+
+  await service.record(
+    {
+      eventName: "job_detail_viewed",
+      eventVersion: 1,
+      metadata: {},
+    },
+    {
+      ...baseContext,
+      posthogVisitorIp: "203.0.113.10",
+      posthogVisitorUserAgent: "Mozilla/5.0 (compatible; GPTBot/1.2)",
+    },
+    "frontend",
+  );
+
+  assert.equal(exported.length, 1);
+  assert.equal(exported[0].properties.$ip, "203.0.113.10");
+  assert.equal(
+    exported[0].properties.$raw_user_agent,
+    "Mozilla/5.0 (compatible; GPTBot/1.2)",
+  );
+});
+
+test("never falls back to server-side user-agent/ip: event is exported without $raw_user_agent/$ip when the original visitor context is unavailable", async () => {
+  const exported: Array<{ properties: Record<string, unknown> }> = [];
+  const service = buildRecordingService(exported);
+
+  await service.record(
+    {
+      eventName: "page_view",
+      eventVersion: 1,
+      metadata: {},
+    },
+    baseContext,
+    "frontend",
+  );
+
+  assert.equal(exported.length, 1);
+  assert.equal("$ip" in exported[0].properties, false);
+  assert.equal("$raw_user_agent" in exported[0].properties, false);
+});
+
+test("ignores client-supplied $raw_user_agent/$ip inside metadata — only the server-resolved context is trusted", async () => {
+  const exported: Array<{ properties: Record<string, unknown> }> = [];
+  const service = buildRecordingService(exported);
+
+  await service.record(
+    {
+      eventName: "radar_view",
+      eventVersion: 1,
+      metadata: {
+        $raw_user_agent: "spoofed-by-client",
+        $ip: "10.0.0.1",
+      },
+    },
+    {
+      ...baseContext,
+      posthogVisitorIp: "203.0.113.10",
+      posthogVisitorUserAgent: "Mozilla/5.0 (compatible; GPTBot/1.2)",
+    },
+    "frontend",
+  );
+
+  assert.equal(exported.length, 1);
+  assert.equal(exported[0].properties.$ip, "203.0.113.10");
+  assert.equal(
+    exported[0].properties.$raw_user_agent,
+    "Mozilla/5.0 (compatible; GPTBot/1.2)",
+  );
+});
+
 test("canonicalizes eventName before persisting and projecting", async () => {
   let persistedEventName: string | null = null;
   const projectionApplied: string[] = [];
