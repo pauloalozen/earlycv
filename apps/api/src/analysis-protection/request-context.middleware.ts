@@ -322,6 +322,18 @@ function resolveUserAgentHash(req: Request): string | null {
   return createHash("sha256").update(userAgent).digest("hex");
 }
 
+// Lidos só dos headers dedicados x-visitor-ip/x-visitor-user-agent (ver
+// AnalysisRequestContext) — nunca de `user-agent`/req.ip, que neste ponto
+// já são os do processo Next fazendo a chamada server-to-server, não os
+// do visitante original. Sem fallback: header ausente = null.
+function resolvePosthogVisitorIp(req: Request): string | null {
+  return pickFirstHeaderValue(req.headers["x-visitor-ip"]);
+}
+
+function resolvePosthogVisitorUserAgent(req: Request): string | null {
+  return pickFirstHeaderValue(req.headers["x-visitor-user-agent"]);
+}
+
 export function requestContextMiddleware(
   req: Request,
   _res: Response,
@@ -341,6 +353,8 @@ export function requestContextMiddleware(
     userAgentHash: resolveUserAgentHash(req),
     journeySessionInternalId: resolveJourneySessionInternalId(req),
     visitorId: resolveVisitorId(req),
+    posthogVisitorIp: resolvePosthogVisitorIp(req),
+    posthogVisitorUserAgent: resolvePosthogVisitorUserAgent(req),
   };
 
   req.analysisContext = context;

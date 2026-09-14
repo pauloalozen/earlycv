@@ -450,3 +450,47 @@ test("request context middleware never leaks one request's visitorId into anothe
   );
   assert.equal(reqB.analysisContext.visitorId, null);
 });
+
+// ─── Causa B: contexto de rede pro PostHog ($raw_user_agent/$ip) ─────────
+
+test("request context middleware reads posthogVisitorIp/posthogVisitorUserAgent from dedicated headers", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {
+      "x-visitor-ip": "203.0.113.10",
+      "x-visitor-user-agent": "Mozilla/5.0 (compatible; GPTBot/1.2)",
+    },
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.posthogVisitorIp, "203.0.113.10");
+  assert.equal(
+    req.analysisContext.posthogVisitorUserAgent,
+    "Mozilla/5.0 (compatible; GPTBot/1.2)",
+  );
+});
+
+test("request context middleware never invents posthogVisitorIp/posthogVisitorUserAgent from user-agent/x-forwarded-for/ip when the dedicated headers are absent", () => {
+  const req = {
+    app: { get: () => false },
+    cookies: {},
+    headers: {
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64)",
+      "x-forwarded-for": "203.0.113.10",
+    },
+    ip: "198.51.100.5",
+    socket: { remoteAddress: "127.0.0.1" },
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+  } as any;
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  requestContextMiddleware(req, {} as any, () => {});
+
+  assert.equal(req.analysisContext.posthogVisitorIp, null);
+  assert.equal(req.analysisContext.posthogVisitorUserAgent, null);
+});
