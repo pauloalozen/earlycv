@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EcvBuildLoader } from "@/components/ecv-loader";
 import type { ResumeDto } from "@/lib/resumes-api";
 import {
+  getCvProcessingJobStatus,
   getMyMasterCvExtractionStatus,
   uploadMasterResume,
 } from "@/lib/resumes-api";
@@ -137,25 +138,46 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
     }
   }, []);
 
-  const startPolling = useCallback(() => {
-    pollRef.current = setInterval(async () => {
-      try {
-        const status = await getMyMasterCvExtractionStatus();
-        if (!status) return;
-        if (status.status === "succeeded" || status.status === "failed") {
-          stopPolling();
-          // router.refresh() depende do router cache do App Router, que pode
-          // colidir com a revalidação disparada pela ação de limpar o perfil
-          // logo antes do upload — o resultado é a tela ficar com dados
-          // velhos até um F5 manual. Um reload completo busca o estado atual
-          // direto do servidor, sem essa ambiguidade.
-          window.location.reload();
+  // Quando o upload roda no pipeline canônico novo (sempre ligado pra
+  // admin/superadmin — ver CvProcessingFlagResolverService), o backend
+  // nunca cria linha na tabela do pipeline legado que
+  // getMyMasterCvExtractionStatus() consulta. Sem isto, o polling nunca via
+  // "succeeded"/"failed" e a tela travava pra sempre no overlay de
+  // "Processando CV", mesmo com o processamento real concluindo
+  // normalmente em background (daí um F5 manual sempre mostrar tudo já
+  // atualizado). Achado real 2026-09-15, reportado pelo Paulo.
+  const startPolling = useCallback(
+    (cvProcessingJobId: string | null | undefined) => {
+      pollRef.current = setInterval(async () => {
+        try {
+          if (cvProcessingJobId) {
+            const job = await getCvProcessingJobStatus(cvProcessingJobId);
+            if (!job) return;
+            if (job.status === "READY" || job.status === "FAILED") {
+              stopPolling();
+              window.location.reload();
+            }
+            return;
+          }
+
+          const status = await getMyMasterCvExtractionStatus();
+          if (!status) return;
+          if (status.status === "succeeded" || status.status === "failed") {
+            stopPolling();
+            // router.refresh() depende do router cache do App Router, que
+            // pode colidir com a revalidação disparada pela ação de limpar
+            // o perfil logo antes do upload — o resultado é a tela ficar
+            // com dados velhos até um F5 manual. Um reload completo busca
+            // o estado atual direto do servidor, sem essa ambiguidade.
+            window.location.reload();
+          }
+        } catch {
+          // keep polling
         }
-      } catch {
-        // keep polling
-      }
-    }, POLL_INTERVAL_MS);
-  }, [stopPolling]);
+      }, POLL_INTERVAL_MS);
+    },
+    [stopPolling],
+  );
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
@@ -189,10 +211,10 @@ export function ResumeUploadStrip({ masterResume, hasFilledFields }: Props) {
       formData.append("isPrimary", "true");
       if (clearExistingProfile) formData.append("clearExistingProfile", "true");
       if (UPLOAD_TOKEN) formData.append("turnstileToken", UPLOAD_TOKEN);
-      await uploadMasterResume(formData);
+      const uploaded = await uploadMasterResume(formData);
       setPendingFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      startPolling();
+      startPolling(uploaded.cvProcessingJobId);
     } catch (err) {
       setProcessing(false);
       setError(
