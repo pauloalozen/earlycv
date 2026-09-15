@@ -14,10 +14,10 @@ import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-e
 import {
   buildAnalysisWorker,
   buildCapturingAiClient,
+  buildClaimSourceGrantService,
   buildEntrypoint,
   buildProcessingWorker,
   buildRealCvAdaptationService,
-  claimSourceGrantService,
   database,
   JOB_DESCRIPTION_BASE,
   minimalAnalysisJson,
@@ -28,8 +28,6 @@ import {
   FakeStorage,
 } from "./test-support/canonical-pipeline-test-services";
 import { makeRunId } from "./test-support/canonical-pipeline-test-harness";
-
-void claimSourceGrantService; // usado indiretamente via buildRealCvAdaptationService
 
 function fakeOutput(
   runId: string,
@@ -73,6 +71,7 @@ type Harness = {
   analysisWorker: ReturnType<typeof buildAnalysisWorker>;
   cvWorker: ReturnType<typeof buildProcessingWorker>;
   extractCalls: { count: number };
+  storage: FakeStorage;
 };
 
 function buildHarness(runId: string, marker = "a"): Harness {
@@ -93,8 +92,8 @@ function buildHarness(runId: string, marker = "a"): Harness {
     entrypoint,
     storage,
   );
-  const analysisWorker = buildAnalysisWorker(service);
-  return { service, analysisWorker, cvWorker, extractCalls };
+  const analysisWorker = buildAnalysisWorker(service, storage);
+  return { service, analysisWorker, cvWorker, extractCalls, storage };
 }
 
 async function startAndProcessGuestJob(
@@ -1152,14 +1151,15 @@ test("CLAIM-RACE 3: duas chamadas concorrentes de claim() convergem (direto ou v
     // do TalentProfile(userId) que a corrida concorrente pode ter criado
     // no meio do caminho (isso sim seria um bug permanente, não uma
     // corrida recuperável).
+    const claimService = buildClaimSourceGrantService(h.storage);
     const results = await Promise.allSettled([
-      claimSourceGrantService.claim(claimInput),
-      claimSourceGrantService.claim(claimInput),
+      claimService.claim(claimInput),
+      claimService.claim(claimInput),
     ]);
 
     const anyRejected = results.some((r) => r.status === "rejected");
     if (anyRejected) {
-      const retry = await claimSourceGrantService.claim(claimInput);
+      const retry = await claimService.claim(claimInput);
       assert.ok(retry, "retry depois de perder a corrida precisa suceder");
     }
 

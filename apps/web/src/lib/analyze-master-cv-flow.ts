@@ -13,6 +13,15 @@ export type AnalyzeMasterCvForJobResult =
 // orquestração (analisar -> poll -> salvar preview) que /adaptar já faz para
 // o caso "autenticado com masterResumeId", mas sem os outros modos de
 // entrada de CV (upload/texto/perfil) que não se aplicam aqui.
+//
+// Achado 2026-09-15 (hotfix "Resume not found or has no text content."):
+// este fluxo mandava masterResumeId sem inputMode, o que cai no branch
+// LEGADO de startAuthenticatedAnalysisJob (lê Resume.rawText direto) em vez
+// do canônico (inputMode "profile" -> resolveActiveMasterCvProcessingJobId,
+// que usa a CvMasterDesignation/CvStructuredProfile ativa e só cai pro
+// rawText como fallback quando não existe designação canônica nenhuma).
+// masterResumeId aqui só serve pro caller decidir se mostra o botão
+// (hasCvMaster) — nunca deve dirigir qual branch do backend roda.
 export async function analyzeMasterCvForJob(params: {
   masterResumeId: string;
   radarJobId: string;
@@ -21,7 +30,6 @@ export async function analyzeMasterCvForJob(params: {
   turnstileToken: string | null;
 }): Promise<AnalyzeMasterCvForJobResult> {
   const formData = new FormData();
-  formData.append("masterResumeId", params.masterResumeId);
   formData.append("radarJobId", params.radarJobId);
   formData.append("radarJobOrigin", params.radarJobOrigin);
   appendTurnstileTokenToAnalyzeFormData(formData, params.turnstileToken);
@@ -39,7 +47,7 @@ export async function analyzeMasterCvForJob(params: {
 
   const started = await analyzeAuthenticatedCv(
     formData,
-    undefined,
+    "profile",
     journeyContext,
   );
   if (!started.ok) {

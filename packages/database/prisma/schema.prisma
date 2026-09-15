@@ -1057,6 +1057,17 @@ model AnalysisJob {
   masterCvText             String?
   jobTitle                 String?
   companyName              String?
+  // Achado 2026-09-15: cargo/empresa curados do Job do radar, resolvidos em
+  // resolveAnalysisJobDescription no momento da criação (startAuthenticatedAnalysisJobCanonical/
+  // startGuestAnalysisJobCanonical) — SEMPRE prevalecem sobre o que a IA
+  // reextrai do texto colado (jobTitle/companyName acima, escritos por
+  // CvAnalysisWorker ao terminar). O worker canônico nunca tinha essa
+  // prioridade (só o método legado processAnalysisJob tinha, e não roda
+  // mais com o pipeline canônico ligado) — análises via radar voltavam
+  // "Não informado" mesmo com o dado certo disponível no Job desde o
+  // início da requisição.
+  radarJobTitle            String?
+  radarCompanyName         String?
   adaptedContentJson       Json?
   previewText              String?
   scoreBefore              Int?

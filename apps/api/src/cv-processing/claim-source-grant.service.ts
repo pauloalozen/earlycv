@@ -28,8 +28,10 @@ import {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { StorageService } from "../storage/storage.service";
 import { CvMasterPromotionService } from "./cv-master-promotion.service";
 import {
+  CvSourceTextObjectMissingError,
   isSubjectMismatchError,
   MasterDesignationSubjectMismatchError,
 } from "./cv-processing.errors";
@@ -73,6 +75,8 @@ export class ClaimSourceGrantService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CvMasterPromotionService)
     private readonly masterPromotion: CvMasterPromotionService,
+    @Inject(StorageService)
+    private readonly storage: Pick<StorageService, "getObject">,
   ) {}
 
   async claim(input: ClaimSourceInput): Promise<ClaimSourceResult> {
@@ -826,6 +830,28 @@ export class ClaimSourceGrantService {
       ? originalFileName.replace(/\.[^.]+$/, "")
       : "Meu CV";
 
+    // Achado 2026-09-15 (hotfix "Resume not found or has no text content."):
+    // este método nunca preenchia rawText — o Resume nascia com o campo
+    // null e, se depois virasse Master (syncResolveMasterAndResume/
+    // promoteAndProjectWithinTransaction acima), qualquer análise que
+    // dependesse de Resume.rawText direto (masterResumeId em
+    // cv-adaptation.service.ts#analyze) quebrava mesmo o usuário tendo
+    // Master "ready" (o profile vem de CvStructuredProfile.canonicalJson,
+    // não deste campo). CvSource.textStorageKey é a fonte real do texto
+    // (mesmo objeto que CvProcessingWorker#readSourceText lê pra extração)
+    // — lida aqui uma vez e copiada pro Resume novo, igual ao upload
+    // autenticado normal.
+    let textBuffer: Buffer;
+    try {
+      textBuffer = await this.storage.getObject(source.textStorageKey);
+    } catch (error) {
+      if (this.isMissingObjectError(error)) {
+        throw new CvSourceTextObjectMissingError(source.textStorageKey);
+      }
+      throw error;
+    }
+    const rawText = textBuffer.toString("utf-8");
+
     const resume = await tx.resume.create({
       data: {
         userId,
@@ -833,6 +859,7 @@ export class ClaimSourceGrantService {
         sourceFileName: originalFileName,
         kind: "master",
         status: "uploaded",
+        rawText,
         isMaster: false,
         cvSourceId: targetCvSourceId,
         cvSubmissionId: submission.id,
@@ -840,5 +867,24 @@ export class ClaimSourceGrantService {
     });
 
     return resume.id;
+  }
+
+  // Mesmo critério de cv-processing.worker.ts#isMissingObjectError — mantido
+  // duplicado (não extraído pra helper compartilhado) porque é a única
+  // outra chamada a storage.getObject() neste módulo; extrair por dois usos
+  // seria abstração prematura.
+  private isMissingObjectError(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const err = error as {
+      name?: string;
+      Code?: string;
+      $metadata?: { httpStatusCode?: number };
+    };
+    return (
+      err.name === "NoSuchKey" ||
+      err.name === "NotFound" ||
+      err.Code === "NoSuchKey" ||
+      err.$metadata?.httpStatusCode === 404
+    );
   }
 }

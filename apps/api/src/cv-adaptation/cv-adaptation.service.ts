@@ -65,10 +65,7 @@ import {
 import { CvAdaptationProtectedAnalyzeService } from "./cv-adaptation-protected-analyze.service";
 import type { AnalyzeCvDto } from "./dto/analyze-cv.dto";
 import type { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
-import type {
-  CreateCvAdaptationDto,
-  FileUpload,
-} from "./dto/create-cv-adaptation.dto";
+import type { FileUpload } from "./dto/create-cv-adaptation.dto";
 import type { CvAdaptationOutput } from "./dto/cv-adaptation-output.types";
 import { createCvAdaptationResponseDto } from "./dto/cv-adaptation-response.dto";
 import type { JobRequirementCoverage } from "./dto/job-requirement.types";
@@ -477,310 +474,6 @@ export class CvAdaptationService {
         `[job-application-hook] failed in ${input.callerMethod} — adaptationId=${input.cvAdaptationId} userId=${input.userId} targetStatus=${input.targetStatus}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-  }
-
-  // Auditoria de 2026-09-08 (seção 3 do relatório de fechamento do pipeline
-  // canônico): confirmado código morto — sem caller real em apps/web/src
-  // (createCvAdaptation/createCvAdaptationFromMaster nunca são importados
-  // em nenhuma página/componente), já documentado assim desde a Fase 2G
-  // (commit b87e0eb). A rota HTTP continua tecnicamente acessível
-  // (POST /cv-adaptation -> CvAdaptationController), e internamente chama
-  // #analyzeAndAdapt -> adaptCv() com masterCvText bruto, INCONDICIONALMENTE
-  // — nunca checou a flag pra decidir a fonte da análise/geração em si (só
-  // usa enqueueCanonicalMasterProcessing como efeito colateral do upload de
-  // Master, igual claimGuest/saveGuestPreview). Isso violaria a invariante
-  // "pipeline novo nunca usa texto bruto" se algum caller externo
-  // desconhecido ainda existir. Em vez de só confiar na ausência de caller
-  // conhecido, rejeita explicitamente quando o pipeline está ativo pro
-  // usuário — fail-safe barato até a remoção formal na Fase 5.
-  async create(userId: string, dto: CreateCvAdaptationDto, file?: FileUpload) {
-    if (await this.isPipelineEnabledFor({ userId })) {
-      throw new BadRequestException(
-        "POST /cv-adaptation (create) está descontinuado para contas com o pipeline canônico ativo — use /cv-adaptation/analyze. Marcado para remoção na Fase 5 (código morto, sem caller em produção).",
-      );
-    }
-
-    const normalizedJobDescriptionText = this.validateJobDescription(
-      dto.jobDescriptionText,
-      {
-        context: this.buildProtectionContext(
-          undefined,
-          userId,
-          "cv-adaptation/create",
-        ),
-        routeKey: "cv-adaptation/create",
-      },
-    );
-
-    const inputMode = dto.inputMode ?? (file ? "file_upload" : "text_paste");
-    const adaptationSource =
-      inputMode === "profile" ? "user_profile" : "uploaded_content";
-
-    if (inputMode === "profile" && file) {
-      throw new BadRequestException(
-        "Modo profile nao aceita upload de arquivo no mesmo envio.",
-      );
-    }
-
-    if (inputMode === "profile") {
-      const profile = await this.database.userProfile.findUnique({
-        where: { userId },
-        select: { profileReadinessStatus: true },
-      });
-
-      if (profile?.profileReadinessStatus !== "ready") {
-        throw new BadRequestException(
-          "Perfil salvo ainda nao esta pronto para analise no modo profile.",
-        );
-      }
-    }
-
-    let masterResumeId = dto.masterResumeId;
-    let masterCvText: string | null = null;
-
-    // Handle file upload path
-    if (file) {
-      // Extract text from PDF
-      try {
-        masterCvText = await extractTextFromCvFile(file);
-      } catch (error) {
-        await this.mapFileExtractionError(error, {
-          context: this.buildProtectionContext(
-            undefined,
-            userId,
-            "cv-adaptation/create",
-          ),
-          file,
-          routeKey: "cv-adaptation/create",
-        });
-      }
-
-      const sourceFileUrl = await this.uploadResumeSourceFile(userId, file);
-
-      // Create master Resume record — ver resolveMasterPromotionIntent pra
-      // regra de quando este CV vira master automaticamente.
-      const { shouldBecomeMaster, masterIntent } =
-        await this.resolveMasterPromotionIntent(
-          this.database,
-          userId,
-          dto.saveAsMaster,
-        );
-      const masterResume = await this.database.$transaction(async (tx) => {
-        if (shouldBecomeMaster) {
-          await tx.resume.updateMany({
-            where: { userId, isMaster: true },
-            data: { isMaster: false },
-          });
-        }
-        return tx.resume.create({
-          data: {
-            userId,
-            title: file.originalname.replace(".pdf", ""),
-            kind: "master",
-            status: "uploaded",
-            sourceFileName: file.originalname,
-            sourceFileType: file.mimetype,
-            sourceFileUrl,
-            rawText: masterCvText,
-            isMaster: shouldBecomeMaster,
-          },
-        });
-      });
-
-      masterResumeId = masterResume.id;
-      if (masterResume.isMaster) {
-        this.triggerMasterCvExtraction({
-          userId,
-          resumeId: masterResume.id,
-          rawText: masterCvText,
-          file,
-        });
-        await this.enqueueCanonicalMasterProcessing({
-          userId,
-          rawText: masterCvText,
-          masterIntent,
-          file,
-          resumeId: masterResume.id,
-        });
-      }
-    }
-
-    // Require masterResumeId
-    if (!masterResumeId) {
-      throw new BadRequestException("masterResumeId or PDF file is required.");
-    }
-
-    // Verify masterResumeId ownership and get rawText
-    const resume = await this.database.resume.findFirst({
-      where: {
-        id: masterResumeId,
-        userId,
-      },
-    });
-
-    if (!resume) {
-      throw new NotFoundException("master resume not found");
-    }
-
-    if (!resume.rawText) {
-      throw new BadRequestException(
-        "master resume has no extracted text. Please re-upload.",
-      );
-    }
-
-    // Use extracted text from file or from resume
-    if (!masterCvText) {
-      masterCvText = resume.rawText;
-    }
-
-    // Verify template exists if provided
-    if (dto.templateId) {
-      const template = await this.database.resumeTemplate.findUnique({
-        where: { id: dto.templateId },
-      });
-
-      if (!template) {
-        throw new NotFoundException("template not found");
-      }
-    }
-
-    await this.mergeCanonicalProfileFromText({
-      source: inputMode === "profile" ? "base_cv_upload" : "analysis_upload",
-      sourceCvId: masterResumeId,
-      text: masterCvText,
-      userId,
-    });
-
-    const canonicalJob = await this.resolveCanonicalJob(
-      normalizedJobDescriptionText,
-      "create",
-    );
-    const existingRequirementSet =
-      await this.resolveExistingRequirementSet(canonicalJob);
-    const canonicalJobId = canonicalJob?.canonicalJobId ?? null;
-
-    // Validate that the supplied jobApplicationId belongs to this user
-    let linkedJobApplicationId: string | null = null;
-    if (dto.jobApplicationId) {
-      const owned = await this.database.jobApplication.findFirst({
-        where: { id: dto.jobApplicationId, userId },
-        select: { id: true },
-      });
-      if (owned) {
-        linkedJobApplicationId = owned.id;
-      }
-    }
-
-    const adaptation = await this.database.cvAdaptation.create({
-      data: {
-        userId,
-        masterResumeId,
-        templateId: dto.templateId || null,
-        canonicalJobId,
-        jobRequirementSetId: existingRequirementSet?.id ?? null,
-        jobDescriptionText: normalizedJobDescriptionText,
-        jobTitle: dto.jobTitle || null,
-        companyName: dto.companyName || null,
-        adaptationSource,
-        inputMode,
-        jobApplicationId: linkedJobApplicationId,
-        analysisInputSnapshotJson: this.buildAnalysisInputSnapshot({
-          adaptationSource,
-          inputMode,
-          masterCvText,
-          masterResumeId,
-        }) as Prisma.InputJsonValue,
-        uploadedContentSnapshotJson:
-          adaptationSource === "uploaded_content"
-            ? (this.buildUploadedContentSnapshot({
-                inputMode,
-                masterCvText,
-                masterResumeId,
-              }) as Prisma.InputJsonValue)
-            : undefined,
-        status: "analyzing",
-      },
-      include: {
-        template: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    this.protectedAnalyzeService
-      .executeProtectedAnalyzeAndPersist({
-        adaptation,
-        context: this.buildProtectionContext(
-          undefined,
-          userId,
-          "cv-adaptation/create",
-        ),
-        masterCvText,
-        payload: {
-          adaptationId: adaptation.id,
-          companyName: adaptation.companyName,
-          hasFile: Boolean(file),
-          jobDescriptionText: normalizedJobDescriptionText,
-          jobTitle: adaptation.jobTitle,
-          masterResumeId,
-          route: "cv-adaptation/create",
-          templateId: adaptation.templateId,
-          userId,
-        },
-        turnstileToken: dto.turnstileToken,
-      })
-      .then(async (result) => {
-        if (result.ok) {
-          await this.triggerJobApplicationHook({
-            cvAdaptationId: adaptation.id,
-            userId,
-            jobTitle: adaptation.jobTitle,
-            companyName: adaptation.companyName,
-            jobDescriptionText: adaptation.jobDescriptionText,
-            targetStatus: "ANALYZED",
-            origin: "analysis_auto",
-            callerMethod: "create",
-          });
-          return;
-        }
-
-        await this.database.cvAdaptation.update({
-          where: { id: adaptation.id },
-          data: {
-            status: "failed",
-            failureReason: this.toProtectedBoundaryMessage(result),
-          },
-        });
-      })
-      .catch((err) => {
-        console.error(
-          `AI adaptation failed for ${adaptation.id}:`,
-          err instanceof Error ? err.message : String(err),
-        );
-
-        this.database.cvAdaptation
-          .update({
-            where: { id: adaptation.id },
-            data: {
-              status: "failed",
-              failureReason: this.sanitizeFailureReason(err),
-            },
-          })
-          .catch((updateError) => {
-            console.error(
-              `Failed to persist adaptation failure for ${adaptation.id}:`,
-              updateError instanceof Error
-                ? updateError.message
-                : String(updateError),
-            );
-          });
-      });
-
-    return createCvAdaptationResponseDto(adaptation);
   }
 
   async claimGuest(
@@ -1567,6 +1260,8 @@ export class CvAdaptationService {
         guestSessionHash,
         guestPossessionTokenHash,
         jobDescriptionText: resolved.text,
+        radarJobTitle: resolved.radarJobTitle,
+        radarCompanyName: resolved.radarCompanyName,
       },
     });
 
@@ -1948,6 +1643,8 @@ export class CvAdaptationService {
         ownerKind: "authenticated",
         status: "pending",
         userId,
+        radarJobTitle: resolved.radarJobTitle,
+        radarCompanyName: resolved.radarCompanyName,
       },
     });
 
@@ -2367,6 +2064,20 @@ export class CvAdaptationService {
     scoreAfter: number | null;
   } {
     return this.extractAnalysisJobSignals(adaptedContentJson);
+  }
+
+  // Alias público (achado 2026-09-15) — mesma reconciliação de vaga.cargo/
+  // vaga.empresa dentro do JSON persistido já usada por processAnalysisJob
+  // (reconcileVagaFields, privado), reaproveitada por CvAnalysisWorker pra
+  // aplicar a mesma prioridade "radar sempre vence a IA" no pipeline
+  // canônico — sem isso, o worker novo persistia companyName/jobTitle
+  // corretos nas colunas mas deixava vaga.empresa/vaga.cargo (dentro do
+  // JSON que a tela de resultado renderiza) com o que a IA reextraiu.
+  reconcileVagaFieldsForPipeline(
+    adaptedContentJson: unknown,
+    known: { jobTitle?: string | null; companyName?: string | null },
+  ): unknown {
+    return this.reconcileVagaFields(adaptedContentJson, known);
   }
 
   private async processAnalysisJob(

@@ -355,8 +355,8 @@ test("CURRENTTITLE 5: claim â€” currentTitle do guest sobrevive na conta do usuÃ
     );
     const entrypoint = buildEntrypoint(storage);
     const { client } = buildCapturingAiClient(minimalAnalysisJson, minimalGenerationJson);
-    const service = buildRealCvAdaptationService(client, client, entrypoint);
-    const analysisWorker = buildAnalysisWorker(service);
+    const service = buildRealCvAdaptationService(client, client, entrypoint, storage);
+    const analysisWorker = buildAnalysisWorker(service, storage);
 
     const session = `${runId}-session`;
     const started = await service.startGuestAnalysisJob(

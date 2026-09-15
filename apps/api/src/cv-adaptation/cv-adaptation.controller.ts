@@ -31,10 +31,7 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CvAdaptationService } from "./cv-adaptation.service";
 import { AnalyzeCvDto } from "./dto/analyze-cv.dto";
 import { ClaimGuestAdaptationDto } from "./dto/claim-guest-adaptation.dto";
-import {
-  CreateCvAdaptationDto,
-  type FileUpload,
-} from "./dto/create-cv-adaptation.dto";
+import { type FileUpload } from "./dto/create-cv-adaptation.dto";
 import { RedeemCreditDto } from "./dto/redeem-credit.dto";
 import { SaveApplicationIdentityDto } from "./dto/save-application-identity.dto";
 import { SaveGuestPreviewDto } from "./dto/save-guest-preview.dto";
@@ -54,40 +51,6 @@ export class CvAdaptationController {
     @Inject(CvAdaptationService)
     private readonly cvAdaptationService: CvAdaptationService,
   ) {}
-
-  @Post()
-  @UseInterceptors(
-    FileInterceptor("file", {
-      fileFilter: (_req, file, cb) => {
-        if (isAllowedCvUploadMimeType(file.mimetype)) {
-          cb(null, true);
-        } else {
-          cb(
-            new Error(`Only ${ALLOWED_CV_FORMATS_LABEL} files are allowed`),
-            false,
-          );
-        }
-      },
-      limits: {
-        fileSize: 5 * 1024 * 1024, // 5 MB
-      },
-    }),
-  )
-  create(
-    @AuthenticatedUser() user: { id: string },
-    @UploadedFile() file: FileUpload | undefined,
-    @Body(
-      new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        expectedType: CreateCvAdaptationDto,
-      }),
-    )
-    dto: CreateCvAdaptationDto,
-  ) {
-    return this.cvAdaptationService.create(user.id, dto, file);
-  }
 
   @Post("claim-guest")
   claimGuest(
