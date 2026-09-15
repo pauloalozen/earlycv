@@ -31,6 +31,7 @@ import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.modul
 import { PaymentsModule } from "./payments/payments.module";
 import { PlansModule } from "./plans/plans.module";
 import { PosthogIntegrationModule } from "./posthog-integration/posthog-integration.module";
+import { ProductUpdatesModule } from "./product-updates/product-updates.module";
 import { ProfilesModule } from "./profiles/profiles.module";
 import { RadarModule } from "./radar/radar.module";
 import { ResumeTemplatesModule } from "./resume-templates/resume-templates.module";
@@ -54,6 +55,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AuthModule,
     AdminUsersModule,
     AdminMonitorModule,
+    ProductUpdatesModule,
     AdminProfilesModule,
     AdminResumesModule,
     AdminTalentProfilesModule,
