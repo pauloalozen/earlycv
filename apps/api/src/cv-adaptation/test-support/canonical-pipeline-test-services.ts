@@ -45,10 +45,11 @@ export const masterPromotion = new CvMasterPromotionService(
 );
 export const lockRepository = new IngestionLockRepository(database);
 export const talentSubjectService = new TalentSubjectService(database);
-export const claimSourceGrantService = new ClaimSourceGrantService(
-  database,
-  masterPromotion,
-);
+export function buildClaimSourceGrantService(
+  storage: Pick<FakeStorage, "getObject">,
+): ClaimSourceGrantService {
+  return new ClaimSourceGrantService(database, masterPromotion, storage);
+}
 // Instância REAL — nunca o fallback @Optional() (achado da 1ª rodada de
 // auditoria: todo e2e-spec anterior omitia isto, testando um caminho que
 // nunca teria bloqueado guest/usuário fora da allowlist).
@@ -168,13 +169,14 @@ export function buildProcessingWorker(
 
 export function buildAnalysisWorker(
   cvAdaptationService: CvAdaptationService,
+  storage: Pick<FakeStorage, "getObject"> = new FakeStorage(),
 ): CvAnalysisWorker {
   return new CvAnalysisWorker(
     database,
     lockRepository,
     userProfileSync,
     cvAdaptationService,
-    claimSourceGrantService,
+    buildClaimSourceGrantService(storage),
   );
 }
 
@@ -375,7 +377,7 @@ export function buildRealCvAdaptationService(
     entrypoint,
     masterPromotion,
     talentSubjectService,
-    claimSourceGrantService,
+    buildClaimSourceGrantService(storage ?? new FakeStorage()),
     flagResolver,
   );
 }

@@ -33,7 +33,6 @@ const userProfileSync = new CvUserProfileSyncService(
 );
 const masterPromotion = new CvMasterPromotionService(database, userProfileSync);
 const lockRepository = new IngestionLockRepository(database);
-const claimService = new ClaimSourceGrantService(database, masterPromotion);
 
 class FakeStorage {
   private readonly objects = new Map<string, Buffer>();
@@ -67,6 +66,10 @@ function buildWorker(
     masterPromotion,
     storage,
   );
+}
+
+function buildClaimService(storage: Pick<FakeStorage, "getObject">) {
+  return new ClaimSourceGrantService(database, masterPromotion, storage);
 }
 
 async function processOne(worker: CvProcessingWorker, jobId: string) {
@@ -228,7 +231,7 @@ test("claim sem Master existente do usuário: fonte do guest vira Master (design
     readyJob.cvStructuredProfileId as string,
   );
 
-  const result = await claimService.claim({
+  const result = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJob.id,
     cvProcessingJobId: readyJob.id,
@@ -376,7 +379,7 @@ test("claim COM Master já existente do usuário: Master do usuário é preserva
     readyJob.cvStructuredProfileId as string,
   );
 
-  const result = await claimService.claim({
+  const result = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJob.id,
     cvProcessingJobId: readyJob.id,
@@ -431,12 +434,12 @@ test("claim chamado duas vezes: segunda chamada é no-op, não duplica ClaimSour
     readyJob.cvStructuredProfileId as string,
   );
 
-  const first = await claimService.claim({
+  const first = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJob.id,
     cvProcessingJobId: readyJob.id,
   });
-  const second = await claimService.claim({
+  const second = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJob.id,
     cvProcessingJobId: readyJob.id,
@@ -514,7 +517,7 @@ test("colisão de hash: usuário já tem CvSource próprio com o mesmo conteúdo
     readyJob.cvStructuredProfileId as string,
   );
 
-  const result = await claimService.claim({
+  const result = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJob.id,
     cvProcessingJobId: readyJob.id,
@@ -596,7 +599,7 @@ test("claim completo (todas as fontes do TalentSubject cobertas por grants) fund
     second.cvSubmission.id,
     readySecond.cvStructuredProfileId as string,
   );
-  const partial = await claimService.claim({
+  const partial = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJobSecond.id,
     cvProcessingJobId: readySecond.id,
@@ -635,7 +638,7 @@ test("claim completo (todas as fontes do TalentSubject cobertas por grants) fund
     first.cvSubmission.id,
     readyFirst.cvStructuredProfileId as string,
   );
-  const full = await claimService.claim({
+  const full = await buildClaimService(storage).claim({
     userId: user.id,
     analysisJobId: analysisJobFirst.id,
     cvProcessingJobId: readyFirst.id,
@@ -697,7 +700,7 @@ test("claim falha no meio: nada fica persistido — nem o grant, nem a resoluç�
   });
 
   await assert.rejects(() =>
-    claimService.claim({
+    buildClaimService(storage).claim({
       userId: user.id,
       analysisJobId: analysisJob.id,
       cvProcessingJobId: readyJob.id,
