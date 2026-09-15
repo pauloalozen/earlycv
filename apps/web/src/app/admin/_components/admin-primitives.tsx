@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 // ─── Design tokens ───────────────────────────────────────────────
@@ -33,6 +34,10 @@ type AdminStatCardProps = {
   // do card, pra não empilhar texto e desalinhar a grade de cards.
   tooltip?: string;
   value: string;
+  // Quando presente, o card inteiro vira link pro drill-down (lista
+  // item-a-item por trás do número agregado) — navega pra mesma tela do
+  // "Histórico de envios", só com o filtro do card já aplicado.
+  href?: string;
 };
 
 export function AdminStatCard({
@@ -41,10 +46,11 @@ export function AdminStatCard({
   delta,
   sub,
   tooltip,
+  href,
 }: AdminStatCardProps) {
   const deltaPositive = delta?.startsWith("+");
   const deltaNegative = delta?.startsWith("-");
-  return (
+  const card = (
     <div
       style={{
         background: AT.card,
@@ -55,6 +61,7 @@ export function AdminStatCard({
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
+        cursor: href ? "pointer" : undefined,
       }}
     >
       <div
@@ -138,6 +145,12 @@ export function AdminStatCard({
         </div>
       )}
     </div>
+  );
+  if (!href) return card;
+  return (
+    <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>
+      {card}
+    </Link>
   );
 }
 

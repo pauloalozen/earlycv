@@ -197,10 +197,18 @@ export class MonitorDigestWebhookService {
     if ((eventType === "BOUNCED" || eventType === "COMPLAINED") && digest) {
       // Higiene de lista: bounce/complaint desativa e-mails do Monitor
       // automaticamente (protege a reputação do domínio de envio). Nunca
-      // desliga o Monitor in-app nem apaga recomendações.
+      // desliga o Monitor in-app nem apaga recomendações. suppressionReason
+      // distingue isso de um unsubscribe voluntário (ver
+      // MonitorAlertPreferenceService.unsubscribeByToken) — os dois usam
+      // emailEnabled=false + unsubscribedAt idênticos, sem essa coluna o
+      // admin não tinha como separar "cancelou" de "e-mail rejeitado".
       await this.database.monitorAlertPreference.updateMany({
         where: { userId: digest.userId },
-        data: { emailEnabled: false, unsubscribedAt: new Date() },
+        data: {
+          emailEnabled: false,
+          unsubscribedAt: new Date(),
+          suppressionReason: eventType === "BOUNCED" ? "BOUNCED" : "COMPLAINED",
+        },
       });
     }
 
@@ -292,10 +300,14 @@ export class MonitorDigestWebhookService {
     }
 
     if ((eventType === "BOUNCED" || eventType === "COMPLAINED") && digest) {
-      // Mesma higiene de lista que o Resend já faz.
+      // Mesma higiene de lista que o Resend já faz (ver comentário acima).
       await this.database.monitorAlertPreference.updateMany({
         where: { userId: digest.userId },
-        data: { emailEnabled: false, unsubscribedAt: new Date() },
+        data: {
+          emailEnabled: false,
+          unsubscribedAt: new Date(),
+          suppressionReason: eventType === "BOUNCED" ? "BOUNCED" : "COMPLAINED",
+        },
       });
     }
 

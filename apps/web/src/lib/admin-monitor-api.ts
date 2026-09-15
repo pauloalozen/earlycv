@@ -570,8 +570,17 @@ export type DigestEmailStatsSummary = {
   openedUnique: number;
   clickedUnique: number;
   unsubscribed: number;
+  // Fatia de `unsubscribed` que foi supressão automática (bounce/
+  // complaint), não unsubscribe voluntário — ver
+  // DigestUnsubscribeItem.suppressionReason.
+  suppressed: number;
   rates: DigestEmailStatsRates;
 };
+
+export type DigestUnsubscribeReason =
+  | "USER_UNSUBSCRIBED"
+  | "BOUNCED"
+  | "COMPLAINED";
 
 export type DigestFailedItem = {
   id: string;
@@ -694,6 +703,10 @@ export function getMonitorDigestHistory(
     source?: "MANUAL" | "AUTOMATIC";
     provider?: EmailProviderName;
     status?: MonitorDigestStatus;
+    // Drill-down dos cards de evento (Entregues/Abertos/Clicados/
+    // Rejeitados/Bounces/Complaints) — ver comentário em
+    // ListDigestHistoryDto no backend.
+    eventType?: MonitorDigestEventType;
     from?: string;
     to?: string;
   } = {},
@@ -706,6 +719,7 @@ export function getMonitorDigestHistory(
   if (params.source) qs.set("source", params.source);
   if (params.provider) qs.set("provider", params.provider);
   if (params.status) qs.set("status", params.status);
+  if (params.eventType) qs.set("eventType", params.eventType);
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
   const suffix = qs.toString();
@@ -715,6 +729,40 @@ export function getMonitorDigestHistory(
     total: number;
     items: DigestHistoryItem[];
   }>(`/admin/monitor/digest/history${suffix ? `?${suffix}` : ""}`, token);
+}
+
+export type DigestUnsubscribeItem = {
+  id: string;
+  unsubscribedAt: string | null;
+  suppressionReason: DigestUnsubscribeReason | null;
+  user: { id: string; email: string; name: string };
+};
+
+export function getMonitorDigestUnsubscribes(
+  params: {
+    page?: number;
+    limit?: number;
+    from?: string;
+    to?: string;
+    // "SUPPRESSED" = BOUNCED + COMPLAINED juntos (drill-down do card
+    // "Suprimidos (bounce/complaint)").
+    reason?: DigestUnsubscribeReason | "SUPPRESSED";
+  } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  if (params.reason) qs.set("reason", params.reason);
+  const suffix = qs.toString();
+  return apiRequest<{
+    page: number;
+    limit: number;
+    total: number;
+    items: DigestUnsubscribeItem[];
+  }>(`/admin/monitor/digest/unsubscribes${suffix ? `?${suffix}` : ""}`, token);
 }
 
 export function getMonitorDigestStats(

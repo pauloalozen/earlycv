@@ -23,6 +23,8 @@ import {
   type DigestFrequency,
   type DigestHistoryItem,
   type DigestSchedule,
+  type DigestUnsubscribeItem,
+  type DigestUnsubscribeReason,
   type EmailBulkSendMode,
   type EmailProviderName,
   getAlertRolloutPolicy,
@@ -30,7 +32,9 @@ import {
   getMonitorDigestHistory,
   getMonitorDigestSchedule,
   getMonitorDigestStats,
+  getMonitorDigestUnsubscribes,
   listTrackedAlertUsers,
+  type MonitorDigestEventType,
   type MonitorDigestStatus,
   type SesRolloutSegment,
   type TrackedAlertUser,
@@ -108,6 +112,13 @@ const PROVIDER_LABEL: Record<EmailProviderName, string> = {
   SES: "SES",
 };
 
+const REASON_LABEL: Record<string, string> = {
+  USER_UNSUBSCRIBED: "descadastro voluntário",
+  BOUNCED: "suprimido · bounce",
+  COMPLAINED: "suprimido · complaint",
+  SUPPRESSED: "suprimidos (bounce/complaint)",
+};
+
 const EVENT_LABEL: Record<string, string> = {
   SENT: "aceito",
   DELIVERED: "entregue",
@@ -136,6 +147,21 @@ type SearchParams = Promise<{
   historySource?: string;
   historyProvider?: string;
   historyStatus?: string;
+  // Drill-down por card (ver AdminStatCard href abaixo): eventType filtra
+  // por evento de webhook (Entregues/Abertos/Clicados/Rejeitados/Bounces/
+  // Complaints), view alterna pra listagem de descadastros (fonte de dados
+  // diferente, não é um MonitorDigest), from é a janela do card (mesma
+  // usada pelo periodDays dos cards, fixada no momento do clique pra não
+  // mudar conforme o tempo passa navegando entre páginas), page pagina a
+  // listagem ativa (digest ou descadastro).
+  historyEventType?: string;
+  historyView?: string;
+  // Filtro de motivo dentro da view "unsubscribed" — USER_UNSUBSCRIBED
+  // (descadastro voluntário), BOUNCED, COMPLAINED, ou SUPPRESSED (atalho
+  // pra BOUNCED+COMPLAINED juntos, usado pelo card "Suprimidos").
+  historyReason?: string;
+  historyFrom?: string;
+  historyPage?: string;
   periodDays?: string;
   statsProvider?: string;
   status?: string;
@@ -193,6 +219,11 @@ export default async function AdminAlertaVagasPage({
     historySource,
     historyProvider,
     historyStatus,
+    historyEventType,
+    historyView,
+    historyReason,
+    historyFrom,
+    historyPage,
     periodDays,
     statsProvider,
     status,
@@ -227,6 +258,43 @@ export default async function AdminAlertaVagasPage({
   ).includes(historyStatus as MonitorDigestStatus)
     ? (historyStatus as MonitorDigestStatus)
     : undefined;
+  const EVENT_TYPE_FILTERS = [
+    "DELIVERED",
+    "OPENED",
+    "CLICKED",
+    "BOUNCED",
+    "COMPLAINED",
+    "REJECTED",
+  ] as const;
+  const parsedHistoryEventType: MonitorDigestEventType | undefined =
+    EVENT_TYPE_FILTERS.includes(
+      historyEventType as (typeof EVENT_TYPE_FILTERS)[number],
+    )
+      ? (historyEventType as (typeof EVENT_TYPE_FILTERS)[number])
+      : undefined;
+  const historyViewIsUnsubscribed = historyView === "unsubscribed";
+  const REASON_FILTERS = [
+    "USER_UNSUBSCRIBED",
+    "BOUNCED",
+    "COMPLAINED",
+    "SUPPRESSED",
+  ] as const;
+  const parsedHistoryReason:
+    | DigestUnsubscribeReason
+    | "SUPPRESSED"
+    | undefined = REASON_FILTERS.includes(
+    historyReason as (typeof REASON_FILTERS)[number],
+  )
+    ? (historyReason as (typeof REASON_FILTERS)[number])
+    : undefined;
+  const parsedHistoryFrom =
+    historyFrom && !Number.isNaN(Date.parse(historyFrom))
+      ? historyFrom
+      : undefined;
+  const parsedHistoryPage =
+    historyPage && Number(historyPage) > 0
+      ? Math.floor(Number(historyPage))
+      : 1;
 
   if (!token) {
     const state = buildAdminStateModel("missing-token", ROOT_PATH);
@@ -238,36 +306,68 @@ export default async function AdminAlertaVagasPage({
   }
 
   let trackedUsers: { total: number; users: TrackedAlertUser[] };
-  let history: { total: number; items: DigestHistoryItem[] };
+  let history: {
+    page: number;
+    limit: number;
+    total: number;
+    items: DigestHistoryItem[];
+  };
   let stats: DigestEmailStats;
   let schedule: DigestSchedule;
   let content: DigestContent;
   let rolloutPolicy: AlertRolloutPolicy;
+  let unsubscribes: {
+    page: number;
+    limit: number;
+    total: number;
+    items: DigestUnsubscribeItem[];
+  } | null;
   try {
-    [trackedUsers, history, stats, schedule, content, rolloutPolicy] =
-      await Promise.all([
-        listTrackedAlertUsers({ query, limit: 20 }, token),
-        getMonitorDigestHistory(
-          {
-            userQuery: historyQuery,
-            source:
-              historySource === "MANUAL" || historySource === "AUTOMATIC"
-                ? historySource
-                : undefined,
-            provider: parsedHistoryProvider,
-            status: parsedHistoryStatus,
-            limit: 20,
-          },
-          token,
-        ),
-        getMonitorDigestStats(
-          { periodDays: parsedPeriodDays, provider: parsedStatsProvider },
-          token,
-        ),
-        getMonitorDigestSchedule(token),
-        getMonitorDigestContent(token),
-        getAlertRolloutPolicy(token),
-      ]);
+    [
+      trackedUsers,
+      history,
+      stats,
+      schedule,
+      content,
+      rolloutPolicy,
+      unsubscribes,
+    ] = await Promise.all([
+      listTrackedAlertUsers({ query, limit: 20 }, token),
+      getMonitorDigestHistory(
+        {
+          userQuery: historyQuery,
+          source:
+            historySource === "MANUAL" || historySource === "AUTOMATIC"
+              ? historySource
+              : undefined,
+          provider: parsedHistoryProvider,
+          status: parsedHistoryStatus,
+          eventType: parsedHistoryEventType,
+          from: parsedHistoryFrom,
+          page: parsedHistoryPage,
+          limit: 20,
+        },
+        token,
+      ),
+      getMonitorDigestStats(
+        { periodDays: parsedPeriodDays, provider: parsedStatsProvider },
+        token,
+      ),
+      getMonitorDigestSchedule(token),
+      getMonitorDigestContent(token),
+      getAlertRolloutPolicy(token),
+      historyViewIsUnsubscribed
+        ? getMonitorDigestUnsubscribes(
+            {
+              from: parsedHistoryFrom,
+              page: parsedHistoryPage,
+              limit: 20,
+              reason: parsedHistoryReason,
+            },
+            token,
+          )
+        : Promise.resolve(null),
+    ]);
   } catch {
     const state = buildAdminStateModel("unexpected-error", ROOT_PATH);
     return (
@@ -277,15 +377,46 @@ export default async function AdminAlertaVagasPage({
     );
   }
 
-  const currentRedirectPath = buildRedirectPath({
+  const currentHistoryParams = {
     query,
     historyQuery,
     historySource,
     historyProvider,
     historyStatus,
+    historyEventType,
+    historyView,
+    historyReason,
+    historyFrom,
     periodDays,
     statsProvider,
-  });
+  };
+  const currentRedirectPath = buildRedirectPath(currentHistoryParams);
+  // Janela do card no momento do clique — fixa em ISO pra não recalcular a
+  // cada navegação de página dentro do mesmo drill-down (ver comentário no
+  // SearchParams.historyFrom).
+  const cardWindowFrom = new Date(
+    Date.now() - parsedPeriodDays * 24 * 60 * 60_000,
+  ).toISOString();
+  function cardHref(overrides: {
+    historyStatus?: MonitorDigestStatus;
+    historyEventType?: MonitorDigestEventType;
+    historyView?: "unsubscribed";
+    historyReason?: DigestUnsubscribeReason | "SUPPRESSED";
+  }) {
+    return buildRedirectPath({
+      periodDays,
+      statsProvider,
+      historyProvider: statsProvider,
+      historyFrom: cardWindowFrom,
+      ...overrides,
+    });
+  }
+  function historyPageHref(page: number) {
+    return buildRedirectPath({
+      ...currentHistoryParams,
+      historyPage: String(page),
+    });
+  }
 
   return (
     <AdminPageWrap>
@@ -534,62 +665,82 @@ export default async function AdminAlertaVagasPage({
             <AdminStatCard
               label="Processados"
               value={String(stats.summary.processed)}
-              tooltip="Digests que entraram no funil de envio neste período (inclui os que ainda falharam ou foram pulados)."
+              tooltip="Digests que entraram no funil de envio neste período (inclui os que ainda falharam ou foram pulados). Clique pra ver a lista."
+              href={cardHref({})}
             />
             <AdminStatCard
               label="Aceitos pelo provider"
               value={String(stats.summary.accepted)}
-              tooltip="Envios que o provider (Resend ou SES) aceitou processar, antes de qualquer confirmação de entrega."
+              tooltip="Envios que o provider (Resend ou SES) aceitou processar, antes de qualquer confirmação de entrega. Clique pra ver a lista."
+              href={cardHref({ historyStatus: "SENT" })}
             />
             <AdminStatCard
               label="Entregues"
               value={String(stats.summary.delivered)}
               sub={fmtRate(stats.summary.rates.deliveryRate)}
-              tooltip="Taxa de entrega = entregues / aceitos pelo provider."
+              tooltip="Taxa de entrega = entregues / aceitos pelo provider. Clique pra ver a lista."
+              href={cardHref({ historyEventType: "DELIVERED" })}
             />
             <AdminStatCard
               label="Abertos (únicos)"
               value={String(stats.summary.openedUnique)}
               sub={fmtRate(stats.summary.rates.openRate)}
-              tooltip="Taxa de abertura = abertos únicos / entregues. Pode estar inflada: o Apple Mail Privacy Protection pré-carrega o pixel de rastreio mesmo sem abertura real pelo usuário."
+              tooltip="Taxa de abertura = abertos únicos / entregues. Pode estar inflada: o Apple Mail Privacy Protection pré-carrega o pixel de rastreio mesmo sem abertura real pelo usuário. Clique pra ver a lista."
+              href={cardHref({ historyEventType: "OPENED" })}
             />
             <AdminStatCard
               label="Clicados (únicos)"
               value={String(stats.summary.clickedUnique)}
               sub={fmtRate(stats.summary.rates.clickRate)}
-              tooltip="Taxa de clique = clicados únicos / entregues."
+              tooltip="Taxa de clique = clicados únicos / entregues. Clique pra ver a lista."
+              href={cardHref({ historyEventType: "CLICKED" })}
             />
             <AdminStatCard
               label="Rejeitados pelo provider"
               value={String(stats.summary.rejected)}
-              tooltip="Rejeitado pelo provider antes da entrega (ex.: filtro de conteúdo/spam do SES) — nunca chegou a ser entregue."
+              tooltip="Rejeitado pelo provider antes da entrega (ex.: filtro de conteúdo/spam do SES) — nunca chegou a ser entregue. Clique pra ver a lista."
+              href={cardHref({ historyEventType: "REJECTED" })}
             />
             <AdminStatCard
               label="Bounces"
               value={String(stats.summary.bounced)}
               sub={fmtRate(stats.summary.rates.bounceRate)}
-              tooltip="Taxa de bounce = bounces / aceitos pelo provider."
+              tooltip="Taxa de bounce = bounces / aceitos pelo provider. Clique pra ver a lista."
+              href={cardHref({ historyEventType: "BOUNCED" })}
             />
             <AdminStatCard
               label="Complaints"
               value={String(stats.summary.complained)}
               sub={fmtRate(stats.summary.rates.complaintRate)}
-              tooltip="Taxa de complaint = complaints / entregues."
+              tooltip="Taxa de complaint = complaints / entregues. Clique pra ver a lista."
+              href={cardHref({ historyEventType: "COMPLAINED" })}
             />
             <AdminStatCard
               label="Falharam"
               value={String(stats.summary.failed)}
-              tooltip="Erro confirmado do provider antes de aceitar o envio (esgotou as tentativas)."
+              tooltip="Erro confirmado do provider antes de aceitar o envio (esgotou as tentativas). Clique pra ver a lista."
+              href={cardHref({ historyStatus: "FAILED" })}
             />
             <AdminStatCard
               label="Resultado desconhecido"
               value={String(stats.summary.outcomeUnknown)}
-              tooltip="Timeout ou erro de rede ambíguo — aguardando confirmação assíncrona do provider antes de decidir sucesso ou falha."
+              tooltip="Timeout ou erro de rede ambíguo — aguardando confirmação assíncrona do provider antes de decidir sucesso ou falha. Clique pra ver a lista."
+              href={cardHref({ historyStatus: "OUTCOME_UNKNOWN" })}
             />
             <AdminStatCard
               label="Descadastros"
               value={String(stats.summary.unsubscribed)}
-              tooltip="Usuários que cancelaram o recebimento do Alerta de Vaga Certa neste período."
+              tooltip="Usuários com o Alerta desativado neste período, por qualquer motivo (cancelamento voluntário ou supressão automática por bounce/complaint). Clique pra ver a lista."
+              href={cardHref({ historyView: "unsubscribed" })}
+            />
+            <AdminStatCard
+              label="Suprimidos (bounce/complaint)"
+              value={String(stats.summary.suppressed)}
+              tooltip="Fatia de Descadastros que NÃO foi cancelamento voluntário — o sistema desativou o e-mail sozinho porque o provider reportou bounce ou complaint (higiene de lista automática, protege a reputação do domínio de envio). Clique pra ver a lista."
+              href={cardHref({
+                historyView: "unsubscribed",
+                historyReason: "SUPPRESSED",
+              })}
             />
           </AdminStatsRow>
 
@@ -630,172 +781,323 @@ export default async function AdminAlertaVagasPage({
             )}
           </div>
 
-          <form method="GET" style={{ marginBottom: 14 }}>
-            <input type="hidden" name="query" value={query ?? ""} />
-            <input type="hidden" name="periodDays" value={periodDays ?? ""} />
-            <input
-              type="hidden"
-              name="statsProvider"
-              value={statsProvider ?? ""}
-            />
-            <AdminFilterBar>
-              <input
-                type="text"
-                name="historyQuery"
-                defaultValue={historyQuery}
-                placeholder="Buscar por usuário"
-                style={inputStyle}
-              />
-              <select
-                name="historySource"
-                defaultValue={historySource ?? ""}
-                style={inputStyle}
+          {(historyEventType || historyViewIsUnsubscribed) && (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                marginBottom: 14,
+                fontSize: 12,
+                color: AT.muted,
+              }}
+            >
+              <AdminPill tone="info">
+                Filtro do card:{" "}
+                {historyViewIsUnsubscribed
+                  ? (REASON_LABEL[historyReason ?? ""] ?? "Descadastros")
+                  : (EVENT_LABEL[historyEventType ?? ""] ?? historyEventType)}
+              </AdminPill>
+              <Link
+                href={buildRedirectPath({ periodDays, statsProvider })}
+                style={{ color: AT.info }}
               >
-                <option value="">Forma de envio: todas</option>
-                <option value="MANUAL">Manual</option>
-                <option value="AUTOMATIC">Automático</option>
-              </select>
-              <select
-                name="historyProvider"
-                defaultValue={historyProvider ?? ""}
-                style={inputStyle}
-              >
-                <option value="">Provider: todos</option>
-                <option value="RESEND">Resend</option>
-                <option value="SES">SES</option>
-              </select>
-              <select
-                name="historyStatus"
-                defaultValue={historyStatus ?? ""}
-                style={inputStyle}
-              >
-                <option value="">Status: todos</option>
-                <option value="SENT">Enviado</option>
-                <option value="FAILED">Falhou</option>
-                <option value="OUTCOME_UNKNOWN">Resultado desconhecido</option>
-                <option value="SKIPPED">Sem elegíveis</option>
-                <option value="PENDING">Pendente</option>
-                <option value="PROCESSING">Processando</option>
-              </select>
-              <button type="submit" className={buttonVariants({ size: "sm" })}>
-                Filtrar
-              </button>
-            </AdminFilterBar>
-          </form>
+                Limpar filtro
+              </Link>
+            </div>
+          )}
 
-          <AdminTable>
-            <thead>
-              <tr>
-                <AdminTh>Data/hora</AdminTh>
-                <AdminTh>Usuário</AdminTh>
-                <AdminTh>Provider</AdminTh>
-                <AdminTh>Forma de envio</AdminTh>
-                <AdminTh>Status</AdminTh>
-                <AdminTh>Último evento</AdminTh>
-                <AdminTh align="right">Ação</AdminTh>
-              </tr>
-            </thead>
-            <tbody>
-              {history.items.map((item) => (
-                <tr key={item.id}>
-                  <AdminTd mono>
-                    {fmtDate(item.sentAt ?? item.createdAt)}
-                  </AdminTd>
-                  <AdminTd>
-                    <Link
-                      href={`/admin/alerta-vagas/digest/${item.id}`}
-                      style={{ textDecoration: "none" }}
-                    >
-                      <div style={{ fontSize: 13, color: AT.ink2 }}>
-                        {item.user.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: AT.muted2,
-                          fontFamily: '"Geist Mono", monospace',
-                        }}
-                      >
-                        {item.user.email}
-                      </div>
-                    </Link>
-                  </AdminTd>
-                  <AdminTd>
-                    <AdminPill tone="dark" mono>
-                      {PROVIDER_LABEL[item.provider]}
-                    </AdminPill>
-                  </AdminTd>
-                  <AdminTd>
-                    <AdminPill
-                      tone={item.source === "ADMIN_MANUAL" ? "info" : "neutral"}
-                    >
-                      {item.source === "ADMIN_MANUAL"
-                        ? `manual · ${item.triggeredByAdmin?.name ?? item.triggeredByAdmin?.email ?? "admin"}`
-                        : "automático"}
-                    </AdminPill>
-                  </AdminTd>
-                  <AdminTd>
-                    <AdminPill tone={STATUS_TONE[item.status] ?? "neutral"}>
-                      {item.status.toLowerCase()}
-                    </AdminPill>
-                  </AdminTd>
-                  <AdminTd muted>
-                    {item.lastEvent
-                      ? `${EVENT_LABEL[item.lastEvent.type] ?? item.lastEvent.type.toLowerCase()} · ${fmtDate(item.lastEvent.occurredAt)}`
-                      : "—"}
-                  </AdminTd>
-                  <AdminTd align="right">
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 6,
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      <Link
-                        href={`/admin/alerta-vagas/digest/${item.id}`}
-                        className={buttonVariants({
-                          variant: "outline",
-                          size: "sm",
-                        })}
-                      >
-                        Ver linha do tempo
-                      </Link>
-                      {item.status === "FAILED" && (
-                        <form action={resendDigestAction}>
-                          <input type="hidden" name="id" value={item.id} />
-                          <input
-                            type="hidden"
-                            name="redirectPath"
-                            value={currentRedirectPath}
-                          />
-                          <button
-                            type="submit"
+          {historyViewIsUnsubscribed ? (
+            <>
+              <AdminTable>
+                <thead>
+                  <tr>
+                    <AdminTh>Data/hora</AdminTh>
+                    <AdminTh>Usuário</AdminTh>
+                    <AdminTh>Motivo</AdminTh>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(unsubscribes?.items ?? []).map((item) => (
+                    <tr key={item.id}>
+                      <AdminTd mono>{fmtDate(item.unsubscribedAt)}</AdminTd>
+                      <AdminTd>
+                        <div style={{ fontSize: 13, color: AT.ink2 }}>
+                          {item.user.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: AT.muted2,
+                            fontFamily: '"Geist Mono", monospace',
+                          }}
+                        >
+                          {item.user.email}
+                        </div>
+                      </AdminTd>
+                      <AdminTd>
+                        <AdminPill
+                          tone={
+                            item.suppressionReason === "USER_UNSUBSCRIBED"
+                              ? "neutral"
+                              : item.suppressionReason
+                                ? "warn"
+                                : "neutral"
+                          }
+                        >
+                          {item.suppressionReason
+                            ? (REASON_LABEL[item.suppressionReason] ??
+                              item.suppressionReason)
+                            : "motivo desconhecido (anterior)"}
+                        </AdminPill>
+                      </AdminTd>
+                    </tr>
+                  ))}
+                  {(unsubscribes?.items.length ?? 0) === 0 && (
+                    <tr>
+                      <AdminTd>
+                        <span style={{ color: AT.muted }}>
+                          Nenhum descadastro neste período.
+                        </span>
+                      </AdminTd>
+                    </tr>
+                  )}
+                </tbody>
+              </AdminTable>
+              <AdminPagination
+                summary={`${unsubscribes?.total ?? 0} descadastro(s) · página ${unsubscribes?.page ?? 1} de ${Math.max(1, Math.ceil((unsubscribes?.total ?? 0) / (unsubscribes?.limit ?? 20)))}`}
+              >
+                {(unsubscribes?.page ?? 1) > 1 && (
+                  <Link
+                    href={historyPageHref((unsubscribes?.page ?? 1) - 1)}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                  >
+                    Anterior
+                  </Link>
+                )}
+                {(unsubscribes?.page ?? 1) * (unsubscribes?.limit ?? 20) <
+                  (unsubscribes?.total ?? 0) && (
+                  <Link
+                    href={historyPageHref((unsubscribes?.page ?? 1) + 1)}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                  >
+                    Próxima
+                  </Link>
+                )}
+              </AdminPagination>
+            </>
+          ) : (
+            <>
+              <form method="GET" style={{ marginBottom: 14 }}>
+                <input type="hidden" name="query" value={query ?? ""} />
+                <input
+                  type="hidden"
+                  name="periodDays"
+                  value={periodDays ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="statsProvider"
+                  value={statsProvider ?? ""}
+                />
+                <AdminFilterBar>
+                  <input
+                    type="text"
+                    name="historyQuery"
+                    defaultValue={historyQuery}
+                    placeholder="Buscar por usuário"
+                    style={inputStyle}
+                  />
+                  <select
+                    name="historySource"
+                    defaultValue={historySource ?? ""}
+                    style={inputStyle}
+                  >
+                    <option value="">Forma de envio: todas</option>
+                    <option value="MANUAL">Manual</option>
+                    <option value="AUTOMATIC">Automático</option>
+                  </select>
+                  <select
+                    name="historyProvider"
+                    defaultValue={historyProvider ?? ""}
+                    style={inputStyle}
+                  >
+                    <option value="">Provider: todos</option>
+                    <option value="RESEND">Resend</option>
+                    <option value="SES">SES</option>
+                  </select>
+                  <select
+                    name="historyStatus"
+                    defaultValue={historyStatus ?? ""}
+                    style={inputStyle}
+                  >
+                    <option value="">Status: todos</option>
+                    <option value="SENT">Enviado</option>
+                    <option value="FAILED">Falhou</option>
+                    <option value="OUTCOME_UNKNOWN">
+                      Resultado desconhecido
+                    </option>
+                    <option value="SKIPPED">Sem elegíveis</option>
+                    <option value="PENDING">Pendente</option>
+                    <option value="PROCESSING">Processando</option>
+                  </select>
+                  <button
+                    type="submit"
+                    className={buttonVariants({ size: "sm" })}
+                  >
+                    Filtrar
+                  </button>
+                </AdminFilterBar>
+              </form>
+
+              <AdminTable>
+                <thead>
+                  <tr>
+                    <AdminTh>Data/hora</AdminTh>
+                    <AdminTh>Usuário</AdminTh>
+                    <AdminTh>Provider</AdminTh>
+                    <AdminTh>Forma de envio</AdminTh>
+                    <AdminTh>Status</AdminTh>
+                    <AdminTh>Último evento</AdminTh>
+                    <AdminTh align="right">Ação</AdminTh>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.items.map((item) => (
+                    <tr key={item.id}>
+                      <AdminTd mono>
+                        {fmtDate(item.sentAt ?? item.createdAt)}
+                      </AdminTd>
+                      <AdminTd>
+                        <Link
+                          href={`/admin/alerta-vagas/digest/${item.id}`}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <div style={{ fontSize: 13, color: AT.ink2 }}>
+                            {item.user.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: AT.muted2,
+                              fontFamily: '"Geist Mono", monospace',
+                            }}
+                          >
+                            {item.user.email}
+                          </div>
+                        </Link>
+                      </AdminTd>
+                      <AdminTd>
+                        <AdminPill tone="dark" mono>
+                          {PROVIDER_LABEL[item.provider]}
+                        </AdminPill>
+                      </AdminTd>
+                      <AdminTd>
+                        <AdminPill
+                          tone={
+                            item.source === "ADMIN_MANUAL" ? "info" : "neutral"
+                          }
+                        >
+                          {item.source === "ADMIN_MANUAL"
+                            ? `manual · ${item.triggeredByAdmin?.name ?? item.triggeredByAdmin?.email ?? "admin"}`
+                            : "automático"}
+                        </AdminPill>
+                      </AdminTd>
+                      <AdminTd>
+                        <AdminPill tone={STATUS_TONE[item.status] ?? "neutral"}>
+                          {item.status.toLowerCase()}
+                        </AdminPill>
+                      </AdminTd>
+                      <AdminTd muted>
+                        {item.lastEvent
+                          ? `${EVENT_LABEL[item.lastEvent.type] ?? item.lastEvent.type.toLowerCase()} · ${fmtDate(item.lastEvent.occurredAt)}`
+                          : "—"}
+                      </AdminTd>
+                      <AdminTd align="right">
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            justifyContent: "flex-end",
+                          }}
+                        >
+                          <Link
+                            href={`/admin/alerta-vagas/digest/${item.id}`}
                             className={buttonVariants({
                               variant: "outline",
                               size: "sm",
                             })}
                           >
-                            Reenviar
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  </AdminTd>
-                </tr>
-              ))}
-              {history.items.length === 0 && (
-                <tr>
-                  <AdminTd>
-                    <span style={{ color: AT.muted }}>Nenhum envio ainda.</span>
-                  </AdminTd>
-                </tr>
-              )}
-            </tbody>
-          </AdminTable>
-          <AdminPagination summary={`${history.total} envio(s)`}>
-            {null}
-          </AdminPagination>
+                            Ver linha do tempo
+                          </Link>
+                          {item.status === "FAILED" && (
+                            <form action={resendDigestAction}>
+                              <input type="hidden" name="id" value={item.id} />
+                              <input
+                                type="hidden"
+                                name="redirectPath"
+                                value={currentRedirectPath}
+                              />
+                              <button
+                                type="submit"
+                                className={buttonVariants({
+                                  variant: "outline",
+                                  size: "sm",
+                                })}
+                              >
+                                Reenviar
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      </AdminTd>
+                    </tr>
+                  ))}
+                  {history.items.length === 0 && (
+                    <tr>
+                      <AdminTd>
+                        <span style={{ color: AT.muted }}>
+                          Nenhum envio ainda.
+                        </span>
+                      </AdminTd>
+                    </tr>
+                  )}
+                </tbody>
+              </AdminTable>
+              <AdminPagination
+                summary={`${history.total} envio(s) · página ${history.page} de ${Math.max(1, Math.ceil(history.total / history.limit))}`}
+              >
+                {history.page > 1 && (
+                  <Link
+                    href={historyPageHref(history.page - 1)}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                  >
+                    Anterior
+                  </Link>
+                )}
+                {history.page * history.limit < history.total && (
+                  <Link
+                    href={historyPageHref(history.page + 1)}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                  >
+                    Próxima
+                  </Link>
+                )}
+              </AdminPagination>
+            </>
+          )}
         </section>
       </AdminSectionGroup>
 

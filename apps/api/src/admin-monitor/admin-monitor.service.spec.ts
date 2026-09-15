@@ -978,6 +978,193 @@ test("listDigestHistory filters by source (manual vs automatic) and by user quer
   }
 });
 
+test("listDigestHistory eventType filters to digests with at least one matching event (drill-down do card de stats)", async () => {
+  const user = await seedUser();
+  try {
+    const opened = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "DAILY",
+        status: "SENT",
+        scheduledFor: new Date(),
+        source: "SCHEDULER",
+      },
+    });
+    const neverOpened = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "DAILY",
+        status: "SENT",
+        scheduledFor: new Date("2026-01-05T00:00:00Z"),
+        source: "SCHEDULER",
+      },
+    });
+    await prisma.monitorDigestEvent.create({
+      data: {
+        digestId: opened.id,
+        providerMessageId: "fake-opened",
+        providerEventId: `fake-event-${randomUUID()}`,
+        type: "OPENED",
+        provider: "RESEND",
+        occurredAt: new Date(),
+      },
+    });
+
+    const openedOnly = await service.listDigestHistory({
+      eventType: "OPENED",
+    });
+    assert.ok(openedOnly.items.some((i) => i.id === opened.id));
+    assert.ok(!openedOnly.items.some((i) => i.id === neverOpened.id));
+
+    const clickedOnly = await service.listDigestHistory({
+      eventType: "CLICKED",
+    });
+    assert.ok(!clickedOnly.items.some((i) => i.id === opened.id));
+  } finally {
+    await prisma.monitorDigest.deleteMany({ where: { userId: user.id } });
+    await cleanupUser(user.id);
+  }
+});
+
+test("getDigestEmailStats.summary.suppressed conta só descadastro automático (bounce/complaint), nunca unsubscribe voluntário", async () => {
+  const voluntary = await seedUser();
+  const bounced = await seedUser();
+  try {
+    const before = await service.getDigestEmailStats({ periodDays: 1 });
+
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: voluntary.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "USER_UNSUBSCRIBED",
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: bounced.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "BOUNCED",
+      },
+    });
+
+    const after = await service.getDigestEmailStats({ periodDays: 1 });
+
+    assert.equal(
+      after.summary.unsubscribed - before.summary.unsubscribed,
+      2,
+      "unsubscribed conta os dois, voluntário e automático",
+    );
+    assert.equal(
+      after.summary.suppressed - before.summary.suppressed,
+      1,
+      "suppressed conta só o automático (BOUNCED)",
+    );
+  } finally {
+    await prisma.monitorAlertPreference.deleteMany({
+      where: { userId: { in: [voluntary.id, bounced.id] } },
+    });
+    await cleanupUser(voluntary.id);
+    await cleanupUser(bounced.id);
+  }
+});
+
+test("listDigestUnsubscribes lists who unsubscribed (drill-down do card Descadastros), respeitando o período", async () => {
+  const unsubscribed = await seedUser();
+  const stillSubscribed = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: unsubscribed.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: { userId: stillSubscribed.id, emailEnabled: true },
+    });
+
+    const result = await service.listDigestUnsubscribes({});
+    assert.ok(result.items.some((item) => item.user.id === unsubscribed.id));
+    assert.ok(
+      !result.items.some((item) => item.user.id === stillSubscribed.id),
+    );
+
+    const outsideWindow = await service.listDigestUnsubscribes({
+      from: new Date(Date.now() + 60_000).toISOString(),
+    });
+    assert.ok(
+      !outsideWindow.items.some((item) => item.user.id === unsubscribed.id),
+    );
+  } finally {
+    await prisma.monitorAlertPreference.deleteMany({
+      where: { userId: { in: [unsubscribed.id, stillSubscribed.id] } },
+    });
+    await cleanupUser(unsubscribed.id);
+    await cleanupUser(stillSubscribed.id);
+  }
+});
+
+test("listDigestUnsubscribes reason filter distingue descadastro voluntário de supressão automática por bounce/complaint", async () => {
+  const voluntary = await seedUser();
+  const bounced = await seedUser();
+  const complained = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: voluntary.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "USER_UNSUBSCRIBED",
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: bounced.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "BOUNCED",
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: complained.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "COMPLAINED",
+      },
+    });
+
+    const voluntaryOnly = await service.listDigestUnsubscribes({
+      reason: "USER_UNSUBSCRIBED",
+    });
+    assert.ok(voluntaryOnly.items.some((i) => i.user.id === voluntary.id));
+    assert.ok(!voluntaryOnly.items.some((i) => i.user.id === bounced.id));
+    assert.ok(!voluntaryOnly.items.some((i) => i.user.id === complained.id));
+
+    const suppressedOnly = await service.listDigestUnsubscribes({
+      reason: "SUPPRESSED",
+    });
+    assert.ok(suppressedOnly.items.some((i) => i.user.id === bounced.id));
+    assert.ok(suppressedOnly.items.some((i) => i.user.id === complained.id));
+    assert.ok(!suppressedOnly.items.some((i) => i.user.id === voluntary.id));
+
+    const bouncedOnly = await service.listDigestUnsubscribes({
+      reason: "BOUNCED",
+    });
+    assert.ok(bouncedOnly.items.some((i) => i.user.id === bounced.id));
+    assert.ok(!bouncedOnly.items.some((i) => i.user.id === complained.id));
+  } finally {
+    await prisma.monitorAlertPreference.deleteMany({
+      where: { userId: { in: [voluntary.id, bounced.id, complained.id] } },
+    });
+    await cleanupUser(voluntary.id);
+    await cleanupUser(bounced.id);
+    await cleanupUser(complained.id);
+  }
+});
+
 test("getDigestSchedule / updateDigestSchedule roundtrip through the singleton row", async () => {
   const original = await service.getDigestSchedule();
   try {

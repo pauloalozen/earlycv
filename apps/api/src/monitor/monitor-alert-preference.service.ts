@@ -125,7 +125,11 @@ export class MonitorAlertPreferenceService {
 
     const updated = await this.database.monitorAlertPreference.update({
       where: { userId },
-      data: { emailEnabled: false, unsubscribedAt: new Date() },
+      data: {
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "USER_UNSUBSCRIBED",
+      },
     });
 
     await this.recordUnsubscribed(userId);
