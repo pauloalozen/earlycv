@@ -257,65 +257,6 @@ async function markPurchaseAsApproved(
   }
 }
 
-test("POST /cv-adaptation with masterResumeId creates an adaptation", async () => {
-  const { app, database } = await createApp();
-  const user = await registerUser(app, database, "cv-adaptation-user");
-
-  // Create a master resume
-  const masterResume = await database.resume.create({
-    data: {
-      userId: user.userId,
-      title: "My CV",
-      kind: "master",
-      status: "uploaded",
-      rawText: "Engineer with 5 years experience in TypeScript",
-    },
-  });
-
-  const res = await request(app.getHttpServer())
-    .post("/api/cv-adaptation")
-    .set("Authorization", `Bearer ${user.accessToken}`)
-    .send({
-      masterResumeId: masterResume.id,
-      jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
-      jobTitle: "Senior Engineer",
-      companyName: "Tech Corp",
-    })
-    .expect((response) => {
-      assert.equal(
-        response.status,
-        201,
-        `unexpected status: ${response.status} body=${JSON.stringify(response.body)}`,
-      );
-    });
-
-  assert.equal(res.body.masterResumeId, masterResume.id);
-  assert.equal(res.body.status, "analyzing");
-  assert.equal(res.body.jobTitle, "Senior Engineer");
-  assert.equal(res.body.companyName, "Tech Corp");
-  assert.ok(!("adaptedContentJson" in res.body));
-
-  await deleteUserByEmail(database, user.email);
-  await app.close();
-});
-
-test("POST /cv-adaptation with wrong masterResumeId returns 404", async () => {
-  const { app, database } = await createApp();
-  const user = await registerUser(app, database, "cv-adaptation-wrong-resume");
-
-  await request(app.getHttpServer())
-    .post("/api/cv-adaptation")
-    .set("Authorization", `Bearer ${user.accessToken}`)
-    .send({
-      masterResumeId: randomUUID(),
-      jobDescriptionText: VALID_JOB_DESCRIPTION_TEXT,
-    })
-    .expect(404);
-
-  await deleteUserByEmail(database, user.email);
-  await app.close();
-});
-
 test("GET /cv-adaptation returns only current user's adaptations", async () => {
   const { app, database } = await createApp();
   const user1 = await registerUser(app, database, "cv-adaptation-user-1");

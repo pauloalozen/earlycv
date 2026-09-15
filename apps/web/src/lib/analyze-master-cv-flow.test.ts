@@ -90,7 +90,7 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     expect(saveCall.visitorId).toBe(analyzeContext.visitorId);
   });
 
-  it("still forwards masterResumeId/radarJobId/turnstileToken in the FormData sent to analyzeAuthenticatedCv", async () => {
+  it("forwards radarJobId/turnstileToken in the FormData sent to analyzeAuthenticatedCv, with inputMode 'profile' (nunca masterResumeId — achado 2026-09-15: masterResumeId aqui caía no branch legado que lê Resume.rawText direto em vez do CvStructuredProfile canônico)", async () => {
     await analyzeMasterCvForJob({
       masterResumeId: "resume-9",
       radarJobId: "job-xyz",
@@ -100,9 +100,10 @@ describe("analyzeMasterCvForJob — Radar 1-click analysis (bypasses /adaptar)",
     });
 
     const formData = analyzeAuthenticatedCvMock.mock.calls[0]?.[0] as FormData;
-    expect(formData.get("masterResumeId")).toBe("resume-9");
+    expect(formData.get("masterResumeId")).toBeNull();
     expect(formData.get("radarJobId")).toBe("job-xyz");
     expect(formData.get("turnstileToken")).toBe("token-9");
+    expect(analyzeAuthenticatedCvMock.mock.calls[0]?.[1]).toBe("profile");
   });
 
   it("prioritizes the radar-curated jobTitle/companyName over what the AI extracted into adaptedContentJson.vaga", async () => {
