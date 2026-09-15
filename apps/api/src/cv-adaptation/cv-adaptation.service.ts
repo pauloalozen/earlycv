@@ -1260,6 +1260,8 @@ export class CvAdaptationService {
         guestSessionHash,
         guestPossessionTokenHash,
         jobDescriptionText: resolved.text,
+        radarJobTitle: resolved.radarJobTitle,
+        radarCompanyName: resolved.radarCompanyName,
       },
     });
 
@@ -1641,6 +1643,8 @@ export class CvAdaptationService {
         ownerKind: "authenticated",
         status: "pending",
         userId,
+        radarJobTitle: resolved.radarJobTitle,
+        radarCompanyName: resolved.radarCompanyName,
       },
     });
 
@@ -2060,6 +2064,20 @@ export class CvAdaptationService {
     scoreAfter: number | null;
   } {
     return this.extractAnalysisJobSignals(adaptedContentJson);
+  }
+
+  // Alias público (achado 2026-09-15) — mesma reconciliação de vaga.cargo/
+  // vaga.empresa dentro do JSON persistido já usada por processAnalysisJob
+  // (reconcileVagaFields, privado), reaproveitada por CvAnalysisWorker pra
+  // aplicar a mesma prioridade "radar sempre vence a IA" no pipeline
+  // canônico — sem isso, o worker novo persistia companyName/jobTitle
+  // corretos nas colunas mas deixava vaga.empresa/vaga.cargo (dentro do
+  // JSON que a tela de resultado renderiza) com o que a IA reextraiu.
+  reconcileVagaFieldsForPipeline(
+    adaptedContentJson: unknown,
+    known: { jobTitle?: string | null; companyName?: string | null },
+  ): unknown {
+    return this.reconcileVagaFields(adaptedContentJson, known);
   }
 
   private async processAnalysisJob(

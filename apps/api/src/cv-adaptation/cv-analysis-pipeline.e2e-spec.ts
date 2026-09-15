@@ -3155,3 +3155,83 @@ test("2C.1-9) AnalysisJob (inputMode profile) succeeded sempre referencia um CvS
     });
   assert.equal(structuredProfile.status, "READY");
 });
+
+// ---------------------------------------------------------------------------
+// Achado 2026-09-15: o worker canônico (CvAnalysisWorker, o único caminho
+// ativo em produção com a flag ligada) nunca aplicava a prioridade "cargo/
+// empresa curados do Job do radar sempre vencem o que a IA extrai" — essa
+// lógica só existia em processAnalysisJob (caminho legado, morto com a flag
+// ligada). Os dois entrypoints canônicos (autenticado/guest) resolviam
+// radarJobTitle/radarCompanyName em resolveAnalysisJobDescription mas
+// jogavam fora sem persistir — resultado real: análises via radar
+// terminavam com companyName = o que a IA "achou" no texto (geralmente
+// errado/genérico), nunca a empresa real, mesmo o Job já sabendo a resposta
+// certa desde o início da requisição.
+// ---------------------------------------------------------------------------
+test("18) análise via radarJobId persiste jobTitle/companyName do Job curado, nunca o que a IA extraiu — tanto nas colunas quanto em adaptedContentJson.vaga", async () => {
+  const user = await createUser();
+  const storage = new FakeStorage();
+  const cvWorker = buildProcessingWorker(
+    async () => fakeCanonicalOutput("Invariante 18"),
+    storage,
+  );
+  const protectedAnalyze = new FakeProtectedAnalyzeService();
+  const entrypoint = new CvProcessingEntrypointService(
+    database,
+    jobService,
+    storage,
+  );
+  const service = buildCvAdaptationService(
+    protectedAnalyze,
+    entrypoint,
+    masterPromotion,
+  );
+  const analysisWorker = buildAnalysisWorker(service);
+
+  const company = await prisma.company.create({
+    data: {
+      name: "GPS Participações e Empreendimentos S.A.",
+      normalizedName: `gps-participacoes-${randomUUID()}`,
+    },
+  });
+  const radarJob = await prisma.job.create({
+    data: {
+      companyId: company.id,
+      sourceJobUrl: `https://radar.example.com/jobs/${randomUUID()}`,
+      canonicalKey: `gps:gerente-de-sistemas:${randomUUID()}`,
+      title: "Gerente de Sistemas",
+      normalizedTitle: "gerente de sistemas",
+      descriptionRaw: JOB_DESCRIPTION,
+      descriptionClean: JOB_DESCRIPTION,
+      locationText: "São Paulo, BR",
+      firstSeenAt: new Date(),
+      lastSeenAt: new Date(),
+      status: "active",
+    },
+  });
+
+  const started = await service.startAuthenticatedAnalysisJob(user.id, {
+    jobDescriptionText: JOB_DESCRIPTION,
+    masterCvText: buildCvText("Invariante 18", "sistemas"),
+    radarJobId: radarJob.id,
+  });
+  const row = await database.analysisJob.findUniqueOrThrow({
+    where: { id: started.jobId },
+  });
+  assert.equal(row.radarJobTitle, "Gerente de Sistemas");
+  assert.equal(row.radarCompanyName, company.name);
+
+  await processOneCvJob(cvWorker, row.cvProcessingJobId as string);
+  const finalRow = await processOneAnalysisJob(analysisWorker, started.jobId);
+
+  assert.equal(finalRow.status, "succeeded");
+  // O fake de IA sempre devolve vaga: { cargo: "Analista", empresa: "Acme" }
+  // (ver FakeProtectedAnalyzeService) — se a coluna/JSON final ainda
+  // mostrasse isso, a prioridade do radar não estaria sendo aplicada.
+  assert.equal(finalRow.jobTitle, "Gerente de Sistemas");
+  assert.equal(finalRow.companyName, company.name);
+  assert.deepEqual(
+    (finalRow.adaptedContentJson as { vaga?: Record<string, unknown> })?.vaga,
+    { cargo: "Gerente de Sistemas", empresa: company.name },
+  );
+});

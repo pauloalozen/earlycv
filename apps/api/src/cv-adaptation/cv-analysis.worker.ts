@@ -61,6 +61,7 @@ export class CvAnalysisWorker {
       | "runCanonicalAuthenticatedAnalysis"
       | "runCanonicalGuestAnalysis"
       | "extractAnalysisJobSignalsForPipeline"
+      | "reconcileVagaFieldsForPipeline"
     >,
     // Achado real de auditoria de claim (2026-09-09): claimGuestAnalysisJob
     // transfere AnalysisJob.userId do guest pro usuário ANTES de checar
@@ -329,6 +330,28 @@ export class CvAnalysisWorker {
           result.adaptedContentJson,
         );
 
+      // Achado 2026-09-15: cargo/empresa curados do Job do radar (gravados
+      // em job.radarJobTitle/radarCompanyName na criação, via
+      // resolveAnalysisJobDescription) SEMPRE prevalecem sobre o que a IA
+      // reextraiu do texto colado — mesma prioridade que processAnalysisJob
+      // já aplicava no caminho legado (flag desligada), que nunca chegou a
+      // este worker. Sem isto, análises via radar voltavam
+      // companyName="Não informado" mesmo com o dado certo disponível desde
+      // o início da requisição.
+      const radarFallback = {
+        jobTitle: job.radarJobTitle,
+        companyName: job.radarCompanyName,
+      };
+      const jobTitle = radarFallback.jobTitle ?? signals.jobTitle;
+      const companyName = radarFallback.companyName ?? signals.companyName;
+      const reconciledContentJson =
+        radarFallback.jobTitle || radarFallback.companyName
+          ? this.cvAdaptationService.reconcileVagaFieldsForPipeline(
+              result.adaptedContentJson,
+              radarFallback,
+            )
+          : result.adaptedContentJson;
+
       await this.ensureClaimBeforeSucceeding(job, cvProcessingJob);
 
       await this.database.analysisJob.update({
@@ -336,13 +359,13 @@ export class CvAnalysisWorker {
         data: {
           status: "succeeded",
           finishedAt: new Date(),
-          adaptedContentJson: result.adaptedContentJson as never,
+          adaptedContentJson: reconciledContentJson as never,
           previewText: result.previewText,
           masterCvText: result.masterCvText,
           analysisCvSnapshotId: result.analysisCvSnapshotId,
           cvStructuredProfileId: structuredProfile.id,
-          jobTitle: signals.jobTitle,
-          companyName: signals.companyName,
+          jobTitle,
+          companyName,
           scoreBefore: signals.scoreBefore,
           scoreAfter: signals.scoreAfter,
         },
