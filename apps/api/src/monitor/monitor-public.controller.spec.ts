@@ -9,6 +9,10 @@ function createController(expectedTopicArn: string | undefined) {
   const webhookService = {
     processSesEvent: async () => ({ processed: true }),
   };
+  const productUpdateWebhookService = {
+    processSesEvent: async () => ({ processed: true }),
+    processSubscriptionEvent: async () => ({ processed: true }),
+  };
   const alertPreferenceService = {};
   const emailConfig = {
     getExpectedSnsTopicArn: () => expectedTopicArn,
@@ -16,6 +20,7 @@ function createController(expectedTopicArn: string | undefined) {
 
   return new MonitorPublicController(
     webhookService as never,
+    productUpdateWebhookService as never,
     alertPreferenceService as never,
     emailConfig as never,
   );
