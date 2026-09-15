@@ -327,6 +327,20 @@ export class ResumesService {
     // inalterado. O enqueue novo é AWAITED (persiste CvSource/CvSubmission/
     // CvProcessingJob antes da resposta HTTP) — a extração de IA em si só
     // roda depois, no CvProcessingWorker (cron separado), nunca aqui.
+    // Bug real (2026-09-15): o frontend de /meu-cv-master faz polling em
+    // GET /resumes/master-cv-extraction-status, que só enxerga o pipeline
+    // LEGADO (tabela masterCvCanonicalExtraction, branch else abaixo). Com
+    // o pipeline novo ativo (sempre ligado pra admin/superadmin via
+    // CvProcessingFlagResolverService, ou via allowlist/flag global), esta
+    // requisição nunca cria linha nessa tabela — o polling nunca via
+    // "succeeded"/"failed" e a tela travava indefinidamente no overlay de
+    // loading, mesmo com o CvProcessingJob concluindo normalmente em
+    // background (daí um F5 manual sempre mostrar tudo já atualizado).
+    // Devolver o id do job aqui permite o cliente fazer polling no
+    // endpoint certo (GET /cv-processing-jobs/:id, já existente e
+    // construído exatamente pra isso).
+    let cvProcessingJobId: string | null = null;
+
     if (
       createdResume.isMaster &&
       (await this.isPipelineEnabledFor(userId)) &&
@@ -381,6 +395,8 @@ export class ResumesService {
               cvSubmissionId: enqueued.cvSubmission.id,
             },
           });
+
+          cvProcessingJobId = enqueued.job.id;
         } catch (error) {
           console.error(
             "[resumes] failed to enqueue cv processing job (new pipeline)",
@@ -424,7 +440,7 @@ export class ResumesService {
       }
     }
 
-    return createdResume;
+    return { ...createdResume, cvProcessingJobId };
   }
 
   private parseExtractionCoverage(

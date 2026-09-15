@@ -14,6 +14,12 @@ export type ResumeDto = {
   // o título/nome do arquivo continuam sendo os originais, isto é só um
   // sinal pra exibir um badge "sincronizado com o perfil".
   syncedFromProfile?: boolean;
+  // Presente quando o upload rodou no pipeline canônico novo (sempre
+  // ligado pra admin/superadmin, ver CvProcessingFlagResolverService) —
+  // o cliente deve fazer polling em getCvProcessingJobStatus() com este
+  // id, nunca em getMyMasterCvExtractionStatus() (que só enxerga o
+  // pipeline legado e nunca resolve pra este upload).
+  cvProcessingJobId?: string | null;
 };
 
 export type MasterCvExtractionStatusDto = {
@@ -24,6 +30,12 @@ export type MasterCvExtractionStatusDto = {
     fieldStatus: Record<string, "filled" | "partial" | "missing">;
   } | null;
   updatedAt: string;
+} | null;
+
+export type CvProcessingJobStatusDto = {
+  id: string;
+  status: "PENDING" | "PROCESSING" | "READY" | "FAILED";
+  lastError: string | null;
 } | null;
 
 export async function listMyResumes(): Promise<ResumeDto[]> {
@@ -81,6 +93,24 @@ export async function getMyMasterCvExtractionStatus(): Promise<MasterCvExtractio
       return null;
     }
     return JSON.parse(payload) as MasterCvExtractionStatusDto;
+  } catch {
+    return null;
+  }
+}
+
+export async function getCvProcessingJobStatus(
+  id: string,
+): Promise<CvProcessingJobStatusDto> {
+  try {
+    const response = await apiRequest("GET", `/cv-processing-jobs/${id}`);
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.text();
+    if (!payload.trim()) {
+      return null;
+    }
+    return JSON.parse(payload) as CvProcessingJobStatusDto;
   } catch {
     return null;
   }
