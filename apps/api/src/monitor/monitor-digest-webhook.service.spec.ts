@@ -210,6 +210,7 @@ test("bounced marks the user's MonitorAlertPreference emailEnabled=false and rec
       data: {
         emailEnabled: false,
         unsubscribedAt: fixture.preferenceUpdates[0].data.unsubscribedAt,
+        suppressionReason: "BOUNCED",
       },
     },
   ]);
@@ -231,6 +232,10 @@ test("complained marks the user's MonitorAlertPreference emailEnabled=false and 
 
   assert.equal(fixture.preferenceUpdates.length, 1);
   assert.equal(fixture.preferenceUpdates[0].data.emailEnabled, false);
+  assert.equal(
+    fixture.preferenceUpdates[0].data.suppressionReason,
+    "COMPLAINED",
+  );
 });
 
 test("clicked and opened never touch MonitorAlertPreference", async () => {
@@ -449,6 +454,7 @@ test("a Bounce/Complaint event never touches status when the digest is NOT in OU
   assert.equal(fixture.digests.get("digest-1")?.status, "SENT");
   assert.equal(fixture.preferenceUpdates.length, 1);
   assert.equal(fixture.preferenceUpdates[0].data.emailEnabled, false);
+  assert.equal(fixture.preferenceUpdates[0].data.suppressionReason, "BOUNCED");
 });
 
 test("an unsupported SES eventType is rejected without creating an event", async () => {

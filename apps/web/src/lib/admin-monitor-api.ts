@@ -570,8 +570,17 @@ export type DigestEmailStatsSummary = {
   openedUnique: number;
   clickedUnique: number;
   unsubscribed: number;
+  // Fatia de `unsubscribed` que foi supressão automática (bounce/
+  // complaint), não unsubscribe voluntário — ver
+  // DigestUnsubscribeItem.suppressionReason.
+  suppressed: number;
   rates: DigestEmailStatsRates;
 };
+
+export type DigestUnsubscribeReason =
+  | "USER_UNSUBSCRIBED"
+  | "BOUNCED"
+  | "COMPLAINED";
 
 export type DigestFailedItem = {
   id: string;
@@ -725,11 +734,20 @@ export function getMonitorDigestHistory(
 export type DigestUnsubscribeItem = {
   id: string;
   unsubscribedAt: string | null;
+  suppressionReason: DigestUnsubscribeReason | null;
   user: { id: string; email: string; name: string };
 };
 
 export function getMonitorDigestUnsubscribes(
-  params: { page?: number; limit?: number; from?: string; to?: string } = {},
+  params: {
+    page?: number;
+    limit?: number;
+    from?: string;
+    to?: string;
+    // "SUPPRESSED" = BOUNCED + COMPLAINED juntos (drill-down do card
+    // "Suprimidos (bounce/complaint)").
+    reason?: DigestUnsubscribeReason | "SUPPRESSED";
+  } = {},
   token?: string,
 ) {
   const qs = new URLSearchParams();
@@ -737,6 +755,7 @@ export function getMonitorDigestUnsubscribes(
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
+  if (params.reason) qs.set("reason", params.reason);
   const suffix = qs.toString();
   return apiRequest<{
     page: number;

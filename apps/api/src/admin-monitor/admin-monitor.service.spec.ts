@@ -1026,6 +1026,50 @@ test("listDigestHistory eventType filters to digests with at least one matching 
   }
 });
 
+test("getDigestEmailStats.summary.suppressed conta só descadastro automático (bounce/complaint), nunca unsubscribe voluntário", async () => {
+  const voluntary = await seedUser();
+  const bounced = await seedUser();
+  try {
+    const before = await service.getDigestEmailStats({ periodDays: 1 });
+
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: voluntary.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "USER_UNSUBSCRIBED",
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: bounced.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "BOUNCED",
+      },
+    });
+
+    const after = await service.getDigestEmailStats({ periodDays: 1 });
+
+    assert.equal(
+      after.summary.unsubscribed - before.summary.unsubscribed,
+      2,
+      "unsubscribed conta os dois, voluntário e automático",
+    );
+    assert.equal(
+      after.summary.suppressed - before.summary.suppressed,
+      1,
+      "suppressed conta só o automático (BOUNCED)",
+    );
+  } finally {
+    await prisma.monitorAlertPreference.deleteMany({
+      where: { userId: { in: [voluntary.id, bounced.id] } },
+    });
+    await cleanupUser(voluntary.id);
+    await cleanupUser(bounced.id);
+  }
+});
+
 test("listDigestUnsubscribes lists who unsubscribed (drill-down do card Descadastros), respeitando o período", async () => {
   const unsubscribed = await seedUser();
   const stillSubscribed = await seedUser();
@@ -1059,6 +1103,65 @@ test("listDigestUnsubscribes lists who unsubscribed (drill-down do card Descadas
     });
     await cleanupUser(unsubscribed.id);
     await cleanupUser(stillSubscribed.id);
+  }
+});
+
+test("listDigestUnsubscribes reason filter distingue descadastro voluntário de supressão automática por bounce/complaint", async () => {
+  const voluntary = await seedUser();
+  const bounced = await seedUser();
+  const complained = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: voluntary.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "USER_UNSUBSCRIBED",
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: bounced.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "BOUNCED",
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: complained.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+        suppressionReason: "COMPLAINED",
+      },
+    });
+
+    const voluntaryOnly = await service.listDigestUnsubscribes({
+      reason: "USER_UNSUBSCRIBED",
+    });
+    assert.ok(voluntaryOnly.items.some((i) => i.user.id === voluntary.id));
+    assert.ok(!voluntaryOnly.items.some((i) => i.user.id === bounced.id));
+    assert.ok(!voluntaryOnly.items.some((i) => i.user.id === complained.id));
+
+    const suppressedOnly = await service.listDigestUnsubscribes({
+      reason: "SUPPRESSED",
+    });
+    assert.ok(suppressedOnly.items.some((i) => i.user.id === bounced.id));
+    assert.ok(suppressedOnly.items.some((i) => i.user.id === complained.id));
+    assert.ok(!suppressedOnly.items.some((i) => i.user.id === voluntary.id));
+
+    const bouncedOnly = await service.listDigestUnsubscribes({
+      reason: "BOUNCED",
+    });
+    assert.ok(bouncedOnly.items.some((i) => i.user.id === bounced.id));
+    assert.ok(!bouncedOnly.items.some((i) => i.user.id === complained.id));
+  } finally {
+    await prisma.monitorAlertPreference.deleteMany({
+      where: { userId: { in: [voluntary.id, bounced.id, complained.id] } },
+    });
+    await cleanupUser(voluntary.id);
+    await cleanupUser(bounced.id);
+    await cleanupUser(complained.id);
   }
 });
 

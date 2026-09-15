@@ -2016,8 +2016,24 @@ model MonitorAlertPreference {
 
   unsubscribedAt DateTime?
 
+  // Por que o e-mail foi desativado — USER_UNSUBSCRIBED (clique no link/
+  // one-click do usuário) vs BOUNCED/COMPLAINED (higiene de lista
+  // automática do webhook, ver monitor-digest-webhook.service.ts). Sem
+  // isso os dois casos eram indistinguíveis (mesmos emailEnabled=false +
+  // unsubscribedAt), inflando o card "Descadastros" do admin com gente que
+  // nunca pediu pra sair, só teve o e-mail rejeitado pelo provider. null
+  // = preferência nunca desativada, ou desativada antes desta coluna
+  // existir (dado histórico, motivo não recuperável).
+  suppressionReason MonitorAlertSuppressionReason?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum MonitorAlertSuppressionReason {
+  USER_UNSUBSCRIBED
+  BOUNCED
+  COMPLAINED
 }
 
 enum MonitorDigestStatus {

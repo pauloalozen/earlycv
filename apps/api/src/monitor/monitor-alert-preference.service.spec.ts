@@ -236,6 +236,7 @@ test("unsubscribeByToken disables email, sets unsubscribedAt, and records monito
   assert.ok(updated);
   assert.equal(updated?.emailEnabled, false);
   assert.ok(updated?.unsubscribedAt instanceof Date);
+  assert.equal(updated?.suppressionReason, "USER_UNSUBSCRIBED");
   assert.deepEqual(recordedEvents, ["monitor_digest_unsubscribed"]);
   assert.equal(recordedMetadata[0]?.monitor_access_type, "internal_access");
 });

@@ -1,10 +1,18 @@
 import { Type } from "class-transformer";
-import { IsInt, IsISO8601, IsOptional, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsISO8601, IsOptional, Max, Min } from "class-validator";
 
 // Descadastro (MonitorAlertPreference.unsubscribedAt) não é um
 // MonitorDigestEvent nem carrega provider — drill-down do card
 // "Descadastros" precisa de endpoint/DTO próprio, ver comentário em
 // AdminMonitorService.getDigestEmailStats.
+export type DigestUnsubscribeReasonFilter =
+  | "USER_UNSUBSCRIBED"
+  | "BOUNCED"
+  | "COMPLAINED"
+  // Drill-down do card "Suprimidos (bounce/complaint)" — os dois motivos
+  // automáticos juntos, distintos do unsubscribe voluntário.
+  | "SUPPRESSED";
+
 export class ListDigestUnsubscribesDto {
   @IsOptional()
   @Type(() => Number)
@@ -28,4 +36,8 @@ export class ListDigestUnsubscribesDto {
   @IsOptional()
   @IsISO8601()
   to?: string;
+
+  @IsOptional()
+  @IsIn(["USER_UNSUBSCRIBED", "BOUNCED", "COMPLAINED", "SUPPRESSED"])
+  reason?: DigestUnsubscribeReasonFilter;
 }

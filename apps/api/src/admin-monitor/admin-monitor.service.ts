@@ -38,6 +38,7 @@ import {
 import type { GetDigestEmailStatsDto } from "./dto/get-digest-email-stats.dto";
 import type { AdminMonitorRecommendationStatusFilter } from "./dto/list-admin-monitor-recommendations.dto";
 import type { DigestHistorySourceFilter } from "./dto/list-digest-history.dto";
+import type { DigestUnsubscribeReasonFilter } from "./dto/list-digest-unsubscribes.dto";
 import type { UpdateAlertRolloutPolicyDto } from "./dto/update-alert-rollout-policy.dto";
 import type { UpdateDigestContentDto } from "./dto/update-digest-content.dto";
 import type { UpdateDigestScheduleDto } from "./dto/update-digest-schedule.dto";
@@ -377,6 +378,7 @@ export class AdminMonitorService {
       outcomeUnknownInPeriod,
       eventGroupsInPeriod,
       unsubscribedInPeriod,
+      suppressedInPeriod,
     ] = await Promise.all([
       this.database.monitorDigest.groupBy({
         by: ["status"],
@@ -467,6 +469,18 @@ export class AdminMonitorService {
       this.database.monitorAlertPreference.count({
         where: { unsubscribedAt: { gte: since } },
       }),
+      // Fatia de unsubscribedInPeriod que foi supressão AUTOMÁTICA (bounce/
+      // complaint via webhook), não unsubscribe voluntário — ver
+      // suppressionReason em MonitorAlertPreference. Preferências
+      // desativadas antes desta coluna existir (suppressionReason null)
+      // não entram aqui nem no card de descadastro voluntário — motivo
+      // histórico não recuperável.
+      this.database.monitorAlertPreference.count({
+        where: {
+          unsubscribedAt: { gte: since },
+          suppressionReason: { in: ["BOUNCED", "COMPLAINED"] },
+        },
+      }),
     ]);
 
     const eventTallyInPeriod = tallyByKey(
@@ -496,6 +510,10 @@ export class AdminMonitorService {
         openedUnique,
         clickedUnique,
         unsubscribed: unsubscribedInPeriod,
+        // Fatia de `unsubscribed` acima que foi supressão automática
+        // (bounce/complaint), não unsubscribe voluntário — ver comentário
+        // na query.
+        suppressed: suppressedInPeriod,
         rates: {
           // Base correta por taxa, nunca soma de eventos duplicados
           // (already deduplicado por digest em eventTallyInPeriod). null
@@ -1667,14 +1685,27 @@ export class AdminMonitorService {
   // (monitorAlertPreference.count({unsubscribedAt: {gte: since}})), mas
   // linha por linha com quem descadastrou. Não filtra por provider (a
   // preferência de e-mail não carrega provider, ver comentário no card).
+  // reason distingue unsubscribe voluntário (USER_UNSUBSCRIBED) de
+  // supressão automática por bounce/complaint (ver
+  // monitor-digest-webhook.service.ts) — "SUPPRESSED" é o atalho pros dois
+  // motivos automáticos juntos, usado pelo card "Suprimidos
+  // (bounce/complaint)".
   // ---------------------------------------------------------------------
   async listDigestUnsubscribes(params: {
     page?: number;
     limit?: number;
     from?: string;
     to?: string;
+    reason?: DigestUnsubscribeReasonFilter;
   }) {
     const { page, limit, skip } = paginate(params.page, params.limit);
+
+    const reasonWhere: Prisma.MonitorAlertPreferenceWhereInput =
+      params.reason === "SUPPRESSED"
+        ? { suppressionReason: { in: ["BOUNCED", "COMPLAINED"] } }
+        : params.reason
+          ? { suppressionReason: params.reason }
+          : {};
 
     const where: Prisma.MonitorAlertPreferenceWhereInput = {
       unsubscribedAt: {
@@ -1682,6 +1713,7 @@ export class AdminMonitorService {
         ...(params.from ? { gte: new Date(params.from) } : {}),
         ...(params.to ? { lte: new Date(params.to) } : {}),
       },
+      ...reasonWhere,
     };
 
     const [preferences, total] = await Promise.all([
@@ -1690,6 +1722,7 @@ export class AdminMonitorService {
         select: {
           id: true,
           unsubscribedAt: true,
+          suppressionReason: true,
           user: { select: { id: true, email: true, name: true } },
         },
         orderBy: [{ unsubscribedAt: "desc" }],
@@ -1706,6 +1739,7 @@ export class AdminMonitorService {
       items: preferences.map((preference) => ({
         id: preference.id,
         unsubscribedAt: preference.unsubscribedAt,
+        suppressionReason: preference.suppressionReason,
         user: preference.user,
       })),
     };

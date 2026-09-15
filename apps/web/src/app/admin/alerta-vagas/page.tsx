@@ -24,6 +24,7 @@ import {
   type DigestHistoryItem,
   type DigestSchedule,
   type DigestUnsubscribeItem,
+  type DigestUnsubscribeReason,
   type EmailBulkSendMode,
   type EmailProviderName,
   getAlertRolloutPolicy,
@@ -111,6 +112,13 @@ const PROVIDER_LABEL: Record<EmailProviderName, string> = {
   SES: "SES",
 };
 
+const REASON_LABEL: Record<string, string> = {
+  USER_UNSUBSCRIBED: "descadastro voluntário",
+  BOUNCED: "suprimido · bounce",
+  COMPLAINED: "suprimido · complaint",
+  SUPPRESSED: "suprimidos (bounce/complaint)",
+};
+
 const EVENT_LABEL: Record<string, string> = {
   SENT: "aceito",
   DELIVERED: "entregue",
@@ -148,6 +156,10 @@ type SearchParams = Promise<{
   // listagem ativa (digest ou descadastro).
   historyEventType?: string;
   historyView?: string;
+  // Filtro de motivo dentro da view "unsubscribed" — USER_UNSUBSCRIBED
+  // (descadastro voluntário), BOUNCED, COMPLAINED, ou SUPPRESSED (atalho
+  // pra BOUNCED+COMPLAINED juntos, usado pelo card "Suprimidos").
+  historyReason?: string;
   historyFrom?: string;
   historyPage?: string;
   periodDays?: string;
@@ -209,6 +221,7 @@ export default async function AdminAlertaVagasPage({
     historyStatus,
     historyEventType,
     historyView,
+    historyReason,
     historyFrom,
     historyPage,
     periodDays,
@@ -260,6 +273,20 @@ export default async function AdminAlertaVagasPage({
       ? (historyEventType as (typeof EVENT_TYPE_FILTERS)[number])
       : undefined;
   const historyViewIsUnsubscribed = historyView === "unsubscribed";
+  const REASON_FILTERS = [
+    "USER_UNSUBSCRIBED",
+    "BOUNCED",
+    "COMPLAINED",
+    "SUPPRESSED",
+  ] as const;
+  const parsedHistoryReason:
+    | DigestUnsubscribeReason
+    | "SUPPRESSED"
+    | undefined = REASON_FILTERS.includes(
+    historyReason as (typeof REASON_FILTERS)[number],
+  )
+    ? (historyReason as (typeof REASON_FILTERS)[number])
+    : undefined;
   const parsedHistoryFrom =
     historyFrom && !Number.isNaN(Date.parse(historyFrom))
       ? historyFrom
@@ -331,7 +358,12 @@ export default async function AdminAlertaVagasPage({
       getAlertRolloutPolicy(token),
       historyViewIsUnsubscribed
         ? getMonitorDigestUnsubscribes(
-            { from: parsedHistoryFrom, page: parsedHistoryPage, limit: 20 },
+            {
+              from: parsedHistoryFrom,
+              page: parsedHistoryPage,
+              limit: 20,
+              reason: parsedHistoryReason,
+            },
             token,
           )
         : Promise.resolve(null),
@@ -353,6 +385,7 @@ export default async function AdminAlertaVagasPage({
     historyStatus,
     historyEventType,
     historyView,
+    historyReason,
     historyFrom,
     periodDays,
     statsProvider,
@@ -368,6 +401,7 @@ export default async function AdminAlertaVagasPage({
     historyStatus?: MonitorDigestStatus;
     historyEventType?: MonitorDigestEventType;
     historyView?: "unsubscribed";
+    historyReason?: DigestUnsubscribeReason | "SUPPRESSED";
   }) {
     return buildRedirectPath({
       periodDays,
@@ -696,8 +730,17 @@ export default async function AdminAlertaVagasPage({
             <AdminStatCard
               label="Descadastros"
               value={String(stats.summary.unsubscribed)}
-              tooltip="Usuários que cancelaram o recebimento do Alerta de Vaga Certa neste período. Clique pra ver a lista."
+              tooltip="Usuários com o Alerta desativado neste período, por qualquer motivo (cancelamento voluntário ou supressão automática por bounce/complaint). Clique pra ver a lista."
               href={cardHref({ historyView: "unsubscribed" })}
+            />
+            <AdminStatCard
+              label="Suprimidos (bounce/complaint)"
+              value={String(stats.summary.suppressed)}
+              tooltip="Fatia de Descadastros que NÃO foi cancelamento voluntário — o sistema desativou o e-mail sozinho porque o provider reportou bounce ou complaint (higiene de lista automática, protege a reputação do domínio de envio). Clique pra ver a lista."
+              href={cardHref({
+                historyView: "unsubscribed",
+                historyReason: "SUPPRESSED",
+              })}
             />
           </AdminStatsRow>
 
@@ -752,7 +795,7 @@ export default async function AdminAlertaVagasPage({
               <AdminPill tone="info">
                 Filtro do card:{" "}
                 {historyViewIsUnsubscribed
-                  ? "Descadastros"
+                  ? (REASON_LABEL[historyReason ?? ""] ?? "Descadastros")
                   : (EVENT_LABEL[historyEventType ?? ""] ?? historyEventType)}
               </AdminPill>
               <Link
@@ -769,8 +812,9 @@ export default async function AdminAlertaVagasPage({
               <AdminTable>
                 <thead>
                   <tr>
-                    <AdminTh>Data/hora do descadastro</AdminTh>
+                    <AdminTh>Data/hora</AdminTh>
                     <AdminTh>Usuário</AdminTh>
+                    <AdminTh>Motivo</AdminTh>
                   </tr>
                 </thead>
                 <tbody>
@@ -790,6 +834,22 @@ export default async function AdminAlertaVagasPage({
                         >
                           {item.user.email}
                         </div>
+                      </AdminTd>
+                      <AdminTd>
+                        <AdminPill
+                          tone={
+                            item.suppressionReason === "USER_UNSUBSCRIBED"
+                              ? "neutral"
+                              : item.suppressionReason
+                                ? "warn"
+                                : "neutral"
+                          }
+                        >
+                          {item.suppressionReason
+                            ? (REASON_LABEL[item.suppressionReason] ??
+                              item.suppressionReason)
+                            : "motivo desconhecido (anterior)"}
+                        </AdminPill>
                       </AdminTd>
                     </tr>
                   ))}
