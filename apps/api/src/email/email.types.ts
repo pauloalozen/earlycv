@@ -65,6 +65,13 @@ export type EmailMessage = {
   from?: { email: string; name: string };
   replyTo?: string;
   configurationSet?: string;
+  // Gerenciamento de lista nativo do SES v2 (SendEmailCommand
+  // ListManagementOptions) — usado só pelo envio REAL de Product Updates
+  // (nunca pelo envio de teste, nunca pelo Monitor/JOB_ALERT). O SES
+  // resolve o placeholder {{amazonSESUnsubscribeUrl}} no corpo e recusa
+  // entregar a quem estiver OPT_OUT do tópico, sem token/endpoint de
+  // unsubscribe nosso. Resend/demais categorias ignoram este campo.
+  listManagementOptions?: { contactListName: string; topicName: string };
 };
 
 // Identidade de remetente de UMA categoria de envio em massa — quem o

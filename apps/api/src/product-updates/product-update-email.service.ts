@@ -1,17 +1,31 @@
 import { Inject, Injectable } from "@nestjs/common";
 
+import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
-import { EMAIL_SERVICE, type EmailService } from "../email/email.types";
+import {
+  EMAIL_SERVICE,
+  type EmailSendOutcome,
+  type EmailService,
+} from "../email/email.types";
 import { ProductUpdateTemplateService } from "./product-update-template.service";
 
 export type SendTestResult =
   | { sent: true }
   | { sent: false; errorMessage: string };
 
-// Isolado do envio real (ver ProductUpdateSenderWorker, adicionado numa
-// entrega posterior) — envio de teste nunca usa ListManagementOptions,
-// nunca cria ProductUpdateDelivery, nunca entra nas métricas da campanha.
-// Um único destinatário por chamada (decisão de produto).
+export type SendDeliveryResult =
+  | {
+      sent: true;
+      outcome: EmailSendOutcome;
+      providerMessageId: string | null;
+      errorMessage?: string;
+    }
+  | { sent: false; skippedReason: string };
+
+// Envio de teste é isolado do envio real (sendToDelivery, abaixo) — nunca
+// usa ListManagementOptions, nunca cria ProductUpdateDelivery, nunca entra
+// nas métricas da campanha. Um único destinatário por chamada (decisão de
+// produto).
 @Injectable()
 export class ProductUpdateEmailService {
   constructor(
@@ -19,6 +33,11 @@ export class ProductUpdateEmailService {
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
     @Inject(ProductUpdateTemplateService)
     private readonly templateService: ProductUpdateTemplateService,
+    @Inject(APP_ENV)
+    private readonly env: Pick<
+      AppEnv,
+      "AWS_SES_CONTACT_LIST_NAME" | "AWS_SES_PRODUCT_UPDATE_TOPIC_NAME"
+    >,
   ) {}
 
   async sendTest(
@@ -83,5 +102,64 @@ export class ProductUpdateEmailService {
     }
 
     return { sent: true };
+  }
+
+  // Envio real de uma ProductUpdateDelivery — usa o htmlSnapshot/
+  // textSnapshot já congelados no momento do start (nunca re-renderiza,
+  // nunca personaliza por destinatário: o que foi testado é exatamente o
+  // que é enviado). Sempre inclui ListManagementOptions — é a única
+  // barreira de descadastro (nenhum token/endpoint nosso).
+  async sendToDelivery(deliveryId: string): Promise<SendDeliveryResult> {
+    const delivery = await this.database.productUpdateDelivery.findUnique({
+      where: { id: deliveryId },
+      include: { productUpdate: true },
+    });
+    if (!delivery) {
+      return { sent: false, skippedReason: "delivery_not_found" };
+    }
+
+    const { productUpdate } = delivery;
+    if (!productUpdate.htmlSnapshot || !productUpdate.textSnapshot) {
+      // Nunca deveria acontecer (start() sempre congela os dois antes de
+      // criar qualquer delivery) — defesa em profundidade.
+      return { sent: false, skippedReason: "missing_snapshot" };
+    }
+
+    const contactListName = this.env.AWS_SES_CONTACT_LIST_NAME;
+    const topicName = this.env.AWS_SES_PRODUCT_UPDATE_TOPIC_NAME;
+    if (!contactListName || !topicName) {
+      return {
+        sent: false,
+        skippedReason: "ses_list_management_not_configured",
+      };
+    }
+
+    const result = await this.emailService.send({
+      category: "PRODUCT_ANNOUNCEMENT",
+      message: {
+        to: delivery.recipientEmail,
+        subject: productUpdate.subject,
+        html: productUpdate.htmlSnapshot,
+        text: productUpdate.textSnapshot,
+        listManagementOptions: { contactListName, topicName },
+        // Chave estável derivada só do deliveryId (cuid opaco, sem PII) —
+        // SES v2 não tem equivalente nativo (ignora este campo), a
+        // correlação de fato é pelas tags abaixo, iguais ao padrão do
+        // Monitor (ver monitor-digest-email.service.ts).
+        idempotencyKey: `product-update-delivery:${delivery.id}`,
+        tags: {
+          correlationType: "PRODUCT_UPDATE",
+          correlationId: delivery.id,
+          campaignId: productUpdate.id,
+        },
+      },
+    });
+
+    return {
+      sent: true,
+      outcome: result.outcome,
+      providerMessageId: result.providerMessageId,
+      errorMessage: result.errorMessage,
+    };
   }
 }

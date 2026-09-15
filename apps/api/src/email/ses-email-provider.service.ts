@@ -83,6 +83,12 @@ export class SesEmailProviderService implements EmailProvider {
           ConfigurationSetName: message.configurationSet,
           ReplyToAddresses: message.replyTo ? [message.replyTo] : undefined,
           EmailTags: emailTags,
+          ListManagementOptions: message.listManagementOptions
+            ? {
+                ContactListName: message.listManagementOptions.contactListName,
+                TopicName: message.listManagementOptions.topicName,
+              }
+            : undefined,
           Content: {
             Simple: {
               Subject: { Data: message.subject, Charset: "UTF-8" },
