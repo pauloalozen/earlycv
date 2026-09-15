@@ -30,3 +30,20 @@ test("loadAppEnv parses JOBS_GHOST_MODE boolean", async () => {
   const env = await loadAppEnv(buildBaseEnv({ JOBS_GHOST_MODE: "true" }));
   assert.equal(env.JOBS_GHOST_MODE, true);
 });
+
+test("loadAppEnv defaults PRODUCT_UPDATES_ENABLED to false and rate to 5 — nasce desabilitado", async () => {
+  const env = await loadAppEnv(buildBaseEnv());
+  assert.equal(env.PRODUCT_UPDATES_ENABLED, false);
+  assert.equal(env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND, 5);
+});
+
+test("loadAppEnv parses PRODUCT_UPDATES_ENABLED and rate overrides", async () => {
+  const env = await loadAppEnv(
+    buildBaseEnv({
+      PRODUCT_UPDATES_ENABLED: "true",
+      PRODUCT_UPDATE_SEND_RATE_PER_SECOND: "10",
+    }),
+  );
+  assert.equal(env.PRODUCT_UPDATES_ENABLED, true);
+  assert.equal(env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND, 10);
+});

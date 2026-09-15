@@ -2,16 +2,19 @@
 // EmailCategory decide o roteamento (ver email-routing.policy.ts) — nunca
 // comparação de assunto/template/string espalhada pelo código.
 //
-// PRODUCT_ANNOUNCEMENT/MARKETING existem só como vocabulário — nenhum
+// PRODUCT_ANNOUNCEMENT é usada pelo domínio Product Updates (comunicados
+// institucionais, ver apps/api/src/product-updates/) — seleção de
+// destinatários/consentimento vive lá (ProductEmailSubscription +
+// ListManagementOptions do SES), nunca nesta camada de e-mail.
+// MARKETING/ADMIN_COMMUNICATION continuam só como vocabulário — nenhum
 // call site usa ainda, e resolvê-las (EmailConfigService.getSesSenderProfile)
-// lança erro claro até que sejam implementadas de fato, cada uma com sua
-// própria seleção de destinatários/consentimento (fora do escopo desta
-// entrega). Elas não liberam envio nenhum por existirem no type.
+// lança erro claro até que sejam implementadas de fato. Elas não liberam
+// envio nenhum por existirem no type.
 export type EmailCategory =
   | "AUTHENTICATION"
   | "BILLING"
   | "JOB_ALERT"
-  | "PRODUCT_ANNOUNCEMENT" // reservado — sem uso nesta entrega
+  | "PRODUCT_ANNOUNCEMENT"
   | "MARKETING" // reservado — sem uso nesta entrega
   | "ADMIN_COMMUNICATION"; // reservado — sem uso nesta entrega
 

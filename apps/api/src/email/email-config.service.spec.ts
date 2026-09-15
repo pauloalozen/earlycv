@@ -18,6 +18,8 @@ function buildEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     GOOGLE_CALLBACK_URL: "https://example.com",
     SES_EMAIL_ENABLED: false,
     AWS_SES_SNS_LOG_SUBSCRIPTION_URL: false,
+    PRODUCT_UPDATES_ENABLED: false,
+    PRODUCT_UPDATE_SEND_RATE_PER_SECOND: 5,
     ...overrides,
   };
 }
@@ -71,12 +73,14 @@ test("EmailConfigService.getSesClientConfig returns pure transport config — no
   });
 });
 
-test("EmailConfigService.getSesSenderProfile throws for any category other than JOB_ALERT — nenhuma outra categoria libera envio", () => {
+test("EmailConfigService.getSesSenderProfile throws for categorias ainda não implementadas — nenhuma delas libera envio", () => {
   const service = new EmailConfigService(
     buildEnv({
       SES_EMAIL_ENABLED: true,
       AWS_SES_JOB_ALERT_FROM_EMAIL: "vagas@alertas.earlycv.com.br",
       AWS_SES_JOB_ALERT_FROM_NAME: "EarlyCV — Alerta de Vagas",
+      AWS_SES_PRODUCT_UPDATE_FROM_EMAIL: "contato@earlycv.com.br",
+      AWS_SES_PRODUCT_UPDATE_FROM_NAME: "EarlyCV",
       AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
     }),
   );
@@ -84,7 +88,6 @@ test("EmailConfigService.getSesSenderProfile throws for any category other than 
   for (const category of [
     "AUTHENTICATION",
     "BILLING",
-    "PRODUCT_ANNOUNCEMENT",
     "MARKETING",
     "ADMIN_COMMUNICATION",
   ] as const) {
@@ -131,6 +134,54 @@ test("EmailConfigService.getSesSenderProfile(JOB_ALERT) returns the full profile
     fromName: "EarlyCV — Alerta de Vagas",
     configurationSet: "earlycv-bulk-email",
     replyTo: "contato@earlycv.com.br",
+  });
+});
+
+test("EmailConfigService.getSesSenderProfile(PRODUCT_ANNOUNCEMENT) throws listing every missing field", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      SES_EMAIL_ENABLED: true,
+      AWS_SES_PRODUCT_UPDATE_FROM_EMAIL: "contato@earlycv.com.br",
+    }),
+  );
+
+  assert.throws(
+    () => service.getSesSenderProfile("PRODUCT_ANNOUNCEMENT"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /fromName/);
+      assert.match(error.message, /configurationSet/);
+      assert.doesNotMatch(error.message, /fromEmail/);
+      return true;
+    },
+  );
+});
+
+test("EmailConfigService.getSesSenderProfile(PRODUCT_ANNOUNCEMENT) returns the full profile, replyTo optional, isolado do perfil JOB_ALERT", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      SES_EMAIL_ENABLED: true,
+      AWS_SES_JOB_ALERT_FROM_EMAIL: "vagas@alertas.earlycv.com.br",
+      AWS_SES_JOB_ALERT_FROM_NAME: "EarlyCV — Alerta de Vagas",
+      AWS_SES_PRODUCT_UPDATE_FROM_EMAIL: "contato@earlycv.com.br",
+      AWS_SES_PRODUCT_UPDATE_FROM_NAME: "EarlyCV",
+      AWS_SES_PRODUCT_UPDATE_REPLY_TO: "contato@earlycv.com.br",
+      AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
+    }),
+  );
+
+  assert.deepEqual(service.getSesSenderProfile("PRODUCT_ANNOUNCEMENT"), {
+    fromEmail: "contato@earlycv.com.br",
+    fromName: "EarlyCV",
+    configurationSet: "earlycv-bulk-email",
+    replyTo: "contato@earlycv.com.br",
+  });
+  // Não vaza nem se confunde com o perfil JOB_ALERT configurado ao lado.
+  assert.deepEqual(service.getSesSenderProfile("JOB_ALERT"), {
+    fromEmail: "vagas@alertas.earlycv.com.br",
+    fromName: "EarlyCV — Alerta de Vagas",
+    configurationSet: "earlycv-bulk-email",
+    replyTo: undefined,
   });
 });
 
