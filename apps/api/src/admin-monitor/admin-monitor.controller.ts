@@ -35,6 +35,7 @@ import { ListAdminMonitorJobsDto } from "./dto/list-admin-monitor-jobs.dto";
 import { ListAdminMonitorRecommendationsDto } from "./dto/list-admin-monitor-recommendations.dto";
 import { ListAdminMonitorUsersDto } from "./dto/list-admin-monitor-users.dto";
 import { ListDigestHistoryDto } from "./dto/list-digest-history.dto";
+import { ListDigestUnsubscribesDto } from "./dto/list-digest-unsubscribes.dto";
 import { ListTrackedAlertUsersDto } from "./dto/list-tracked-alert-users.dto";
 import { PageQueryDto } from "./dto/page-query.dto";
 import { PreviewAlertRolloutDto } from "./dto/preview-alert-rollout.dto";
@@ -216,6 +217,14 @@ export class AdminMonitorController {
     @Query(new ValidationPipe(validationOptions)) query: GetDigestEmailStatsDto,
   ) {
     return this.adminMonitorService.getDigestEmailStats(query);
+  }
+
+  @Get("digest/unsubscribes")
+  listDigestUnsubscribes(
+    @Query(new ValidationPipe(validationOptions))
+    query: ListDigestUnsubscribesDto,
+  ) {
+    return this.adminMonitorService.listDigestUnsubscribes(query);
   }
 
   @Get("digests/:id/timeline")

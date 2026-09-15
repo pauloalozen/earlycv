@@ -978,6 +978,90 @@ test("listDigestHistory filters by source (manual vs automatic) and by user quer
   }
 });
 
+test("listDigestHistory eventType filters to digests with at least one matching event (drill-down do card de stats)", async () => {
+  const user = await seedUser();
+  try {
+    const opened = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "DAILY",
+        status: "SENT",
+        scheduledFor: new Date(),
+        source: "SCHEDULER",
+      },
+    });
+    const neverOpened = await prisma.monitorDigest.create({
+      data: {
+        userId: user.id,
+        frequency: "DAILY",
+        status: "SENT",
+        scheduledFor: new Date("2026-01-05T00:00:00Z"),
+        source: "SCHEDULER",
+      },
+    });
+    await prisma.monitorDigestEvent.create({
+      data: {
+        digestId: opened.id,
+        providerMessageId: "fake-opened",
+        providerEventId: `fake-event-${randomUUID()}`,
+        type: "OPENED",
+        provider: "RESEND",
+        occurredAt: new Date(),
+      },
+    });
+
+    const openedOnly = await service.listDigestHistory({
+      eventType: "OPENED",
+    });
+    assert.ok(openedOnly.items.some((i) => i.id === opened.id));
+    assert.ok(!openedOnly.items.some((i) => i.id === neverOpened.id));
+
+    const clickedOnly = await service.listDigestHistory({
+      eventType: "CLICKED",
+    });
+    assert.ok(!clickedOnly.items.some((i) => i.id === opened.id));
+  } finally {
+    await prisma.monitorDigest.deleteMany({ where: { userId: user.id } });
+    await cleanupUser(user.id);
+  }
+});
+
+test("listDigestUnsubscribes lists who unsubscribed (drill-down do card Descadastros), respeitando o período", async () => {
+  const unsubscribed = await seedUser();
+  const stillSubscribed = await seedUser();
+  try {
+    await prisma.monitorAlertPreference.create({
+      data: {
+        userId: unsubscribed.id,
+        emailEnabled: false,
+        unsubscribedAt: new Date(),
+      },
+    });
+    await prisma.monitorAlertPreference.create({
+      data: { userId: stillSubscribed.id, emailEnabled: true },
+    });
+
+    const result = await service.listDigestUnsubscribes({});
+    assert.ok(result.items.some((item) => item.user.id === unsubscribed.id));
+    assert.ok(
+      !result.items.some((item) => item.user.id === stillSubscribed.id),
+    );
+
+    const outsideWindow = await service.listDigestUnsubscribes({
+      from: new Date(Date.now() + 60_000).toISOString(),
+    });
+    assert.ok(
+      !outsideWindow.items.some((item) => item.user.id === unsubscribed.id),
+    );
+  } finally {
+    await prisma.monitorAlertPreference.deleteMany({
+      where: { userId: { in: [unsubscribed.id, stillSubscribed.id] } },
+    });
+    await cleanupUser(unsubscribed.id);
+    await cleanupUser(stillSubscribed.id);
+  }
+});
+
 test("getDigestSchedule / updateDigestSchedule roundtrip through the singleton row", async () => {
   const original = await service.getDigestSchedule();
   try {

@@ -1483,6 +1483,7 @@ export class AdminMonitorService {
     source?: DigestHistorySourceFilter;
     provider?: EmailProviderName;
     status?: MonitorDigestStatus;
+    eventType?: MonitorDigestEventType;
     from?: string;
     to?: string;
   }) {
@@ -1512,6 +1513,28 @@ export class AdminMonitorService {
             createdAt: {
               ...(params.from ? { gte: new Date(params.from) } : {}),
               ...(params.to ? { lte: new Date(params.to) } : {}),
+            },
+          }
+        : {}),
+      // Drill-down por card de evento (ver comentário no DTO) — mesma
+      // janela de from/to acima, mas aplicada a occurredAt do evento, não
+      // createdAt do digest (um digest criado antes do período pode ter
+      // sido aberto/clicado dentro dele).
+      ...(params.eventType
+        ? {
+            events: {
+              some: {
+                type: params.eventType,
+                ...(params.provider ? { provider: params.provider } : {}),
+                ...(params.from || params.to
+                  ? {
+                      occurredAt: {
+                        ...(params.from ? { gte: new Date(params.from) } : {}),
+                        ...(params.to ? { lte: new Date(params.to) } : {}),
+                      },
+                    }
+                  : {}),
+              },
             },
           }
         : {}),
@@ -1635,6 +1658,55 @@ export class AdminMonitorService {
           ? (adminById.get(digest.triggeredByAdminId) ?? null)
           : null,
         user: digest.user,
+      })),
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // Drill-down do card "Descadastros" de getDigestEmailStats — mesma conta
+  // (monitorAlertPreference.count({unsubscribedAt: {gte: since}})), mas
+  // linha por linha com quem descadastrou. Não filtra por provider (a
+  // preferência de e-mail não carrega provider, ver comentário no card).
+  // ---------------------------------------------------------------------
+  async listDigestUnsubscribes(params: {
+    page?: number;
+    limit?: number;
+    from?: string;
+    to?: string;
+  }) {
+    const { page, limit, skip } = paginate(params.page, params.limit);
+
+    const where: Prisma.MonitorAlertPreferenceWhereInput = {
+      unsubscribedAt: {
+        not: null,
+        ...(params.from ? { gte: new Date(params.from) } : {}),
+        ...(params.to ? { lte: new Date(params.to) } : {}),
+      },
+    };
+
+    const [preferences, total] = await Promise.all([
+      this.database.monitorAlertPreference.findMany({
+        where,
+        select: {
+          id: true,
+          unsubscribedAt: true,
+          user: { select: { id: true, email: true, name: true } },
+        },
+        orderBy: [{ unsubscribedAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      this.database.monitorAlertPreference.count({ where }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      items: preferences.map((preference) => ({
+        id: preference.id,
+        unsubscribedAt: preference.unsubscribedAt,
+        user: preference.user,
       })),
     };
   }
