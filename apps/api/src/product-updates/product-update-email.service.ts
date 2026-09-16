@@ -108,7 +108,14 @@ export class ProductUpdateEmailService {
   // textSnapshot já congelados no momento do start (nunca re-renderiza,
   // nunca personaliza por destinatário: o que foi testado é exatamente o
   // que é enviado). Sempre inclui ListManagementOptions — é a única
-  // barreira de descadastro (nenhum token/endpoint nosso).
+  // barreira de descadastro (nenhum token/endpoint nosso). A Contact List
+  // do SES NUNCA é alimentada manualmente por nós: quando o destinatário
+  // ainda não existe como contato em AWS_SES_CONTACT_LIST_NAME, o próprio
+  // SendEmailCommand com ListManagementOptions cria o contato ausente
+  // automaticamente (comportamento documentado da AWS) — nenhum
+  // CreateContactCommand/backfill é chamado por este service. Envio de
+  // teste (sendTest, acima) nunca passa ListManagementOptions de
+  // propósito, então nunca cria nem consulta contato nenhum na lista real.
   async sendToDelivery(deliveryId: string): Promise<SendDeliveryResult> {
     const delivery = await this.database.productUpdateDelivery.findUnique({
       where: { id: deliveryId },

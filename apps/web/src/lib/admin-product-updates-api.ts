@@ -9,7 +9,13 @@ export type ProductUpdateStatus =
   | "COMPLETED"
   | "CANCELLED"
   | "FAILED";
-export type ProductUpdateAudience = "INTERNAL_TEST" | "ALL_ELIGIBLE_USERS";
+// Nomes internos preservados de propósito (não renomeados na migration,
+// ver schema.prisma) — a interface admin mostra "Internos"/"Pagantes"/
+// "Toda a base", nunca estes valores brutos.
+export type ProductUpdateAudience =
+  | "INTERNAL_TEST"
+  | "PAID"
+  | "ALL_ELIGIBLE_USERS";
 export type ProductUpdateDeliveryStatus =
   | "PENDING"
   | "PROCESSING"

@@ -14,6 +14,7 @@ import { AdminTokenState } from "@/app/admin/_components/admin-token-state";
 import {
   listProductUpdates,
   type ProductUpdate,
+  type ProductUpdateAudience,
   type ProductUpdateStatus,
 } from "@/lib/admin-product-updates-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -44,6 +45,14 @@ const STATUS_LABEL: Record<ProductUpdateStatus, string> = {
   COMPLETED: "Concluída",
   CANCELLED: "Cancelada",
   FAILED: "Falhou",
+};
+
+// Nomes internos (INTERNAL_TEST/ALL_ELIGIBLE_USERS) nunca aparecem na
+// interface — histórico mostra só estes rótulos curtos.
+const AUDIENCE_LABEL: Record<ProductUpdateAudience, string> = {
+  INTERNAL_TEST: "Internos",
+  PAID: "Pagantes",
+  ALL_ELIGIBLE_USERS: "Toda a base",
 };
 
 function fmtDate(value: string | null) {
@@ -172,7 +181,9 @@ export default async function AdminProductUpdatesPage({
                       {STATUS_LABEL[item.status]}
                     </AdminPill>
                   </AdminTd>
-                  <AdminTd>{item.audience ?? "—"}</AdminTd>
+                  <AdminTd>
+                    {item.audience ? AUDIENCE_LABEL[item.audience] : "—"}
+                  </AdminTd>
                   <AdminTd align="right">{item.recipientCount}</AdminTd>
                   <AdminTd>{fmtDate(item.createdAt)}</AdminTd>
                   <AdminTd>

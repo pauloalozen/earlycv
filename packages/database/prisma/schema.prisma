@@ -2382,8 +2382,16 @@ enum ProductUpdateStatus {
   FAILED
 }
 
+// Nomes internos preservados de propósito (INTERNAL_TEST/ALL_ELIGIBLE_USERS
+// já estavam em produção via migration anterior) — renomear exigiria
+// recriar o tipo/enum no Postgres, risco desnecessário só por estética. A
+// interface mostra "Internos"/"Pagantes"/"Toda a base", nunca estes nomes
+// brutos (ver AUDIENCE_LABEL no admin). PAID é o único valor novo,
+// adicionado por uma migration puramente aditiva (ALTER TYPE ... ADD
+// VALUE), sem tocar nos dois valores existentes.
 enum ProductUpdateAudience {
   INTERNAL_TEST
+  PAID
   ALL_ELIGIBLE_USERS
 }
 

@@ -276,6 +276,30 @@ test("start cria uma ProductUpdateDelivery por destinatário e congela o snapsho
   assert.equal(deliveries.length, 2);
 });
 
+// Público novo (PAID) — a resolução em si é responsabilidade de
+// ProductUpdateSubscriptionService (ver product-update-subscription.service.spec.ts);
+// aqui só confirmamos que ProductUpdatesService.start() aceita "PAID" como
+// qualquer outro valor do enum, sem tratamento especial nem quebra de
+// campanhas que já existiam com os nomes internos antigos
+// (INTERNAL_TEST/ALL_ELIGIBLE_USERS, não renomeados na migration).
+test("start aceita o público PAID e persiste normalmente, igual aos públicos já existentes", async () => {
+  const { service, store, deliveries } = createFixture({
+    enabled: true,
+    eligibleRecipients: [{ userId: "u1", email: "u1@x.com", name: "U1" }],
+  });
+  setStatus(store, "pu-1", "READY");
+
+  const result = await service.start("pu-1", {
+    audience: "PAID",
+    confirmedRecipientCount: 1,
+    startedBy: "admin-1",
+  });
+
+  assert.equal(result.status, "SENDING");
+  assert.equal(result.audience, "PAID");
+  assert.equal(deliveries.length, 1);
+});
+
 test("cancel só é permitido a partir de SENDING", async () => {
   const { service } = createFixture({ enabled: true });
   await assert.rejects(() => service.cancel("pu-1", "admin-1"), /SENDING/);

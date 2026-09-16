@@ -9,6 +9,7 @@ type FakeUser = {
   name: string;
   status: string;
   internalRole: string;
+  planPurchases?: Array<{ status: string }>;
 };
 
 function createFixture(users: FakeUser[]) {
@@ -27,6 +28,18 @@ function createFixture(users: FakeUser[]) {
     if (where.status && user.status !== where.status) return false;
     const roleFilter = where.internalRole as { in: string[] } | undefined;
     if (roleFilter && !roleFilter.in.includes(user.internalRole)) return false;
+    const purchaseFilter = where.planPurchases as
+      | { some: { status: string } }
+      | undefined;
+    if (purchaseFilter) {
+      // `some` é um EXISTS — basta UMA compra bater, nunca multiplica o
+      // usuário mesmo com várias compras iguais (mesma semântica do
+      // Prisma real, é isso que a fixture precisa provar).
+      const hasMatch = (user.planPurchases ?? []).some(
+        (p) => p.status === purchaseFilter.some.status,
+      );
+      if (!hasMatch) return false;
+    }
     const and = (where.AND ?? []) as Array<{
       OR: Array<Record<string, unknown>>;
     }>;
@@ -110,6 +123,69 @@ const ADMIN_USER: FakeUser = {
   status: "active",
   internalRole: "admin",
 };
+const PAID_USER: FakeUser = {
+  id: "paid-1",
+  email: "paid1@example.com",
+  name: "Pagante Um",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "completed" }],
+};
+const DOUBLE_PAID_USER: FakeUser = {
+  id: "paid-2",
+  email: "paid2@example.com",
+  name: "Pagante Dois",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "completed" }, { status: "completed" }],
+};
+const PENDING_PURCHASE_USER: FakeUser = {
+  id: "pending-purchase-1",
+  email: "pendente@example.com",
+  name: "Compra Pendente",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "pending" }],
+};
+const PROCESSING_PURCHASE_USER: FakeUser = {
+  id: "processing-purchase-1",
+  email: "processando@example.com",
+  name: "Compra Em Processamento",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "processing_payment" }],
+};
+const PENDING_PAYMENT_USER: FakeUser = {
+  id: "pending-payment-1",
+  email: "pagamento-pendente@example.com",
+  name: "Pagamento Pendente",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "pending_payment" }],
+};
+const FAILED_PURCHASE_USER: FakeUser = {
+  id: "failed-purchase-1",
+  email: "falhou@example.com",
+  name: "Compra Falhou",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "failed" }],
+};
+const REFUNDED_PURCHASE_USER: FakeUser = {
+  id: "refunded-purchase-1",
+  email: "estornado@example.com",
+  name: "Compra Estornada",
+  status: "active",
+  internalRole: "none",
+  planPurchases: [{ status: "refunded" }],
+};
+const FREE_USER: FakeUser = {
+  id: "free-1",
+  email: "free1@example.com",
+  name: "Gratuito Um",
+  status: "active",
+  internalRole: "none",
+};
 
 test("resolveEligibleRecipients(ALL_ELIGIBLE_USERS) includes active users without an explicit opt-out — default é optado", async () => {
   const { database } = createFixture([ACTIVE_USER, SUSPENDED_USER, ADMIN_USER]);
@@ -171,4 +247,99 @@ test("countEligibleRecipients matches resolveEligibleRecipients length — mesma
   const recipients =
     await service.resolveEligibleRecipients("ALL_ELIGIBLE_USERS");
   assert.equal(count, recipients.length);
+});
+
+// PAID — regra canônica: pelo menos uma PlanPurchase com status
+// "completed" (mesma semântica já usada em 3 lugares do Monitor pra esse
+// segmento), independente de qualquer preferência do Monitor.
+
+test("resolveEligibleRecipients(PAID) inclui usuário com PlanPurchase completed", async () => {
+  const { database } = createFixture([PAID_USER, FREE_USER]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.deepEqual(
+    recipients.map((r) => r.userId),
+    ["paid-1"],
+  );
+});
+
+test("resolveEligibleRecipients(PAID) exclui compra pending/processing_payment/pending_payment/failed/refunded", async () => {
+  const { database } = createFixture([
+    PENDING_PURCHASE_USER,
+    PROCESSING_PURCHASE_USER,
+    PENDING_PAYMENT_USER,
+    FAILED_PURCHASE_USER,
+    REFUNDED_PURCHASE_USER,
+  ]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.deepEqual(recipients, []);
+});
+
+test("resolveEligibleRecipients(PAID) não duplica usuário com duas compras completed", async () => {
+  const { database } = createFixture([DOUBLE_PAID_USER]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.equal(recipients.length, 1);
+  assert.equal(recipients[0]?.userId, "paid-2");
+});
+
+test("resolveEligibleRecipients(PAID) exclui usuário pagante descadastrado", async () => {
+  const { database } = createFixture([PAID_USER]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  await service.markSuppressed("paid-1", "SES_OPT_OUT", new Date());
+
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.deepEqual(recipients, []);
+});
+
+test("resolveEligibleRecipients(PAID) exclui usuário pagante com complaint", async () => {
+  const { database } = createFixture([PAID_USER]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  await service.markSuppressed("paid-1", "COMPLAINED", new Date());
+
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.deepEqual(recipients, []);
+});
+
+test("resolveEligibleRecipients(PAID) exclui usuário pagante com bounce", async () => {
+  const { database } = createFixture([PAID_USER]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  await service.markSuppressed("paid-1", "BOUNCED", new Date());
+
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.deepEqual(recipients, []);
+});
+
+test("resolveEligibleRecipients(ALL_ELIGIBLE_USERS) inclui usuários gratuitos elegíveis, não só pagantes", async () => {
+  const { database } = createFixture([FREE_USER, PAID_USER]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  const recipients =
+    await service.resolveEligibleRecipients("ALL_ELIGIBLE_USERS");
+  assert.deepEqual(recipients.map((r) => r.userId).sort(), [
+    "free-1",
+    "paid-1",
+  ]);
+});
+
+test("countEligibleRecipients(PAID) usa a mesma resolução de resolveEligibleRecipients(PAID)", async () => {
+  const { database } = createFixture([
+    PAID_USER,
+    DOUBLE_PAID_USER,
+    FREE_USER,
+    PENDING_PURCHASE_USER,
+  ]);
+  const service = new ProductUpdateSubscriptionService(database);
+
+  const count = await service.countEligibleRecipients("PAID");
+  const recipients = await service.resolveEligibleRecipients("PAID");
+  assert.equal(count, recipients.length);
+  assert.equal(count, 2);
 });

@@ -33,9 +33,15 @@ export const metadata = buildAdminMetadata("Product Updates — campanha");
 
 const EDITABLE_STATUSES = new Set(["DRAFT", "READY"]);
 
+// Nomes internos (INTERNAL_TEST/ALL_ELIGIBLE_USERS) nunca aparecem na
+// interface — só estes rótulos. Contatos são criados automaticamente pelo
+// SES no envio real (ver ListManagementOptions em
+// ProductUpdateEmailService.sendToDelivery); nada aqui sugere cadastro
+// manual na AWS.
 const AUDIENCE_LABEL: Record<ProductUpdateAudience, string> = {
-  INTERNAL_TEST: "Time interno (admin/superadmin)",
-  ALL_ELIGIBLE_USERS: "Toda a base elegível",
+  INTERNAL_TEST: "Internos — administradores e superadministradores",
+  PAID: "Pagantes — usuários com pagamento aprovado",
+  ALL_ELIGIBLE_USERS: "Toda a base — todos os usuários elegíveis",
 };
 
 function fmtDate(value: string | null) {
@@ -107,7 +113,9 @@ export default async function ProductUpdateDetailPage({
   const editable = EDITABLE_STATUSES.has(productUpdate.status);
 
   const selectedAudience: ProductUpdateAudience | null =
-    audience === "INTERNAL_TEST" || audience === "ALL_ELIGIBLE_USERS"
+    audience === "INTERNAL_TEST" ||
+    audience === "PAID" ||
+    audience === "ALL_ELIGIBLE_USERS"
       ? audience
       : null;
   const eligibleCount = selectedAudience
@@ -336,7 +344,13 @@ export default async function ProductUpdateDetailPage({
                 href={`${rootPath}?audience=INTERNAL_TEST`}
                 style={{ fontSize: 12.5 }}
               >
-                Ver elegíveis: time interno
+                Ver elegíveis: internos
+              </Link>
+              <Link
+                href={`${rootPath}?audience=PAID`}
+                style={{ fontSize: 12.5 }}
+              >
+                Ver elegíveis: pagantes
               </Link>
               <Link
                 href={`${rootPath}?audience=ALL_ELIGIBLE_USERS`}
@@ -424,7 +438,10 @@ export default async function ProductUpdateDetailPage({
 
       <div style={{ marginBottom: 12 }}>
         <AdminPill tone="neutral">
-          Público: {productUpdate.audience ?? "não definido ainda"}
+          Público:{" "}
+          {productUpdate.audience
+            ? AUDIENCE_LABEL[productUpdate.audience]
+            : "não definido ainda"}
         </AdminPill>
       </div>
     </div>

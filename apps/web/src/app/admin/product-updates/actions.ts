@@ -126,7 +126,11 @@ export async function startProductUpdateAction(formData: FormData) {
     formData.get("confirmedRecipientCount") ?? "0",
   );
 
-  if (audience !== "INTERNAL_TEST" && audience !== "ALL_ELIGIBLE_USERS") {
+  if (
+    audience !== "INTERNAL_TEST" &&
+    audience !== "PAID" &&
+    audience !== "ALL_ELIGIBLE_USERS"
+  ) {
     redirect(
       buildAdminRedirect(redirectPath, "error", "Selecione um público."),
     );
