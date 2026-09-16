@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { buildAdminRedirect } from "@/lib/admin-ingestion-flow";
@@ -45,9 +46,23 @@ export async function createProductUpdateAction(formData: FormData) {
   redirect(`${LIST_PATH}/${created.id}`);
 }
 
-export async function updateProductUpdateAction(formData: FormData) {
+export type UpdateProductUpdateActionState = {
+  status: "idle" | "error" | "success";
+  message: string;
+};
+
+// Ligada via useActionState (ver editor-form.tsx) em vez de redirect — um
+// erro de validação (ex.: URL do botão insegura) NUNCA pode apagar o que
+// o admin digitou. redirect() força uma navegação completa, que descarta
+// o valor não salvo dos campos (eles voltam a refletir o que já estava
+// persistido); devolvendo estado em vez de redirecionar, a página nunca
+// recarrega e os campos (não controlados, com defaultValue) mantêm
+// exatamente o que foi digitado.
+export async function updateProductUpdateAction(
+  _prevState: UpdateProductUpdateActionState,
+  formData: FormData,
+): Promise<UpdateProductUpdateActionState> {
   const id = String(formData.get("id") ?? "");
-  const redirectPath = redirectPathFor(id, formData);
 
   try {
     await updateProductUpdate(id, {
@@ -63,10 +78,11 @@ export async function updateProductUpdateAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Falha ao salvar rascunho.";
-    redirect(buildAdminRedirect(redirectPath, "error", message));
+    return { status: "error", message };
   }
 
-  redirect(buildAdminRedirect(redirectPath, "success", "Rascunho salvo."));
+  revalidatePath(`/admin/product-updates/${id}`);
+  return { status: "success", message: "Rascunho salvo." };
 }
 
 export async function sendTestProductUpdateAction(formData: FormData) {

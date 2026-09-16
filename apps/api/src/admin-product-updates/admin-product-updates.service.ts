@@ -191,6 +191,7 @@ export class AdminProductUpdatesService {
       clickedDeliveryIds,
       bounced,
       complained,
+      unsubscribed,
     ] = await Promise.all([
       this.database.productUpdateDelivery.count({
         where: { productUpdateId, status: "SENT" },
@@ -226,6 +227,24 @@ export class AdminProductUpdatesService {
       this.database.productUpdateEvent.count({
         where: { type: "COMPLAINED", delivery: { productUpdateId } },
       }),
+      // Status ATUAL de opt-out entre os destinatários desta campanha —
+      // o evento SUBSCRIPTION do SES é por TÓPICO, não por campanha
+      // (ver ProductUpdateWebhookService.processSubscriptionEvent), então
+      // não há como saber "descadastrou por causa deste e-mail
+      // específico". Isto conta quantos dos destinatários já enviados
+      // estão descadastrados agora, o mais próximo que dá pra mostrar
+      // sem inventar uma correlação que os dados não sustentam.
+      this.database.productUpdateDelivery.count({
+        where: {
+          productUpdateId,
+          user: {
+            productEmailSubscription: {
+              subscribed: false,
+              suppressionReason: "SES_OPT_OUT",
+            },
+          },
+        },
+      }),
     ]);
 
     return {
@@ -239,6 +258,7 @@ export class AdminProductUpdatesService {
       uniqueClicked: clickedDeliveryIds.length,
       bounced,
       complained,
+      unsubscribed,
     };
   }
 }
