@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { ProductUpdateWebhookService } from "./product-update-webhook.service";
@@ -240,4 +241,45 @@ test("processSubscriptionEvent with a malformed payload (no source) is ignored s
 
   assert.equal(result.processed, false);
   assert.equal(result.reason, "malformed_subscription_payload");
+});
+
+// M1 — o e-mail do evento NUNCA pode ir pro log em claro, nem no caso de
+// "nenhum usuário encontrado" (onde antes o e-mail completo era logado).
+test("processSubscriptionEvent without a matching user never logs the raw e-mail address", async (t) => {
+  const { service } = createFixture();
+  const rawEmail = "unknown-person@example.com";
+
+  const loggedMessages: string[] = [];
+  t.mock.method(
+    Logger.prototype,
+    "warn",
+    function (this: unknown, ...args: unknown[]) {
+      loggedMessages.push(args.map((a) => String(a)).join(" "));
+    },
+  );
+
+  const result = await service.processSubscriptionEvent("sns-3", {
+    eventType: "Subscription",
+    subscription: {
+      source: rawEmail,
+      newTopicPreferences: {
+        topicSubscriptionStatus: [
+          { topicName: "product-updates", subscriptionStatus: "OPT_OUT" },
+        ],
+      },
+    },
+  });
+
+  assert.equal(result.processed, true);
+  assert.ok(loggedMessages.length > 0, "expected a warn log to be emitted");
+  for (const message of loggedMessages) {
+    assert.doesNotMatch(message, /unknown-person@example\.com/);
+    assert.doesNotMatch(message, /@example\.com/);
+  }
+  // Ainda assim, o log carrega o suficiente pra correlacionar
+  // tecnicamente: o snsMessageId (providerEventId) e um hash do e-mail.
+  assert.ok(
+    loggedMessages.some((m) => m.includes("sns-3")),
+    "expected the log to include the providerEventId for correlation",
+  );
 });

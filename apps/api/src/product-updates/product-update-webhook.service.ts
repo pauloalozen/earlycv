@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { ProductUpdateEventType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -9,6 +10,15 @@ import {
   type SesEventPayload,
 } from "../email/ses-event.util";
 import { ProductUpdateSubscriptionService } from "./product-update-subscription.service";
+
+// Mesma técnica já usada pra hashear dado sensível antes de logar (ver
+// request-context.middleware.ts, hash de user-agent) — nunca escrevemos
+// um e-mail em claro em log, nem pra diagnosticar um caso de "nenhum
+// usuário encontrado". sha256 é irreversível; suficiente pra correlacionar
+// duas linhas de log do MESMO endereço sem expor qual endereço é.
+function hashEmailForLogging(email: string): string {
+  return createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+}
 
 // Mesmo raciocínio do Monitor (ver monitor-digest-webhook.service.ts) —
 // Send/Reject só existem pra resolver OUTCOME_UNKNOWN.
@@ -214,8 +224,12 @@ export class ProductUpdateWebhookService {
 
     const userId = await this.subscriptionService.findUserIdByEmail(source);
     if (!userId) {
+      // Nunca logar o e-mail em claro — só providerEventId (snsMessageId),
+      // o reason code e um hash irreversível do endereço (só pra
+      // correlacionar duas ocorrências do MESMO e-mail entre logs, nunca
+      // pra descobrir qual é).
       this.logger.warn(
-        `product update subscription webhook: nenhum User encontrado para o e-mail do evento (source=${source})`,
+        `product update subscription webhook: no matching User (providerEventId=${snsMessageId}, reason=no_user_for_source, sourceHash=${hashEmailForLogging(source)})`,
       );
       return { processed: true };
     }
