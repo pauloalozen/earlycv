@@ -115,6 +115,14 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   // POSTHOG_EVENT_NAME em monitor-digest-webhook.service.ts.
   monitor_digest_provider_accepted: 1,
   monitor_digest_provider_rejected: 1,
+  // Product Updates (comunicados institucionais) — só eventos
+  // administrativos, nunca métricas por destinatário (email/nome/
+  // conteúdo nunca entram no metadata, ver ProductUpdatesService).
+  product_update_created: 1,
+  product_update_test_sent: 1,
+  product_update_started: 1,
+  product_update_completed: 1,
+  product_update_cancelled: 1,
   // Interview Prep
   interview_prep_drawer_opened: 1,
   interview_prep_generate_clicked: 1,

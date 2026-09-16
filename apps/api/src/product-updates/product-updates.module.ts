@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { AnalysisObservabilityModule } from "../analysis-observability/analysis-observability.module";
 import { DatabaseModule } from "../database/database.module";
 import { EmailModule } from "../email/email.module";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
@@ -11,7 +12,7 @@ import { ProductUpdateWebhookService } from "./product-update-webhook.service";
 import { ProductUpdatesService } from "./product-updates.service";
 
 @Module({
-  imports: [DatabaseModule, EmailModule],
+  imports: [DatabaseModule, EmailModule, AnalysisObservabilityModule],
   providers: [
     ProductUpdateSubscriptionService,
     ProductUpdateTemplateService,

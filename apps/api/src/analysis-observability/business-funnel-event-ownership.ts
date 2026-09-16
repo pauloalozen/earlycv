@@ -107,6 +107,14 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   // confirma o envio, nunca precisou de um evento assíncrono pra isso).
   monitor_digest_provider_accepted: "backend",
   monitor_digest_provider_rejected: "backend",
+  // Product Updates — todos administrativos, disparados pelo admin
+  // (ProductUpdatesService/ProductUpdateSenderWorker), nunca pelo browser
+  // de um destinatário.
+  product_update_created: "backend",
+  product_update_test_sent: "backend",
+  product_update_started: "backend",
+  product_update_completed: "backend",
+  product_update_cancelled: "backend",
   // Interview Prep
   interview_prep_drawer_opened: "frontend",
   interview_prep_generate_clicked: "frontend",

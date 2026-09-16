@@ -2,11 +2,13 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { ProductUpdate, ProductUpdateAudience } from "@prisma/client";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import { ProductUpdateEmailService } from "./product-update-email.service";
@@ -51,6 +53,8 @@ const EDITABLE_STATUSES = new Set(["DRAFT", "READY"]);
 
 @Injectable()
 export class ProductUpdatesService {
+  private readonly logger = new Logger(ProductUpdatesService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENV)
@@ -61,7 +65,47 @@ export class ProductUpdatesService {
     private readonly subscriptionService: ProductUpdateSubscriptionService,
     @Inject(ProductUpdateTemplateService)
     private readonly templateService: ProductUpdateTemplateService,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: BusinessFunnelEventService,
   ) {}
+
+  // Eventos administrativos de Product Updates no PostHog — SEM PII: nunca
+  // e-mail, nome, assunto, conteúdo ou lista de destinatários no metadata,
+  // só ids/contadores/status. Falha ao gravar nunca derruba a ação
+  // administrativa que a originou.
+  private recordAdminEvent(
+    eventName:
+      | "product_update_created"
+      | "product_update_test_sent"
+      | "product_update_started"
+      | "product_update_cancelled",
+    productUpdateId: string,
+    adminId: string,
+    metadata: Record<string, unknown> = {},
+  ) {
+    this.funnelEvents
+      .record(
+        {
+          eventName,
+          eventVersion: 1,
+          metadata: { productUpdateId, ...metadata },
+        },
+        {
+          correlationId: `product-update:${productUpdateId}`,
+          ip: null,
+          requestId: `product-update:${productUpdateId}`,
+          routePath: "/api/admin/product-updates",
+          sessionInternalId: null,
+          sessionPublicToken: null,
+          userAgentHash: null,
+          userId: adminId,
+        },
+        "backend",
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(`failed to record ${eventName}: ${err}`);
+      });
+  }
 
   private assertEnabled() {
     if (!this.env.PRODUCT_UPDATES_ENABLED) {
@@ -82,7 +126,7 @@ export class ProductUpdatesService {
   }
 
   async create(input: CreateProductUpdateInput): Promise<ProductUpdate> {
-    return this.database.productUpdate.create({
+    const created = await this.database.productUpdate.create({
       data: {
         internalName: input.internalName,
         subject: input.subject,
@@ -94,6 +138,12 @@ export class ProductUpdatesService {
         createdBy: input.createdBy,
       },
     });
+    this.recordAdminEvent(
+      "product_update_created",
+      created.id,
+      input.createdBy,
+    );
+    return created;
   }
 
   // Edição só é permitida em DRAFT/READY (nunca depois de start). Editar
@@ -150,7 +200,7 @@ export class ProductUpdatesService {
       );
     }
 
-    return this.database.productUpdate.update({
+    const updated = await this.database.productUpdate.update({
       where: { id },
       data: {
         testSentAt: new Date(),
@@ -158,6 +208,8 @@ export class ProductUpdatesService {
         testRecipientEmail: recipientEmail,
       },
     });
+    this.recordAdminEvent("product_update_test_sent", id, adminId);
+    return updated;
   }
 
   // Trava de teste obrigatório NO BACKEND (não só UI) — recusa sem
@@ -233,7 +285,7 @@ export class ProductUpdatesService {
     );
 
     try {
-      return await this.database.$transaction(async (tx) => {
+      const started = await this.database.$transaction(async (tx) => {
         const updated = await tx.productUpdate.update({
           where: { id },
           data: {
@@ -258,6 +310,11 @@ export class ProductUpdatesService {
 
         return updated;
       });
+      this.recordAdminEvent("product_update_started", id, input.startedBy, {
+        audience: input.audience,
+        recipientCount: recipients.length,
+      });
+      return started;
     } catch (error) {
       await this.database.productUpdate.update({
         where: { id },
@@ -269,7 +326,7 @@ export class ProductUpdatesService {
 
   // Só cancela entregas ainda PENDING — SENT/FAILED/PROCESSING/
   // OUTCOME_UNKNOWN não são tocadas (uma entrega em voo termina).
-  async cancel(id: string): Promise<ProductUpdate> {
+  async cancel(id: string, cancelledBy: string): Promise<ProductUpdate> {
     const current = await this.findOrThrow(id);
     if (current.status !== "SENDING") {
       throw new UnprocessableEntityException(
@@ -277,15 +334,23 @@ export class ProductUpdatesService {
       );
     }
 
-    return this.database.$transaction(async (tx) => {
-      await tx.productUpdateDelivery.updateMany({
-        where: { productUpdateId: id, status: "PENDING" },
-        data: { status: "CANCELLED" },
-      });
-      return tx.productUpdate.update({
-        where: { id },
-        data: { status: "CANCELLED", cancelledAt: new Date() },
-      });
+    const { cancelled, count } = await this.database.$transaction(
+      async (tx) => {
+        const { count } = await tx.productUpdateDelivery.updateMany({
+          where: { productUpdateId: id, status: "PENDING" },
+          data: { status: "CANCELLED" },
+        });
+        const cancelled = await tx.productUpdate.update({
+          where: { id },
+          data: { status: "CANCELLED", cancelledAt: new Date() },
+        });
+        return { cancelled, count };
+      },
+    );
+
+    this.recordAdminEvent("product_update_cancelled", id, cancelledBy, {
+      cancelledDeliveryCount: count,
     });
+    return cancelled;
   }
 }

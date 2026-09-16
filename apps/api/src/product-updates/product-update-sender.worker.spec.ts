@@ -92,11 +92,14 @@ function createFixture(options: {
       },
       count: async ({ where }: { where: Record<string, unknown> }) => {
         const productUpdateId = where.productUpdateId as string;
-        const statusFilter = where.status as { in: string[] };
+        const statusFilter = where.status as string | { in: string[] };
+        const matchesStatus = (status: string) =>
+          typeof statusFilter === "string"
+            ? status === statusFilter
+            : statusFilter.in.includes(status);
         return Array.from(deliveries.values()).filter(
           (d) =>
-            d.productUpdateId === productUpdateId &&
-            statusFilter.in.includes(d.status),
+            d.productUpdateId === productUpdateId && matchesStatus(d.status),
         ).length;
       },
     },
@@ -130,10 +133,21 @@ function createFixture(options: {
     // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
   } as any;
 
-  const worker = new ProductUpdateSenderWorker(database, lock, emailService, {
-    PRODUCT_UPDATES_ENABLED: true,
-    PRODUCT_UPDATE_SEND_RATE_PER_SECOND: 5,
-  });
+  const funnelEvents = {
+    record: async () => {},
+    // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
+  } as any;
+
+  const worker = new ProductUpdateSenderWorker(
+    database,
+    lock,
+    emailService,
+    funnelEvents,
+    {
+      PRODUCT_UPDATES_ENABLED: true,
+      PRODUCT_UPDATE_SEND_RATE_PER_SECOND: 5,
+    },
+  );
 
   return { worker, deliveries, productUpdates };
 }

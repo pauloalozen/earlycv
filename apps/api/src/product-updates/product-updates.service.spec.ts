@@ -131,12 +131,18 @@ function createFixture(options: {
     // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
   } as any;
 
+  const funnelEvents = {
+    record: async () => {},
+    // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
+  } as any;
+
   const service = new ProductUpdatesService(
     database,
     { PRODUCT_UPDATES_ENABLED: options.enabled },
     emailService,
     subscriptionService,
     templateService,
+    funnelEvents,
   );
 
   return { service, store, deliveries };
@@ -250,5 +256,5 @@ test("start cria uma ProductUpdateDelivery por destinatário e congela o snapsho
 
 test("cancel só é permitido a partir de SENDING", async () => {
   const { service } = createFixture({ enabled: true });
-  await assert.rejects(() => service.cancel("pu-1"), /SENDING/);
+  await assert.rejects(() => service.cancel("pu-1", "admin-1"), /SENDING/);
 });

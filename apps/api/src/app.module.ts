@@ -4,6 +4,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
 import { AdminMonitorModule } from "./admin-monitor/admin-monitor.module";
+import { AdminProductUpdatesModule } from "./admin-product-updates/admin-product-updates.module";
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminTalentProfilesModule } from "./admin-talent-profiles/admin-talent-profiles.module";
@@ -56,6 +57,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AdminUsersModule,
     AdminMonitorModule,
     ProductUpdatesModule,
+    AdminProductUpdatesModule,
     AdminProfilesModule,
     AdminResumesModule,
     AdminTalentProfilesModule,

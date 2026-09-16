@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
+import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
@@ -34,6 +35,8 @@ export class ProductUpdateSenderWorker {
     private readonly lockRepository: IngestionLockRepository,
     @Inject(ProductUpdateEmailService)
     private readonly emailService: ProductUpdateEmailService,
+    @Inject(BusinessFunnelEventService)
+    private readonly funnelEvents: BusinessFunnelEventService,
     @Inject(APP_ENV)
     private readonly env: Pick<
       AppEnv,
@@ -236,5 +239,47 @@ export class ProductUpdateSenderWorker {
       where: { id: productUpdateId },
       data: { status: "COMPLETED", completedAt: new Date() },
     });
+
+    const [sentCount, failedCount, outcomeUnknownCount, cancelledCount] =
+      await Promise.all(
+        (["SENT", "FAILED", "OUTCOME_UNKNOWN", "CANCELLED"] as const).map(
+          (status) =>
+            this.database.productUpdateDelivery.count({
+              where: { productUpdateId, status },
+            }),
+        ),
+      );
+
+    // Sem PII no metadata — só contadores, nunca e-mail/nome/lista de
+    // destinatários.
+    this.funnelEvents
+      .record(
+        {
+          eventName: "product_update_completed",
+          eventVersion: 1,
+          idempotencyKey: `product_update_completed:${productUpdateId}`,
+          metadata: {
+            productUpdateId,
+            sentCount,
+            failedCount,
+            outcomeUnknownCount,
+            cancelledCount,
+          },
+        },
+        {
+          correlationId: `product-update:${productUpdateId}`,
+          ip: null,
+          requestId: `product-update:${productUpdateId}`,
+          routePath: "/api/admin/product-updates",
+          sessionInternalId: null,
+          sessionPublicToken: null,
+          userAgentHash: null,
+          userId: null,
+        },
+        "backend",
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(`failed to record product_update_completed: ${err}`);
+      });
   }
 }
