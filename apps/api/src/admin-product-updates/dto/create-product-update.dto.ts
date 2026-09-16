@@ -1,5 +1,7 @@
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
+import { IsSafeButtonUrl } from "./is-safe-button-url.decorator";
+
 export class CreateProductUpdateDto {
   @IsString()
   @MinLength(1)
@@ -29,6 +31,7 @@ export class CreateProductUpdateDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
+  @IsSafeButtonUrl()
   primaryButtonUrl?: string;
 
   @IsOptional()

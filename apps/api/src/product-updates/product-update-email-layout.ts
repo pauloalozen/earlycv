@@ -59,13 +59,17 @@ export function renderEmailFooter(input: {
     </p>`;
 }
 
+// url já passou por isSafeProductUpdateButtonUrl (DTO + service, nunca só
+// um dos dois) antes de chegar aqui — mas escapamos de qualquer forma,
+// nunca confiando só na validação anterior pra decidir o que é seguro
+// interpolar dentro de um atributo HTML.
 export function renderPrimaryButton(input: {
   text: string;
   url: string;
 }): string {
   return `
     <p style="margin:24px 0;">
-      <a href="${input.url}" style="background:#0a0a0a;color:#fafaf6;padding:12px 20px;border-radius:9px;text-decoration:none;font-weight:600;display:inline-block;">${escapeHtml(input.text)}</a>
+      <a href="${escapeHtml(input.url)}" style="background:#0a0a0a;color:#fafaf6;padding:12px 20px;border-radius:9px;text-decoration:none;font-weight:600;display:inline-block;">${escapeHtml(input.text)}</a>
     </p>`;
 }
 

@@ -125,8 +125,11 @@ export class AdminProductUpdatesController {
   }
 
   @Get(":id/deliveries/:deliveryId/timeline")
-  deliveryTimeline(@Param("deliveryId") deliveryId: string) {
-    return this.service.deliveryTimeline(deliveryId);
+  deliveryTimeline(
+    @Param("id") id: string,
+    @Param("deliveryId") deliveryId: string,
+  ) {
+    return this.service.deliveryTimeline(id, deliveryId);
   }
 
   @Get(":id/stats")

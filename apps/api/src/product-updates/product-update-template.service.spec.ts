@@ -49,6 +49,48 @@ test("ProductUpdateTemplateService omits the primary button when text or url is 
   assert.match(withButton.text, /Ver novidade: https:\/\/earlycv\.com\.br\/x/);
 });
 
+test("ProductUpdateTemplateService escapes the primary button URL in the href attribute, preserving the query string", () => {
+  const service = new ProductUpdateTemplateService();
+
+  const rendered = service.render(
+    {
+      ...BASE_CONTENT,
+      primaryButtonText: "Ver vaga",
+      primaryButtonUrl:
+        "https://earlycv.com.br/monitor?utm_source=email&utm_campaign=teste",
+    },
+    { recipientName: null, mode: "real" },
+  );
+
+  // & vira &amp; no atributo HTML (obrigatório pela spec de HTML) — o
+  // link, quando clicado, ainda resolve pra query string original com os
+  // dois parâmetros intactos.
+  assert.match(
+    rendered.html,
+    /href="https:\/\/earlycv\.com\.br\/monitor\?utm_source=email&amp;utm_campaign=teste"/,
+  );
+  assert.doesNotMatch(
+    rendered.html,
+    /href="https:\/\/earlycv\.com\.br\/monitor\?utm_source=email&utm_campaign=teste"/,
+  );
+});
+
+test("ProductUpdateTemplateService escapes an attribute-breaking primary button URL instead of injecting it raw", () => {
+  const service = new ProductUpdateTemplateService();
+
+  const rendered = service.render(
+    {
+      ...BASE_CONTENT,
+      primaryButtonText: "Ver vaga",
+      primaryButtonUrl: 'https://earlycv.com.br/x" onmouseover="alert(1)',
+    },
+    { recipientName: null, mode: "real" },
+  );
+
+  assert.doesNotMatch(rendered.html, /onmouseover="alert\(1\)"/);
+  assert.match(rendered.html, /&quot;/);
+});
+
 test("ProductUpdateTemplateService uses the SES unsubscribe placeholder only in real mode, never in test mode", () => {
   const service = new ProductUpdateTemplateService();
 

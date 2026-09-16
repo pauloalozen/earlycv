@@ -141,9 +141,13 @@ export class AdminProductUpdatesService {
     return { items, total, page, limit };
   }
 
-  async deliveryTimeline(deliveryId: string) {
-    const delivery = await this.database.productUpdateDelivery.findUnique({
-      where: { id: deliveryId },
+  // Exige os dois identificadores simultaneamente (productUpdateId +
+  // deliveryId) — nunca só o deliveryId. Sem isso, o :id da rota era
+  // decorativo: qualquer deliveryId existente respondia independente da
+  // campanha na URL (IDOR entre campanha e delivery).
+  async deliveryTimeline(productUpdateId: string, deliveryId: string) {
+    const delivery = await this.database.productUpdateDelivery.findFirst({
+      where: { id: deliveryId, productUpdateId },
     });
     if (!delivery) {
       throw new NotFoundException("delivery not found");
