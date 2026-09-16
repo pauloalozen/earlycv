@@ -26,8 +26,8 @@ import {
   markProductUpdateReadyAction,
   sendTestProductUpdateAction,
   startProductUpdateAction,
-  updateProductUpdateAction,
 } from "../actions";
+import { ProductUpdateEditorForm } from "./editor-form";
 
 export const metadata = buildAdminMetadata("Product Updates — campanha");
 
@@ -153,93 +153,18 @@ export default async function ProductUpdateDetailPage({
 
       <AdminSectionGroup label="Editor">
         <AdminCard>
-          {!editable ? (
-            <p style={{ fontSize: 12.5, color: "#8a8580", marginBottom: 12 }}>
-              Campanha em {productUpdate.status} — conteúdo não pode mais ser
-              editado.
-            </p>
-          ) : null}
-          <form
-            action={updateProductUpdateAction}
-            style={{ display: "grid", gap: 10 }}
-          >
-            <input type="hidden" name="id" value={id} />
-            <input type="hidden" name="redirectPath" value={rootPath} />
-
-            <label style={labelStyle()}>
-              Assunto
-              <input
-                type="text"
-                name="subject"
-                defaultValue={productUpdate.subject}
-                disabled={!editable}
-                style={inputStyle()}
-              />
-            </label>
-
-            <label style={labelStyle()}>
-              Preheader (texto de prévia)
-              <input
-                type="text"
-                name="preheader"
-                defaultValue={productUpdate.preheader ?? ""}
-                disabled={!editable}
-                style={inputStyle()}
-              />
-            </label>
-
-            <label style={labelStyle()}>
-              Conteúdo
-              <textarea
-                name="content"
-                defaultValue={productUpdate.content}
-                disabled={!editable}
-                rows={8}
-                style={{ ...inputStyle(), resize: "vertical" }}
-              />
-            </label>
-
-            <label style={labelStyle()}>
-              Texto do botão principal (opcional)
-              <input
-                type="text"
-                name="primaryButtonText"
-                defaultValue={productUpdate.primaryButtonText ?? ""}
-                disabled={!editable}
-                style={inputStyle()}
-              />
-            </label>
-
-            <label style={labelStyle()}>
-              URL do botão principal (opcional)
-              <input
-                type="text"
-                name="primaryButtonUrl"
-                defaultValue={productUpdate.primaryButtonUrl ?? ""}
-                disabled={!editable}
-                style={inputStyle()}
-              />
-            </label>
-
-            <label style={labelStyle()}>
-              Rodapé opcional
-              <textarea
-                name="optionalFooterContent"
-                defaultValue={productUpdate.optionalFooterContent ?? ""}
-                disabled={!editable}
-                rows={2}
-                style={{ ...inputStyle(), resize: "vertical" }}
-              />
-            </label>
-
-            {editable ? (
-              <div>
-                <button type="submit" className={buttonVariants()}>
-                  Salvar rascunho
-                </button>
-              </div>
-            ) : null}
-          </form>
+          <ProductUpdateEditorForm
+            id={id}
+            editable={editable}
+            productUpdate={{
+              subject: productUpdate.subject,
+              preheader: productUpdate.preheader,
+              content: productUpdate.content,
+              primaryButtonText: productUpdate.primaryButtonText,
+              primaryButtonUrl: productUpdate.primaryButtonUrl,
+              optionalFooterContent: productUpdate.optionalFooterContent,
+            }}
+          />
         </AdminCard>
       </AdminSectionGroup>
 
@@ -433,6 +358,11 @@ export default async function ProductUpdateDetailPage({
           />
           <AdminStatCard label="Bounces" value={String(stats.bounced)} />
           <AdminStatCard label="Complaints" value={String(stats.complained)} />
+          <AdminStatCard
+            label="Descadastros"
+            value={String(stats.unsubscribed)}
+            tooltip="Status atual de opt-out entre os destinatários desta campanha — o descadastro do SES é por tópico, não por envio específico, então este número reflete quem está descadastrado agora, não necessariamente por causa deste e-mail."
+          />
         </AdminStatsRow>
       </AdminSectionGroup>
 
@@ -446,14 +376,4 @@ export default async function ProductUpdateDetailPage({
       </div>
     </div>
   );
-}
-
-function labelStyle(): React.CSSProperties {
-  return {
-    display: "grid",
-    gap: 4,
-    fontSize: 12,
-    fontWeight: 600,
-    color: "#6a6560",
-  };
 }

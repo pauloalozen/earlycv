@@ -9,11 +9,14 @@ function createFixture() {
     ["pu-2", { id: "pu-2", status: "SENDING" }],
   ]);
   const deliveries = [
-    { id: "d1", productUpdateId: "pu-1", status: "SENT" },
-    { id: "d2", productUpdateId: "pu-1", status: "SENT" },
-    { id: "d3", productUpdateId: "pu-1", status: "FAILED" },
-    { id: "d4", productUpdateId: "pu-2", status: "SENT" },
+    { id: "d1", productUpdateId: "pu-1", status: "SENT", userId: "u1" },
+    { id: "d2", productUpdateId: "pu-1", status: "SENT", userId: "u2" },
+    { id: "d3", productUpdateId: "pu-1", status: "FAILED", userId: "u3" },
+    { id: "d4", productUpdateId: "pu-2", status: "SENT", userId: "u4" },
   ];
+  // u2 é o único descadastrado (SES_OPT_OUT) — usado pro teste de
+  // "unsubscribed" em computeStats.
+  const optedOutUserIds = new Set(["u2"]);
   const events = [
     { deliveryId: "d1", type: "OPENED" },
     { deliveryId: "d1", type: "OPENED" }, // aberto 2x — não pode contar 2x
@@ -29,12 +32,28 @@ function createFixture() {
         productUpdates.get(where.id) ?? null,
     },
     productUpdateDelivery: {
-      count: async ({ where }: { where: Record<string, unknown> }) =>
-        deliveries.filter(
+      count: async ({ where }: { where: Record<string, unknown> }) => {
+        const userFilter = where.user as
+          | {
+              productEmailSubscription: {
+                subscribed: boolean;
+                suppressionReason: string;
+              };
+            }
+          | undefined;
+        if (userFilter) {
+          return deliveries.filter(
+            (d) =>
+              d.productUpdateId === where.productUpdateId &&
+              optedOutUserIds.has(d.userId),
+          ).length;
+        }
+        return deliveries.filter(
           (d) =>
             d.productUpdateId === where.productUpdateId &&
             d.status === where.status,
-        ).length,
+        ).length;
+      },
       // Exige id E productUpdateId simultaneamente — é exatamente essa
       // dupla condição que corrige o IDOR (ver
       // AdminProductUpdatesService.deliveryTimeline).
@@ -112,6 +131,9 @@ test("stats counts unique opened/clicked deliveries, never raw duplicate events"
   assert.equal(stats.complained, 1);
   assert.equal(stats.sent, 2);
   assert.equal(stats.failed, 1);
+  // d2 (SENT) pertence ao usuário u2, que está opt-out — conta 1, mesmo
+  // d1/d3 (não opt-out) não contando.
+  assert.equal(stats.unsubscribed, 1);
 });
 
 test("stats throws NotFoundException for a non-existent campaign", async () => {

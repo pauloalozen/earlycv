@@ -71,6 +71,12 @@ export type ProductUpdateStats = {
   uniqueClicked: number;
   bounced: number;
   complained: number;
+  // Status ATUAL de opt-out entre os destinatários desta campanha — o
+  // descadastro do SES não é amarrado a um envio específico (é por
+  // tópico, não por campanha), então este número reflete "quantos dos
+  // destinatários desta campanha estão descadastrados agora", não
+  // necessariamente "descadastraram por causa deste e-mail".
+  unsubscribed: number;
 };
 
 export type ProductUpdateDelivery = {
@@ -115,6 +121,22 @@ async function resolveToken(token?: string) {
   return sessionToken;
 }
 
+// Extrai só a mensagem legível do corpo de erro do Nest (class-validator
+// devolve `message` como array de strings; outras exceptions, como
+// string única) — nunca deixa o JSON cru vazar pra tela do admin (ex.:
+// `API 400: {"message":["primaryButtonUrl precisa..."],"error":"Bad
+// Request","statusCode":400}`).
+function parseApiErrorMessage(status: number, rawBody: string): string {
+  try {
+    const body = JSON.parse(rawBody) as { message?: string | string[] };
+    if (Array.isArray(body.message)) return body.message.join(" ");
+    if (typeof body.message === "string" && body.message) return body.message;
+  } catch {
+    // corpo não é JSON — cai no fallback abaixo.
+  }
+  return rawBody || `Erro ${status} ao chamar a API.`;
+}
+
 async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   const bearerToken = await resolveToken(token);
 
@@ -129,7 +151,9 @@ async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   });
 
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await response.text()}`);
+    throw new Error(
+      parseApiErrorMessage(response.status, await response.text()),
+    );
   }
 
   const text = await response.text();
