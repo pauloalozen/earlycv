@@ -14,6 +14,11 @@ const NAV_ITEMS = [
   { id: "ingestao", label: "Radar Oportunidades", href: "/admin/ingestion" },
   { id: "alerta-vagas", label: "Alerta de Vagas", href: "/admin/alerta-vagas" },
   {
+    id: "product-updates",
+    label: "Product Updates",
+    href: "/admin/product-updates",
+  },
+  {
     id: "curadoria-vagas",
     label: "Curadoria de Vagas",
     href: "/admin/curadoria-vagas",

@@ -40,6 +40,12 @@ export type AppEnv = {
   AWS_SES_JOB_ALERT_FROM_EMAIL?: string;
   AWS_SES_JOB_ALERT_FROM_NAME?: string;
   AWS_SES_JOB_ALERT_REPLY_TO?: string;
+  // Perfil de remetente de PRODUCT_ANNOUNCEMENT (Product Updates) — mesmo
+  // raciocínio do JOB_ALERT acima: 3 variáveis próprias, nunca reaproveita
+  // as de outra categoria.
+  AWS_SES_PRODUCT_UPDATE_FROM_EMAIL?: string;
+  AWS_SES_PRODUCT_UPDATE_FROM_NAME?: string;
+  AWS_SES_PRODUCT_UPDATE_REPLY_TO?: string;
   AWS_SES_CUSTOM_MAIL_FROM_DOMAIN?: string;
   AWS_SES_SNS_TOPIC_ARN?: string;
   // Controle temporário do log de SubscriptionConfirmation do SNS — default
@@ -48,6 +54,19 @@ export type AppEnv = {
   // infraestrutura (ver MonitorPublicController.sesWebhook), desligar
   // depois de confirmar a assinatura.
   AWS_SES_SNS_LOG_SUBSCRIPTION_URL: boolean;
+  // Gerenciamento de lista nativo do SES usado pelo Product Updates — ver
+  // ProductUpdateEmailService (ListManagementOptions no SendEmailCommand).
+  // Nunca usado pelo Monitor (que não passa ListManagementOptions).
+  AWS_SES_CONTACT_LIST_NAME?: string;
+  AWS_SES_PRODUCT_UPDATE_TOPIC_NAME?: string;
+  // Gate mestre do domínio Product Updates — nasce false: nenhum deploy,
+  // migration ou criação de rascunho pode disparar envio de teste/real
+  // enquanto esta flag não for ligada manualmente (ver
+  // ProductUpdatesService/ProductUpdateSenderWorker).
+  PRODUCT_UPDATES_ENABLED: boolean;
+  // Limite inicial conservador de envio em massa do Product Updates (ver
+  // ProductUpdateSenderWorker) — nada a ver com o digest do Monitor.
+  PRODUCT_UPDATE_SEND_RATE_PER_SECOND: number;
 };
 
 export const APP_ENV = Symbol("APP_ENV");
@@ -111,11 +130,24 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_JOB_ALERT_FROM_EMAIL: { optional: true },
     AWS_SES_JOB_ALERT_FROM_NAME: { optional: true },
     AWS_SES_JOB_ALERT_REPLY_TO: { optional: true },
+    AWS_SES_PRODUCT_UPDATE_FROM_EMAIL: { optional: true },
+    AWS_SES_PRODUCT_UPDATE_FROM_NAME: { optional: true },
+    AWS_SES_PRODUCT_UPDATE_REPLY_TO: { optional: true },
     AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: { optional: true },
     AWS_SES_SNS_TOPIC_ARN: { optional: true },
     AWS_SES_SNS_LOG_SUBSCRIPTION_URL: {
       default: "false",
       parse: (value: string) => envToBoolean(value),
+    },
+    AWS_SES_CONTACT_LIST_NAME: { optional: true },
+    AWS_SES_PRODUCT_UPDATE_TOPIC_NAME: { optional: true },
+    PRODUCT_UPDATES_ENABLED: {
+      default: "false",
+      parse: (value: string) => envToBoolean(value),
+    },
+    PRODUCT_UPDATE_SEND_RATE_PER_SECOND: {
+      default: "5",
+      parse: (value: string, key: string) => envToNumber(value, key),
     },
   });
 
@@ -153,11 +185,28 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_JOB_ALERT_REPLY_TO: env.AWS_SES_JOB_ALERT_REPLY_TO as
       | string
       | undefined,
+    AWS_SES_PRODUCT_UPDATE_FROM_EMAIL: env.AWS_SES_PRODUCT_UPDATE_FROM_EMAIL as
+      | string
+      | undefined,
+    AWS_SES_PRODUCT_UPDATE_FROM_NAME: env.AWS_SES_PRODUCT_UPDATE_FROM_NAME as
+      | string
+      | undefined,
+    AWS_SES_PRODUCT_UPDATE_REPLY_TO: env.AWS_SES_PRODUCT_UPDATE_REPLY_TO as
+      | string
+      | undefined,
     AWS_SES_CUSTOM_MAIL_FROM_DOMAIN: env.AWS_SES_CUSTOM_MAIL_FROM_DOMAIN as
       | string
       | undefined,
     AWS_SES_SNS_TOPIC_ARN: env.AWS_SES_SNS_TOPIC_ARN as string | undefined,
     AWS_SES_SNS_LOG_SUBSCRIPTION_URL: env.AWS_SES_SNS_LOG_SUBSCRIPTION_URL,
+    AWS_SES_CONTACT_LIST_NAME: env.AWS_SES_CONTACT_LIST_NAME as
+      | string
+      | undefined,
+    AWS_SES_PRODUCT_UPDATE_TOPIC_NAME: env.AWS_SES_PRODUCT_UPDATE_TOPIC_NAME as
+      | string
+      | undefined,
+    PRODUCT_UPDATES_ENABLED: env.PRODUCT_UPDATES_ENABLED,
+    PRODUCT_UPDATE_SEND_RATE_PER_SECOND: env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND,
   };
 }
 

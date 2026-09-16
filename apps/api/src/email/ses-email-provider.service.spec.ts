@@ -92,3 +92,46 @@ test("SesEmailProviderService.send puts replyTo in ReplyToAddresses, never as a 
   // — só Reply-To tem tratamento especial.
   assert.ok(headerNames.includes("List-Unsubscribe"));
 });
+
+// Usado só pelo envio real de Product Updates (nunca Monitor/JOB_ALERT,
+// nunca envio de teste) — SES resolve o descadastro nativo a partir disto,
+// sem token/endpoint nosso.
+test("SesEmailProviderService.send forwards listManagementOptions to ListManagementOptions, only when present", async (t) => {
+  let capturedInput: Record<string, unknown> | undefined;
+  t.mock.method(
+    SESv2Client.prototype,
+    "send",
+    async (command: { input: Record<string, unknown> }) => {
+      capturedInput = command.input;
+      return { MessageId: "ses-message-id" };
+    },
+  );
+
+  const config: Pick<EmailConfigService, "getSesClientConfig"> = {
+    getSesClientConfig: () => ({
+      region: "us-east-1",
+      accessKeyId: "AKIA...",
+      secretAccessKey: "secret",
+    }),
+  };
+  const provider = new SesEmailProviderService(config);
+
+  await provider.send({
+    ...RESOLVED_MESSAGE,
+    listManagementOptions: {
+      contactListName: "earlycv-users",
+      topicName: "product-updates",
+    },
+  });
+
+  assert.ok(capturedInput);
+  assert.deepEqual(capturedInput.ListManagementOptions, {
+    ContactListName: "earlycv-users",
+    TopicName: "product-updates",
+  });
+
+  capturedInput = undefined;
+  await provider.send(RESOLVED_MESSAGE);
+  assert.ok(capturedInput);
+  assert.equal(capturedInput.ListManagementOptions, undefined);
+});

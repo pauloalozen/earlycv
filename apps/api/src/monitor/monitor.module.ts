@@ -5,6 +5,7 @@ import { DatabaseModule } from "../database/database.module";
 import { EmailModule } from "../email/email.module";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
+import { ProductUpdatesModule } from "../product-updates/product-updates.module";
 import { RadarModule } from "../radar/radar.module";
 import { SavedJobsModule } from "../saved-jobs/saved-jobs.module";
 import { MonitorController } from "./monitor.controller";
@@ -34,6 +35,14 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
     SavedJobsModule,
     AnalysisObservabilityModule,
     EmailModule,
+    // Importado só pra MonitorPublicController poder injetar
+    // ProductUpdateWebhookService e rotear o webhook SES por
+    // correlationType/eventType (ver comentário em sesWebhook). Única
+    // dependência de Product Updates dentro do Monitor — motivada por
+    // manter a rota /api/monitor/webhooks/ses sem mudança de endereço
+    // nesta entrega; nenhuma outra parte do Monitor conhece Product
+    // Updates.
+    ProductUpdatesModule,
   ],
   controllers: [
     MonitorController,

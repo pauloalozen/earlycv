@@ -467,6 +467,8 @@ model User {
   monitorProfileMatchJob       MonitorProfileMatchJob?
   monitorAlertPreference       MonitorAlertPreference?
   monitorDigests               MonitorDigest[]
+  productUpdateDeliveries      ProductUpdateDelivery[]
+  productEmailSubscription     ProductEmailSubscription?
 
   // Pipeline de perfil canônico de CV (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
   // Fase 1: só schema aditivo, nenhum código lê/escreve nestas relações ainda.
@@ -2355,6 +2357,220 @@ model MonitorAlertRolloutPolicy {
 
   updatedAt        DateTime @updatedAt
   updatedByAdminId String?
+}
+
+// ---------------------------------------------------------------------------
+// Product Updates — comunicados institucionais (categoria PRODUCT_ANNOUNCEMENT).
+// Domínio deliberadamente isolado do Monitor/Alerta de Vaga Certa: nenhuma
+// FK, tabela ou config compartilhada com MonitorDigest*/MonitorAlertPreference.
+// Descadastro é feito só pelo gerenciamento nativo de lista do SES
+// (ListManagementOptions/ContactList earlycv-users/Topic product-updates,
+// ver ProductUpdateEmailService) — não existe token/endpoint de unsubscribe
+// próprio aqui, diferente do Monitor.
+// ---------------------------------------------------------------------------
+
+enum ProductUpdateStatus {
+  DRAFT
+  READY
+  SENDING
+  COMPLETED
+  CANCELLED
+  // Só falha irrecuperável da ORQUESTRAÇÃO da campanha (ex.: erro ao
+  // resolver elegibilidade/criar as deliveries no start) — nunca por uma
+  // ProductUpdateDelivery individual ter falhado (isso é normal e a
+  // campanha ainda chega em COMPLETED).
+  FAILED
+}
+
+// Nomes internos preservados de propósito (INTERNAL_TEST/ALL_ELIGIBLE_USERS
+// já estavam em produção via migration anterior) — renomear exigiria
+// recriar o tipo/enum no Postgres, risco desnecessário só por estética. A
+// interface mostra "Internos"/"Pagantes"/"Toda a base", nunca estes nomes
+// brutos (ver AUDIENCE_LABEL no admin). PAID é o único valor novo,
+// adicionado por uma migration puramente aditiva (ALTER TYPE ... ADD
+// VALUE), sem tocar nos dois valores existentes.
+enum ProductUpdateAudience {
+  INTERNAL_TEST
+  PAID
+  ALL_ELIGIBLE_USERS
+}
+
+enum ProductUpdateDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  // Erro CONFIRMADO do SES antes de aceitar o envio (resposta HTTP de
+  // verdade, ver SesEmailProviderService.toSendResult).
+  FAILED
+  // Ambíguo: timeout/erro de rede sem resposta, OU recovery de uma
+  // PROCESSING travada (worker reiniciado no meio do envio). NUNCA
+  // requeue automático — diferente do MonitorDigestWorker, que reverte
+  // PROCESSING travada para PENDING; aqui não há como provar que a
+  // chamada ao SES não foi aceita antes do crash, então tratamos sempre
+  // como ambíguo por padrão (duplicar um comunicado institucional em
+  // massa é pior do que um alerta de vaga duplicado). Só sai deste
+  // estado via evento conclusivo do webhook (ver ProductUpdateOutcomeReconciler).
+  OUTCOME_UNKNOWN
+  CANCELLED
+}
+
+enum ProductUpdateEventType {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  REJECTED
+  // Evento nativo do SES List Management (contato mudou de tópico via
+  // {{amazonSESUnsubscribeUrl}}) — não está amarrado a um envio
+  // específico, por isso ProductUpdateEvent.deliveryId/providerMessageId
+  // ficam null neste tipo.
+  SUBSCRIPTION
+}
+
+enum ProductUpdateSuppressionReason {
+  BOUNCED
+  COMPLAINED
+  // Veio do evento SUBSCRIPTION — descadastro nativo do SES, não um
+  // token/endpoint nosso.
+  SES_OPT_OUT
+}
+
+// Snapshot final de uma campanha de comunicado institucional — sem tabela
+// de "conteúdo" separada de propósito (decisão de produto: um único
+// registro concentra o que foi/será enviado).
+model ProductUpdate {
+  id String @id @default(cuid())
+
+  internalName String
+
+  subject               String
+  preheader             String?
+  content               String
+  primaryButtonText     String?
+  primaryButtonUrl      String?
+  optionalFooterContent String?
+
+  // Congelados no momento de POST .../start — editar o template depois de
+  // uma campanha em SENDING/COMPLETED nunca deveria mudar retroativamente
+  // o que já foi (ou está sendo) entregue.
+  htmlSnapshot String?
+  textSnapshot String?
+
+  audience       ProductUpdateAudience?
+  status         ProductUpdateStatus @default(DRAFT)
+  recipientCount Int                 @default(0)
+
+  // Trava de teste obrigatório ANTES de DRAFT -> READY, aplicada no
+  // backend (ProductUpdatesService.markReady), não só na UI. Qualquer
+  // edição de subject/preheader/content/primaryButtonText/
+  // primaryButtonUrl/optionalFooterContent zera os 3 campos abaixo (e
+  // reverte READY -> DRAFT), forçando um novo teste.
+  testSentAt         DateTime?
+  testSentBy         String?
+  testRecipientEmail String?
+
+  createdBy String
+  startedBy String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  failedAt    DateTime?
+
+  deliveries ProductUpdateDelivery[]
+
+  @@index([status, createdAt])
+}
+
+// Um destinatário individual de UMA campanha. userId é nullable com
+// onDelete: SetNull (nunca Cascade) — excluir um usuário nunca pode apagar
+// o histórico de envio/entrega/evento; recipientEmail/recipientName são o
+// snapshot que sobrevive à exclusão (exibido na UI quando userId=null). A
+// constraint de unicidade só precisa valer no momento da CRIAÇÃO (sempre
+// com userId não-nulo nesse momento) — múltiplas linhas com userId=null no
+// mesmo productUpdateId são permitidas pelo Postgres (NULL nunca colide
+// consigo mesmo num unique index) e nunca deveriam ocorrer de qualquer
+// forma, já que nunca criamos uma linha nova depois de um SetNull.
+model ProductUpdateDelivery {
+  id String @id @default(cuid())
+
+  productUpdateId String
+  productUpdate   ProductUpdate @relation(fields: [productUpdateId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  recipientEmail String
+  recipientName  String?
+
+  status    ProductUpdateDeliveryStatus @default(PENDING)
+  attempts  Int                         @default(0)
+  lastError String?
+  sentAt    DateTime?
+
+  providerMessageId String?
+  provider          EmailProviderName @default(SES)
+  outcomeUnknownAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events ProductUpdateEvent[]
+
+  @@unique([productUpdateId, userId])
+  @@index([status, createdAt])
+  @@index([providerMessageId])
+  @@index([status, outcomeUnknownAt])
+}
+
+// Eventos idempotentes recebidos via webhook SES/SNS — mesmo mecanismo de
+// idempotência do Monitor (providerEventId = SNS MessageId, único).
+// deliveryId/providerMessageId ficam null para eventos SUBSCRIPTION (não
+// amarrados a um envio específico) ou na falha defensiva de não conseguir
+// resolver a delivery (nunca deveria acontecer em operação normal).
+model ProductUpdateEvent {
+  id String @id @default(cuid())
+
+  deliveryId String?
+  delivery   ProductUpdateDelivery? @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  providerMessageId String?
+  providerEventId   String                 @unique
+  type              ProductUpdateEventType
+  metadataJson      Json?
+  occurredAt        DateTime
+
+  provider EmailProviderName @default(SES)
+
+  createdAt DateTime @default(now())
+
+  @@index([deliveryId])
+  @@index([providerMessageId])
+}
+
+// Independente de MonitorAlertPreference — opt-out específico de
+// comunicados institucionais. Default subscribed=true (comunicado
+// institucional essencial, mesmo raciocínio de default do Monitor: quem
+// nunca decidiu nada está optado, descadastro é ação explícita). Serve só
+// para AUDITORIA e PRÉ-FILTRO local de elegibilidade — a barreira de fato
+// contra reenvio a quem descadastrou é o próprio SES (ListManagementOptions
+// no momento do envio), nunca esta tabela sozinha.
+model ProductEmailSubscription {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscribed Boolean @default(true)
+
+  unsubscribedAt    DateTime?
+  suppressionReason ProductUpdateSuppressionReason?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model JobEnrichment {

@@ -77,6 +77,13 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   monitor_digest_unsubscribed: "monitor_digest_unsubscribed",
   monitor_digest_provider_accepted: "monitor_digest_provider_accepted",
   monitor_digest_provider_rejected: "monitor_digest_provider_rejected",
+  // Product Updates — sem PII (nunca email/nome/assunto/conteúdo/lista de
+  // destinatários no metadata, ver ProductUpdatesService).
+  product_update_created: "product_update_created",
+  product_update_test_sent: "product_update_test_sent",
+  product_update_started: "product_update_started",
+  product_update_completed: "product_update_completed",
+  product_update_cancelled: "product_update_cancelled",
   // Candidaturas
   candidaturas_page_viewed: "candidaturas_page_viewed",
   candidatura_created: "candidatura_created",

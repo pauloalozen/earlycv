@@ -16,6 +16,7 @@ import {
 import type { Request, Response } from "express";
 
 import { EmailConfigService } from "../email/email-config.service";
+import { ProductUpdateWebhookService } from "../product-updates/product-update-webhook.service";
 import { MonitorAlertPreferenceService } from "./monitor-alert-preference.service";
 import { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
 import { verifyResendWebhookSignature } from "./resend-webhook-verifier";
@@ -37,6 +38,8 @@ export class MonitorPublicController {
   constructor(
     @Inject(MonitorDigestWebhookService)
     private readonly webhookService: MonitorDigestWebhookService,
+    @Inject(ProductUpdateWebhookService)
+    private readonly productUpdateWebhookService: ProductUpdateWebhookService,
     @Inject(MonitorAlertPreferenceService)
     private readonly alertPreferenceService: MonitorAlertPreferenceService,
     @Inject(EmailConfigService)
@@ -166,13 +169,64 @@ export class MonitorPublicController {
       return { ok: true };
     }
 
+    // Dispatcher por eventType/correlationType — único ponto do Monitor
+    // que conhece Product Updates (ver ProductUpdatesModule importado em
+    // monitor.module.ts). O caminho MONITOR_DIGEST abaixo é BYTE A BYTE o
+    // mesmo código de antes desta mudança.
+    const eventType = (sesEvent as { eventType?: string }).eventType;
+
+    if (eventType === "Subscription") {
+      // Evento nativo do SES List Management (Product Updates) — não
+      // carrega mail.tags/correlationType (não é sobre um envio
+      // específico), por isso roteado direto pelo eventType, nunca pela
+      // lógica de correlationType abaixo.
+      const result =
+        await this.productUpdateWebhookService.processSubscriptionEvent(
+          message.MessageId,
+          sesEvent as Parameters<
+            typeof this.productUpdateWebhookService.processSubscriptionEvent
+          >[1],
+        );
+      if (!result.processed) {
+        this.logger.log(
+          `product update subscription webhook not processed: ${result.reason}`,
+        );
+      }
+      return { ok: true };
+    }
+
+    const correlationType = (
+      sesEvent as {
+        mail?: { tags?: Record<string, string[]> };
+      }
+    ).mail?.tags?.correlationType?.[0];
+
+    if (correlationType === "PRODUCT_UPDATE") {
+      const result = await this.productUpdateWebhookService.processSesEvent(
+        message.MessageId,
+        sesEvent as Parameters<
+          typeof this.productUpdateWebhookService.processSesEvent
+        >[1],
+      );
+      if (!result.processed) {
+        this.logger.log(
+          `product update ses webhook not processed: ${result.reason} (type=${eventType})`,
+        );
+      }
+      return { ok: true };
+    }
+
+    // correlationType === "MONITOR_DIGEST" | "PRODUCT_UPDATE_TEST" | outro/
+    // ausente — MonitorDigestWebhookService já ignora com segurança
+    // qualquer coisa que não seja MONITOR_DIGEST (comportamento
+    // preexistente, inalterado).
     const result = await this.webhookService.processSesEvent(
       message.MessageId,
       sesEvent as Parameters<typeof this.webhookService.processSesEvent>[1],
     );
     if (!result.processed) {
       this.logger.log(
-        `ses digest webhook not processed: ${result.reason} (type=${(sesEvent as { eventType?: string }).eventType})`,
+        `ses digest webhook not processed: ${result.reason} (type=${eventType})`,
       );
     }
 

@@ -49,22 +49,46 @@ export class EmailConfigService {
     return required as SesClientConfig;
   }
 
-  // Perfil de remetente por categoria — implementado só para JOB_ALERT
-  // nesta entrega, de propósito: nenhuma outra categoria tem seleção de
-  // destinatários/consentimento implementados ainda, então nenhuma outra
-  // categoria deve conseguir enviar (mesmo que EmailRoutingPolicy resolva
-  // SES pra ela). Adicionar PRODUCT_ANNOUNCEMENT/MARKETING no futuro é só
-  // acrescentar um novo `case` aqui — SesEmailProviderService nunca muda.
+  // Perfil de remetente por categoria — implementado para JOB_ALERT e
+  // PRODUCT_ANNOUNCEMENT nesta entrega, de propósito: nenhuma outra
+  // categoria (MARKETING/ADMIN_COMMUNICATION) tem seleção de
+  // destinatários/consentimento implementados ainda, então nenhuma delas
+  // deve conseguir enviar (mesmo que EmailRoutingPolicy resolva SES pra
+  // ela). Adicionar uma categoria nova no futuro é só acrescentar um novo
+  // `case` aqui — SesEmailProviderService nunca muda.
   getSesSenderProfile(category: EmailCategory): EmailSenderProfile {
-    if (category !== "JOB_ALERT") {
-      throw new Error(
-        `SES sender profile não configurado para a categoria "${category}" — nenhum call site deveria estar enviando por ela ainda`,
-      );
+    if (category === "JOB_ALERT") {
+      return this.resolveSenderProfile("JOB_ALERT", {
+        fromEmail: this.env.AWS_SES_JOB_ALERT_FROM_EMAIL,
+        fromName: this.env.AWS_SES_JOB_ALERT_FROM_NAME,
+        replyTo: this.env.AWS_SES_JOB_ALERT_REPLY_TO,
+      });
     }
 
+    if (category === "PRODUCT_ANNOUNCEMENT") {
+      return this.resolveSenderProfile("PRODUCT_ANNOUNCEMENT", {
+        fromEmail: this.env.AWS_SES_PRODUCT_UPDATE_FROM_EMAIL,
+        fromName: this.env.AWS_SES_PRODUCT_UPDATE_FROM_NAME,
+        replyTo: this.env.AWS_SES_PRODUCT_UPDATE_REPLY_TO,
+      });
+    }
+
+    throw new Error(
+      `SES sender profile não configurado para a categoria "${category}" — nenhum call site deveria estar enviando por ela ainda`,
+    );
+  }
+
+  private resolveSenderProfile(
+    category: EmailCategory,
+    fields: {
+      fromEmail?: string;
+      fromName?: string;
+      replyTo?: string;
+    },
+  ): EmailSenderProfile {
     const required: Partial<EmailSenderProfile> = {
-      fromEmail: this.env.AWS_SES_JOB_ALERT_FROM_EMAIL,
-      fromName: this.env.AWS_SES_JOB_ALERT_FROM_NAME,
+      fromEmail: fields.fromEmail,
+      fromName: fields.fromName,
       configurationSet: this.env.AWS_SES_CONFIGURATION_SET,
     };
 
@@ -74,7 +98,7 @@ export class EmailConfigService {
 
     if (missingKeys.length > 0) {
       throw new Error(
-        `SES sender profile de JOB_ALERT incompleto: ${missingKeys.join(", ")}`,
+        `SES sender profile de ${category} incompleto: ${missingKeys.join(", ")}`,
       );
     }
 
@@ -82,7 +106,7 @@ export class EmailConfigService {
       ...(required as Required<
         Pick<EmailSenderProfile, "fromEmail" | "fromName" | "configurationSet">
       >),
-      replyTo: this.env.AWS_SES_JOB_ALERT_REPLY_TO,
+      replyTo: fields.replyTo,
     };
   }
 

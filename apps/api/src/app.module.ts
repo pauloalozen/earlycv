@@ -4,6 +4,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 
 import { AdminMonitorModule } from "./admin-monitor/admin-monitor.module";
+import { AdminProductUpdatesModule } from "./admin-product-updates/admin-product-updates.module";
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminTalentProfilesModule } from "./admin-talent-profiles/admin-talent-profiles.module";
@@ -31,6 +32,7 @@ import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.modul
 import { PaymentsModule } from "./payments/payments.module";
 import { PlansModule } from "./plans/plans.module";
 import { PosthogIntegrationModule } from "./posthog-integration/posthog-integration.module";
+import { ProductUpdatesModule } from "./product-updates/product-updates.module";
 import { ProfilesModule } from "./profiles/profiles.module";
 import { RadarModule } from "./radar/radar.module";
 import { ResumeTemplatesModule } from "./resume-templates/resume-templates.module";
@@ -54,6 +56,8 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AuthModule,
     AdminUsersModule,
     AdminMonitorModule,
+    ProductUpdatesModule,
+    AdminProductUpdatesModule,
     AdminProfilesModule,
     AdminResumesModule,
     AdminTalentProfilesModule,
