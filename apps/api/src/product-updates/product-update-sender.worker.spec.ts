@@ -32,6 +32,12 @@ function createFixture(options: {
     | (() => never)
   >;
   productUpdates?: Record<string, { status: string }>;
+  enabled?: boolean;
+  // Hook opcional pra simular uma corrida real: chamado toda vez que uma
+  // delivery é marcada PROCESSING, ANTES do worker reconferir o status da
+  // campanha-pai — é o ponto exato onde um cancelamento concorrente
+  // aconteceria de verdade entre o claim e o envio.
+  onClaimed?: (deliveryId: string) => void;
 }) {
   const deliveries = new Map<string, FakeDelivery>();
   for (const d of options.deliveries) {
@@ -49,6 +55,8 @@ function createFixture(options: {
   }
 
   const productUpdates = new Map(Object.entries(options.productUpdates ?? {}));
+  const sendToDeliveryCalls: string[] = [];
+  let findManyCalls = 0;
 
   const lock = {
     acquire: async () => true,
@@ -62,14 +70,25 @@ function createFixture(options: {
         where,
         take,
       }: {
-        where: Record<string, unknown>;
+        where: {
+          status?: string | { in: string[] };
+          productUpdate?: { status: string };
+        };
         take?: number;
       }) => {
-        const status = where.status as string | { in: string[] } | undefined;
+        findManyCalls += 1;
+        const status = where.status;
+        const parentStatus = where.productUpdate?.status;
         const matches = Array.from(deliveries.values()).filter((d) => {
-          if (typeof status === "string") return d.status === status;
-          if (status && "in" in status) return status.in.includes(d.status);
-          return true;
+          const statusOk =
+            typeof status === "string"
+              ? d.status === status
+              : status && "in" in status
+                ? status.in.includes(d.status)
+                : true;
+          if (!statusOk) return false;
+          if (parentStatus === undefined) return true;
+          return productUpdates.get(d.productUpdateId)?.status === parentStatus;
         });
         return take ? matches.slice(0, take) : matches;
       },
@@ -88,6 +107,9 @@ function createFixture(options: {
           updatedAt: new Date(),
         } as FakeDelivery;
         deliveries.set(where.id, next);
+        if (data.status === "PROCESSING") {
+          options.onClaimed?.(where.id);
+        }
         return next;
       },
       count: async ({ where }: { where: Record<string, unknown> }) => {
@@ -126,6 +148,7 @@ function createFixture(options: {
 
   const emailService = {
     sendToDelivery: async (deliveryId: string) => {
+      sendToDeliveryCalls.push(deliveryId);
       const result = options.sendResults[deliveryId];
       if (typeof result === "function") return result();
       return result;
@@ -144,12 +167,18 @@ function createFixture(options: {
     emailService,
     funnelEvents,
     {
-      PRODUCT_UPDATES_ENABLED: true,
+      PRODUCT_UPDATES_ENABLED: options.enabled ?? true,
       PRODUCT_UPDATE_SEND_RATE_PER_SECOND: 5,
     },
   );
 
-  return { worker, deliveries, productUpdates };
+  return {
+    worker,
+    deliveries,
+    productUpdates,
+    sendToDeliveryCalls,
+    getFindManyCalls: () => findManyCalls,
+  };
 }
 
 test("processPendingBatch marks a successful send as SENT", async () => {
@@ -278,4 +307,98 @@ test("campaign stays SENDING while a delivery beyond the batch size is still PEN
   );
   assert.equal(stillPending.length, 1);
   assert.equal(productUpdates.get("pu1")?.status, "SENDING");
+});
+
+// C2 — o worker nunca pode enviar uma delivery cuja campanha-pai não está
+// SENDING, nem no findMany (join productUpdate.status), nem se a campanha
+// mudar de status DEPOIS do claim e ANTES do envio de fato (recheck
+// imediatamente antes da chamada ao SES).
+
+test("uma delivery PENDING de campanha FAILED nunca é buscada nem enviada", async () => {
+  const { worker, deliveries, sendToDeliveryCalls } = createFixture({
+    deliveries: [{ id: "d1", productUpdateId: "pu1" }],
+    sendResults: {
+      d1: { sent: true, outcome: "SENT", providerMessageId: "msg-1" },
+    },
+    productUpdates: { pu1: { status: "FAILED" } },
+  });
+
+  await worker.processPendingBatch();
+
+  assert.equal(deliveries.get("d1")?.status, "PENDING");
+  assert.equal(sendToDeliveryCalls.length, 0);
+});
+
+test("uma delivery PENDING de campanha CANCELLED nunca é buscada nem enviada", async () => {
+  const { worker, deliveries, sendToDeliveryCalls } = createFixture({
+    deliveries: [{ id: "d1", productUpdateId: "pu1" }],
+    sendResults: {
+      d1: { sent: true, outcome: "SENT", providerMessageId: "msg-1" },
+    },
+    productUpdates: { pu1: { status: "CANCELLED" } },
+  });
+
+  await worker.processPendingBatch();
+
+  assert.equal(deliveries.get("d1")?.status, "PENDING");
+  assert.equal(sendToDeliveryCalls.length, 0);
+});
+
+test("cancelamento entre o claim (PROCESSING) e o envio impede a chamada ao SES — delivery vira CANCELLED", async () => {
+  const { worker, deliveries, productUpdates, sendToDeliveryCalls } =
+    createFixture({
+      deliveries: [{ id: "d1", productUpdateId: "pu1" }],
+      sendResults: {
+        d1: { sent: true, outcome: "SENT", providerMessageId: "msg-1" },
+      },
+      productUpdates: { pu1: { status: "SENDING" } },
+      // No instante em que o worker marca a delivery PROCESSING (logo
+      // depois do findMany, ANTES do recheck), simula um admin cancelando
+      // a campanha concorrentemente.
+      onClaimed: () => {
+        productUpdates.set("pu1", { status: "CANCELLED" });
+      },
+    });
+
+  await worker.processPendingBatch();
+
+  assert.equal(sendToDeliveryCalls.length, 0, "SES nunca deveria ser chamado");
+  assert.equal(deliveries.get("d1")?.status, "CANCELLED");
+});
+
+test("uma campanha SENDING continua sendo processada normalmente", async () => {
+  const { worker, deliveries, sendToDeliveryCalls } = createFixture({
+    deliveries: [{ id: "d1", productUpdateId: "pu1" }],
+    sendResults: {
+      d1: { sent: true, outcome: "SENT", providerMessageId: "msg-1" },
+    },
+    productUpdates: { pu1: { status: "SENDING" } },
+  });
+
+  await worker.processPendingBatch();
+
+  assert.deepEqual(sendToDeliveryCalls, ["d1"]);
+  assert.equal(deliveries.get("d1")?.status, "SENT");
+});
+
+// B1 — gate em profundidade: mesmo chamando processPendingBatch()
+// diretamente (não só via tick()), a flag desligada impede qualquer
+// consulta de PENDING e qualquer chamada ao EmailService.
+test("PRODUCT_UPDATES_ENABLED=false: processPendingBatch não consulta PENDING nem chama EmailService", async () => {
+  const { worker, deliveries, sendToDeliveryCalls, getFindManyCalls } =
+    createFixture({
+      enabled: false,
+      deliveries: [{ id: "d1", productUpdateId: "pu1" }],
+      sendResults: {
+        d1: { sent: true, outcome: "SENT", providerMessageId: "msg-1" },
+      },
+      productUpdates: { pu1: { status: "SENDING" } },
+    });
+
+  const processed = await worker.processPendingBatch();
+
+  assert.equal(processed, 0);
+  assert.equal(getFindManyCalls(), 0);
+  assert.equal(sendToDeliveryCalls.length, 0);
+  assert.equal(deliveries.get("d1")?.status, "PENDING");
 });

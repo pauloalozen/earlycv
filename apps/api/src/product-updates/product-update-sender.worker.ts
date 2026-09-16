@@ -55,7 +55,16 @@ export class ProductUpdateSenderWorker {
     await this.processPendingBatch();
   }
 
+  // Gate em profundidade: mesmo que este método seja chamado diretamente
+  // (não só via tick(), ex.: um futuro "enviar agora" administrativo, ou
+  // um teste que esqueça de checar a flag antes), a checagem acontece
+  // aqui dentro também, antes de qualquer aquisição de lock, consulta de
+  // PENDING ou chamada ao EmailService — nunca só em tick().
   async processPendingBatch() {
+    if (!this.env.PRODUCT_UPDATES_ENABLED) {
+      return 0;
+    }
+
     const owner = `product-update-sender-worker-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -73,8 +82,14 @@ export class ProductUpdateSenderWorker {
         1,
         Math.round(this.env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND),
       );
+      // productUpdate.status: "SENDING" é obrigatório aqui — nunca envia
+      // uma delivery cuja campanha-pai não está mais SENDING (cancelada,
+      // ou qualquer outro estado). Isso sozinho já evita processar uma
+      // delivery PENDING órfã; a checagem em processDelivery (logo antes
+      // da chamada ao SES) fecha a janela restante de uma campanha ser
+      // cancelada DEPOIS deste findMany mas ANTES do envio de fato.
       const pending = await this.database.productUpdateDelivery.findMany({
-        where: { status: "PENDING" },
+        where: { status: "PENDING", productUpdate: { status: "SENDING" } },
         orderBy: [{ createdAt: "asc" }],
         take: batchSize,
       });
@@ -132,6 +147,31 @@ export class ProductUpdateSenderWorker {
       where: { id: delivery.id },
       data: { status: "PROCESSING" },
     });
+
+    // Recheck IMEDIATAMENTE antes de chamar o SES — fecha a janela entre
+    // o findMany (que já filtra productUpdate.status="SENDING") e agora:
+    // um admin pode ter cancelado a campanha nesse meio-tempo. Nunca
+    // chama sendToDelivery se a campanha não estiver mais SENDING. Só ids
+    // e status no log — nunca e-mail/nome do destinatário.
+    const productUpdate = await this.database.productUpdate.findUnique({
+      where: { id: delivery.productUpdateId },
+      select: { status: true },
+    });
+
+    if (productUpdate?.status !== "SENDING") {
+      const parentStatus = productUpdate?.status ?? "not_found";
+      this.logger.warn(
+        `product update delivery ${delivery.id} skipped: campaign ${delivery.productUpdateId} is ${parentStatus}, not SENDING — never calling SES`,
+      );
+      await this.database.productUpdateDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: "CANCELLED",
+          lastError: `campaign status changed to ${parentStatus} before send`,
+        },
+      });
+      return;
+    }
 
     try {
       const result = await this.emailService.sendToDelivery(delivery.id);

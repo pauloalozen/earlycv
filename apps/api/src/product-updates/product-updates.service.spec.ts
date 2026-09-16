@@ -96,6 +96,28 @@ function createFixture(options: {
         store.set(where.id, next);
         return next;
       },
+      // Semântica de UPDATE...WHERE condicional do Postgres: check-e-muta
+      // SÍNCRONO dentro do corpo (nenhum `await` antes de ler/escrever o
+      // Map) — é isso que faz o teste de start() concorrente (dois
+      // Promise.all) se comportar como a corrida real: quem chega
+      // primeiro na chamada muda o status e ganha count=1; quem chega
+      // depois lê o status já mudado e ganha count=0, sem nunca escrever
+      // nada.
+      updateMany: ({
+        where,
+        data,
+      }: {
+        where: { id: string; status?: string };
+        data: Record<string, unknown>;
+      }) => {
+        const current = store.get(where.id);
+        if (!current) return Promise.resolve({ count: 0 });
+        if (where.status !== undefined && current.status !== where.status) {
+          return Promise.resolve({ count: 0 });
+        }
+        store.set(where.id, { ...current, ...data } as FakeProductUpdate);
+        return Promise.resolve({ count: 1 });
+      },
     },
     productUpdateDelivery: {
       createMany: async ({
@@ -257,4 +279,125 @@ test("start cria uma ProductUpdateDelivery por destinatário e congela o snapsho
 test("cancel só é permitido a partir de SENDING", async () => {
   const { service } = createFixture({ enabled: true });
   await assert.rejects(() => service.cancel("pu-1", "admin-1"), /SENDING/);
+});
+
+// C1 — regressão do bug de corrida: duas chamadas concorrentes de start()
+// para a MESMA campanha nunca podem ambas "vencer". A transição
+// READY->SENDING é uma aquisição atômica (updateMany where status=READY);
+// quem perde a corrida nunca toca a campanha nem cria deliveries, e
+// principalmente NUNCA marca a campanha como FAILED (bug original: o
+// catch fazia isso incondicionalmente, sobrescrevendo o SENDING que a
+// chamada vencedora acabara de commitar).
+test("start concorrente: só uma chamada vence, nenhuma duplica deliveries, a perdedora nunca marca FAILED", async () => {
+  const { service, store, deliveries } = createFixture({
+    enabled: true,
+    eligibleRecipients: [
+      { userId: "u1", email: "u1@x.com", name: "U1" },
+      { userId: "u2", email: "u2@x.com", name: "U2" },
+    ],
+  });
+  setStatus(store, "pu-1", "READY");
+
+  const input = {
+    audience: "ALL_ELIGIBLE_USERS" as const,
+    confirmedRecipientCount: 2,
+    startedBy: "admin-1",
+  };
+
+  const [resultA, resultB] = await Promise.allSettled([
+    service.start("pu-1", input),
+    service.start("pu-1", input),
+  ]);
+
+  const outcomes = [resultA, resultB];
+  const fulfilled = outcomes.filter((r) => r.status === "fulfilled");
+  const rejected = outcomes.filter((r) => r.status === "rejected");
+
+  // Exatamente uma chamada venceu, a outra foi recusada (nunca as duas
+  // fulfilled, nunca as duas rejected).
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+
+  const winner = fulfilled[0] as PromiseFulfilledResult<
+    Awaited<ReturnType<typeof service.start>>
+  >;
+  assert.equal(winner.value.status, "SENDING");
+
+  const loser = rejected[0] as PromiseRejectedResult;
+  assert.doesNotMatch(String(loser.reason), /\bFAILED\b/);
+  assert.match(String(loser.reason), /já foi iniciada/);
+
+  // Só um conjunto de deliveries foi criado (2, não 4) — nenhuma
+  // duplicidade.
+  assert.equal(deliveries.length, 2);
+
+  // Estado final da campanha é SENDING — a chamada perdedora não deixou
+  // rastro nenhum (nunca escreveu FAILED nem qualquer outro status).
+  assert.equal(store.get("pu-1")?.status, "SENDING");
+});
+
+test("botão precisa ser um par: create recusa texto sem URL", async () => {
+  const { service } = createFixture({ enabled: true });
+  await assert.rejects(
+    () =>
+      service.create({
+        internalName: "Campanha",
+        subject: "Assunto",
+        content: "Conteúdo",
+        primaryButtonText: "Ver mais",
+        createdBy: "admin-1",
+      }),
+    /precisam estar presentes juntos/,
+  );
+});
+
+test("botão precisa ser um par: create recusa URL sem texto", async () => {
+  const { service } = createFixture({ enabled: true });
+  await assert.rejects(
+    () =>
+      service.create({
+        internalName: "Campanha",
+        subject: "Assunto",
+        content: "Conteúdo",
+        primaryButtonUrl: "https://earlycv.com.br/x",
+        createdBy: "admin-1",
+      }),
+    /precisam estar presentes juntos/,
+  );
+});
+
+test("create recusa primaryButtonUrl insegura mesmo se o DTO já tiver deixado passar — service nunca confia só no DTO", async () => {
+  const { service } = createFixture({ enabled: true });
+  await assert.rejects(
+    () =>
+      service.create({
+        internalName: "Campanha",
+        subject: "Assunto",
+        content: "Conteúdo",
+        primaryButtonText: "Ver mais",
+        primaryButtonUrl: "javascript:alert(1)",
+        createdBy: "admin-1",
+      }),
+    /URL absoluta https/,
+  );
+});
+
+test("updateContent valida o par considerando o valor já salvo, não só o patch", async () => {
+  const { service } = createFixture({ enabled: true });
+  await service.create({
+    internalName: "Campanha",
+    subject: "Assunto",
+    content: "Conteúdo",
+    createdBy: "admin-1",
+  });
+
+  // pu-1 (fixture base) não tem botão nenhum — só mandar a URL sem texto
+  // deveria falhar.
+  await assert.rejects(
+    () =>
+      service.updateContent("pu-1", {
+        primaryButtonUrl: "https://earlycv.com.br/x",
+      }),
+    /precisam estar presentes juntos/,
+  );
 });

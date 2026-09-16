@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -11,6 +12,7 @@ import type { ProductUpdate, ProductUpdateAudience } from "@prisma/client";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
+import { isSafeProductUpdateButtonUrl } from "./product-update-button-url.util";
 import { ProductUpdateEmailService } from "./product-update-email.service";
 import { ProductUpdateSubscriptionService } from "./product-update-subscription.service";
 import { ProductUpdateTemplateService } from "./product-update-template.service";
@@ -107,6 +109,32 @@ export class ProductUpdatesService {
       });
   }
 
+  // Nunca confia só no DTO (que já valida isto pra dar um 400 rápido, ver
+  // IsSafeButtonUrl): reconfirma aqui pra proteger qualquer outro caller
+  // que chame ProductUpdatesService diretamente. Botão é sempre um par —
+  // texto e URL presentes juntos, ou os dois ausentes — nunca um sem o
+  // outro (evita persistir um botão "quebrado" que nunca renderizaria,
+  // ver ProductUpdateTemplateService.render).
+  private assertValidButtonPair(
+    primaryButtonText: string | null | undefined,
+    primaryButtonUrl: string | null | undefined,
+  ) {
+    const hasText = Boolean(primaryButtonText);
+    const hasUrl = Boolean(primaryButtonUrl);
+
+    if (hasText !== hasUrl) {
+      throw new BadRequestException(
+        "primaryButtonText e primaryButtonUrl precisam estar presentes juntos, ou ambos ausentes",
+      );
+    }
+
+    if (hasUrl && !isSafeProductUpdateButtonUrl(primaryButtonUrl as string)) {
+      throw new BadRequestException(
+        "primaryButtonUrl precisa ser uma URL absoluta https, sem javascript:/data:/caracteres capazes de quebrar o atributo HTML",
+      );
+    }
+  }
+
   private assertEnabled() {
     if (!this.env.PRODUCT_UPDATES_ENABLED) {
       throw new UnprocessableEntityException(
@@ -126,6 +154,7 @@ export class ProductUpdatesService {
   }
 
   async create(input: CreateProductUpdateInput): Promise<ProductUpdate> {
+    this.assertValidButtonPair(input.primaryButtonText, input.primaryButtonUrl);
     const created = await this.database.productUpdate.create({
       data: {
         internalName: input.internalName,
@@ -159,6 +188,19 @@ export class ProductUpdatesService {
         `campanha em status ${current.status} não pode mais ser editada`,
       );
     }
+
+    // Valida o par usando o resultado FINAL (patch mesclado com o que já
+    // está salvo) — um PATCH que só toca primaryButtonUrl, por exemplo,
+    // ainda precisa resultar num par válido considerando o
+    // primaryButtonText já persistido.
+    this.assertValidButtonPair(
+      "primaryButtonText" in patch
+        ? patch.primaryButtonText
+        : current.primaryButtonText,
+      "primaryButtonUrl" in patch
+        ? patch.primaryButtonUrl
+        : current.primaryButtonUrl,
+    );
 
     const changedContent = CONTENT_FIELDS.some(
       (field) => field in patch && patch[field] !== current[field],
@@ -238,10 +280,25 @@ export class ProductUpdatesService {
   }
 
   // Recalcula elegibilidade na hora (nunca reaproveita uma contagem
-  // antiga), congela htmlSnapshot/textSnapshot, cria uma
-  // ProductUpdateDelivery por destinatário numa única transação.
-  // confirmedRecipientCount precisa bater com o recálculo — protege contra
-  // a UI mostrar um número desatualizado e o admin confirmar às cegas.
+  // antiga). A transição READY -> SENDING é uma AQUISIÇÃO atômica e
+  // condicional (updateMany where status="READY", nunca um
+  // findUnique+update separados) — é isso que impede duas chamadas
+  // concorrentes de ambas passarem: a segunda vê count=0 (o status já
+  // mudou por baixo dela) e nunca toca a campanha nem cria deliveries.
+  // Só quem de fato adquiriu a transição (count=1) congela
+  // htmlSnapshot/textSnapshot e cria as ProductUpdateDelivery, na MESMA
+  // transação. confirmedRecipientCount precisa bater com o recálculo —
+  // protege contra a UI mostrar um número desatualizado e o admin
+  // confirmar às cegas.
+  //
+  // Se algo falhar DEPOIS da aquisição (ex.: createMany rejeitado por um
+  // erro real), a transação inteira faz rollback — inclusive a própria
+  // transição READY->SENDING — e a campanha volta a READY sozinha (não é
+  // preciso, e não fazemos, nenhuma atualização adicional pra "corrigir"
+  // o status): nenhuma parte da campanha foi de fato iniciada, então
+  // nunca marcamos FAILED aqui. FAILED continua reservado só pra falha
+  // irrecuperável de orquestração fora deste fluxo (nenhum call site
+  // automático atribui FAILED hoje).
   async start(
     id: string,
     input: {
@@ -284,44 +341,49 @@ export class ProductUpdatesService {
       { recipientName: null, mode: "real" },
     );
 
-    try {
-      const started = await this.database.$transaction(async (tx) => {
-        const updated = await tx.productUpdate.update({
-          where: { id },
-          data: {
-            status: "SENDING",
-            audience: input.audience,
-            recipientCount: recipients.length,
-            startedBy: input.startedBy,
-            startedAt: new Date(),
-            htmlSnapshot: html,
-            textSnapshot: text,
-          },
-        });
+    const patch = {
+      status: "SENDING" as const,
+      audience: input.audience,
+      recipientCount: recipients.length,
+      startedBy: input.startedBy,
+      startedAt: new Date(),
+      htmlSnapshot: html,
+      textSnapshot: text,
+    };
 
-        await tx.productUpdateDelivery.createMany({
-          data: recipients.map((recipient) => ({
-            productUpdateId: id,
-            userId: recipient.userId,
-            recipientEmail: recipient.email,
-            recipientName: recipient.name,
-          })),
-        });
+    const started = await this.database.$transaction(async (tx) => {
+      const acquired = await tx.productUpdate.updateMany({
+        where: { id, status: "READY" },
+        data: patch,
+      });
 
-        return updated;
+      if (acquired.count === 0) {
+        // Perdeu a corrida pra outra chamada concorrente (ou o status
+        // mudou por outro motivo entre a checagem acima e agora) — nada
+        // foi alterado por ESTA chamada, nunca marca FAILED. O vencedor
+        // real já está cuidando do envio.
+        throw new ConflictException(
+          "a campanha já foi iniciada (ou teve o status alterado) por outra requisição — recarregue a página",
+        );
+      }
+
+      await tx.productUpdateDelivery.createMany({
+        data: recipients.map((recipient) => ({
+          productUpdateId: id,
+          userId: recipient.userId,
+          recipientEmail: recipient.email,
+          recipientName: recipient.name,
+        })),
       });
-      this.recordAdminEvent("product_update_started", id, input.startedBy, {
-        audience: input.audience,
-        recipientCount: recipients.length,
-      });
-      return started;
-    } catch (error) {
-      await this.database.productUpdate.update({
-        where: { id },
-        data: { status: "FAILED", failedAt: new Date() },
-      });
-      throw error;
-    }
+
+      return { ...current, ...patch };
+    });
+
+    this.recordAdminEvent("product_update_started", id, input.startedBy, {
+      audience: input.audience,
+      recipientCount: recipients.length,
+    });
+    return started;
   }
 
   // Só cancela entregas ainda PENDING — SENT/FAILED/PROCESSING/
