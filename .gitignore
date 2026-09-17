@@ -48,6 +48,9 @@ yarn-error.log*
 # local-only scripts
 scripts/restore-homolog-dump.sh
 
+# dumps de banco (podem conter PII de produção) — nunca versionar
+backups/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

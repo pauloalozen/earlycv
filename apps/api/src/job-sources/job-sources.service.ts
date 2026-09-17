@@ -219,7 +219,7 @@ export class JobSourcesService {
     await this.getById(jobSourceId);
 
     try {
-      return await this.database.jobSource.update({
+      const updated = await this.database.jobSource.update({
         where: { id: jobSourceId },
         data: {
           ...dto,
@@ -236,6 +236,20 @@ export class JobSourcesService {
           },
         },
       });
+
+      // Pausar a fonte nao pode deixar vagas dela "ativas" pra sempre no
+      // radar publico sem mais nenhum crawler checando se ainda existem —
+      // acompanha o mesmo status ("inactive", nao "removed": preserva
+      // historico, so tira do radar) ja usado por
+      // CompanySourceAuditService.applyApproved() pros rascunhos.
+      if (dto.isActive === false) {
+        await this.database.job.updateMany({
+          where: { jobSourceId, status: "active" },
+          data: { status: "inactive" },
+        });
+      }
+
+      return updated;
     } catch (error) {
       this.rethrowKnownError(error);
     }
@@ -255,6 +269,14 @@ export class JobSourcesService {
       where: { sourceType: dto.sourceType },
       data: { isActive: dto.isActive },
     });
+
+    // Mesma cascata do update() individual, ver comentario la.
+    if (dto.isActive === false) {
+      await this.database.job.updateMany({
+        where: { status: "active", jobSource: { sourceType: dto.sourceType } },
+        data: { status: "inactive" },
+      });
+    }
 
     return { count, isActive: dto.isActive, sourceType: dto.sourceType };
   }

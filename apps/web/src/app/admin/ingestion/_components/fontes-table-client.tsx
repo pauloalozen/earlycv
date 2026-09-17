@@ -17,6 +17,7 @@ import {
   deleteJobSourceAction,
   importCompanySourcesCsvAction,
   runJobSourceAction,
+  toggleActiveAction,
   toggleScheduleEnabledAction,
 } from "../actions";
 
@@ -33,6 +34,7 @@ type JobSourceRow = {
   createdAt: string;
   id: string;
   ingestionRuns?: IngestionRunSummary[];
+  isActive: boolean;
   pausedUntil?: string | null;
   scheduleCron?: string | null;
   scheduleEnabled?: boolean;
@@ -343,6 +345,7 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [result, setResult] = useState<PagedResult>(initialData);
   const [togglePending, setTogglePending] = useState(false);
+  const [activeTogglePending, setActiveTogglePending] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
   const [logoFetchPendingId, setLogoFetchPendingId] = useState<string | null>(
     null,
@@ -907,9 +910,79 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
                     style={{
                       display: "flex",
                       flexDirection: "column",
-                      gap: 2,
+                      gap: 4,
                     }}
                   >
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                      <button
+                        type="button"
+                        title={
+                          source.isActive
+                            ? "Desativar fonte (também inativa as vagas ativas dela)"
+                            : "Ativar fonte"
+                        }
+                        disabled={activeTogglePending}
+                        onClick={() => {
+                          if (
+                            source.isActive &&
+                            source.activeJobsCount > 0 &&
+                            !confirm(
+                              `Desativar "${source.sourceName}" (${source.company.name}) também vai marcar ${source.activeJobsCount === 1 ? "a vaga ativa dela" : `as ${source.activeJobsCount} vagas ativas dela`} como inativa. Confirma?`,
+                            )
+                          ) {
+                            return;
+                          }
+                          setActiveTogglePending(true);
+                          const fd = new FormData();
+                          fd.set("jobSourceId", source.id);
+                          fd.set(
+                            "isActive",
+                            source.isActive ? "false" : "true",
+                          );
+                          fd.set("redirectPath", redirectPath);
+                          toggleActiveAction(fd)
+                            .then(() => fetchSources(paramsRef.current))
+                            .finally(() => setActiveTogglePending(false));
+                        }}
+                        style={{
+                          width: 36,
+                          height: 20,
+                          borderRadius: 10,
+                          border: "none",
+                          background: source.isActive ? AT.ok : AT.faint,
+                          cursor: activeTogglePending
+                            ? "not-allowed"
+                            : "pointer",
+                          position: "relative",
+                          transition: "background 0.2s",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 2,
+                            left: source.isActive ? 18 : 2,
+                            width: 16,
+                            height: 16,
+                            borderRadius: "50%",
+                            background: "white",
+                            transition: "left 0.2s",
+                          }}
+                        />
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 11.5,
+                          color: AT.muted,
+                          fontFamily: '"Geist Mono", monospace',
+                        }}
+                      >
+                        {source.isActive ? "fonte ativa" : "fonte inativa"}
+                      </span>
+                    </div>
                     {source.consecutive403Count &&
                     source.consecutive403Count > 0 ? (
                       <AdminPill tone="warn" mono>
