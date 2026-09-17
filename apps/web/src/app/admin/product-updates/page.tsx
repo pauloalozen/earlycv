@@ -137,7 +137,7 @@ export default async function AdminProductUpdatesPage({
           />
           <textarea
             name="content"
-            placeholder="Conteúdo (texto simples — parágrafos separados por linha em branco)"
+            placeholder="Conteúdo (parágrafos separados por linha em branco; para link use [texto](https://...))"
             required
             rows={4}
             style={{ ...inputStyle, resize: "vertical" as const }}

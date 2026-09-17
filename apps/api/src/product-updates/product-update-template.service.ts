@@ -6,6 +6,7 @@ import {
   renderEmailShell,
   renderPrimaryButton,
 } from "./product-update-email-layout";
+import { isSafeProductUpdateButtonUrl } from "./product-update-button-url.util";
 
 // Placeholder resolvido pelo próprio SES (ListManagementOptions no
 // SendEmailCommand) — nunca uma URL/token nossos. Só usado no modo "real";
@@ -62,7 +63,7 @@ export class ProductUpdateTemplateService {
       ${paragraphs
         .map(
           (paragraph) =>
-            `<p style="font-size:14px;color:#3a3a36;margin:0 0 14px;line-height:1.5;">${escapeHtml(paragraph)}</p>`,
+            `<p style="font-size:14px;color:#3a3a36;margin:0 0 14px;line-height:1.5;">${renderParagraphHtml(paragraph)}</p>`,
         )
         .join("")}
       ${
@@ -85,7 +86,7 @@ export class ProductUpdateTemplateService {
       "",
       input.subject,
       "",
-      ...paragraphs,
+      ...paragraphs.map(stripMarkdownLinksForPlainText),
       ...(input.primaryButtonText && input.primaryButtonUrl
         ? ["", `${input.primaryButtonText}: ${input.primaryButtonUrl}`]
         : []),
@@ -118,4 +119,42 @@ function splitParagraphs(content: string): string[] {
 
 function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? fullName;
+}
+
+// Única sintaxe de "rich text" que o textarea do admin suporta: link inline
+// no formato Markdown `[texto](url)`. Tudo mais (HTML, outras marcações)
+// continua tratado como texto literal via escapeHtml — nunca interpretamos
+// HTML vindo do textarea. A URL passa pela MESMA validação do botão
+// principal (isSafeProductUpdateButtonUrl: só https://, sem espaços/aspas),
+// então um link malformado ou não-https cai pro fallback de texto literal
+// em vez de virar um <a> quebrado ou perigoso.
+const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((\S+)\)/g;
+
+function renderParagraphHtml(paragraph: string): string {
+  let html = "";
+  let lastIndex = 0;
+
+  for (const match of paragraph.matchAll(MARKDOWN_LINK_PATTERN)) {
+    const [fullMatch, label, url] = match;
+    const matchIndex = match.index ?? 0;
+
+    html += escapeHtml(paragraph.slice(lastIndex, matchIndex));
+    html += isSafeProductUpdateButtonUrl(url)
+      ? `<a href="${escapeHtml(url)}" style="color:#0a0a0a;text-decoration:underline;">${escapeHtml(label)}</a>`
+      : escapeHtml(fullMatch);
+    lastIndex = matchIndex + fullMatch.length;
+  }
+
+  return html + escapeHtml(paragraph.slice(lastIndex));
+}
+
+// Versão pra alternativa em texto puro do e-mail (multipart) — troca
+// `[texto](url)` por "texto: url" em vez de deixar a sintaxe Markdown crua
+// pra quem lê em cliente sem HTML.
+function stripMarkdownLinksForPlainText(paragraph: string): string {
+  return paragraph.replace(
+    MARKDOWN_LINK_PATTERN,
+    (fullMatch, label: string, url: string) =>
+      isSafeProductUpdateButtonUrl(url) ? `${label}: ${url}` : fullMatch,
+  );
 }

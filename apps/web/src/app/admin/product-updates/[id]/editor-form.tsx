@@ -114,7 +114,8 @@ export function ProductUpdateEditorForm({
         </label>
 
         <label style={labelStyle()}>
-          Conteúdo
+          Conteúdo (parágrafos separados por linha em branco; para link use{" "}
+          [texto](https://...))
           <textarea
             name="content"
             defaultValue={productUpdate.content}
