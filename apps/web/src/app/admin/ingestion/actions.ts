@@ -534,6 +534,29 @@ export async function toggleScheduleEnabledAction(formData: FormData) {
   }
 }
 
+export async function toggleActiveAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+  const isActive = String(formData.get("isActive")) === "true";
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+
+  try {
+    await updateJobSource(jobSourceId, { isActive });
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao atualizar a fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
 export async function bulkToggleScheduleEnabledAction(formData: FormData) {
   const redirectPath = String(
     formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,

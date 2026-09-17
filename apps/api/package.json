@@ -31,7 +31,8 @@
     "fix:radar-cv-adaptation-job-info": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-radar-cv-adaptation-job-info.ts",
     "audit:company-sources": "NODE_OPTIONS='--conditions=development' tsx src/scripts/audit-company-sources.ts",
     "apply:company-source-audit": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-company-source-audit.ts",
-    "cleanup:foreign-jobs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-foreign-jobs.ts"
+    "cleanup:foreign-jobs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-foreign-jobs.ts",
+    "fix:mismatched-sources": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-mismatched-sources.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
