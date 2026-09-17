@@ -170,7 +170,8 @@ export type ManualAdapterType =
   | "teamtailor"
   | "talentbrew"
   | "workday"
-  | "pandape";
+  | "pandape"
+  | "eightfold";
 
 export type ManualRunStatus =
   | "queued"

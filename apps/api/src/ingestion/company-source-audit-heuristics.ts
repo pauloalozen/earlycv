@@ -55,6 +55,7 @@ export const KNOWN_ATS_PLATFORM_HOSTS = [
   "lg.com.br",
   "greenhouse.io",
   "lever.co",
+  "eightfold.ai",
   // Genericos usados como plataforma de RH/hospedagem por empresas que
   // nao sao o provedor em si (ex: platform.senior.com.br hospeda vagas de
   // varios clientes da Senior Sistemas; buserbrasil.notion.site e a
@@ -72,6 +73,7 @@ const ATS_SUBDOMAIN_HOSTS = [
   "pandape.infojobs.com.br",
   "solides.com.br",
   "gupy.io",
+  "eightfold.ai",
 ];
 
 // Plataformas onde o identificador do cliente vem no PRIMEIRO segmento do

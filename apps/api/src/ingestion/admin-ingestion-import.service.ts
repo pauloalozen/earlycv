@@ -40,6 +40,7 @@ export const IMPORTABLE_ADAPTER_TYPES = [
   "talentbrew",
   "workday",
   "pandape",
+  "eightfold",
 ] as const;
 export type ImportableAdapterType = (typeof IMPORTABLE_ADAPTER_TYPES)[number];
 

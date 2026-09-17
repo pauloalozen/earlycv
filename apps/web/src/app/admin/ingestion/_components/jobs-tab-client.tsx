@@ -525,6 +525,7 @@ function CreateJobModal({
                             "talentbrew",
                             "workday",
                             "pandape",
+                            "eightfold",
                           ].map((option) => (
                             <option key={option} value={option}>
                               {option}

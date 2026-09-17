@@ -67,6 +67,7 @@ const MANUAL_ADAPTER_TYPES = [
   "talentbrew",
   "custom_html",
   "custom_api",
+  "eightfold",
 ] as const;
 
 const QUEUE_STATUSES: DiscoveredCompanyStatus[] = [

@@ -68,6 +68,7 @@ enum JobSourceType {
   pandape
   teamtailor
   talentbrew
+  eightfold
 }
 
 enum DiscoveredCompanyStatus {

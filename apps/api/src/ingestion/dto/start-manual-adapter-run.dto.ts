@@ -12,6 +12,7 @@ const MANUAL_ADAPTER_TYPES = [
   "talentbrew",
   "workday",
   "pandape",
+  "eightfold",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];

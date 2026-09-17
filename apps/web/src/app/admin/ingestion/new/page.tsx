@@ -176,6 +176,7 @@ export default async function NewAdminSourcePage({
                       <option value="workday">workday</option>
                       <option value="solides">solides (sem adapter)</option>
                       <option value="pandape">pandape</option>
+                      <option value="eightfold">eightfold</option>
                     </select>
                   </label>
 
@@ -221,7 +222,8 @@ export default async function NewAdminSourcePage({
                       https://[empresa].inhire.app · talentbrew:
                       https://carreiras.[empresa].com.br · workday:
                       https://[empresa].[instancia].myworkdayjobs.com/[site]
-                      (ex: pt-BR/SantanderCareers)
+                      (ex: pt-BR/SantanderCareers) · eightfold:
+                      https://[empresa].eightfold.ai/careers
                     </p>
                   </label>
 
@@ -406,6 +408,7 @@ export default async function NewAdminSourcePage({
                       <option value="workday">workday</option>
                       <option value="solides">solides (sem adapter)</option>
                       <option value="pandape">pandape</option>
+                      <option value="eightfold">eightfold</option>
                     </select>
                   </label>
 
@@ -451,7 +454,8 @@ export default async function NewAdminSourcePage({
                       https://[empresa].inhire.app · talentbrew:
                       https://carreiras.[empresa].com.br · workday:
                       https://[empresa].[instancia].myworkdayjobs.com/[site]
-                      (ex: pt-BR/SantanderCareers)
+                      (ex: pt-BR/SantanderCareers) · eightfold:
+                      https://[empresa].eightfold.ai/careers
                     </p>
                   </label>
 

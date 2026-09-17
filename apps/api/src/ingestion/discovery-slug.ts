@@ -14,6 +14,7 @@ export const GUESSABLE_ADAPTERS = [
   "inhire",
   "teamtailor",
   "pandape",
+  "eightfold",
 ] as const satisfies readonly JobSourceType[];
 
 export type GuessableAdapter = (typeof GUESSABLE_ADAPTERS)[number];
@@ -79,5 +80,7 @@ export function buildCandidateUrl(
       return `https://${slug}.teamtailor.com`;
     case "pandape":
       return `https://${slug}.pandape.com.br`;
+    case "eightfold":
+      return `https://${slug}.eightfold.ai/careers`;
   }
 }

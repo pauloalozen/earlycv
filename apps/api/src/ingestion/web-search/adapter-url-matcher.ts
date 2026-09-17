@@ -13,6 +13,7 @@ export type ResolvedAdapterUrl = {
   careersUrl: string;
   sourceType:
     | "ashby"
+    | "eightfold"
     | "greenhouse"
     | "gupy"
     | "inhire"
@@ -39,6 +40,10 @@ export const ATS_SEARCH_DOMAINS = [
   "myworkdayjobs.com",
   "pandape.com.br",
   "pandape.infojobs.com.br",
+  // So o dominio direto *.eightfold.ai e reconhecivel aqui — o outro
+  // formato (empresa hospeda proxy proprio, ex: careers-meli.mercadolibre.com)
+  // nao tem padrao de URL fixo, nao da pra detectar so pela URL.
+  "eightfold.ai",
   // Sólides ainda nao tem adapter implementado, mas reconhecer o dominio
   // aqui evita que a busca web pra um candidato hospedado la caia no chute
   // de slug (que nunca vai bater) — ver o tratamento "sem adapter" em
@@ -62,38 +67,59 @@ export function matchAdapterUrl(rawUrl: string): ResolvedAdapterUrl | null {
 
   const gupyMatch = hostname.match(/^([a-z0-9-]+)\.gupy\.io$/);
   if (gupyMatch?.[1]) {
-    return { careersUrl: `https://${gupyMatch[1]}.gupy.io`, sourceType: "gupy" };
+    return {
+      careersUrl: `https://${gupyMatch[1]}.gupy.io`,
+      sourceType: "gupy",
+    };
   }
 
-  if (hostname === "boards.greenhouse.io" || hostname === "job-boards.greenhouse.io") {
+  if (
+    hostname === "boards.greenhouse.io" ||
+    hostname === "job-boards.greenhouse.io"
+  ) {
     const slug = firstPathSegment(parsed.pathname);
     if (slug) {
-      return { careersUrl: `https://boards.greenhouse.io/${slug}`, sourceType: "greenhouse" };
+      return {
+        careersUrl: `https://boards.greenhouse.io/${slug}`,
+        sourceType: "greenhouse",
+      };
     }
   }
 
   if (hostname === "jobs.lever.co") {
     const slug = firstPathSegment(parsed.pathname);
     if (slug) {
-      return { careersUrl: `https://jobs.lever.co/${slug}`, sourceType: "lever" };
+      return {
+        careersUrl: `https://jobs.lever.co/${slug}`,
+        sourceType: "lever",
+      };
     }
   }
 
   if (hostname === "jobs.ashbyhq.com") {
     const slug = firstPathSegment(parsed.pathname);
     if (slug) {
-      return { careersUrl: `https://jobs.ashbyhq.com/${slug}`, sourceType: "ashby" };
+      return {
+        careersUrl: `https://jobs.ashbyhq.com/${slug}`,
+        sourceType: "ashby",
+      };
     }
   }
 
   const inhireMatch = hostname.match(/^([a-z0-9-]+)\.inhire\.app$/);
   if (inhireMatch?.[1]) {
-    return { careersUrl: `https://${inhireMatch[1]}.inhire.app`, sourceType: "inhire" };
+    return {
+      careersUrl: `https://${inhireMatch[1]}.inhire.app`,
+      sourceType: "inhire",
+    };
   }
 
   const teamtailorMatch = hostname.match(/^([a-z0-9-]+)\.teamtailor\.com$/);
   if (teamtailorMatch?.[1]) {
-    return { careersUrl: `https://${teamtailorMatch[1]}.teamtailor.com`, sourceType: "teamtailor" };
+    return {
+      careersUrl: `https://${teamtailorMatch[1]}.teamtailor.com`,
+      sourceType: "teamtailor",
+    };
   }
 
   // pandape.com.br redireciona (301) pra pandape.infojobs.com.br — os dois
@@ -110,7 +136,9 @@ export function matchAdapterUrl(rawUrl: string): ResolvedAdapterUrl | null {
     };
   }
 
-  const solidesMatch = hostname.match(/^([a-z0-9-]+)\.vagas\.solides\.com\.br$/);
+  const solidesMatch = hostname.match(
+    /^([a-z0-9-]+)\.vagas\.solides\.com\.br$/,
+  );
   if (solidesMatch?.[1]) {
     return {
       careersUrl: `https://${solidesMatch[1]}.vagas.solides.com.br`,
@@ -118,7 +146,17 @@ export function matchAdapterUrl(rawUrl: string): ResolvedAdapterUrl | null {
     };
   }
 
-  const workdayMatch = hostname.match(/^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/);
+  const eightfoldMatch = hostname.match(/^([a-z0-9-]+)\.eightfold\.ai$/);
+  if (eightfoldMatch?.[1]) {
+    return {
+      careersUrl: `https://${eightfoldMatch[1]}.eightfold.ai/careers`,
+      sourceType: "eightfold",
+    };
+  }
+
+  const workdayMatch = hostname.match(
+    /^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/,
+  );
   if (workdayMatch) {
     const segments = parsed.pathname.split("/").filter(Boolean);
     const site = segments[segments.length - 1];

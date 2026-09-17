@@ -21,6 +21,7 @@ import {
   AshbyAdapter,
   CustomApiAdapter,
   CustomHtmlAdapter,
+  EightfoldAdapter,
   GreenhouseAdapter,
   GupyAdapter,
   InHireAdapter,
@@ -120,6 +121,7 @@ export class IngestionService {
     @Inject(TalentbrewAdapter) talentbrewAdapter: TalentbrewAdapter,
     @Inject(WorkdayAdapter) workdayAdapter: WorkdayAdapter,
     @Inject(PandapeAdapter) pandapeAdapter: PandapeAdapter,
+    @Inject(EightfoldAdapter) eightfoldAdapter: EightfoldAdapter,
     @Inject(GoogleIndexingService)
     private readonly googleIndexingService: GoogleIndexingService,
   ) {
@@ -135,6 +137,7 @@ export class IngestionService {
       [talentbrewAdapter.sourceType, talentbrewAdapter],
       [workdayAdapter.sourceType, workdayAdapter],
       [pandapeAdapter.sourceType, pandapeAdapter],
+      [eightfoldAdapter.sourceType, eightfoldAdapter],
     ]);
   }
 
@@ -368,9 +371,7 @@ export class IngestionService {
   }) {
     const page = filters.page && filters.page > 0 ? filters.page : 1;
     const limit =
-      filters.limit && filters.limit > 0
-        ? Math.min(filters.limit, 100)
-        : 25;
+      filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 25;
 
     const where: Prisma.IngestionRunWhereInput = {
       ...(filters.status ? { status: filters.status } : {}),
