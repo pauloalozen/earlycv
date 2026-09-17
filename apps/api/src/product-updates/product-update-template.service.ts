@@ -102,7 +102,15 @@ export class ProductUpdateTemplateService {
 }
 
 function splitParagraphs(content: string): string[] {
+  // O textarea do admin envia o conteúdo via submit de <form> nativo —
+  // multipart/form-data normaliza toda quebra de linha pra CRLF (\r\n) por
+  // especificação (RFC 7578/HTML forms), mesmo que o usuário só tenha
+  // digitado \n. Sem este replace, "\n\n" vira "\r\n\r\n" no banco e o
+  // regex abaixo (que só reconhece \n puro) nunca separa parágrafo nenhum
+  // — bug real visto em produção: conteúdo com linhas em branco chegava
+  // tudo junto num parágrafo só no e-mail.
   return content
+    .replace(/\r\n/g, "\n")
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0);

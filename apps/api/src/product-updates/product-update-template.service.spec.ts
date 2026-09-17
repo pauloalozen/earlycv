@@ -136,3 +136,26 @@ test("ProductUpdateTemplateService renders the preheader as a hidden preview ele
   assert.match(rendered.html, /display:none/);
   assert.match(rendered.html, /Confira o que mudou/);
 });
+
+// O textarea do admin submete via <form> nativo — multipart/form-data
+// normaliza toda quebra de linha pra CRLF (\r\n) por especificação, mesmo
+// que o admin só tenha digitado \n. Bug real visto em produção: uma linha
+// em branco entre dois parágrafos chegava como "\r\n\r\n" no content
+// salvo, e o split (que só reconhecia \n puro) nunca separava nada — o
+// e-mail saía com tudo num parágrafo só.
+test("ProductUpdateTemplateService splits paragraphs on a blank line even when it arrives as CRLF (\\r\\n\\r\\n), not just \\n\\n", () => {
+  const service = new ProductUpdateTemplateService();
+  const rendered = service.render(
+    {
+      ...BASE_CONTENT,
+      content: "Primeiro parágrafo.\r\n\r\nSegundo parágrafo.",
+    },
+    { recipientName: null, mode: "real" },
+  );
+
+  const paragraphMatches = rendered.html.match(/margin:0 0 14px/g);
+  assert.equal(paragraphMatches?.length, 2);
+  assert.match(rendered.html, /Primeiro parágrafo\.<\/p>/);
+  assert.match(rendered.html, /Segundo parágrafo\.<\/p>/);
+  assert.match(rendered.text, /Primeiro parágrafo\.\nSegundo parágrafo\./);
+});
