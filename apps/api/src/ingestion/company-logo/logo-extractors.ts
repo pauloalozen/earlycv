@@ -1,6 +1,7 @@
 import type { JobSourceType } from "@prisma/client";
 
 import { fetchAshbyCompanyLogo } from "./ashby-logo.extractor";
+import { fetchEightfoldCompanyLogo } from "./eightfold-logo.extractor";
 import { fetchGreenhouseCompanyLogo } from "./greenhouse-logo.extractor";
 import { fetchGupyCompanyLogo } from "./gupy-logo.extractor";
 import { fetchInHireCompanyLogo } from "./inhire-logo.extractor";
@@ -24,7 +25,12 @@ export type LogoExtractor = (sourceUrl: string) => Promise<string | null>;
 // "whitelabel" customizado trocam o template padrao (sem a classe
 // brand-image), retorna null nesses casos. talentbrew (site 100% sob
 // medida por cliente, sem template compartilhado) ficou de fora — sem
-// padrao generico confiavel.
+// padrao generico confiavel. eightfold: cobertura parcial — modo "direto"
+// (*.eightfold.ai) cobre os dois temas conhecidos (config navBar.image e
+// <img alt="eightfold-logo">), modo "proxy" (dominio proprio, ex Mercado
+// Livre) e so heuristico generico (apple-touch-icon/og:image), testado so
+// contra 1 empresa de cada modo (Vale e Mercado Livre) — ver comentario no
+// topo do extractor.
 export const LOGO_EXTRACTORS: Partial<Record<JobSourceType, LogoExtractor>> = {
   gupy: fetchGupyCompanyLogo,
   inhire: fetchInHireCompanyLogo,
@@ -34,6 +40,7 @@ export const LOGO_EXTRACTORS: Partial<Record<JobSourceType, LogoExtractor>> = {
   workday: fetchWorkdayCompanyLogo,
   teamtailor: fetchTeamtailorCompanyLogo,
   pandape: fetchPandapeCompanyLogo,
+  eightfold: fetchEightfoldCompanyLogo,
 };
 
 export const LOGO_FETCH_SUPPORTED_ADAPTERS = Object.keys(
