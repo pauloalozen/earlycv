@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { Logger } from "@nestjs/common";
+
 import { DefaultEmailService } from "./email.service";
 import type {
   EmailMessage,
@@ -143,4 +145,44 @@ test("DefaultEmailService never touches from/replyTo/configurationSet/tags when 
   assert.equal(sent.replyTo, undefined);
   assert.equal(sent.configurationSet, undefined);
   assert.equal(sent.tags, undefined);
+});
+
+// Sem correlationType no log, "category: PRODUCT_ANNOUNCEMENT, outcome:
+// SENT" é indistinguível entre uma campanha real e um envio de TESTE (ver
+// product-update-email.service.ts sendTest, correlationType=
+// PRODUCT_UPDATE_TEST) — foi exatamente essa ambiguidade que causou um
+// falso alarme de "webhook não correlacionou" em produção quando o envio
+// era, na verdade, um teste sem delivery persistida (esperado).
+test("email_send log includes correlationType/correlationId so a test send is never confused with a real campaign send in the logs", async (t) => {
+  const { policy } = buildPolicy({
+    result: {
+      outcome: "SENT",
+      provider: "SES",
+      providerMessageId: "ses-msg-1",
+    },
+    tags: { category: "PRODUCT_ANNOUNCEMENT" },
+  });
+  const service = new DefaultEmailService(policy as never);
+
+  const logs: unknown[][] = [];
+  t.mock.method(Logger.prototype, "log", (...args: unknown[]) => {
+    logs.push(args);
+  });
+
+  await service.send({
+    category: "PRODUCT_ANNOUNCEMENT",
+    message: {
+      to: "a@example.com",
+      subject: "s",
+      text: "t",
+      tags: {
+        correlationType: "PRODUCT_UPDATE_TEST",
+        correlationId: "product-update-1",
+      },
+    },
+  });
+
+  const [, payload] = logs[0] as [string, Record<string, unknown>];
+  assert.equal(payload.correlationType, "PRODUCT_UPDATE_TEST");
+  assert.equal(payload.correlationId, "product-update-1");
 });

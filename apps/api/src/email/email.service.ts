@@ -57,6 +57,13 @@ export class DefaultEmailService implements EmailServiceContract {
       provider: result.provider,
       outcome: result.outcome,
       providerMessageId: result.providerMessageId,
+      // correlationType/correlationId (quando o chamador setar) — sem isto
+      // o log fica ambíguo entre "campanha real" e "envio de teste" pra
+      // categorias com os dois caminhos (ex.: PRODUCT_ANNOUNCEMENT: SENT
+      // com correlationType=PRODUCT_UPDATE_TEST é um teste, não uma
+      // campanha que falhou em correlacionar no webhook).
+      correlationType: message.tags?.correlationType,
+      correlationId: message.tags?.correlationId,
     };
 
     if (result.outcome === "SENT") {
