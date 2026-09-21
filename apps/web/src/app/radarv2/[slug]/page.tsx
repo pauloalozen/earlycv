@@ -17,7 +17,7 @@ import {
   SkillChip,
   scoreColor,
 } from "@/app/radar/radar-ui";
-import { SaveJobTextBtn } from "@/app/radar/save-job-btn";
+import { SaveJobCtaBtn, SaveJobTextBtn } from "@/app/radar/save-job-btn";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -1327,14 +1327,25 @@ export default async function JobPage({ params }: JobPageProps) {
                     · {Math.round(existingApplication.bestScore as number)}%
                   </span>
                 </a>
-              ) : (
+              ) : user ? (
                 <AnalysisCtaButtons
-                  isLoggedIn={!!user}
+                  isLoggedIn
                   masterResumeId={masterResumeId}
                   radarJobId={job.id}
                   jobDescriptionText={job.description}
                   score={match?.score}
                   secondaryHref={adaptarJobHref}
+                />
+              ) : (
+                // Anônimo: o CTA de análise já está em destaque no topo da
+                // página (RadarGuestAnalysisBandV2) — um segundo "Analisar
+                // meu CV" aqui embaixo seria redundante. No lugar dele,
+                // "Salvar para depois" (mesmo ícone/toggle do link que já
+                // existia neste card).
+                <SaveJobCtaBtn
+                  jobId={job.id}
+                  initialSaved={isSaved}
+                  isLoggedIn={false}
                 />
               )}
               {!user || !hasExistingAnalysisScore ? (
@@ -1369,11 +1380,16 @@ export default async function JobPage({ params }: JobPageProps) {
                   Candidatar-se externamente ↗
                 </a>
               )}
-              <SaveJobTextBtn
-                jobId={job.id}
-                initialSaved={isSaved}
-                isLoggedIn={!!user}
-              />
+              {/* Logado: "salvar" já não tem um CTA próprio na sidebar
+              (o CTA principal é sempre análise) — mantém o link discreto.
+              Anônimo: SaveJobCtaBtn acima já cobre "salvar", sem duplicar. */}
+              {user ? (
+                <SaveJobTextBtn
+                  jobId={job.id}
+                  initialSaved={isSaved}
+                  isLoggedIn
+                />
+              ) : null}
             </div>
 
             {/* Job details card */}

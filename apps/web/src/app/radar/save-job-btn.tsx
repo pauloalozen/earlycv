@@ -168,3 +168,75 @@ export function SaveJobTextBtn({
     </button>
   );
 }
+
+// Variante em formato de CTA (borda, mesma régua visual do botão
+// "Candidatar-se externamente" abaixo dele) — usada no Radar v2
+// (radarv2/[slug]/page.tsx) no lugar do CTA de análise quando ele já
+// existe em destaque acima na mesma página (RadarGuestAnalysisBandV2),
+// tornando um segundo "Analisar meu CV" redundante ali.
+export function SaveJobCtaBtn({
+  jobId,
+  initialSaved = false,
+  isLoggedIn = true,
+}: {
+  jobId: string;
+  initialSaved?: boolean;
+  isLoggedIn?: boolean;
+}) {
+  const [origin] = useState<"RADAR" | "MONITOR">(() => {
+    const productOrigin = resolveJobProductOrigin(jobId);
+    return productOrigin === "monitor" || productOrigin === "monitor_email"
+      ? "MONITOR"
+      : "RADAR";
+  });
+  const { saved, pending, toggle } = useSaveJobToggle({
+    jobId,
+    initialSaved,
+    isLoggedIn,
+    origin,
+  });
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={pending}
+      aria-pressed={saved}
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 7,
+        background: saved ? "rgba(31,122,52,0.06)" : "#fff",
+        color: saved ? "#1f7a34" : "#0a0a0a",
+        border: `1px solid ${saved ? "rgba(31,122,52,0.3)" : "rgba(10,10,10,0.15)"}`,
+        borderRadius: 9,
+        padding: "11px",
+        fontSize: 13,
+        fontWeight: 500,
+        cursor: pending ? "default" : "pointer",
+        opacity: pending ? 0.7 : 1,
+        fontFamily: GEIST,
+        marginBottom: 8,
+      }}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill={saved ? "#1f7a34" : "none"}
+      >
+        <title>{saved ? "Remover vaga salva" : "Salvar para depois"}</title>
+        <path
+          d="M6 3h12v18l-6-4-6 4V3z"
+          stroke={saved ? "#1f7a34" : "currentColor"}
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {saved ? "Salva para depois" : "Salvar para depois"}
+    </button>
+  );
+}
