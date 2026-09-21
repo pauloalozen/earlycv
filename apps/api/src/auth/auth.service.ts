@@ -50,6 +50,20 @@ export type AuthSession = {
   user: AuthUser;
 };
 
+// Contexto de rede do visitante original (browser), só pra classificação de
+// tráfego ($virt_traffic_type) do PostHog nos eventos signup_completed/
+// login_completed — mesmo princípio de business-funnel-event.service.ts
+// (posthogVisitorIp/posthogVisitorUserAgent lá). Diferença aqui: register/
+// login/callback social são chamados DIRETO pelo browser na API Nest (sem
+// hop pela rota Next), então o AuthController lê o contexto real do próprio
+// request (request.analysisContext.ip + header user-agent), nunca de
+// metadata/DTO controlável pelo cliente. Omitido (nunca fabricado) quando
+// ausente.
+export type AuthVisitorContext = {
+  posthogVisitorIp?: string | null;
+  posthogVisitorUserAgent?: string | null;
+};
+
 export type SocialProvider = "google" | "linkedin";
 
 export type SocialProfileInput = {
@@ -98,6 +112,8 @@ export class AuthService {
     conversionContext: string;
     sessionInternalId?: string | null;
     visitorId?: string | null;
+    posthogVisitorIp?: string | null;
+    posthogVisitorUserAgent?: string | null;
   }): Promise<void> {
     try {
       await this.funnelEvents.record(
@@ -134,6 +150,8 @@ export class AuthService {
           ip: null,
           routePath: null,
           userAgentHash: null,
+          posthogVisitorIp: input.posthogVisitorIp ?? null,
+          posthogVisitorUserAgent: input.posthogVisitorUserAgent ?? null,
         },
         "backend",
       );
@@ -153,6 +171,8 @@ export class AuthService {
     loginMethod: string;
     sessionInternalId?: string | null;
     visitorId?: string | null;
+    posthogVisitorIp?: string | null;
+    posthogVisitorUserAgent?: string | null;
   }): Promise<void> {
     try {
       await this.funnelEvents.record(
@@ -178,6 +198,8 @@ export class AuthService {
           ip: null,
           routePath: null,
           userAgentHash: null,
+          posthogVisitorIp: input.posthogVisitorIp ?? null,
+          posthogVisitorUserAgent: input.posthogVisitorUserAgent ?? null,
         },
         "backend",
       );
@@ -186,7 +208,10 @@ export class AuthService {
     }
   }
 
-  async register(input: RegisterDto): Promise<AuthSession> {
+  async register(
+    input: RegisterDto,
+    visitorContext?: AuthVisitorContext,
+  ): Promise<AuthSession> {
     const user = await this.createUser({
       email: input.email,
       password: input.password,
@@ -201,6 +226,8 @@ export class AuthService {
       conversionContext,
       sessionInternalId: input.sessionInternalId,
       visitorId: input.visitorId,
+      posthogVisitorIp: visitorContext?.posthogVisitorIp,
+      posthogVisitorUserAgent: visitorContext?.posthogVisitorUserAgent,
     });
 
     await this.issueEmailVerificationChallenge(user.id, user.email);
@@ -241,12 +268,15 @@ export class AuthService {
     user: { id: string },
     sessionInternalId?: string | null,
     visitorId?: string | null,
+    visitorContext?: AuthVisitorContext,
   ): Promise<AuthSession> {
     await this.recordLoginCompleted({
       userId: user.id,
       loginMethod: "password",
       sessionInternalId,
       visitorId,
+      posthogVisitorIp: visitorContext?.posthogVisitorIp,
+      posthogVisitorUserAgent: visitorContext?.posthogVisitorUserAgent,
     });
 
     return this.issueSession(user.id);
@@ -307,6 +337,7 @@ export class AuthService {
     conversionContext: SignupConversionContext = "unknown",
     sessionInternalId?: string | null,
     visitorId?: string | null,
+    visitorContext?: AuthVisitorContext,
   ): Promise<AuthSession> {
     const providerEmail = input.email.trim().toLowerCase();
     const providerAccountId = input.providerAccountId.trim();
@@ -428,6 +459,8 @@ export class AuthService {
         conversionContext,
         sessionInternalId,
         visitorId,
+        posthogVisitorIp: visitorContext?.posthogVisitorIp,
+        posthogVisitorUserAgent: visitorContext?.posthogVisitorUserAgent,
       });
     } else {
       await this.recordLoginCompleted({
@@ -435,6 +468,8 @@ export class AuthService {
         loginMethod: input.provider,
         sessionInternalId,
         visitorId,
+        posthogVisitorIp: visitorContext?.posthogVisitorIp,
+        posthogVisitorUserAgent: visitorContext?.posthogVisitorUserAgent,
       });
     }
 
