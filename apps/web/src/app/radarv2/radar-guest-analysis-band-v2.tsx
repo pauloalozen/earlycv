@@ -13,6 +13,7 @@ import { runRadarGuestAnalysisFlow } from "@/lib/radar-guest-analysis-flow";
 import type { SucceededRadarAnalysisPreview } from "@/lib/radar-guest-analysis-preview";
 import { useTurnstileToken } from "@/lib/use-turnstile-token";
 import { getOrCreateVisitorId } from "@/lib/visitor-id";
+import { useRadarV2AnalysisPreview } from "./radar-analysis-preview-context-v2";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -481,6 +482,7 @@ export function RadarGuestAnalysisBandV2({
     null,
   );
   const [ctaTracked, setCtaTracked] = useState(false);
+  const { markPreviewRevealed } = useRadarV2AnalysisPreview();
 
   const signupHref = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
     "/adaptar/resultado",
@@ -510,10 +512,15 @@ export function RadarGuestAnalysisBandV2({
     trackCtaClickOnce();
     setFile(nextFile);
     setError(null);
+    // Dispara a análise assim que o CV é enviado — sem exigir um segundo
+    // clique no botão. Passa o arquivo direto (nunca lê de `file` aqui)
+    // porque setFile ainda não foi commitado nesse mesmo tick.
+    void handleAnalyze(nextFile);
   }
 
-  async function handleAnalyze() {
-    if (!file || phase === "loading") return;
+  async function handleAnalyze(fileOverride?: File) {
+    const activeFile = fileOverride ?? file;
+    if (!activeFile || phase === "loading") return;
 
     setPhase("loading");
     setError(null);
@@ -521,7 +528,7 @@ export function RadarGuestAnalysisBandV2({
     try {
       const formData = new FormData();
       formData.append("radarJobId", jobId);
-      formData.append("file", file);
+      formData.append("file", activeFile);
 
       const turnstileToken = await requestTurnstileToken();
       appendTurnstileTokenToAnalyzeFormData(formData, turnstileToken);
@@ -544,6 +551,7 @@ export function RadarGuestAnalysisBandV2({
 
       setPreview(result.preview);
       setPhase("preview");
+      markPreviewRevealed();
       void trackEvent({
         eventName: "radar_analysis_preview_viewed",
         eventVersion: 1,
@@ -822,7 +830,7 @@ export function RadarGuestAnalysisBandV2({
             />
             <button
               type="button"
-              onClick={handleAnalyze}
+              onClick={() => handleAnalyze()}
               disabled={!file}
               style={{
                 width: "100%",

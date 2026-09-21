@@ -53,7 +53,7 @@ describe("RadarGuestAnalysisBandV2", () => {
     expect(screen.queryByText(/SEU RESULTADO PARA ESTA VAGA/i)).toBeNull();
   });
 
-  it("upload + clique: mostra o estado de análise (Zeigarnik checklist) antes do preview", async () => {
+  it("upload: dispara a análise automaticamente e mostra o estado de análise (Zeigarnik checklist) antes do preview", async () => {
     let resolveFlow: (value: unknown) => void = () => undefined;
     runRadarGuestAnalysisFlowMock.mockReturnValue(
       new Promise((resolve) => {
@@ -69,7 +69,6 @@ describe("RadarGuestAnalysisBandV2", () => {
       "radarv2-guest-analysis-file-input",
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
-    fireEvent.click(screen.getByText(/Analisar meu CV para esta vaga/i));
 
     await waitFor(() => {
       expect(
@@ -95,7 +94,7 @@ describe("RadarGuestAnalysisBandV2", () => {
     });
   });
 
-  it("upload + clique: chama runRadarGuestAnalysisFlow com radarJobId no FormData e mostra gauges + gapsCount real no preview", async () => {
+  it("upload: dispara runRadarGuestAnalysisFlow automaticamente com radarJobId no FormData e mostra gauges + gapsCount real no preview", async () => {
     runRadarGuestAnalysisFlowMock.mockResolvedValue({
       kind: "preview",
       jobId: "analysis-job-1",
@@ -120,7 +119,6 @@ describe("RadarGuestAnalysisBandV2", () => {
       "radarv2-guest-analysis-file-input",
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
-    fireEvent.click(screen.getByText(/Analisar meu CV para esta vaga/i));
 
     await waitFor(() => {
       expect(
@@ -178,7 +176,6 @@ describe("RadarGuestAnalysisBandV2", () => {
       "radarv2-guest-analysis-file-input",
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
-    fireEvent.click(screen.getByText(/Analisar meu CV para esta vaga/i));
 
     await waitFor(() => {
       expect(screen.getByText(/Encontramos/i)).toBeInTheDocument();
@@ -202,7 +199,6 @@ describe("RadarGuestAnalysisBandV2", () => {
       "radarv2-guest-analysis-file-input",
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
-    fireEvent.click(screen.getByText(/Analisar meu CV para esta vaga/i));
 
     await waitFor(() => {
       expect(

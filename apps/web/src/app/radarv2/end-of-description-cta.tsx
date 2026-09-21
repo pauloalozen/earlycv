@@ -1,22 +1,27 @@
 "use client";
 
+import { useRadarV2AnalysisPreview } from "./radar-analysis-preview-context-v2";
+
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
+
+const SIGNUP_HREF = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
+  "/adaptar/resultado",
+)}`;
 
 // Fase 1.1 (Radar v2) — reforço pedido explicitamente: depois de ler a
 // descrição inteira da vaga, a pessoa nunca deveria ter que rolar de volta
 // procurando o CTA — este bloco aparece bem no fim do conteúdo e leva de
 // volta pro MESMO CTA principal da página (nunca abre um segundo fluxo).
-// Anônimo → âncora pro bloco de análise guest (RadarGuestAnalysisBandV2,
-// #radar-guest-analysis). Logado com CV master → âncora pro CompatCard real
-// na sidebar (#radarv2-compat-card). Logado sem CV master → mesma âncora,
-// o CompatCard já mostra o CTA de completar o perfil nesse estado.
 //
-// scrollIntoView({block:"center"}) em vez de deixar o navegador seguir o
-// href de verdade: a navegação padrão de âncora sempre alinha o alvo no
-// topo do viewport (respeitando só scrollMarginTop) — como o card de
-// análise é mais alto que a tela em telas menores, isso deixava o CTA
-// (que é o motivo de estar voltando pra lá) cortado fora da área visível.
-// Centralizar o card resolve isso sem depender de scrollMarginTop.
+// Anônimo ANTES de analisar → âncora pro bloco de análise guest
+// (RadarGuestAnalysisBandV2, #radar-guest-analysis), com scroll
+// centralizado (ver handleClick). Anônimo DEPOIS de já ver o preview
+// (useRadarV2AnalysisPreview) → o "curtiu a vaga, veja se seu CV se
+// encaixa" não faz mais sentido (a pessoa já viu que se encaixa, parcial)
+// — a copy muda pra reforçar o gate de cadastro, e o CTA passa a ir direto
+// pro signup, sem mais precisar rolar a página. Logado com/sem CV master →
+// âncora pro CompatCard real na sidebar (#radarv2-compat-card), sempre por
+// scroll (nunca perde a análise em andamento nesse card).
 export function EndOfDescriptionCta({
   isAuthenticated,
   hasMasterCv,
@@ -24,19 +29,29 @@ export function EndOfDescriptionCta({
   isAuthenticated: boolean;
   hasMasterCv: boolean;
 }) {
+  const { hasPreview } = useRadarV2AnalysisPreview();
+  const showSignupGate = !isAuthenticated && hasPreview;
+
   const targetId = isAuthenticated
     ? "radarv2-compat-card"
     : "radar-guest-analysis";
-  const title = isAuthenticated
-    ? hasMasterCv
-      ? "Curtiu a vaga? Veja seu match real com ela."
-      : "Curtiu a vaga? Suba seu CV e veja seu match."
-    : "Curtiu a vaga? Veja se seu CV se encaixa.";
-  const description = isAuthenticated
-    ? "Role pra cima e analise seu CV Master contra essa vaga específica."
-    : "Sobe seu currículo lá em cima e receba seu score em segundos.";
+
+  const title = showSignupGate
+    ? "Libere sua análise completa agora mesmo, criando sua conta grátis."
+    : isAuthenticated
+      ? hasMasterCv
+        ? "Curtiu a vaga? Veja seu match real com ela."
+        : "Curtiu a vaga? Suba seu CV e veja seu match."
+      : "Curtiu a vaga? Veja se seu CV se encaixa.";
+
+  const description = showSignupGate
+    ? "Seu score e os pontos de melhoria já estão prontos lá em cima — só falta criar a conta pra ver tudo."
+    : isAuthenticated
+      ? "Role pra cima e analise seu CV Master contra essa vaga específica."
+      : "Sobe seu currículo lá em cima e receba seu score em segundos.";
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (showSignupGate) return; // navegação normal pro signup
     const target = document.getElementById(targetId);
     if (!target) return;
     e.preventDefault();
@@ -45,7 +60,7 @@ export function EndOfDescriptionCta({
 
   return (
     <a
-      href={`#${targetId}`}
+      href={showSignupGate ? SIGNUP_HREF : `#${targetId}`}
       onClick={handleClick}
       style={{
         display: "flex",
@@ -86,19 +101,35 @@ export function EndOfDescriptionCta({
           justifyContent: "center",
         }}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#16210a"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <title>Voltar ao topo</title>
-          <path d="M12 19V5M5 12l7-7 7 7" />
-        </svg>
+        {showSignupGate ? (
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#16210a"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <title>Criar conta grátis</title>
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        ) : (
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#16210a"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <title>Voltar ao topo</title>
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        )}
       </div>
     </a>
   );

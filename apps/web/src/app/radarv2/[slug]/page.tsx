@@ -35,6 +35,7 @@ import { getAbsoluteUrl } from "@/lib/site";
 import { EndOfDescriptionCta } from "../end-of-description-cta";
 import { JobDetailViewTrackerV2 } from "../job-detail-view-tracker-v2";
 import { MonitorSignupCtaV2 } from "../monitor-signup-cta-v2";
+import { RadarV2AnalysisPreviewProvider } from "../radar-analysis-preview-context-v2";
 import { RadarGuestAnalysisBandV2 } from "../radar-guest-analysis-band-v2";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -831,113 +832,118 @@ export default async function JobPage({ params }: JobPageProps) {
         position: "relative",
       }}
     >
-      <script type="application/ld+json">{JSON.stringify(jobJsonLd)}</script>
-      <script type="application/ld+json">
-        {JSON.stringify(breadcrumbJsonLd)}
-      </script>
-      <JobDetailViewTrackerV2 jobId={job.id} />
+      <RadarV2AnalysisPreviewProvider>
+        <script type="application/ld+json">{JSON.stringify(jobJsonLd)}</script>
+        <script type="application/ld+json">
+          {JSON.stringify(breadcrumbJsonLd)}
+        </script>
+        <JobDetailViewTrackerV2 jobId={job.id} />
 
-      <div
-        aria-hidden
-        style={{
-          position: "fixed",
-          inset: 0,
-          pointerEvents: "none",
-          opacity: 0.5,
-          mixBlendMode: "multiply",
-          zIndex: 0,
-          backgroundImage: GRAIN,
-        }}
-      />
-
-      <PublicNavBar
-        hideHowItWorksLink
-        hideJobsLink
-        fixed
-        userName={user?.name}
-        userRole={user?.internalRole}
-        credits={availableCredits}
-      />
-
-      <div
-        style={{
-          maxWidth: 1200,
-          margin: "0 auto",
-          padding: "108px clamp(16px,4vw,48px) 80px",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {/* Breadcrumb */}
-        <nav
-          aria-label="Breadcrumb"
-          className="job-breadcrumb"
+        <div
+          aria-hidden
           style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            color: "#8a8a85",
-            letterSpacing: 0.3,
-            marginBottom: 20,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "wrap",
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            opacity: 0.5,
+            mixBlendMode: "multiply",
+            zIndex: 0,
+            backgroundImage: GRAIN,
+          }}
+        />
+
+        <PublicNavBar
+          hideHowItWorksLink
+          hideJobsLink
+          fixed
+          userName={user?.name}
+          userRole={user?.internalRole}
+          credits={availableCredits}
+        />
+
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "108px clamp(16px,4vw,48px) 80px",
+            position: "relative",
+            zIndex: 1,
           }}
         >
-          <Link
-            href="/radar"
-            style={{ color: "#5a5a55", textDecoration: "none", flexShrink: 0 }}
+          {/* Breadcrumb */}
+          <nav
+            aria-label="Breadcrumb"
+            className="job-breadcrumb"
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              color: "#8a8a85",
+              letterSpacing: 0.3,
+              marginBottom: 20,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
           >
-            Vagas
-          </Link>
-          <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
-          <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
-            {job.title}
-          </span>
-        </nav>
+            <Link
+              href="/radar"
+              style={{
+                color: "#5a5a55",
+                textDecoration: "none",
+                flexShrink: 0,
+              }}
+            >
+              Vagas
+            </Link>
+            <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
+            <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
+              {job.title}
+            </span>
+          </nav>
 
-        {/* Internal linking — discreto, contextual às landing pages de SEO
+          {/* Internal linking — discreto, contextual às landing pages de SEO
         (área/empresa/remotas). job.dominantArea vem do enrichment
         (JobEnrichment), pode ser null pra vagas ainda sem enriquecimento
         completo — nesse caso o link de área simplesmente não entra na
         lista. job.company é sempre preenchido, então o link de empresa
         aparece pra toda vaga. */}
-        {internalLinks.length > 0 ? (
-          <div
-            className="job-internal-links"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-              fontFamily: MONO,
-              fontSize: 11,
-              marginBottom: 20,
-              marginTop: -8,
-            }}
-          >
-            {internalLinks.map((link, index) => (
-              <Fragment key={link.href}>
-                {index > 0 ? (
-                  <span
-                    className="job-internal-links-sep"
-                    style={{ color: "#c8c6bf" }}
+          {internalLinks.length > 0 ? (
+            <div
+              className="job-internal-links"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                fontFamily: MONO,
+                fontSize: 11,
+                marginBottom: 20,
+                marginTop: -8,
+              }}
+            >
+              {internalLinks.map((link, index) => (
+                <Fragment key={link.href}>
+                  {index > 0 ? (
+                    <span
+                      className="job-internal-links-sep"
+                      style={{ color: "#c8c6bf" }}
+                    >
+                      |
+                    </span>
+                  ) : null}
+                  <Link
+                    href={link.href}
+                    style={{ color: "#6a6560", textDecoration: "none" }}
                   >
-                    |
-                  </span>
-                ) : null}
-                <Link
-                  href={link.href}
-                  style={{ color: "#6a6560", textDecoration: "none" }}
-                >
-                  {link.label}
-                </Link>
-              </Fragment>
-            ))}
-          </div>
-        ) : null}
+                    {link.label}
+                  </Link>
+                </Fragment>
+              ))}
+            </div>
+          ) : null}
 
-        <style>{`
+          <style>{`
           @media (max-width: 640px) {
             /* Long job titles ("Product Owner | Scrum Master - Pleno")
              * wrapped across 2-3 lines right under "Vagas ›", and the
@@ -964,159 +970,146 @@ export default async function JobPage({ params }: JobPageProps) {
           }
         `}</style>
 
-        {/* Job header */}
-        <header style={{ marginBottom: 32 }}>
-          {/* Company row */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              marginBottom: 22,
-            }}
-          >
-            <CompanyLogo
-              name={job.company}
-              logoUrl={job.companyLogoUrl}
-              websiteUrl={job.companyWebsiteUrl}
-              size={44}
-              borderRadius={10}
-              fontSize={13}
-            />
-            <div>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 500,
-                  letterSpacing: -0.3,
-                  marginBottom: 2,
-                }}
-              >
-                {job.company}
-              </div>
-              {job.location ? (
-                <div style={{ fontSize: 12, color: "#6a6560" }}>
-                  {job.location}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Title */}
-          <h1
-            style={{
-              fontSize: "clamp(1.75rem,4vw,2.75rem)",
-              fontWeight: 500,
-              letterSpacing: -1.6,
-              lineHeight: 1.05,
-              marginBottom: 20,
-              color: "#0a0a0a",
-              maxWidth: 760,
-            }}
-          >
-            {titleParts.emphasis ? (
-              <>
-                {titleParts.lead}
-                <br />
-                <em
+          {/* Job header */}
+          <header style={{ marginBottom: 32 }}>
+            {/* Company row */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginBottom: 22,
+              }}
+            >
+              <CompanyLogo
+                name={job.company}
+                logoUrl={job.companyLogoUrl}
+                websiteUrl={job.companyWebsiteUrl}
+                size={44}
+                borderRadius={10}
+                fontSize={13}
+              />
+              <div>
+                <div
                   style={{
-                    fontFamily: SERIF,
-                    fontWeight: 400,
-                    fontStyle: "italic",
-                    color: "#3a3a38",
+                    fontSize: 15,
+                    fontWeight: 500,
+                    letterSpacing: -0.3,
+                    marginBottom: 2,
                   }}
                 >
-                  {titleParts.emphasis}.
-                </em>
-              </>
-            ) : (
-              titleParts.lead
-            )}
-          </h1>
+                  {job.company}
+                </div>
+                {job.location ? (
+                  <div style={{ fontSize: 12, color: "#6a6560" }}>
+                    {job.location}
+                  </div>
+                ) : null}
+              </div>
+            </div>
 
-          {/* Badges */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 6,
-              marginBottom: 26,
-              alignItems: "center",
-            }}
-          >
-            {workModelLabel ? (
-              <span
-                style={{
-                  background: "#c6ff3a",
-                  color: "#405410",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 10px",
-                  borderRadius: 5,
-                  fontWeight: 600,
-                  letterSpacing: 0.2,
-                }}
-              >
-                {workModelLabel}
-              </span>
-            ) : null}
-            {seniorityLabel ? (
-              <span
-                style={{
-                  background: "rgba(10,10,10,0.05)",
-                  color: "#3a3a38",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 9px",
-                  borderRadius: 5,
-                }}
-              >
-                {seniorityLabel}
-              </span>
-            ) : null}
-            {job.employmentType ? (
-              <span
-                style={{
-                  background: "#fafaf6",
-                  color: "#3a3a38",
-                  border: "1px solid rgba(10,10,10,0.1)",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 9px",
-                  borderRadius: 5,
-                }}
-              >
-                {formatEmploymentType(job.employmentType)}
-              </span>
-            ) : null}
-          </div>
+            {/* Title */}
+            <h1
+              style={{
+                fontSize: "clamp(1.75rem,4vw,2.75rem)",
+                fontWeight: 500,
+                letterSpacing: -1.6,
+                lineHeight: 1.05,
+                marginBottom: 20,
+                color: "#0a0a0a",
+                maxWidth: 760,
+              }}
+            >
+              {titleParts.emphasis ? (
+                <>
+                  {titleParts.lead}
+                  <br />
+                  <em
+                    style={{
+                      fontFamily: SERIF,
+                      fontWeight: 400,
+                      fontStyle: "italic",
+                      color: "#3a3a38",
+                    }}
+                  >
+                    {titleParts.emphasis}.
+                  </em>
+                </>
+              ) : (
+                titleParts.lead
+              )}
+            </h1>
 
-          {/* Meta info — mesmos 4 dados de sempre (localização, modelo,
+            {/* Badges */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginBottom: 26,
+                alignItems: "center",
+              }}
+            >
+              {workModelLabel ? (
+                <span
+                  style={{
+                    background: "#c6ff3a",
+                    color: "#405410",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    padding: "4px 10px",
+                    borderRadius: 5,
+                    fontWeight: 600,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  {workModelLabel}
+                </span>
+              ) : null}
+              {seniorityLabel ? (
+                <span
+                  style={{
+                    background: "rgba(10,10,10,0.05)",
+                    color: "#3a3a38",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    padding: "4px 9px",
+                    borderRadius: 5,
+                  }}
+                >
+                  {seniorityLabel}
+                </span>
+              ) : null}
+              {job.employmentType ? (
+                <span
+                  style={{
+                    background: "#fafaf6",
+                    color: "#3a3a38",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    padding: "4px 9px",
+                    borderRadius: 5,
+                  }}
+                >
+                  {formatEmploymentType(job.employmentType)}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Meta info — mesmos 4 dados de sempre (localização, modelo,
           publicação, primeira captura), só que como linha de tags discreta
           em vez de grid de 4 cards grandes: essa informação não é o motivo
           de a pessoa estar aqui, então não deveria disputar espaço com o
           bloco de análise logo abaixo. */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              marginBottom: 4,
-            }}
-          >
-            <span
+            <div
               style={{
-                background: "#fff",
-                border: "1px solid rgba(10,10,10,0.1)",
-                borderRadius: 8,
-                padding: "7px 12px",
-                fontSize: 12,
-                color: "#4a4a45",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginBottom: 4,
               }}
             >
-              📍 {job.location ?? "Não informado"}
-            </span>
-            {workModelLabel ? (
               <span
                 style={{
                   background: "#fff",
@@ -1127,61 +1120,74 @@ export default async function JobPage({ params }: JobPageProps) {
                   color: "#4a4a45",
                 }}
               >
-                {workModelLabel}
+                📍 {job.location ?? "Não informado"}
               </span>
-            ) : null}
-            {publishedDate ? (
+              {workModelLabel ? (
+                <span
+                  style={{
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    borderRadius: 8,
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    color: "#4a4a45",
+                  }}
+                >
+                  {workModelLabel}
+                </span>
+              ) : null}
+              {publishedDate ? (
+                <span
+                  style={{
+                    background: isRecentlyPublished
+                      ? "rgba(198,255,58,0.14)"
+                      : "#fff",
+                    border: `1px solid ${isRecentlyPublished ? "rgba(64,84,16,0.2)" : "rgba(10,10,10,0.1)"}`,
+                    borderRadius: 8,
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    color: isRecentlyPublished ? "#405410" : "#4a4a45",
+                  }}
+                >
+                  Publicada {publishedDate}
+                  {isRecentlyPublished ? " · recém publicada" : ""}
+                </span>
+              ) : null}
               <span
                 style={{
-                  background: isRecentlyPublished
-                    ? "rgba(198,255,58,0.14)"
-                    : "#fff",
-                  border: `1px solid ${isRecentlyPublished ? "rgba(64,84,16,0.2)" : "rgba(10,10,10,0.1)"}`,
+                  background: "#fff",
+                  border: "1px solid rgba(10,10,10,0.1)",
                   borderRadius: 8,
                   padding: "7px 12px",
                   fontSize: 12,
-                  color: isRecentlyPublished ? "#405410" : "#4a4a45",
+                  fontFamily: MONO,
+                  color: "#8a8a85",
                 }}
               >
-                Publicada {publishedDate}
-                {isRecentlyPublished ? " · recém publicada" : ""}
+                capturada em{" "}
+                {new Date(job.firstSeenAt).toLocaleDateString("pt-BR")}
               </span>
-            ) : null}
-            <span
-              style={{
-                background: "#fff",
-                border: "1px solid rgba(10,10,10,0.1)",
-                borderRadius: 8,
-                padding: "7px 12px",
-                fontSize: 12,
-                fontFamily: MONO,
-                color: "#8a8a85",
-              }}
-            >
-              capturada em{" "}
-              {new Date(job.firstSeenAt).toLocaleDateString("pt-BR")}
-            </span>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {/* Fase 1 de conversão do Radar — entrada principal de análise
+          {/* Fase 1 de conversão do Radar — entrada principal de análise
         acima da dobra, só visitante anônimo; usuário logado já vê o
         CompatCard real na sidebar, não precisa deste bloco. */}
-        {!user ? (
-          <RadarGuestAnalysisBandV2 jobId={job.id} jobTitle={job.title} />
-        ) : null}
+          {!user ? (
+            <RadarGuestAnalysisBandV2 jobId={job.id} jobTitle={job.title} />
+          ) : null}
 
-        {/* Two-column body */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 340px",
-            gap: 28,
-            alignItems: "start",
-          }}
-          className="vagas-detail-grid"
-        >
-          <style>{`
+          {/* Two-column body */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) 340px",
+              gap: 28,
+              alignItems: "start",
+            }}
+            className="vagas-detail-grid"
+          >
+            <style>{`
             @media (max-width: 900px) {
               .vagas-detail-grid { grid-template-columns: 1fr !important; }
             }
@@ -1191,382 +1197,384 @@ export default async function JobPage({ params }: JobPageProps) {
             .job-prose strong { font-weight: 600; }
           `}</style>
 
-          {/* Description */}
-          <div
-            style={{
-              background: "#fafaf6",
-              border: "1px solid rgba(10,10,10,0.08)",
-              borderRadius: 14,
-              padding: "clamp(20px,4vw,30px)",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-            }}
-          >
-            {sections.map((section, idx) => (
-              <div
-                key={section.title}
-                style={{
-                  borderTop: idx > 0 ? "1px solid rgba(10,10,10,0.07)" : "none",
-                  paddingTop: idx > 0 ? 28 : 0,
-                  marginBottom: 28,
-                }}
-              >
-                <h2
+            {/* Description */}
+            <div
+              style={{
+                background: "#fafaf6",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 14,
+                padding: "clamp(20px,4vw,30px)",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+              }}
+            >
+              {sections.map((section, idx) => (
+                <div
+                  key={section.title}
                   style={{
-                    fontSize: 18,
-                    fontWeight: 600,
-                    letterSpacing: -0.3,
-                    margin: "0 0 14px",
-                    color: "#0a0a0a",
+                    borderTop:
+                      idx > 0 ? "1px solid rgba(10,10,10,0.07)" : "none",
+                    paddingTop: idx > 0 ? 28 : 0,
+                    marginBottom: 28,
                   }}
                 >
-                  {section.title}
-                </h2>
-                <div
-                  className="job-prose"
-                  style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
-                  dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
-                />
-              </div>
-            ))}
+                  <h2
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 600,
+                      letterSpacing: -0.3,
+                      margin: "0 0 14px",
+                      color: "#0a0a0a",
+                    }}
+                  >
+                    {section.title}
+                  </h2>
+                  <div
+                    className="job-prose"
+                    style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
+                    dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
+                  />
+                </div>
+              ))}
 
-            {/* Reforço de fim de descrição — sempre volta pro mesmo CTA
+              {/* Reforço de fim de descrição — sempre volta pro mesmo CTA
             principal da vaga (bloco de análise guest no topo, ou o
             CompatCard real na sidebar de quem já está logado). */}
-            <EndOfDescriptionCta
-              isAuthenticated={!!user}
-              hasMasterCv={scoreState === "has-cv"}
-            />
+              <EndOfDescriptionCta
+                isAuthenticated={!!user}
+                hasMasterCv={scoreState === "has-cv"}
+              />
 
-            {/* CTA do Monitor — única promoção de Monitor que resta na
+              {/* CTA do Monitor — única promoção de Monitor que resta na
             página (sidebar e faixa de rodapé removidas), só anônimo */}
-            {!user ? <MonitorSignupCtaV2 /> : null}
-          </div>
+              {!user ? <MonitorSignupCtaV2 /> : null}
+            </div>
 
-          {/* Sidebar */}
-          <aside
-            id="radarv2-compat-card"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-              scrollMarginTop: 24,
-            }}
-          >
-            {/* Compat card */}
-            <CompatCard
-              scoreState={scoreState}
-              match={match}
-              existingApplication={existingApplication}
-            />
+            {/* Sidebar */}
+            <aside
+              id="radarv2-compat-card"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+                scrollMarginTop: 24,
+              }}
+            >
+              {/* Compat card */}
+              <CompatCard
+                scoreState={scoreState}
+                match={match}
+                existingApplication={existingApplication}
+              />
 
-            {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto só
+              {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto só
                 aparece quando há score de oportunidade pra explicar e ainda
                 não existe uma análise real (nesse caso o card já mostra o
                 score real, a distinção deixa de fazer sentido) */}
-            {match && !hasExistingAnalysisScore ? (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 11,
-                  lineHeight: 1.5,
-                  color: "#8a8a85",
-                }}
-              >
-                Indica o quanto esta vaga combina com seu perfil. É diferente do
-                score da análise do currículo.
-              </p>
-            ) : null}
-
-            {/* Candidatura card */}
-            <div
-              style={{
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 14,
-                padding: 18,
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  letterSpacing: 1.4,
-                  color: "#8a8a85",
-                  fontWeight: 500,
-                  marginBottom: 12,
-                }}
-              >
-                CANDIDATURA
-              </div>
-              {hasExistingAnalysisScore && existingApplication ? (
-                <a
-                  href={`/candidaturas/${existingApplication.id}`}
-                  data-testid="view-application-btn"
+              {match && !hasExistingAnalysisScore ? (
+                <p
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    width: "100%",
-                    boxSizing: "border-box",
-                    background: "#0a0a0a",
-                    color: "#fafaf6",
-                    border: "none",
-                    borderRadius: 8,
-                    padding: "13px 18px",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    fontFamily: GEIST,
-                    marginBottom: 8,
+                    margin: 0,
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    color: "#8a8a85",
                   }}
                 >
-                  Ver minha candidatura
-                  <span style={{ opacity: 0.6, fontFamily: MONO }}>
-                    · {Math.round(existingApplication.bestScore as number)}%
-                  </span>
-                </a>
-              ) : user ? (
-                <AnalysisCtaButtons
-                  isLoggedIn
-                  masterResumeId={masterResumeId}
-                  radarJobId={job.id}
-                  jobDescriptionText={job.description}
-                  score={match?.score}
-                  secondaryHref={adaptarJobHref}
-                />
-              ) : (
-                // Anônimo: o CTA de análise já está em destaque no topo da
-                // página (RadarGuestAnalysisBandV2) — um segundo "Analisar
-                // meu CV" aqui embaixo seria redundante. No lugar dele,
-                // "Salvar para depois" (mesmo ícone/toggle do link que já
-                // existia neste card).
-                <SaveJobCtaBtn
-                  jobId={job.id}
-                  initialSaved={isSaved}
-                  isLoggedIn={false}
-                />
-              )}
-              {!user || !hasExistingAnalysisScore ? (
-                <ExternalApplyGate
-                  href={job.sourceJobUrl}
-                  company={job.company}
-                  jobId={job.id}
-                  isAuthenticated={!!user}
-                />
-              ) : (
-                <a
-                  href={job.sourceJobUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    width: "100%",
-                    display: "block",
-                    background: "#fff",
-                    color: "#0a0a0a",
-                    border: "1px solid rgba(10,10,10,0.15)",
-                    borderRadius: 9,
-                    padding: "11px",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    textAlign: "center",
-                    fontFamily: GEIST,
-                    marginBottom: 8,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  Candidatar-se externamente ↗
-                </a>
-              )}
-              {/* Logado: "salvar" já não tem um CTA próprio na sidebar
-              (o CTA principal é sempre análise) — mantém o link discreto.
-              Anônimo: SaveJobCtaBtn acima já cobre "salvar", sem duplicar. */}
-              {user ? (
-                <SaveJobTextBtn
-                  jobId={job.id}
-                  initialSaved={isSaved}
-                  isLoggedIn
-                />
+                  Indica o quanto esta vaga combina com seu perfil. É diferente
+                  do score da análise do currículo.
+                </p>
               ) : null}
-            </div>
 
-            {/* Job details card */}
-            <div
-              style={{
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 14,
-                padding: 18,
-              }}
-            >
+              {/* Candidatura card */}
               <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  letterSpacing: 1.4,
-                  color: "#8a8a85",
-                  fontWeight: 500,
-                  marginBottom: 12,
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 14,
+                  padding: 18,
                 }}
               >
-                DETALHES
-              </div>
-              <dl style={{ margin: 0 }}>
-                {(
-                  [
-                    { label: "Empresa", value: job.company },
-                    job.location
-                      ? { label: "Localização", value: job.location }
-                      : null,
-                    workModelLabel
-                      ? { label: "Modelo", value: workModelLabel }
-                      : null,
-                    job.employmentType
-                      ? {
-                          label: "Contrato",
-                          value: formatEmploymentType(job.employmentType),
-                        }
-                      : null,
-                    {
-                      label: "Fonte",
-                      value: new URL(job.sourceJobUrl).hostname.replace(
-                        /^www\./,
-                        "",
-                      ),
-                      link: job.sourceJobUrl,
-                    },
-                  ] as (null | {
-                    label: string;
-                    value: string;
-                    link?: string;
-                  })[]
-                )
-                  .filter(
-                    (
-                      item,
-                    ): item is {
-                      label: string;
-                      value: string;
-                      link?: string;
-                    } => item !== null,
-                  )
-                  .map((item, idx, arr) => (
-                    <div
-                      key={item.label}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 14,
-                        padding: "8px 0",
-                        borderBottom:
-                          idx < arr.length - 1
-                            ? "1px solid rgba(10,10,10,0.05)"
-                            : "none",
-                      }}
-                    >
-                      <span style={{ fontSize: 12, color: "#6a6560" }}>
-                        {item.label}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 12.5,
-                          color: "#0a0a0a",
-                          fontWeight: 500,
-                          textAlign: "right",
-                        }}
-                      >
-                        {item.link ? (
-                          <a
-                            href={item.link}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              color: "#3a3a38",
-                              textDecoration: "underline",
-                              textUnderlineOffset: 3,
-                              textDecorationColor: "rgba(10,10,10,0.2)",
-                            }}
-                          >
-                            {item.value} ↗
-                          </a>
-                        ) : (
-                          item.value
-                        )}
-                      </span>
-                    </div>
-                  ))}
-              </dl>
-            </div>
-          </aside>
-        </div>
-
-        {/* Similar jobs */}
-        {similarJobs.length > 0 ? (
-          <div style={{ marginTop: 36 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
-                marginBottom: 16,
-              }}
-            >
-              <div>
                 <div
                   style={{
                     fontFamily: MONO,
-                    fontSize: 10.5,
+                    fontSize: 10,
                     letterSpacing: 1.4,
                     color: "#8a8a85",
-                    marginBottom: 5,
                     fontWeight: 500,
+                    marginBottom: 12,
                   }}
                 >
-                  SIMILARES
+                  CANDIDATURA
                 </div>
-                <div
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 500,
-                    letterSpacing: -0.6,
-                    color: "#0a0a0a",
-                  }}
-                >
-                  Outras vagas recentes
-                </div>
+                {hasExistingAnalysisScore && existingApplication ? (
+                  <a
+                    href={`/candidaturas/${existingApplication.id}`}
+                    data-testid="view-application-btn"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      width: "100%",
+                      boxSizing: "border-box",
+                      background: "#0a0a0a",
+                      color: "#fafaf6",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "13px 18px",
+                      fontSize: 13.5,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      fontFamily: GEIST,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Ver minha candidatura
+                    <span style={{ opacity: 0.6, fontFamily: MONO }}>
+                      · {Math.round(existingApplication.bestScore as number)}%
+                    </span>
+                  </a>
+                ) : user ? (
+                  <AnalysisCtaButtons
+                    isLoggedIn
+                    masterResumeId={masterResumeId}
+                    radarJobId={job.id}
+                    jobDescriptionText={job.description}
+                    score={match?.score}
+                    secondaryHref={adaptarJobHref}
+                  />
+                ) : (
+                  // Anônimo: o CTA de análise já está em destaque no topo da
+                  // página (RadarGuestAnalysisBandV2) — um segundo "Analisar
+                  // meu CV" aqui embaixo seria redundante. No lugar dele,
+                  // "Salvar para depois" (mesmo ícone/toggle do link que já
+                  // existia neste card).
+                  <SaveJobCtaBtn
+                    jobId={job.id}
+                    initialSaved={isSaved}
+                    isLoggedIn={false}
+                  />
+                )}
+                {!user || !hasExistingAnalysisScore ? (
+                  <ExternalApplyGate
+                    href={job.sourceJobUrl}
+                    company={job.company}
+                    jobId={job.id}
+                    isAuthenticated={!!user}
+                  />
+                ) : (
+                  <a
+                    href={job.sourceJobUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      width: "100%",
+                      display: "block",
+                      background: "#fff",
+                      color: "#0a0a0a",
+                      border: "1px solid rgba(10,10,10,0.15)",
+                      borderRadius: 9,
+                      padding: "11px",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      textAlign: "center",
+                      fontFamily: GEIST,
+                      marginBottom: 8,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    Candidatar-se externamente ↗
+                  </a>
+                )}
+                {/* Logado: "salvar" já não tem um CTA próprio na sidebar
+              (o CTA principal é sempre análise) — mantém o link discreto.
+              Anônimo: SaveJobCtaBtn acima já cobre "salvar", sem duplicar. */}
+                {user ? (
+                  <SaveJobTextBtn
+                    jobId={job.id}
+                    initialSaved={isSaved}
+                    isLoggedIn
+                  />
+                ) : null}
               </div>
-              <Link
-                href="/radar"
+
+              {/* Job details card */}
+              <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 11.5,
-                  color: "#3a3a38",
-                  textDecoration: "underline",
-                  textUnderlineOffset: 3,
-                  textDecorationColor: "rgba(10,10,10,0.2)",
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 14,
+                  padding: 18,
                 }}
               >
-                ver todas →
-              </Link>
-            </div>
-            <style>{`
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.4,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                    marginBottom: 12,
+                  }}
+                >
+                  DETALHES
+                </div>
+                <dl style={{ margin: 0 }}>
+                  {(
+                    [
+                      { label: "Empresa", value: job.company },
+                      job.location
+                        ? { label: "Localização", value: job.location }
+                        : null,
+                      workModelLabel
+                        ? { label: "Modelo", value: workModelLabel }
+                        : null,
+                      job.employmentType
+                        ? {
+                            label: "Contrato",
+                            value: formatEmploymentType(job.employmentType),
+                          }
+                        : null,
+                      {
+                        label: "Fonte",
+                        value: new URL(job.sourceJobUrl).hostname.replace(
+                          /^www\./,
+                          "",
+                        ),
+                        link: job.sourceJobUrl,
+                      },
+                    ] as (null | {
+                      label: string;
+                      value: string;
+                      link?: string;
+                    })[]
+                  )
+                    .filter(
+                      (
+                        item,
+                      ): item is {
+                        label: string;
+                        value: string;
+                        link?: string;
+                      } => item !== null,
+                    )
+                    .map((item, idx, arr) => (
+                      <div
+                        key={item.label}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 14,
+                          padding: "8px 0",
+                          borderBottom:
+                            idx < arr.length - 1
+                              ? "1px solid rgba(10,10,10,0.05)"
+                              : "none",
+                        }}
+                      >
+                        <span style={{ fontSize: 12, color: "#6a6560" }}>
+                          {item.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12.5,
+                            color: "#0a0a0a",
+                            fontWeight: 500,
+                            textAlign: "right",
+                          }}
+                        >
+                          {item.link ? (
+                            <a
+                              href={item.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                color: "#3a3a38",
+                                textDecoration: "underline",
+                                textUnderlineOffset: 3,
+                                textDecorationColor: "rgba(10,10,10,0.2)",
+                              }}
+                            >
+                              {item.value} ↗
+                            </a>
+                          ) : (
+                            item.value
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                </dl>
+              </div>
+            </aside>
+          </div>
+
+          {/* Similar jobs */}
+          {similarJobs.length > 0 ? (
+            <div style={{ marginTop: 36 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  marginBottom: 16,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      letterSpacing: 1.4,
+                      color: "#8a8a85",
+                      marginBottom: 5,
+                      fontWeight: 500,
+                    }}
+                  >
+                    SIMILARES
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 500,
+                      letterSpacing: -0.6,
+                      color: "#0a0a0a",
+                    }}
+                  >
+                    Outras vagas recentes
+                  </div>
+                </div>
+                <Link
+                  href="/radar"
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 11.5,
+                    color: "#3a3a38",
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                    textDecorationColor: "rgba(10,10,10,0.2)",
+                  }}
+                >
+                  ver todas →
+                </Link>
+              </div>
+              <style>{`
               .job-similar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
               @media (max-width: 900px) {
                 .job-similar-grid { grid-template-columns: 1fr; }
               }
             `}</style>
-            <div className="job-similar-grid">
-              {similarJobs.map((j) => (
-                <SimCard key={j.id} job={j} showMatchLock={!user} />
-              ))}
+              <div className="job-similar-grid">
+                {similarJobs.map((j) => (
+                  <SimCard key={j.id} job={j} showMatchLock={!user} />
+                ))}
+              </div>
             </div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
 
-      <PublicFooter tagline="Tudo que você precisa para conquistar mais entrevistas, em um só lugar." />
+        <PublicFooter tagline="Tudo que você precisa para conquistar mais entrevistas, em um só lugar." />
+      </RadarV2AnalysisPreviewProvider>
     </main>
   );
 }
