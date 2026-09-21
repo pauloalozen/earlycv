@@ -358,30 +358,51 @@ function PreviewState({
         ) : null}
       </div>
 
-      {preview.breakdown && preview.breakdown.length > 0 ? (
-        <div>
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              letterSpacing: 0.8,
-              color: "#8a8a85",
-              marginBottom: 14,
-            }}
-          >
-            ONDE VOCÊ ESTÁ FORTE E ONDE ESTÁ FRACO
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-            {preview.breakdown.map((row) => (
-              <Bar
-                key={row.dimension}
-                label={row.label}
-                coveragePercent={row.coveragePercent}
-              />
-            ))}
+      <div>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: 0.8,
+            color: "#8a8a85",
+            marginBottom: 14,
+          }}
+        >
+          ONDE VOCÊ ESTÁ FORTE E ONDE ESTÁ FRACO
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+          {preview.breakdown?.map((row) => (
+            <Bar
+              key={row.dimension}
+              label={row.label}
+              coveragePercent={row.coveragePercent}
+            />
+          ))}
+          {/* Linha travada, sempre presente — sinaliza que existem mais
+          critérios analisados além dos revelados aqui, mesmo quando o
+          preview só tem 1-2 dimensões reais. */}
+          <div style={{ opacity: 0.5 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 12.5,
+                marginBottom: 5,
+              }}
+            >
+              <span>Outros critérios analisados 🔒</span>
+            </div>
+            <div
+              style={{
+                height: 7,
+                background:
+                  "repeating-linear-gradient(45deg, rgba(250,250,246,0.12) 0px, rgba(250,250,246,0.12) 4px, rgba(250,250,246,0.04) 4px, rgba(250,250,246,0.04) 8px)",
+                borderRadius: 99,
+              }}
+            />
           </div>
         </div>
-      ) : null}
+      </div>
 
       {typeof preview.gapsCount === "number" && preview.gapsCount > 0 ? (
         <div
@@ -435,15 +456,15 @@ function PreviewState({
           padding: 18,
           fontFamily: GEIST,
           fontSize: 16,
-          fontWeight: 800,
+          fontWeight: 600,
           textDecoration: "none",
           textAlign: "center",
           lineHeight: 1.3,
         }}
       >
         {typeof preview.gapsCount === "number" && preview.gapsCount > 0
-          ? `Ver os ${preview.gapsCount} pontos e desbloquear análise completa →`
-          : "Desbloquear análise completa →"}
+          ? `Ver os ${preview.gapsCount} pontos e minha análise completa →`
+          : "Ver minha análise completa →"}
       </a>
       <div
         style={{
@@ -676,8 +697,8 @@ export function RadarGuestAnalysisBandV2({
               }}
             >
               Envie seu CV e descubra, em segundos, sua compatibilidade real com{" "}
-              {jobTitle} — o que já atende, e o que pode estar te tirando da
-              disputa.
+              {jobTitle} — o que já atende, e onde seu currículo pode estar
+              perdendo aderência.
             </p>
 
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
@@ -719,10 +740,10 @@ export function RadarGuestAnalysisBandV2({
             style={{
               flexShrink: 0,
               width: 300,
-              background: "rgba(250,250,246,0.04)",
-              border: `1.5px dashed ${
-                fileHover || file ? "#c6ff3a" : "rgba(198,255,58,0.35)"
-              }`,
+              background: fileHover
+                ? "rgba(198,255,58,0.14)"
+                : "rgba(198,255,58,0.08)",
+              border: `2px dashed ${fileHover || file ? "#c6ff3a" : "rgba(198,255,58,0.5)"}`,
               borderRadius: 16,
               padding: "26px 22px",
               textAlign: "center",
@@ -730,6 +751,7 @@ export function RadarGuestAnalysisBandV2({
               flexDirection: "column",
               alignItems: "center",
               gap: 12,
+              transition: "background 120ms ease, border-color 120ms ease",
             }}
           >
             {error ? (
@@ -785,22 +807,22 @@ export function RadarGuestAnalysisBandV2({
             >
               <div
                 style={{
-                  width: 46,
-                  height: 46,
+                  width: 50,
+                  height: 50,
                   borderRadius: "50%",
-                  background: "rgba(198,255,58,0.12)",
+                  background: "rgba(198,255,58,0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
                 <svg
-                  width="20"
-                  height="20"
+                  width="22"
+                  height="22"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="#c6ff3a"
-                  strokeWidth="1.8"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -809,10 +831,15 @@ export function RadarGuestAnalysisBandV2({
                   <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" />
                 </svg>
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                {file ? file.name : "Envie seu currículo"}
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#fafaf6" }}>
+                {file ? file.name : "Arraste seu currículo aqui"}
               </div>
-              <div style={{ fontSize: 11.5, color: "#8a8a85" }}>
+              <div style={{ fontSize: 12, color: "#c8c6bf" }}>
+                {file
+                  ? "Toque para trocar o arquivo"
+                  : "ou clique para selecionar"}
+              </div>
+              <div style={{ fontSize: 11, color: "#8a8a85" }}>
                 PDF, DOCX ou ODT · até 5 MB
               </div>
             </button>
@@ -828,27 +855,9 @@ export function RadarGuestAnalysisBandV2({
                 }
               }}
             />
-            <button
-              type="button"
-              onClick={() => handleAnalyze()}
-              disabled={!file}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                background: file ? "#c6ff3a" : "rgba(250,250,246,0.12)",
-                color: file ? "#16210a" : "#6a6a66",
-                border: "none",
-                borderRadius: 11,
-                padding: 14,
-                fontFamily: GEIST,
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: file ? "pointer" : "not-allowed",
-                marginTop: 2,
-              }}
-            >
-              Analisar meu CV para esta vaga →
-            </button>
+            {/* Sem botão "Analisar" separado — o upload já dispara a
+            análise (ver selectFile). Um botão desabilitado até o upload
+            só reforçava a sensação de área "apagada"/não clicável. */}
             <div style={{ fontFamily: MONO, fontSize: 10, color: "#6a6560" }}>
               grátis · leva menos de 1 minuto
             </div>

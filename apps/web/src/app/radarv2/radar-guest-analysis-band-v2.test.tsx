@@ -44,12 +44,12 @@ describe("RadarGuestAnalysisBandV2", () => {
     cleanup();
   });
 
-  it("estado inicial: mostra o CTA de upload, sem preview nem botão de análise habilitado", () => {
+  it("estado inicial: mostra a área de upload convidando a arrastar o CV, sem preview", () => {
     render(
       <RadarGuestAnalysisBandV2 jobId="job-1" jobTitle="Engenheiro de Dados" />,
     );
 
-    expect(screen.getByText(/Analisar meu CV para esta vaga/i)).toBeDisabled();
+    expect(screen.getByText(/Arraste seu currículo aqui/i)).toBeInTheDocument();
     expect(screen.queryByText(/SEU RESULTADO PARA ESTA VAGA/i)).toBeNull();
   });
 
@@ -129,7 +129,10 @@ describe("RadarGuestAnalysisBandV2", () => {
     expect(container.textContent).toContain("50%");
     expect(container.textContent).toContain("86%");
     expect(
-      screen.getByText(/Ver os 13 pontos e desbloquear análise completa/i),
+      screen.getByText(/Ver os 13 pontos e minha análise completa/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Outros critérios analisados/i),
     ).toBeInTheDocument();
 
     const formData = runRadarGuestAnalysisFlowMock.mock.calls[0][0]

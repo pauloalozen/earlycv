@@ -1573,7 +1573,11 @@ export default async function JobPage({ params }: JobPageProps) {
           ) : null}
         </div>
 
-        <PublicFooter tagline="Tudo que você precisa para conquistar mais entrevistas, em um só lugar." />
+        <PublicFooter
+          tagline="Tudo que você precisa para conquistar mais entrevistas, em um só lugar."
+          ctaLabel="Criar minha conta grátis agora →"
+          ctaHref="/entrar?tab=cadastrar&ctx=radar"
+        />
       </RadarV2AnalysisPreviewProvider>
     </main>
   );
