@@ -2411,6 +2411,152 @@ export class CvAdaptationService {
     return { status: job.status };
   }
 
+  // Fase 1 de conversão do Radar (/radar/[slug]) — preview limitado da
+  // análise guest, pensado pra sustentar o incentivo de cadastro descrito no
+  // briefing de conversão: mostra o diagnóstico (score atual, potencial
+  // depois de adaptação, resumo por dimensão, quantidade de gaps), nunca a
+  // prescrição (gapExplanation/recommendation/evidence de cada requisito,
+  // ou o adaptedContentJson inteiro). Deliberadamente independente de
+  // guest_analysis_auth_gate_enabled — essa flag só existe pra decidir se o
+  // CvAdaptationOutput completo é exposto a guest em getAnalysisJobStatus;
+  // este método nunca expõe isso, então gatear por ela aqui só bloquearia o
+  // preview do Radar sem nenhum ganho de segurança, e mudar a semântica
+  // dela pra sempre permitir preview mudaria também o comportamento atual
+  // da landing (fora do escopo desta fase).
+  //
+  // Mesma prova de posse de getGuestAnalysisJobStatusOnly
+  // (verifyGuestPossessionToken) — jobId sozinho nunca é suficiente, e um
+  // job já convertido (userId setado) também deixa de responder aqui
+  // (mesma regra de verifyGuestPossessionToken: token de posse guest não
+  // vale mais depois do claim).
+  async getGuestAnalysisRadarPreview(
+    jobId: string,
+    possessionToken: string | null,
+  ): Promise<{
+    status: AnalysisJobStatusValue;
+    lastError: string | null;
+    jobTitle: string | null;
+    companyName: string | null;
+    score: { before: number | null; after: number | null } | null;
+    breakdown:
+      | { dimension: string; label: string; coveragePercent: number }[]
+      | null;
+    gapsCount: number | null;
+  }> {
+    if (!possessionToken) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    const owns = await this.verifyGuestPossessionToken(jobId, possessionToken);
+
+    if (!owns) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    const job = await this.database.analysisJob.findUnique({
+      where: { id: jobId },
+      select: {
+        status: true,
+        lastError: true,
+        jobTitle: true,
+        companyName: true,
+        scoreBefore: true,
+        scoreAfter: true,
+        adaptedContentJson: true,
+      },
+    });
+
+    if (!job) {
+      throw new NotFoundException("analysis job not found");
+    }
+
+    if (job.status !== "succeeded") {
+      return {
+        status: job.status,
+        lastError: job.status === "failed" ? job.lastError : null,
+        jobTitle: null,
+        companyName: null,
+        score: null,
+        breakdown: null,
+        gapsCount: null,
+      };
+    }
+
+    const requirements = this.extractRequirementCoverageFromAnalysis(
+      job.adaptedContentJson,
+    );
+
+    return {
+      status: "succeeded",
+      lastError: null,
+      jobTitle: job.jobTitle,
+      companyName: job.companyName,
+      score: { before: job.scoreBefore, after: job.scoreAfter },
+      breakdown: this.buildRadarPreviewBreakdown(requirements),
+      gapsCount: requirements
+        ? requirements.filter((r) => r.coverageStatus !== "covered").length
+        : null,
+    };
+  }
+
+  // Agrega requirementCoverage por dimensão só em percentual médio — nunca
+  // expõe gapExplanation/recommendation/evidence (a "prescrição" que o
+  // briefing de conversão do Radar pede pra reter até o cadastro). Ordem
+  // fixa (não por valor) pra manter o preview determinístico entre chamadas
+  // e nos testes; capado a 4 dimensões pra caber no espaço de preview.
+  private buildRadarPreviewBreakdown(
+    requirements: JobRequirementCoverage[] | undefined,
+  ): { dimension: string; label: string; coveragePercent: number }[] | null {
+    if (!requirements || requirements.length === 0) {
+      return null;
+    }
+
+    const DIMENSION_LABELS: Record<string, string> = {
+      skill: "Skills técnicas",
+      experience: "Experiência",
+      education: "Formação",
+      certification: "Certificações",
+      language: "Idiomas",
+      work_model: "Modelo de trabalho",
+      location: "Localização",
+      other: "Outros",
+    };
+    const DIMENSION_ORDER = Object.keys(DIMENSION_LABELS);
+
+    const buckets = new Map<string, { total: number; count: number }>();
+
+    for (const requirement of requirements) {
+      const dimension = requirement.dimension ?? "other";
+      const percent =
+        typeof requirement.coveragePercent === "number"
+          ? requirement.coveragePercent
+          : requirement.coverageStatus === "covered"
+            ? 100
+            : requirement.coverageStatus === "partial"
+              ? 50
+              : 0;
+
+      const bucket = buckets.get(dimension) ?? { total: 0, count: 0 };
+      bucket.total += percent;
+      bucket.count += 1;
+      buckets.set(dimension, bucket);
+    }
+
+    return DIMENSION_ORDER.filter((dimension) => buckets.has(dimension))
+      .slice(0, 4)
+      .map((dimension) => {
+        const bucket = buckets.get(dimension) as {
+          total: number;
+          count: number;
+        };
+        return {
+          dimension,
+          label: DIMENSION_LABELS[dimension] ?? dimension,
+          coveragePercent: Math.round(bucket.total / bucket.count),
+        };
+      });
+  }
+
   // Fase 4 do gate de autenticação guest — claim server-side, sem
   // reprocessar IA. Diferente de getGuestAnalysisJobStatusOnly, este
   // método é chamado só depois de autenticado: ownership do AnalysisJob

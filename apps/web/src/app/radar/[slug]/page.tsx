@@ -22,6 +22,7 @@ import { AnalysisCtaButtons } from "../analysis-cta";
 import { CompanyLogo } from "../company-logo";
 import { ExternalApplyGate } from "../external-apply-gate";
 import { JobDetailViewTracker } from "../job-detail-view-tracker";
+import { RadarGuestAnalysisBand } from "../radar-guest-analysis-band";
 import { RadarOpportunityLink } from "../radar-opportunity-link";
 import {
   breakdownPct,
@@ -69,7 +70,6 @@ const SENIORITY_LABELS: Record<string, string> = {
 // cadastro com `next` — sem isso, o usuário cai no default (/meu-perfil)
 // depois de criar conta, perdendo o fio da ação que o trouxe até aqui.
 const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/alerta-vaga-certa")}`;
-const SIGNUP_NEXT_CV = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/meu-cv-master")}`;
 
 type ScoreState = "anonymous" | "no-cv" | "has-cv";
 
@@ -220,189 +220,6 @@ function LockIcon({ size = 13 }: { size?: number }) {
         strokeLinecap="round"
       />
     </svg>
-  );
-}
-
-// Gate de compatibilidade acima da dobra, só pra visitante anônimo. O
-// número é um placeholder deliberado (skeleton, não dígito) — sem CV do
-// visitante não existe score real pra mostrar, e um número "de exemplo"
-// já foi descartado por poder ser lido como dado calculado de verdade.
-// Abre com uma pergunta ("quanto seu currículo bate com ESSA vaga")
-// em vez de "é assim que fica SEU match" — o visitante chega aqui direto
-// do Google, ainda não sabe o que é o EarlyCV nem o que "match" significa
-// aqui, então a headline precisa explicar antes de pedir o CV.
-function MonitorGateBand({ jobTitle }: { jobTitle: string }) {
-  const breakdownPreview: Array<{
-    label: string;
-    width: string;
-    color: string;
-  }> = [
-    { label: "Skills técnicas", width: "82%", color: "#c6ff3a" },
-    { label: "Senioridade", width: "65%", color: "#4ade80" },
-    { label: "Tecnologias", width: "70%", color: "#c6ff3a" },
-  ];
-
-  return (
-    <div
-      style={{
-        background: "#0a0a0a",
-        borderRadius: 16,
-        padding: "26px 28px",
-        marginBottom: 28,
-        color: "#fafaf6",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 260 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              fontFamily: MONO,
-              fontSize: 10,
-              letterSpacing: 1.3,
-              color: "#8a8a85",
-              fontWeight: 500,
-              marginBottom: 10,
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "#c6ff3a",
-                display: "inline-block",
-              }}
-            />
-            ANÁLISE DE COMPATIBILIDADE COM IA
-          </div>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              letterSpacing: -0.4,
-              lineHeight: 1.3,
-              marginBottom: 18,
-              maxWidth: 420,
-            }}
-          >
-            Quanto o seu currículo bate com essa vaga de {jobTitle}?
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 9,
-              marginBottom: 6,
-            }}
-          >
-            <div
-              style={{
-                width: 58,
-                height: 24,
-                borderRadius: 6,
-                background:
-                  "linear-gradient(90deg, rgba(250,250,246,0.06) 0%, rgba(250,250,246,0.16) 50%, rgba(250,250,246,0.06) 100%)",
-              }}
-            />
-            <span style={{ color: "#8a8a85", fontSize: 16 }}>% de match</span>
-          </div>
-          <div
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: "#6a6560",
-              marginBottom: 14,
-            }}
-          >
-            o EarlyCV compara linha a linha assim que você sobe o CV
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              maxWidth: 340,
-            }}
-          >
-            {breakdownPreview.map((row) => (
-              <div key={row.label}>
-                <div
-                  style={{ fontSize: 11, color: "#c8c6bf", marginBottom: 3 }}
-                >
-                  {row.label}
-                </div>
-                <div
-                  style={{
-                    height: 5,
-                    background: "rgba(250,250,246,0.1)",
-                    borderRadius: 99,
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      height: "100%",
-                      width: row.width,
-                      background: row.color,
-                      filter: "blur(5px)",
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div
-          style={{
-            flexShrink: 0,
-            textAlign: "center",
-            background: "rgba(250,250,246,0.04)",
-            border: "1px solid rgba(250,250,246,0.08)",
-            borderRadius: 14,
-            padding: "22px 26px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              color: "#e8e6df",
-              marginBottom: 14,
-              maxWidth: 220,
-            }}
-          >
-            Suba seu CV pra ver o seu número — e onde você ganha ou perde
-            pontos.
-          </div>
-          <a
-            href={SIGNUP_NEXT_CV}
-            style={{
-              display: "block",
-              background: "#c6ff3a",
-              color: "#1c2a05",
-              borderRadius: 9,
-              padding: "13px 22px",
-              fontSize: 13.5,
-              fontWeight: 700,
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Calcular meu match →
-          </a>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1314,8 +1131,15 @@ export default async function JobPage({ params }: JobPageProps) {
   const hasExistingAnalysisScore =
     typeof existingApplication?.bestScore === "number";
 
-  const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar&ctx=radar";
-  const adaptarJobHref = `${adaptarHref}${adaptarHref.includes("?") ? `&jobId=${job.id}` : `?jobId=${job.id}`}`;
+  // Anônimo: nunca navega direto pro /entrar a partir daqui — sobe pro
+  // bloco de análise inline (RadarGuestAnalysisBand, id
+  // "radar-guest-analysis") acima da dobra, que já resolve exatamente a
+  // mesma vaga (radarJobId=job.id) sem duplicar CTA de análise na mesma
+  // página (Fase 1 de conversão do Radar).
+  const adaptarHref = user ? "/adaptar" : "#radar-guest-analysis";
+  const adaptarJobHref = user
+    ? `${adaptarHref}?jobId=${job.id}`
+    : adaptarHref;
 
   const sections = splitHtmlSections(job.descriptionHtml);
   const titleParts = splitJobTitleForDisplay(job.title);
@@ -1795,10 +1619,12 @@ export default async function JobPage({ params }: JobPageProps) {
           </div>
         </header>
 
-        {/* Gate de compatibilidade acima da dobra — só visitante anônimo;
-        usuário logado já vê o CompatCard real na sidebar, não precisa do
-        placeholder */}
-        {!user ? <MonitorGateBand jobTitle={job.title} /> : null}
+        {/* Fase 1 de conversão do Radar — entrada principal de análise
+        acima da dobra, só visitante anônimo; usuário logado já vê o
+        CompatCard real na sidebar, não precisa deste bloco. */}
+        {!user ? (
+          <RadarGuestAnalysisBand jobId={job.id} jobTitle={job.title} />
+        ) : null}
 
         {/* Two-column body */}
         <div

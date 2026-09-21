@@ -123,7 +123,7 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     ).toBeInTheDocument();
   });
 
-  it("usuário logado sem CV master: só 'Analisar com outro CV' aparece", async () => {
+  it("usuário logado sem CV master: só o botão secundário 'Analisar meu CV' aparece, levando pra /adaptar com o jobId", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
     mocks.getMyMasterResume.mockResolvedValue(null);
 
@@ -133,12 +133,15 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     render(element);
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Analisar com outro CV/i }),
-    ).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Analisar meu CV/i });
+    expect(link).toHaveAttribute("href", "/adaptar?jobId=job_1");
   });
 
-  it("usuário não logado: só 'Analisar com outro CV' aparece", async () => {
+  // Fase 1 de conversão do Radar: visitante anônimo nunca é mandado direto
+  // pro /entrar a partir deste CTA secundário — sobe pro bloco de análise
+  // guest inline (RadarGuestAnalysisBand, #radar-guest-analysis) na mesma
+  // página, sem duplicar fluxo de análise.
+  it("usuário não logado: só o botão secundário 'Analisar meu CV' aparece, levando pro bloco de análise inline (nunca direto pro /entrar)", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
 
     const element = await JobPage({
@@ -147,8 +150,8 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     render(element);
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Analisar com outro CV/i });
-    expect(link).toHaveAttribute("href", expect.stringContaining("/entrar"));
+    const link = screen.getByRole("link", { name: /Analisar meu CV/i });
+    expect(link).toHaveAttribute("href", "#radar-guest-analysis");
   });
 });
 

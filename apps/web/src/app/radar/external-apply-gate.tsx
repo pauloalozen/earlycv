@@ -25,14 +25,14 @@ export function ExternalApplyGate({
   jobId: string;
   isAuthenticated: boolean;
 }) {
-  // Usuário logado vai direto pra /adaptar (já tem sessão). Anônimo
-  // precisa criar conta primeiro — /adaptar exige sessão, então o CTA
-  // passa por /entrar, com `next` carregando o jobId: assim que a conta é
-  // criada, o redirect cai direto em /adaptar já com a descrição desta
-  // vaga carregada (ver adaptar-client.tsx, fluxo de 1 clique via jobId).
+  // Usuário logado vai direto pra /adaptar (já tem sessão). Anônimo sobe
+  // pro bloco de análise inline (RadarGuestAnalysisBand, id
+  // "radar-guest-analysis") em vez de ir pro /entrar — mesmo CTA
+  // contextual usado no restante da página (Fase 1 de conversão do
+  // Radar), nunca duplica o fluxo de análise.
   const analyzeHref = isAuthenticated
     ? `/adaptar?jobId=${jobId}`
-    : `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(`/adaptar?jobId=${jobId}`)}`;
+    : "#radar-guest-analysis";
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -201,6 +201,7 @@ export function ExternalApplyGate({
 
             <a
               href={analyzeHref}
+              onClick={isAuthenticated ? undefined : () => setOpen(false)}
               style={{
                 display: "flex",
                 alignItems: "center",
