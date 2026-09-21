@@ -388,14 +388,17 @@ export function RadarGuestAnalysisBand({
               href={SIGNUP_NEXT_ANALYSIS_RESULT}
               style={{
                 display: "block",
+                boxSizing: "border-box",
+                width: "100%",
                 background: "#c6ff3a",
                 color: "#1c2a05",
                 borderRadius: 9,
-                padding: "13px 18px",
+                padding: "13px 16px",
                 fontSize: 13.5,
                 fontWeight: 700,
                 textDecoration: "none",
-                whiteSpace: "nowrap",
+                textAlign: "center",
+                lineHeight: 1.35,
               }}
             >
               Criar conta grátis e ver análise completa →
