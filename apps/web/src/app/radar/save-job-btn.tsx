@@ -169,11 +169,12 @@ export function SaveJobTextBtn({
   );
 }
 
-// Variante em formato de CTA (borda, mesma régua visual do botão
-// "Candidatar-se externamente" abaixo dele) — usada no Radar v2
-// (radarv2/[slug]/page.tsx) no lugar do CTA de análise quando ele já
-// existe em destaque acima na mesma página (RadarGuestAnalysisBandV2),
-// tornando um segundo "Analisar meu CV" redundante ali.
+// Variante em formato de CTA — mesma régua visual (preto, sem borda) que
+// "Analisar meu CV" tinha nesse exato lugar antes de virar este botão —
+// usada no Radar v2 (radarv2/[slug]/page.tsx) no lugar do CTA de análise
+// quando ele já existe em destaque acima na mesma página
+// (RadarGuestAnalysisBandV2), tornando um segundo "Analisar meu CV" ali
+// redundante.
 export function SaveJobCtaBtn({
   jobId,
   initialSaved = false,
@@ -203,18 +204,18 @@ export function SaveJobCtaBtn({
       disabled={pending}
       aria-pressed={saved}
       style={{
-        width: "100%",
-        boxSizing: "border-box",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 7,
-        background: saved ? "rgba(31,122,52,0.06)" : "#fff",
-        color: saved ? "#1f7a34" : "#0a0a0a",
-        border: `1px solid ${saved ? "rgba(31,122,52,0.3)" : "rgba(10,10,10,0.15)"}`,
-        borderRadius: 9,
-        padding: "11px",
-        fontSize: 13,
+        gap: 6,
+        width: "100%",
+        boxSizing: "border-box",
+        background: saved ? "#1f7a34" : "#0a0a0a",
+        color: "#fafaf6",
+        border: "none",
+        borderRadius: 8,
+        padding: "13px 18px",
+        fontSize: 13.5,
         fontWeight: 500,
         cursor: pending ? "default" : "pointer",
         opacity: pending ? 0.7 : 1,
@@ -226,12 +227,12 @@ export function SaveJobCtaBtn({
         width="13"
         height="13"
         viewBox="0 0 24 24"
-        fill={saved ? "#1f7a34" : "none"}
+        fill={saved ? "#fafaf6" : "none"}
       >
         <title>{saved ? "Remover vaga salva" : "Salvar para depois"}</title>
         <path
           d="M6 3h12v18l-6-4-6 4V3z"
-          stroke={saved ? "#1f7a34" : "currentColor"}
+          stroke="#fafaf6"
           strokeWidth="1.7"
           strokeLinejoin="round"
         />

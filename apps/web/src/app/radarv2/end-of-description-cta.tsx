@@ -1,3 +1,5 @@
+"use client";
+
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
 // Fase 1.1 (Radar v2) — reforço pedido explicitamente: depois de ler a
@@ -8,6 +10,13 @@ const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 // #radar-guest-analysis). Logado com CV master → âncora pro CompatCard real
 // na sidebar (#radarv2-compat-card). Logado sem CV master → mesma âncora,
 // o CompatCard já mostra o CTA de completar o perfil nesse estado.
+//
+// scrollIntoView({block:"center"}) em vez de deixar o navegador seguir o
+// href de verdade: a navegação padrão de âncora sempre alinha o alvo no
+// topo do viewport (respeitando só scrollMarginTop) — como o card de
+// análise é mais alto que a tela em telas menores, isso deixava o CTA
+// (que é o motivo de estar voltando pra lá) cortado fora da área visível.
+// Centralizar o card resolve isso sem depender de scrollMarginTop.
 export function EndOfDescriptionCta({
   isAuthenticated,
   hasMasterCv,
@@ -15,9 +24,9 @@ export function EndOfDescriptionCta({
   isAuthenticated: boolean;
   hasMasterCv: boolean;
 }) {
-  const href = isAuthenticated
-    ? "#radarv2-compat-card"
-    : "#radar-guest-analysis";
+  const targetId = isAuthenticated
+    ? "radarv2-compat-card"
+    : "radar-guest-analysis";
   const title = isAuthenticated
     ? hasMasterCv
       ? "Curtiu a vaga? Veja seu match real com ela."
@@ -27,9 +36,17 @@ export function EndOfDescriptionCta({
     ? "Role pra cima e analise seu CV Master contra essa vaga específica."
     : "Sobe seu currículo lá em cima e receba seu score em segundos.";
 
+  function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    e.preventDefault();
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   return (
     <a
-      href={href}
+      href={`#${targetId}`}
+      onClick={handleClick}
       style={{
         display: "flex",
         alignItems: "center",
