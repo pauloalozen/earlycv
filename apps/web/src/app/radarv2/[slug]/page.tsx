@@ -23,7 +23,6 @@ import { PublicNavBar } from "@/components/public-nav-bar";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toCompanySlug } from "@/lib/company-slug";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { getMyPlan } from "@/lib/plans-api";
 import {
   getPublicJobBySlug,
@@ -34,9 +33,8 @@ import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { EndOfDescriptionCta } from "../end-of-description-cta";
-import { FeatureShowcaseStripV2 } from "../feature-showcase-strip-v2";
 import { JobDetailViewTrackerV2 } from "../job-detail-view-tracker-v2";
-import { MonitorHighlightBandV2 } from "../monitor-highlight-band-v2";
+import { MonitorSignupCtaV2 } from "../monitor-signup-cta-v2";
 import { RadarGuestAnalysisBandV2 } from "../radar-guest-analysis-band-v2";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -67,11 +65,6 @@ const SENIORITY_LABELS: Record<string, string> = {
   staff: "Staff",
   principal: "Principal",
 };
-
-// CTAs de conversão do visitante anônimo (Agressivo-v2) sempre levam pro
-// cadastro com `next` — sem isso, o usuário cai no default (/meu-perfil)
-// depois de criar conta, perdendo o fio da ação que o trouxe até aqui.
-const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/alerta-vaga-certa")}`;
 
 type ScoreState = "anonymous" | "no-cv" | "has-cv";
 
@@ -279,98 +272,6 @@ function CompatCardCta({
   );
 }
 
-// Card #1 da sidebar pra visitante anônimo — Monitor como CTA principal,
-// no lugar do antigo "Cadastre-se para ver sua oportunidade" (genérico e
-// sem prova de valor). Fica acima do card de Candidatura, que continua
-// intacto (AnalysisCtaButtons, aplicação externa, salvar) logo abaixo.
-function MonitorPrimaryCard() {
-  if (isJobsGhostModeEnabled()) return null;
-  const benefits = [
-    "Novas vagas parecidas assim que entram no ar",
-    "Compatibilidade calculada em cada uma",
-    "CV adaptado com um clique quando você quiser aplicar",
-  ];
-
-  return (
-    <CompatCardShell>
-      <div
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          letterSpacing: -0.3,
-          marginBottom: 14,
-        }}
-      >
-        O que você ganha com o Monitor:
-      </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 11,
-          marginBottom: 20,
-        }}
-      >
-        {benefits.map((text) => (
-          <div
-            key={text}
-            style={{ display: "flex", gap: 9, alignItems: "flex-start" }}
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              style={{ flexShrink: 0, marginTop: 1 }}
-            >
-              <title>Incluído</title>
-              <path
-                d="M5 13l4 4L19 7"
-                stroke="#c6ff3a"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span style={{ fontSize: 12.5, color: "#e8e6df" }}>{text}</span>
-          </div>
-        ))}
-      </div>
-      <a
-        href={SIGNUP_NEXT_MONITOR}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          width: "100%",
-          boxSizing: "border-box",
-          background: "#c6ff3a",
-          color: "#1c2a05",
-          borderRadius: 9,
-          padding: "14px 16px",
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: "none",
-          marginBottom: 10,
-        }}
-      >
-        Ativar Monitor grátis
-      </a>
-      <div
-        style={{
-          textAlign: "center",
-          fontFamily: MONO,
-          fontSize: 10.5,
-          color: "#6a6560",
-        }}
-      >
-        grátis · sem cartão · 30s pra configurar
-      </div>
-    </CompatCardShell>
-  );
-}
-
 function CompatCard({
   scoreState,
   match,
@@ -416,8 +317,11 @@ function CompatCard({
     );
   }
 
+  // Sem card de Monitor na sidebar — a promoção do Monitor virou o CTA
+  // colorido único no meio da página (MonitorSignupCtaV2), não duplicada
+  // aqui também.
   if (scoreState === "anonymous") {
-    return <MonitorPrimaryCard />;
+    return null;
   }
 
   if (scoreState === "no-cv") {
@@ -1187,90 +1091,76 @@ export default async function JobPage({ params }: JobPageProps) {
             ) : null}
           </div>
 
-          {/* Meta cards */}
-          <style>{`
-            .job-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
-            @media (max-width: 640px) {
-              .job-meta-grid { grid-template-columns: repeat(2, 1fr); }
-            }
-          `}</style>
-          <div className="job-meta-grid">
-            {[
-              {
-                k: "LOCALIZAÇÃO",
-                v: job.location ?? "Não informado",
-                sub: null,
-                highlight: false,
-              },
-              {
-                k: "MODELO",
-                v: workModelLabel ?? "Não informado",
-                sub: null,
-                highlight: false,
-              },
-              {
-                k: "PUBLICADA",
-                v: publishedDate ?? "Não informado",
-                sub: isRecentlyPublished ? "recém publicada" : null,
-                highlight: isRecentlyPublished,
-              },
-              {
-                k: "PRIMEIRA CAPTURA",
-                v: new Date(job.firstSeenAt).toLocaleDateString("pt-BR"),
-                sub: "EarlyCV",
-                mono: true,
-                highlight: false,
-              },
-            ].map((item) => (
-              <div
-                key={item.k}
+          {/* Meta info — mesmos 4 dados de sempre (localização, modelo,
+          publicação, primeira captura), só que como linha de tags discreta
+          em vez de grid de 4 cards grandes: essa informação não é o motivo
+          de a pessoa estar aqui, então não deveria disputar espaço com o
+          bloco de análise logo abaixo. */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 4,
+            }}
+          >
+            <span
+              style={{
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.1)",
+                borderRadius: 8,
+                padding: "7px 12px",
+                fontSize: 12,
+                color: "#4a4a45",
+              }}
+            >
+              📍 {job.location ?? "Não informado"}
+            </span>
+            {workModelLabel ? (
+              <span
                 style={{
-                  background: item.highlight
-                    ? "rgba(198,255,58,0.1)"
-                    : "#fafaf6",
-                  border: `1px solid ${item.highlight ? "rgba(64,84,16,0.18)" : "rgba(10,10,10,0.08)"}`,
-                  borderRadius: 10,
-                  padding: "14px 16px",
+                  background: "#fff",
+                  border: "1px solid rgba(10,10,10,0.1)",
+                  borderRadius: 8,
+                  padding: "7px 12px",
+                  fontSize: 12,
+                  color: "#4a4a45",
                 }}
               >
-                <p
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 9.5,
-                    letterSpacing: 1.2,
-                    color: "#8a8a85",
-                    margin: "0 0 6px",
-                    fontWeight: 500,
-                  }}
-                >
-                  {item.k}
-                </p>
-                <p
-                  style={{
-                    fontSize: "mono" in item ? 13 : 14,
-                    fontWeight: 500,
-                    letterSpacing: -0.3,
-                    color: "#0a0a0a",
-                    margin: "0 0 2px",
-                    fontFamily: "mono" in item ? MONO : GEIST,
-                  }}
-                >
-                  {item.v}
-                </p>
-                {item.sub ? (
-                  <p
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: "#8a8a85",
-                      margin: 0,
-                    }}
-                  >
-                    {item.sub}
-                  </p>
-                ) : null}
-              </div>
-            ))}
+                {workModelLabel}
+              </span>
+            ) : null}
+            {publishedDate ? (
+              <span
+                style={{
+                  background: isRecentlyPublished
+                    ? "rgba(198,255,58,0.14)"
+                    : "#fff",
+                  border: `1px solid ${isRecentlyPublished ? "rgba(64,84,16,0.2)" : "rgba(10,10,10,0.1)"}`,
+                  borderRadius: 8,
+                  padding: "7px 12px",
+                  fontSize: 12,
+                  color: isRecentlyPublished ? "#405410" : "#4a4a45",
+                }}
+              >
+                Publicada {publishedDate}
+                {isRecentlyPublished ? " · recém publicada" : ""}
+              </span>
+            ) : null}
+            <span
+              style={{
+                background: "#fff",
+                border: "1px solid rgba(10,10,10,0.1)",
+                borderRadius: 8,
+                padding: "7px 12px",
+                fontSize: 12,
+                fontFamily: MONO,
+                color: "#8a8a85",
+              }}
+            >
+              capturada em{" "}
+              {new Date(job.firstSeenAt).toLocaleDateString("pt-BR")}
+            </span>
           </div>
         </header>
 
@@ -1348,8 +1238,9 @@ export default async function JobPage({ params }: JobPageProps) {
               hasMasterCv={scoreState === "has-cv"}
             />
 
-            {/* Vitrine do resto da plataforma — só visitante anônimo */}
-            {!user ? <FeatureShowcaseStripV2 /> : null}
+            {/* CTA do Monitor — única promoção de Monitor que resta na
+            página (sidebar e faixa de rodapé removidas), só anônimo */}
+            {!user ? <MonitorSignupCtaV2 /> : null}
           </div>
 
           {/* Sidebar */}
@@ -1655,14 +1546,11 @@ export default async function JobPage({ params }: JobPageProps) {
                 <SimCard key={j.id} job={j} showMatchLock={!user} />
               ))}
             </div>
-
-            {/* Destaque grande do Monitor — só visitante anônimo */}
-            {!user ? <MonitorHighlightBandV2 /> : null}
           </div>
         ) : null}
       </div>
 
-      <PublicFooter />
+      <PublicFooter tagline="Tudo que você precisa para conquistar mais entrevistas, em um só lugar." />
     </main>
   );
 }
