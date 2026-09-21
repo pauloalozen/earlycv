@@ -19,7 +19,11 @@ import type { Request, Response } from "express";
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { LocalAuthGuard } from "../common/local-auth.guard";
-import type { AuthUser, SocialProfileInput } from "./auth.service";
+import type {
+  AuthUser,
+  AuthVisitorContext,
+  SocialProfileInput,
+} from "./auth.service";
 import { AuthService } from "./auth.service";
 import { CreateOAuthAttemptDto } from "./dto/create-oauth-attempt.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -47,6 +51,25 @@ type SocialAuthRequest = {
   oauthUser?: SocialProfileInput;
   user?: SocialProfileInput;
 };
+
+// register/login/google-callback são as únicas rotas de auth chamadas DIRETO
+// pelo browser na API Nest (sem hop pela rota Next) — por isso, diferente do
+// pipeline de business-funnel-events, aqui request.analysisContext.ip e o
+// header user-agent JÁ SÃO o contexto de rede do visitante original, não do
+// servidor. Nunca lido de DTO/body (client-controlled), só do request cru.
+function resolveAuthVisitorContext(request: Request): AuthVisitorContext {
+  const rawUserAgent = request.headers["user-agent"];
+  const userAgent = Array.isArray(rawUserAgent)
+    ? rawUserAgent[0]
+    : rawUserAgent;
+  const trimmedUserAgent = userAgent?.trim();
+
+  return {
+    posthogVisitorIp: request.analysisContext?.ip ?? null,
+    posthogVisitorUserAgent:
+      trimmedUserAgent && trimmedUserAgent.length > 0 ? trimmedUserAgent : null,
+  };
+}
 
 @Controller("auth")
 export class AuthController {
@@ -80,8 +103,9 @@ export class AuthController {
       }),
     )
     dto: RegisterDto,
+    @Req() request: Request,
   ) {
-    return this.authService.register(dto);
+    return this.authService.register(dto, resolveAuthVisitorContext(request));
   }
 
   @Throttle({ default: { ttl: 300_000, limit: 10 } })
@@ -95,12 +119,13 @@ export class AuthController {
       }),
     )
     dto: LoginDto,
-    @Req() request: { user: { id: string } },
+    @Req() request: { user: { id: string } } & Request,
   ) {
     return this.authService.login(
       request.user,
       dto.sessionInternalId,
       dto.visitorId,
+      resolveAuthVisitorContext(request),
     );
   }
 
@@ -213,6 +238,7 @@ export class AuthController {
       conversionContext,
       sessionInternalId,
       visitorId,
+      resolveAuthVisitorContext(request),
     );
 
     // state (se presente) é resolvido e consumido de forma atômica aqui —

@@ -10,7 +10,30 @@ import { Test } from "@nestjs/testing";
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
 import { FakeEmailDeliveryService } from "../email/fake-email-delivery.service";
+import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 import { PosthogIntegrationModule } from "../posthog-integration/posthog-integration.module";
+
+type CapturedPosthogExport = {
+  eventName: string;
+  properties: Record<string, unknown>;
+};
+
+function createFakePosthogExporter() {
+  const captured: CapturedPosthogExport[] = [];
+  const exporter = {
+    shouldExportBusinessFunnelEvent: () => true,
+    shouldExportProtectionEvent: () => true,
+    exportBusinessFunnelEvent: (
+      eventName: string,
+      properties: Record<string, unknown>,
+    ) => {
+      captured.push({ eventName, properties });
+    },
+    exportProtectionEvent: () => {},
+  } as unknown as PosthogEventExporter;
+
+  return { captured, exporter };
+}
 
 type DeleteManyDelegate = {
   deleteMany: (args?: unknown) => Promise<unknown>;
@@ -564,5 +587,196 @@ test("visitor_id from one signup never leaks into another user's signup_complete
 
   await deleteUserByEmail(database, emailA);
   await deleteUserByEmail(database, emailB);
+  await moduleRef.close();
+});
+
+// ─── $raw_user_agent / $ip propagation on signup_completed/login_completed ─
+// Auditoria PostHog (semana 14-20/09): signup_completed e login_completed
+// chegavam 100% classificados como $virt_traffic_type=Automation, porque
+// AuthService montava o AnalysisRequestContext do zero (sem os campos
+// posthogVisitorIp/posthogVisitorUserAgent), diferente do resto dos eventos
+// v2 (fix #53). Mesmo princípio aqui: nunca fabricar, nunca aceitar valor
+// vindo de DTO/metadata controlável pelo cliente — só o contexto que o
+// AuthController resolveu do request real (ver resolveAuthVisitorContext).
+
+test("AuthService.register propagates visitor UA/IP to signup_completed when the controller supplies them", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const { captured, exporter } = createFakePosthogExporter();
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  })
+    .overrideProvider(PosthogEventExporter)
+    .useValue(exporter)
+    .compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-ctx-signup-${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  await service.register(
+    { email, password: "Super-secret-123", name: "Rede Original" },
+    {
+      posthogVisitorIp: "203.0.113.10",
+      posthogVisitorUserAgent: "Mozilla/5.0 (compatible; realbrowser)",
+    },
+  );
+
+  const signupExport = captured.find((c) => c.eventName === "signup_completed");
+  assert.notEqual(signupExport, undefined);
+  assert.equal(
+    signupExport?.properties.$raw_user_agent,
+    "Mozilla/5.0 (compatible; realbrowser)",
+  );
+  assert.equal(signupExport?.properties.$ip, "203.0.113.10");
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("AuthService.login propagates visitor UA/IP to login_completed when the controller supplies them", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const { captured, exporter } = createFakePosthogExporter();
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  })
+    .overrideProvider(PosthogEventExporter)
+    .useValue(exporter)
+    .compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-ctx-login-${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  const registered = await service.register({
+    email,
+    password: "Super-secret-123",
+    name: "Rede Original Login",
+  });
+  captured.length = 0;
+
+  await service.login({ id: registered.user.id }, undefined, undefined, {
+    posthogVisitorIp: "198.51.100.20",
+    posthogVisitorUserAgent: "Mozilla/5.0 (compatible; realbrowser-login)",
+  });
+
+  const loginExport = captured.find((c) => c.eventName === "login_completed");
+  assert.notEqual(loginExport, undefined);
+  assert.equal(
+    loginExport?.properties.$raw_user_agent,
+    "Mozilla/5.0 (compatible; realbrowser-login)",
+  );
+  assert.equal(loginExport?.properties.$ip, "198.51.100.20");
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("AuthService never fabricates $raw_user_agent/$ip on signup_completed/login_completed when the visitor context is unavailable", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const { captured, exporter } = createFakePosthogExporter();
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  })
+    .overrideProvider(PosthogEventExporter)
+    .useValue(exporter)
+    .compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-ctx-absent-${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  // Sem visitorContext (equivalente a um request sem contexto original) —
+  // nunca cai pro user-agent/IP do próprio processo Nest.
+  const registered = await service.register({
+    email,
+    password: "Super-secret-123",
+    name: "Sem Contexto",
+  });
+
+  const signupExport = captured.find((c) => c.eventName === "signup_completed");
+  assert.notEqual(signupExport, undefined);
+  assert.equal("$raw_user_agent" in (signupExport?.properties ?? {}), false);
+  assert.equal("$ip" in (signupExport?.properties ?? {}), false);
+
+  captured.length = 0;
+  await service.login({ id: registered.user.id });
+
+  const loginExport = captured.find((c) => c.eventName === "login_completed");
+  assert.notEqual(loginExport, undefined);
+  assert.equal("$raw_user_agent" in (loginExport?.properties ?? {}), false);
+  assert.equal("$ip" in (loginExport?.properties ?? {}), false);
+
+  await deleteUserByEmail(database, email);
+  await moduleRef.close();
+});
+
+test("AuthService.register ignores a spoofed posthogVisitorIp/posthogVisitorUserAgent smuggled into the DTO — only the trusted controller-resolved context is honored", async () => {
+  const authModuleExports = await importAuthModule();
+  const authServiceExports = await importAuthService();
+
+  const { AuthModule } = authModuleExports as { AuthModule: never };
+  const { AuthService } = authServiceExports as { AuthService: never };
+
+  const { captured, exporter } = createFakePosthogExporter();
+  const moduleRef = await Test.createTestingModule({
+    imports: [DatabaseModule, PosthogIntegrationModule, AuthModule],
+  })
+    .overrideProvider(PosthogEventExporter)
+    .useValue(exporter)
+    .compile();
+
+  const database = moduleRef.get(DatabaseService);
+  const service = moduleRef.get(AuthService);
+  const email = `visitor-ctx-spoof-${randomUUID()}@earlycv.dev`;
+
+  await deleteUserByEmail(database, email);
+
+  // Um DTO malicioso nunca teria esses campos (ValidationPipe com
+  // forbidNonWhitelisted rejeitaria), mas mesmo se algo os injetasse no
+  // objeto em runtime, o service só lê o segundo argumento
+  // (visitorContext), nunca `input`.
+  const spoofedDto = {
+    email,
+    password: "Super-secret-123",
+    name: "Tentativa de Spoof",
+    posthogVisitorIp: "1.2.3.4",
+    posthogVisitorUserAgent: "spoofed-by-client",
+  };
+
+  await service.register(spoofedDto as never, {
+    posthogVisitorIp: "203.0.113.55",
+    posthogVisitorUserAgent: "Mozilla/5.0 (compatible; trusted)",
+  });
+
+  const signupExport = captured.find((c) => c.eventName === "signup_completed");
+  assert.notEqual(signupExport, undefined);
+  assert.equal(
+    signupExport?.properties.$raw_user_agent,
+    "Mozilla/5.0 (compatible; trusted)",
+  );
+  assert.equal(signupExport?.properties.$ip, "203.0.113.55");
+
+  await deleteUserByEmail(database, email);
   await moduleRef.close();
 });
