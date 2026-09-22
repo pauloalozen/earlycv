@@ -255,7 +255,7 @@ function useRadarV2RingSize() {
     if (typeof window.matchMedia !== "function") return;
 
     const query = window.matchMedia("(max-width: 480px)");
-    const update = () => setSize(query.matches ? 76 : 128);
+    const update = () => setSize(query.matches ? 100 : 128);
     update();
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
@@ -278,7 +278,7 @@ function PreviewState({
   const gap =
     after !== null && before !== null && after > before ? after - before : null;
   const ringSize = useRadarV2RingSize();
-  const isCompact = ringSize < 100;
+  const isCompact = ringSize < 128;
   const visibleBreakdown = (preview.breakdown ?? [])
     .filter((row) => PREVIEW_DIMENSION_ORDER.includes(row.dimension))
     .sort(
@@ -324,15 +324,18 @@ function PreviewState({
       >
         {/* Grupo dos dois gauges — nunca quebra linha entre si (só o
         bloco de texto abaixo quebra pro próprio flexWrap do container
-        pai); no mobile o ringSize encolhe pra caber os dois na mesma
-        linha, ver useRadarV2RingSize. */}
+        pai); no mobile o ringSize encolhe um pouco pra caber os dois na
+        mesma linha (ver useRadarV2RingSize) e o grupo fica centralizado
+        no eixo x, já que nesse breakpoint ele ocupa a linha inteira. */}
         <div
           style={{
             display: "flex",
             gap: isCompact ? 10 : 20,
             alignItems: "center",
+            justifyContent: isCompact ? "center" : "flex-start",
             flexWrap: "nowrap",
             flexShrink: 0,
+            width: isCompact ? "100%" : undefined,
           }}
         >
           {before !== null ? (
