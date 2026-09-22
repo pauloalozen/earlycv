@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   unsaveJob: vi.fn(),
   useRouter: vi.fn(),
   resolveJobProductOrigin: vi.fn(),
+  setPendingSavedJob: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: mocks.useRouter }));
@@ -15,6 +16,9 @@ vi.mock("@/lib/saved-jobs-api", () => ({
 }));
 vi.mock("@/lib/journey-session", () => ({
   resolveJobProductOrigin: mocks.resolveJobProductOrigin,
+}));
+vi.mock("@/lib/saved-job-pending", () => ({
+  setPendingSavedJob: mocks.setPendingSavedJob,
 }));
 
 import { SaveJobTextBtn } from "./save-job-btn";
@@ -26,6 +30,7 @@ describe("SaveJobTextBtn — origin resolved from the navigation that brought th
     mocks.unsaveJob.mockReset();
     mocks.useRouter.mockReturnValue({ push: vi.fn() });
     mocks.resolveJobProductOrigin.mockReset();
+    mocks.setPendingSavedJob.mockReset();
   });
 
   afterEach(() => cleanup());
@@ -71,5 +76,46 @@ describe("SaveJobTextBtn — origin resolved from the navigation that brought th
     render(<SaveJobTextBtn jobId="job-42" />);
 
     expect(mocks.resolveJobProductOrigin).toHaveBeenCalledWith("job-42");
+  });
+});
+
+describe("SaveJobTextBtn — visitante anônimo (bug real: a vaga não era salva depois do cadastro)", () => {
+  const pushMock = vi.fn();
+
+  beforeEach(() => {
+    mocks.saveJob.mockReset();
+    mocks.unsaveJob.mockReset();
+    mocks.useRouter.mockReturnValue({ push: pushMock });
+    pushMock.mockReset();
+    mocks.resolveJobProductOrigin.mockReset();
+    mocks.resolveJobProductOrigin.mockReturnValue("radar");
+    mocks.setPendingSavedJob.mockReset();
+  });
+
+  afterEach(() => cleanup());
+
+  it("guarda a intenção de salvar (jobId+origin) antes de redirecionar pro /entrar, nunca chama a API sem sessão", () => {
+    render(<SaveJobTextBtn jobId="job-1" isLoggedIn={false} />);
+
+    fireEvent.click(screen.getByText("salvar para depois"));
+
+    expect(mocks.setPendingSavedJob).toHaveBeenCalledWith({
+      jobId: "job-1",
+      origin: "RADAR",
+    });
+    expect(mocks.saveJob).not.toHaveBeenCalled();
+    expect(pushMock).toHaveBeenCalledWith("/entrar?tab=cadastrar&ctx=radar");
+  });
+
+  it("guarda origin=MONITOR quando a navegação veio do Alerta", () => {
+    mocks.resolveJobProductOrigin.mockReturnValue("monitor");
+    render(<SaveJobTextBtn jobId="job-2" isLoggedIn={false} />);
+
+    fireEvent.click(screen.getByText("salvar para depois"));
+
+    expect(mocks.setPendingSavedJob).toHaveBeenCalledWith({
+      jobId: "job-2",
+      origin: "MONITOR",
+    });
   });
 });

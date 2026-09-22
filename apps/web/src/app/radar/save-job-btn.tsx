@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { resolveJobProductOrigin } from "@/lib/journey-session";
+import { setPendingSavedJob } from "@/lib/saved-job-pending";
 import { saveJob, unsaveJob } from "@/lib/saved-jobs-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -24,6 +25,12 @@ function useSaveJobToggle({
 
   function toggle() {
     if (!isLoggedIn) {
+      // Bug real corrigido: antes só redirecionava pro cadastro sem
+      // guardar QUAL vaga a pessoa queria salvar — a conta era criada e
+      // nada acontecia com a vaga. SavedJobClaimer (radar/saved-job-
+      // claimer.tsx, montado em /meu-perfil) lê isto e salva de verdade
+      // assim que a pessoa está autenticada.
+      setPendingSavedJob({ jobId, origin });
       router.push("/entrar?tab=cadastrar&ctx=radar");
       return;
     }
