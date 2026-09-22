@@ -110,7 +110,7 @@ describe("/radar/[slug] Monitor CTA under JOBS_GHOST_MODE (anonymous visitor)", 
     }
   });
 
-  it("shows the 'Ativar Monitor grátis' CTA when ghost mode is off", async () => {
+  it("shows the 'Criar conta grátis' Monitor CTA (MonitorSignupCta) when ghost mode is off", async () => {
     delete process.env.JOBS_GHOST_MODE;
     delete process.env.NEXT_PUBLIC_JOBS_GHOST_MODE;
 
@@ -120,11 +120,11 @@ describe("/radar/[slug] Monitor CTA under JOBS_GHOST_MODE (anonymous visitor)", 
     render(element);
 
     expect(
-      screen.getAllByRole("link", { name: /Ativar Monitor grátis/i }).length,
+      screen.getAllByRole("link", { name: /Criar conta grátis/i }).length,
     ).toBeGreaterThan(0);
   });
 
-  it("hides the 'Ativar Monitor grátis' CTA while ghost mode is on — would 404 after signup otherwise", async () => {
+  it("hides the Monitor CTA while ghost mode is on — would 404 after signup otherwise", async () => {
     process.env.NEXT_PUBLIC_JOBS_GHOST_MODE = "true";
 
     const element = await JobPage({
@@ -133,7 +133,7 @@ describe("/radar/[slug] Monitor CTA under JOBS_GHOST_MODE (anonymous visitor)", 
     render(element);
 
     expect(
-      screen.queryByRole("link", { name: /Ativar Monitor grátis/i }),
+      screen.queryByRole("link", { name: /Criar conta grátis/i }),
     ).not.toBeInTheDocument();
   });
 });

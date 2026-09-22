@@ -51,16 +51,27 @@ export class CvAdaptationPublicController {
   analyzeGuest(
     @Req() req: Request,
     @UploadedFile() file: FileUpload | undefined,
-    @Body("jobDescriptionText") jobDescriptionText: string,
+    @Body("jobDescriptionText") jobDescriptionText?: string,
     @Body("masterCvText") masterCvText?: string,
     @Body("turnstileToken") turnstileToken?: string,
     @Body("radarJobId") radarJobId?: string,
   ) {
-    if (!jobDescriptionText?.trim()) {
-      throw new BadRequestException("jobDescriptionText is required");
+    // Simetria com AnalyzeCvDto (endpoint autenticado /cv-adaptation/analyze):
+    // radarJobId sozinho já é aceito lá porque resolveAnalysisJobDescription
+    // resolve o texto a partir de Job.descriptionClean quando jobDescriptionText
+    // não vem preenchido. Este guard aqui exigia jobDescriptionText mesmo com
+    // radarJobId presente — startGuestAnalysisJob já suportava o caso (mesma
+    // chamada a resolveAnalysisJobDescription), então o guard só bloqueava um
+    // caminho que o resto do pipeline já sabia processar. Necessário para o
+    // fluxo de 1 clique a partir de /radar/[slug] (Fase 1 de conversão do
+    // Radar): a página não pede/envia descrição da vaga, só radarJobId.
+    if (!jobDescriptionText?.trim() && !radarJobId?.trim()) {
+      throw new BadRequestException(
+        "jobDescriptionText or radarJobId is required",
+      );
     }
     return this.cvAdaptationService.startGuestAnalysisJob(
-      jobDescriptionText,
+      jobDescriptionText ?? "",
       file,
       masterCvText,
       turnstileToken,
@@ -94,6 +105,25 @@ export class CvAdaptationPublicController {
       userId,
       sessionPublicToken: req.analysisContext?.sessionPublicToken ?? null,
     });
+  }
+
+  // Fase 1 de conversão do Radar (/radar/[slug]) — preview limitado da
+  // análise guest, deliberadamente independente de
+  // guest_analysis_auth_gate_enabled (essa flag só decide se o guest recebe
+  // o adaptedContentJson completo em getAnalysisJobStatus; este endpoint
+  // nunca devolve isso, então não há necessidade de fazer a flag também
+  // controlar este preview mais estreito, nem de mudar a semântica dela pra
+  // landing). Mesmo padrão de posse do getAnalysisJobStatus (header
+  // x-guest-possession-token) — nunca aceita jobId "solto".
+  @Get("analysis-jobs/:jobId/radar-preview")
+  async getRadarAnalysisPreview(
+    @Param("jobId") jobId: string,
+    @Headers("x-guest-possession-token") guestPossessionToken?: string,
+  ) {
+    return this.cvAdaptationService.getGuestAnalysisRadarPreview(
+      jobId,
+      guestPossessionToken ?? null,
+    );
   }
 
   // Único ponto de leitura do flag pelo frontend (ADENDO-hardening.md

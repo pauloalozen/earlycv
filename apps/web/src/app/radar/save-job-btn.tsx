@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { resolveJobProductOrigin } from "@/lib/journey-session";
+import { setPendingSavedJob } from "@/lib/saved-job-pending";
 import { saveJob, unsaveJob } from "@/lib/saved-jobs-api";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -24,6 +25,12 @@ function useSaveJobToggle({
 
   function toggle() {
     if (!isLoggedIn) {
+      // Bug real corrigido: antes só redirecionava pro cadastro sem
+      // guardar QUAL vaga a pessoa queria salvar — a conta era criada e
+      // nada acontecia com a vaga. SavedJobClaimer (radar/saved-job-
+      // claimer.tsx, montado em /meu-perfil) lê isto e salva de verdade
+      // assim que a pessoa está autenticada.
+      setPendingSavedJob({ jobId, origin });
       router.push("/entrar?tab=cadastrar&ctx=radar");
       return;
     }
@@ -165,6 +172,79 @@ export function SaveJobTextBtn({
         />
       </svg>
       {saved ? "salva para depois" : "salvar para depois"}
+    </button>
+  );
+}
+
+// Variante em formato de CTA — mesma régua visual (preto, sem borda) que
+// "Analisar meu CV" tinha nesse exato lugar antes de virar este botão —
+// usada em radar/[slug]/page.tsx no lugar do CTA de análise pra
+// visitante anônimo, quando ele já existe em destaque acima na mesma
+// página (RadarGuestAnalysisBand), tornando um segundo "Analisar meu CV"
+// ali redundante.
+export function SaveJobCtaBtn({
+  jobId,
+  initialSaved = false,
+  isLoggedIn = true,
+}: {
+  jobId: string;
+  initialSaved?: boolean;
+  isLoggedIn?: boolean;
+}) {
+  const [origin] = useState<"RADAR" | "MONITOR">(() => {
+    const productOrigin = resolveJobProductOrigin(jobId);
+    return productOrigin === "monitor" || productOrigin === "monitor_email"
+      ? "MONITOR"
+      : "RADAR";
+  });
+  const { saved, pending, toggle } = useSaveJobToggle({
+    jobId,
+    initialSaved,
+    isLoggedIn,
+    origin,
+  });
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={pending}
+      aria-pressed={saved}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        width: "100%",
+        boxSizing: "border-box",
+        background: saved ? "#1f7a34" : "#0a0a0a",
+        color: "#fafaf6",
+        border: "none",
+        borderRadius: 8,
+        padding: "13px 18px",
+        fontSize: 13.5,
+        fontWeight: 500,
+        cursor: pending ? "default" : "pointer",
+        opacity: pending ? 0.7 : 1,
+        fontFamily: GEIST,
+        marginBottom: 8,
+      }}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill={saved ? "#fafaf6" : "none"}
+      >
+        <title>{saved ? "Remover vaga salva" : "Salvar para depois"}</title>
+        <path
+          d="M6 3h12v18l-6-4-6 4V3z"
+          stroke="#fafaf6"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {saved ? "Salva para depois" : "Salvar para depois"}
     </button>
   );
 }

@@ -5276,6 +5276,291 @@ test("getGuestAnalysisJobStatusOnly throws NotFoundException when the token belo
   );
 });
 
+// Fase 1 de conversão do Radar: getGuestAnalysisRadarPreview — preview
+// limitado (score atual/potencial, breakdown por dimensão, contagem de
+// gaps) que nunca deve expor adaptedContentJson completo, gapExplanation,
+// recommendation ou evidence de nenhum requirement.
+
+test("getGuestAnalysisRadarPreview returns score/breakdown/gapsCount for a succeeded job, never the full adaptedContentJson", async () => {
+  const rawToken = "d".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+  let callCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return { ownerKind: "guest", guestPossessionTokenHash: hash };
+          }
+          return {
+            status: "succeeded",
+            lastError: null,
+            jobTitle: "Engenheiro de Dados Jr",
+            companyName: "Stefanini",
+            scoreBefore: 68,
+            scoreAfter: 82,
+            adaptedContentJson: {
+              requirements: [
+                {
+                  requirementKey: "sql",
+                  requirementText: "SQL avançado",
+                  importance: "high",
+                  dimension: "skill",
+                  coverageStatus: "covered",
+                  coveragePercent: 100,
+                  evidence: ["nunca deve chegar no preview"],
+                  gapExplanation: "nunca deve chegar no preview",
+                  recommendation: "nunca deve chegar no preview",
+                  impactScore: 10,
+                },
+                {
+                  requirementKey: "python",
+                  requirementText: "Python",
+                  importance: "high",
+                  dimension: "skill",
+                  coverageStatus: "partial",
+                  coveragePercent: 50,
+                  evidence: [],
+                  gapExplanation: "nunca deve chegar no preview",
+                  recommendation: "nunca deve chegar no preview",
+                  impactScore: 6,
+                },
+                {
+                  requirementKey: "5-anos",
+                  requirementText: "5 anos de experiência",
+                  importance: "medium",
+                  dimension: "experience",
+                  coverageStatus: "missing",
+                  evidence: [],
+                  gapExplanation: "nunca deve chegar no preview",
+                  recommendation: "nunca deve chegar no preview",
+                  impactScore: 8,
+                },
+              ],
+            },
+          };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getGuestAnalysisRadarPreview(
+    "job-radar-preview-1",
+    rawToken,
+  );
+
+  assert.deepEqual(result, {
+    status: "succeeded",
+    lastError: null,
+    jobTitle: "Engenheiro de Dados Jr",
+    companyName: "Stefanini",
+    score: { before: 68, after: 82 },
+    breakdown: [
+      { dimension: "skill", label: "Skills técnicas", coveragePercent: 75 },
+      { dimension: "experience", label: "Experiência", coveragePercent: 0 },
+    ],
+    gapsCount: 2,
+  });
+
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes("nunca deve chegar no preview"), false);
+});
+
+test("getGuestAnalysisRadarPreview returns only { status } while the job hasn't succeeded yet — no score, no breakdown", async () => {
+  const rawToken = "e".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+  let callCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return { ownerKind: "guest", guestPossessionTokenHash: hash };
+          }
+          return { status: "processing", lastError: null };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getGuestAnalysisRadarPreview(
+    "job-radar-preview-2",
+    rawToken,
+  );
+
+  assert.deepEqual(result, {
+    status: "processing",
+    lastError: null,
+    jobTitle: null,
+    companyName: null,
+    score: null,
+    breakdown: null,
+    gapsCount: null,
+  });
+});
+
+test("getGuestAnalysisRadarPreview surfaces lastError for a failed job", async () => {
+  const rawToken = "f".repeat(64);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+  let callCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return { ownerKind: "guest", guestPossessionTokenHash: hash };
+          }
+          return { status: "failed", lastError: "boom" };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getGuestAnalysisRadarPreview(
+    "job-radar-preview-3",
+    rawToken,
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.lastError, "boom");
+  assert.equal(result.score, null);
+});
+
+test("getGuestAnalysisRadarPreview throws NotFoundException when no possession token is presented", async () => {
+  const service = new CvAdaptationServiceCtor(
+    { analysisJob: { findUnique: async () => null } },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisRadarPreview("job-radar-preview-4", null),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisRadarPreview throws NotFoundException for a wrong possession token — jobId alone never grants access", async () => {
+  const hash = createHash("sha256").update("correct-token").digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () =>
+      service.getGuestAnalysisRadarPreview(
+        "job-radar-preview-5",
+        "wrong-token",
+      ),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisRadarPreview throws NotFoundException once the job is already claimed (converted) — guest token stops working after signup, same rule as verifyGuestPossessionToken", async () => {
+  const rawToken = "aa".repeat(32);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => ({
+          ownerKind: "guest",
+          guestPossessionTokenHash: hash,
+          convertedAt: new Date(),
+        }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  await assert.rejects(
+    () => service.getGuestAnalysisRadarPreview("job-radar-preview-6", rawToken),
+    /analysis job not found/,
+  );
+});
+
+test("getGuestAnalysisRadarPreview returns breakdown=null and gapsCount=null when adaptedContentJson has no requirements array (legacy/non-requirements analyses)", async () => {
+  const rawToken = "bb".repeat(32);
+  const hash = createHash("sha256").update(rawToken).digest("hex");
+  let callCount = 0;
+
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisJob: {
+        findUnique: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return { ownerKind: "guest", guestPossessionTokenHash: hash };
+          }
+          return {
+            status: "succeeded",
+            lastError: null,
+            jobTitle: null,
+            companyName: null,
+            scoreBefore: null,
+            scoreAfter: null,
+            adaptedContentJson: { vaga: { cargo: "x", empresa: "y" } },
+          };
+        },
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+  );
+
+  const result = await service.getGuestAnalysisRadarPreview(
+    "job-radar-preview-7",
+    rawToken,
+  );
+
+  assert.deepEqual(result.breakdown, null);
+  assert.deepEqual(result.gapsCount, null);
+  assert.deepEqual(result.score, { before: null, after: null });
+});
+
 // Fase 4: claimGuestAnalysisJob — claim server-side sem reprocessar IA. O
 // conteúdo vem estritamente do AnalysisJob já processado, nunca de um
 // payload externo; ownership é job.userId === userId (já transferida em

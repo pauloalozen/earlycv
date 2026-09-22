@@ -1416,6 +1416,132 @@ test("POST /cv-adaptation/analyze-guest returns a pending job and scopes polling
   }
 });
 
+// Fase 1 de conversão do Radar (/radar/[slug]): analyze-guest precisa
+// aceitar radarJobId SOZINHO (sem jobDescriptionText) — a página pública da
+// vaga nunca pede/envia descrição de vaga, só o id do Job já existente, e o
+// backend resolve o texto a partir de Job.descriptionClean
+// (resolveAnalysisJobDescription). Cobre ponta a ponta: controller aceita a
+// requisição, o job processa contra a vaga certa, e o novo endpoint de
+// preview (radar-preview) devolve score/breakdown/gapsCount sem nunca
+// expor o adaptedContentJson completo.
+test("POST /cv-adaptation/analyze-guest accepts radarJobId alone, and GET .../radar-preview returns a limited projection of the result", async () => {
+  const { app, database } = await createApp();
+
+  try {
+    const company = await database.company.create({
+      data: {
+        name: "Stefanini",
+        normalizedName: `stefanini-${randomUUID()}`,
+      },
+    });
+    const radarJob = await database.job.create({
+      data: {
+        companyId: company.id,
+        sourceJobUrl: `https://radar.example.com/jobs/${randomUUID()}`,
+        canonicalKey: `stefanini:engenheiro-de-dados-jr:${randomUUID()}`,
+        title: "Engenheiro de Dados Jr",
+        normalizedTitle: "engenheiro de dados jr",
+        descriptionRaw: VALID_JOB_DESCRIPTION_TEXT,
+        descriptionClean: VALID_JOB_DESCRIPTION_TEXT,
+        locationText: "São Paulo, BR",
+        firstSeenAt: new Date(),
+        lastSeenAt: new Date(),
+        status: "active",
+      },
+    });
+
+    const analyzeResponse = await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        radarJobId: radarJob.id,
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia em SQL e BI.\nExperiencia\nEmpresa X\nAnalista de Dados\n2019-2024\nSQL, dashboards e comunicacao com areas de negocio.",
+        turnstileToken: "token-test",
+      })
+      .expect(201);
+
+    assert.equal(analyzeResponse.body.status, "pending");
+    const jobId = analyzeResponse.body.jobId as string;
+    const guestPossessionToken =
+      analyzeResponse.body.guestPossessionToken as string;
+    assert.equal(typeof guestPossessionToken, "string");
+
+    const job = await waitForAnalysisJobStatus(
+      app,
+      null,
+      jobId,
+      ["succeeded", "failed"],
+      15_000,
+    );
+    assert.equal(job.status, "succeeded");
+
+    // jobTitle/companyName vêm do Job do radar, nunca do texto colado
+    // (que nem existe aqui) — mesma garantia de resolveAnalysisJobDescription.
+    assert.equal(
+      (job as unknown as { jobTitle: string | null }).jobTitle,
+      "Engenheiro de Dados Jr",
+    );
+    assert.equal(
+      (job as unknown as { companyName: string | null }).companyName,
+      "Stefanini",
+    );
+
+    const previewResponse = await request(app.getHttpServer())
+      .get(`/api/cv-adaptation/analysis-jobs/${jobId}/radar-preview`)
+      .set("x-guest-possession-token", guestPossessionToken)
+      .expect(200);
+
+    assert.equal(previewResponse.body.status, "succeeded");
+    assert.equal(previewResponse.body.jobTitle, "Engenheiro de Dados Jr");
+    assert.equal(previewResponse.body.companyName, "Stefanini");
+    // O preview nunca deve conter o adaptedContentJson completo nem
+    // gapExplanation/recommendation/evidence de nenhum requirement.
+    assert.equal(
+      "adaptedContentJson" in previewResponse.body,
+      false,
+      JSON.stringify(previewResponse.body),
+    );
+    const serializedPreview = JSON.stringify(previewResponse.body);
+    assert.equal(serializedPreview.includes("gapExplanation"), false);
+    assert.equal(serializedPreview.includes("recommendation"), false);
+
+    // Sem token de posse (ou com um token errado), o preview não é
+    // revelado — mesma regra de posse do getGuestAnalysisJobStatusOnly.
+    await request(app.getHttpServer())
+      .get(`/api/cv-adaptation/analysis-jobs/${jobId}/radar-preview`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`/api/cv-adaptation/analysis-jobs/${jobId}/radar-preview`)
+      .set("x-guest-possession-token", "wrong-token")
+      .expect(404);
+  } finally {
+    await app.close();
+  }
+});
+
+test("POST /cv-adaptation/analyze-guest still requires jobDescriptionText or radarJobId — neither present is a 400, not a silent empty analysis", async () => {
+  const { app } = await createApp();
+
+  try {
+    await request(app.getHttpServer())
+      .post("/api/cv-adaptation/analyze-guest")
+      .send({
+        masterCvText:
+          "Ana Silva\nResumo\nAnalista de Dados com 5 anos de experiencia.",
+        turnstileToken: "token-test",
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        assert.match(
+          String(body.message),
+          /jobDescriptionText or radarJobId is required/,
+        );
+      });
+  } finally {
+    await app.close();
+  }
+});
+
 test("user can redeem an awaiting analysis with one credit", async () => {
   const { app, database } = await createApp();
   const user = await registerUser(app, database, "cv-adapt-redeem-credit");

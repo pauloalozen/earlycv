@@ -27,6 +27,8 @@ export function PublicNavBar({
   userName = null,
   userRole = null,
   credits,
+  guestCtaLabel = "Adaptar meu CV →",
+  guestCtaHref = "/adaptar",
 }: {
   dark?: boolean;
   hideHowItWorksLink?: boolean;
@@ -35,6 +37,8 @@ export function PublicNavBar({
   userName?: string | null;
   userRole?: AppInternalRole | null;
   credits?: number | "∞" | "—";
+  guestCtaLabel?: string;
+  guestCtaHref?: string;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuItems = buildUserMenuItems({ userRole });
@@ -224,7 +228,7 @@ export function PublicNavBar({
             />
           ) : (
             <Link
-              href="/adaptar"
+              href={guestCtaHref}
               style={{
                 background: dark ? "#fafaf6" : "#0a0a0a",
                 color: dark ? "#0a0a0a" : "#fff",
@@ -237,7 +241,7 @@ export function PublicNavBar({
                 alignItems: "center",
               }}
             >
-              Adaptar meu CV →
+              {guestCtaLabel}
             </Link>
           )}
         </div>
@@ -375,11 +379,11 @@ export function PublicNavBar({
           </>
         ) : (
           <Link
-            href="/adaptar"
+            href={guestCtaHref}
             onClick={() => setIsMenuOpen(false)}
             className="public-mob-nav-item public-mob-nav-item--cta"
           >
-            Adaptar meu CV →
+            {guestCtaLabel}
           </Link>
         )}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { scrollCenterBelowFixedNav } from "@/lib/scroll-center-below-fixed-nav";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -25,14 +26,14 @@ export function ExternalApplyGate({
   jobId: string;
   isAuthenticated: boolean;
 }) {
-  // Usuário logado vai direto pra /adaptar (já tem sessão). Anônimo
-  // precisa criar conta primeiro — /adaptar exige sessão, então o CTA
-  // passa por /entrar, com `next` carregando o jobId: assim que a conta é
-  // criada, o redirect cai direto em /adaptar já com a descrição desta
-  // vaga carregada (ver adaptar-client.tsx, fluxo de 1 clique via jobId).
+  // Usuário logado vai direto pra /adaptar (já tem sessão). Anônimo sobe
+  // pro bloco de análise inline (RadarGuestAnalysisBand, id
+  // "radar-guest-analysis") em vez de ir pro /entrar — mesmo CTA
+  // contextual usado no restante da página (Fase 1 de conversão do
+  // Radar), nunca duplica o fluxo de análise.
   const analyzeHref = isAuthenticated
     ? `/adaptar?jobId=${jobId}`
-    : `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(`/adaptar?jobId=${jobId}`)}`;
+    : "#radar-guest-analysis";
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -47,6 +48,20 @@ export function ExternalApplyGate({
   function continueExternally() {
     window.open(href, "_blank", "noopener,noreferrer");
     setOpen(false);
+  }
+
+  // Anônimo: fecha o popup e rola até o bloco de análise (mesmo scroll
+  // centralizado do CTA de reforço no fim da descrição, ver
+  // scroll-center-below-fixed-nav.ts) em vez de deixar o navegador seguir
+  // a âncora puro (que não centraliza nem descontava a nav fixa — cortava
+  // o card). Logado: navegação normal pro /adaptar, sem interceptar.
+  function handleAnalyzeClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (isAuthenticated) return;
+    const target = document.getElementById("radar-guest-analysis");
+    setOpen(false);
+    if (!target) return;
+    e.preventDefault();
+    scrollCenterBelowFixedNav(target);
   }
 
   return (
@@ -201,6 +216,7 @@ export function ExternalApplyGate({
 
             <a
               href={analyzeHref}
+              onClick={handleAnalyzeClick}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -218,9 +234,7 @@ export function ExternalApplyGate({
                 marginBottom: 8,
               }}
             >
-              {isAuthenticated
-                ? "Fazer minha análise →"
-                : "Criar usuário e fazer minha análise →"}
+              Fazer minha análise →
             </a>
             <div
               style={{

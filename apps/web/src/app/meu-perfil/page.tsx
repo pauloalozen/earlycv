@@ -29,6 +29,7 @@ import {
   buildProfileBlockStates,
   type UserProfileRecord,
 } from "../meu-cv-master/profile-blocks";
+import { SavedJobClaimer } from "../radar/saved-job-claimer";
 import { DashboardColumnTabs } from "./dashboard-column-tabs";
 import {
   BriefcaseIcon,
@@ -571,6 +572,7 @@ export default async function MeuPerfilPage() {
 
         <div className="mx-auto max-w-[1320px] px-6 pb-20 pt-[88px] md:px-8 lg:px-12">
           <GuestAnalysisClaimer />
+          <SavedJobClaimer />
 
           <div className="space-y-4">
             {/* 1 · Saudação */}

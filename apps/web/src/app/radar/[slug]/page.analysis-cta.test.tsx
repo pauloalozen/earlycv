@@ -123,7 +123,7 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     ).toBeInTheDocument();
   });
 
-  it("usuário logado sem CV master: só 'Analisar com outro CV' aparece", async () => {
+  it("usuário logado sem CV master: só o botão secundário 'Analisar meu CV' aparece, levando pra /adaptar com o jobId", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(buildUser());
     mocks.getMyMasterResume.mockResolvedValue(null);
 
@@ -133,12 +133,15 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     render(element);
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Analisar com outro CV/i }),
-    ).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Analisar meu CV/i });
+    expect(link).toHaveAttribute("href", "/adaptar?jobId=job_1");
   });
 
-  it("usuário não logado: só 'Analisar com outro CV' aparece", async () => {
+  // Visitante anônimo já tem o CTA de análise em destaque no bloco guest
+  // inline (RadarGuestAnalysisBand, #radar-guest-analysis) no topo da
+  // página — o card de candidatura não duplica esse CTA, mostra "Salvar
+  // para depois" (SaveJobCtaBtn) no lugar.
+  it("usuário não logado: nenhum botão 'Analisar meu CV' no card de candidatura (CTA de análise já está no bloco guest inline)", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
 
     const element = await JobPage({
@@ -147,8 +150,12 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     render(element);
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Analisar com outro CV/i });
-    expect(link).toHaveAttribute("href", expect.stringContaining("/entrar"));
+    expect(
+      screen.queryByRole("link", { name: /Analisar meu CV/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Salvar para depois/i }),
+    ).toBeInTheDocument();
   });
 });
 

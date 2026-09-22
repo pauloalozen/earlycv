@@ -51,7 +51,15 @@ const footerColumns = [
   },
 ] as const;
 
-export function PublicFooter() {
+export function PublicFooter({
+  tagline = "Se a vaga importa, seu currículo não pode ser genérico.",
+  ctaLabel = "Começar análise grátis agora →",
+  ctaHref = "/adaptar",
+}: {
+  tagline?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+} = {}) {
   return (
     <footer
       style={{
@@ -98,10 +106,10 @@ export function PublicFooter() {
             color: "#fafaf6",
           }}
         >
-          Se a vaga importa, seu currículo não pode ser genérico.
+          {tagline}
         </div>
         <Link
-          href="/adaptar"
+          href={ctaHref}
           style={{
             background: "#fafaf6",
             color: "#0a0a0a",
@@ -118,7 +126,7 @@ export function PublicFooter() {
             whiteSpace: "normal",
           }}
         >
-          Começar análise grátis agora →
+          {ctaLabel}
         </Link>
       </div>
 
