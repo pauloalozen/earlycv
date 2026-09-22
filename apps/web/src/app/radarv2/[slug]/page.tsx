@@ -859,6 +859,8 @@ export default async function JobPage({ params }: JobPageProps) {
           userName={user?.name}
           userRole={user?.internalRole}
           credits={availableCredits}
+          guestCtaLabel="Criar conta grátis →"
+          guestCtaHref="/entrar?tab=cadastrar&ctx=radar"
         />
 
         <div
