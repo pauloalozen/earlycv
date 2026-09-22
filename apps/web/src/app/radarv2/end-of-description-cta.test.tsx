@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EndOfDescriptionCta } from "./end-of-description-cta";
 import {
   RadarV2AnalysisPreviewProvider,
@@ -77,5 +77,43 @@ describe("EndOfDescriptionCta", () => {
     expect(
       screen.getByText(/Veja seu match real com ela/i),
     ).toBeInTheDocument();
+  });
+
+  it("clique (antes do preview): rola descontando a altura da nav fixa, nunca a altura total do viewport", () => {
+    const scrollToMock = vi.fn();
+    vi.stubGlobal("scrollTo", scrollToMock);
+
+    // <nav aria-label="Breadcrumb"> real da página (não fixo) + o
+    // PublicNavBar (fixo) — o handler precisa achar especificamente o
+    // fixo, não o primeiro <nav> do documento.
+    const breadcrumbNav = document.createElement("nav");
+    const fixedNav = document.createElement("nav");
+    fixedNav.style.position = "fixed";
+    fixedNav.getBoundingClientRect = () => ({ height: 60, top: 0 }) as DOMRect;
+    document.body.append(breadcrumbNav, fixedNav);
+
+    const target = document.createElement("div");
+    target.id = "radar-guest-analysis";
+    target.getBoundingClientRect = () => ({ top: 500, height: 900 }) as DOMRect;
+    document.body.append(target);
+
+    render(
+      <RadarV2AnalysisPreviewProvider>
+        <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
+      </RadarV2AnalysisPreviewProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("link"));
+
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+    const call = scrollToMock.mock.calls[0][0] as { top: number };
+    // Card (900px) mais alto que o viewport disponível — o topo do card
+    // fica logo abaixo da nav fixa (60px), nunca centralizado ignorando
+    // a nav (o que cortaria o topo atrás dela).
+    expect(call.top).toBe(500 - 60);
+
+    breadcrumbNav.remove();
+    fixedNav.remove();
+    target.remove();
   });
 });

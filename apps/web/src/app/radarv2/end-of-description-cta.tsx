@@ -55,7 +55,33 @@ export function EndOfDescriptionCta({
     const target = document.getElementById(targetId);
     if (!target) return;
     e.preventDefault();
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // scrollIntoView({block:"center"}) centraliza contra a altura TOTAL
+    // do viewport, sem saber que a nav é fixed e cobre uma faixa fixa no
+    // topo — com o card de resultado mais alto (rings maiores, breakdown,
+    // CTA), isso cortava tanto o topo (atrás da nav) quanto a base do
+    // card. Calculando manualmente: centraliza dentro da área realmente
+    // visível (viewport menos a nav) quando o card cabe; quando o card é
+    // mais alto que essa área, alinha o topo dele logo abaixo da nav —
+    // sempre mostra o começo do card (headline + score), nunca corta o
+    // topo atrás da nav.
+    // A página também tem um <nav aria-label="Breadcrumb"> (não fixo) —
+    // pega especificamente o nav fixo no topo (PublicNavBar), nunca o
+    // primeiro <nav> do documento.
+    const fixedNav = Array.from(document.querySelectorAll("nav")).find(
+      (el) => window.getComputedStyle(el).position === "fixed",
+    );
+    const navHeight = fixedNav?.getBoundingClientRect().height ?? 0;
+    const rect = target.getBoundingClientRect();
+    const visibleHeight = window.innerHeight - navHeight;
+    const extraSpace = Math.max(0, visibleHeight - rect.height);
+    const desiredTop = navHeight + extraSpace / 2;
+    const scrollDelta = rect.top - desiredTop;
+
+    window.scrollTo({
+      top: window.scrollY + scrollDelta,
+      behavior: "smooth",
+    });
   }
 
   return (
