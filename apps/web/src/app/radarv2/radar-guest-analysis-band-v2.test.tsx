@@ -188,6 +188,59 @@ describe("RadarGuestAnalysisBandV2", () => {
     expect(screen.queryByText(/recommendation/i)).toBeNull();
   });
 
+  it("breakdown do preview mostra só Skills técnicas + Experiência (nunca outras dimensões), sempre seguido da linha travada", async () => {
+    runRadarGuestAnalysisFlowMock.mockResolvedValue({
+      kind: "preview",
+      jobId: "analysis-job-3",
+      preview: {
+        status: "succeeded",
+        lastError: null,
+        jobTitle: "Engenheiro de Dados",
+        companyName: "Stefanini",
+        score: { before: 60, after: 90 },
+        breakdown: [
+          {
+            dimension: "education",
+            label: "Formação",
+            coveragePercent: 100,
+          },
+          {
+            dimension: "experience",
+            label: "Experiência",
+            coveragePercent: 40,
+          },
+          { dimension: "skill", label: "Skills técnicas", coveragePercent: 80 },
+          {
+            dimension: "language",
+            label: "Idiomas",
+            coveragePercent: 100,
+          },
+        ],
+        gapsCount: 2,
+      },
+    });
+
+    render(
+      <RadarGuestAnalysisBandV2 jobId="job-1" jobTitle="Engenheiro de Dados" />,
+    );
+
+    const fileInput = document.getElementById(
+      "radarv2-guest-analysis-file-input",
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [makeFile()] } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Skills técnicas")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Experiência")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Outros critérios analisados/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Formação")).toBeNull();
+    expect(screen.queryByText("Idiomas")).toBeNull();
+  });
+
   it("erro na análise: mostra a mensagem de erro e permanece no estado de upload", async () => {
     runRadarGuestAnalysisFlowMock.mockResolvedValue({
       kind: "error",

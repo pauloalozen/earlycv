@@ -237,6 +237,33 @@ function LoadingState({ jobTitle }: { jobTitle: string }) {
   );
 }
 
+// Preview limitado a exatamente Skills técnicas + Experiência — nunca as
+// outras dimensões que a análise real possa ter identificado (educação,
+// certificações, idiomas etc.). O objetivo aqui não é mostrar tudo, é
+// mostrar uma amostra consistente + a linha travada "outros critérios
+// analisados", então dimensões extras são omitidas de propósito, nunca
+// adicionadas à lista visível.
+const PREVIEW_DIMENSION_ORDER = ["skill", "experience"];
+
+function useRadarV2RingSize() {
+  const [size, setSize] = useState(128);
+
+  useEffect(() => {
+    // matchMedia não existe em alguns ambientes de teste (jsdom sem
+    // polyfill) — nunca quebra o componente por isso, só mantém o
+    // tamanho padrão de desktop.
+    if (typeof window.matchMedia !== "function") return;
+
+    const query = window.matchMedia("(max-width: 480px)");
+    const update = () => setSize(query.matches ? 76 : 128);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return size;
+}
+
 function PreviewState({
   jobTitle,
   preview,
@@ -250,6 +277,15 @@ function PreviewState({
   const after = preview.score?.after ?? null;
   const gap =
     after !== null && before !== null && after > before ? after - before : null;
+  const ringSize = useRadarV2RingSize();
+  const isCompact = ringSize < 100;
+  const visibleBreakdown = (preview.breakdown ?? [])
+    .filter((row) => PREVIEW_DIMENSION_ORDER.includes(row.dimension))
+    .sort(
+      (a, b) =>
+        PREVIEW_DIMENSION_ORDER.indexOf(a.dimension) -
+        PREVIEW_DIMENSION_ORDER.indexOf(b.dimension),
+    );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
@@ -281,45 +317,27 @@ function PreviewState({
       <div
         style={{
           display: "flex",
-          gap: 28,
+          gap: isCompact ? 14 : 28,
           alignItems: "center",
           flexWrap: "wrap",
         }}
       >
-        {before !== null ? (
-          <div style={{ textAlign: "center" }}>
-            <ScoreRing value={before} size={128} dark />
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 9.5,
-                color: "#8a8a85",
-                marginTop: 6,
-                letterSpacing: 0.3,
-              }}
-            >
-              HOJE
-            </div>
-          </div>
-        ) : null}
-
-        {after !== null && before !== null ? (
-          <>
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#c6ff3a"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <title>Potencial</title>
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
+        {/* Grupo dos dois gauges — nunca quebra linha entre si (só o
+        bloco de texto abaixo quebra pro próprio flexWrap do container
+        pai); no mobile o ringSize encolhe pra caber os dois na mesma
+        linha, ver useRadarV2RingSize. */}
+        <div
+          style={{
+            display: "flex",
+            gap: isCompact ? 10 : 20,
+            alignItems: "center",
+            flexWrap: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          {before !== null ? (
             <div style={{ textAlign: "center" }}>
-              <ScoreRing value={after} size={128} dark />
+              <ScoreRing value={before} size={ringSize} dark />
               <div
                 style={{
                   fontFamily: MONO,
@@ -329,11 +347,44 @@ function PreviewState({
                   letterSpacing: 0.3,
                 }}
               >
-                POTENCIAL
+                HOJE
               </div>
             </div>
-          </>
-        ) : null}
+          ) : null}
+
+          {after !== null && before !== null ? (
+            <>
+              <svg
+                width={isCompact ? 16 : 22}
+                height={isCompact ? 16 : 22}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#c6ff3a"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0 }}
+              >
+                <title>Potencial</title>
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+              <div style={{ textAlign: "center" }}>
+                <ScoreRing value={after} size={ringSize} dark />
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    color: "#8a8a85",
+                    marginTop: 6,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  POTENCIAL
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
 
         {gap !== null ? (
           <div style={{ flex: 1, minWidth: 220 }}>
@@ -371,7 +422,7 @@ function PreviewState({
           ONDE VOCÊ ESTÁ FORTE E ONDE ESTÁ FRACO
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-          {preview.breakdown?.map((row) => (
+          {visibleBreakdown.map((row) => (
             <Bar
               key={row.dimension}
               label={row.label}
