@@ -44,35 +44,22 @@ describe("RadarGuestAnalysisBand", () => {
     cleanup();
   });
 
-  it("estado inicial: mostra o CTA de upload, sem preview nem botão de análise habilitado", () => {
+  it("estado inicial: mostra a área de upload convidando a arrastar o CV, sem preview", () => {
     render(
       <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
     );
 
-    expect(screen.getByText(/Analisar meu CV para esta vaga/i)).toBeDisabled();
-    expect(screen.queryByText(/SEU MATCH COM ESTA VAGA/i)).toBeNull();
+    expect(screen.getByText(/Arraste seu currículo aqui/i)).toBeInTheDocument();
+    expect(screen.queryByText(/SEU RESULTADO PARA ESTA VAGA/i)).toBeNull();
   });
 
-  it("upload + clique: chama runRadarGuestAnalysisFlow com radarJobId no FormData e mostra o preview ao suceder", async () => {
-    runRadarGuestAnalysisFlowMock.mockResolvedValue({
-      kind: "preview",
-      jobId: "analysis-job-1",
-      preview: {
-        status: "succeeded",
-        lastError: null,
-        jobTitle: "Engenheiro de Dados",
-        companyName: "Stefanini",
-        score: { before: 68, after: 82 },
-        breakdown: [
-          {
-            dimension: "skill",
-            label: "Skills técnicas",
-            coveragePercent: 75,
-          },
-        ],
-        gapsCount: 2,
-      },
-    });
+  it("upload: dispara a análise automaticamente e mostra o estado de análise (Zeigarnik checklist) antes do preview", async () => {
+    let resolveFlow: (value: unknown) => void = () => undefined;
+    runRadarGuestAnalysisFlowMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFlow = resolve;
+      }),
+    );
 
     render(
       <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
@@ -83,25 +70,75 @@ describe("RadarGuestAnalysisBand", () => {
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
 
-    const analyzeButton = screen.getByText(/Analisar meu CV para esta vaga/i);
-    expect(analyzeButton).not.toBeDisabled();
-    fireEvent.click(analyzeButton);
-
     await waitFor(() => {
-      expect(screen.getByText(/SEU MATCH COM ESTA VAGA/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Comparando seu CV com os requisitos de/i),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Lendo seu currículo/i)).toBeInTheDocument();
+
+    resolveFlow({
+      kind: "preview",
+      jobId: "analysis-job-1",
+      preview: {
+        status: "succeeded",
+        lastError: null,
+        jobTitle: "Engenheiro de Dados",
+        companyName: "Stefanini",
+        score: { before: 50, after: 86 },
+        breakdown: [
+          { dimension: "skill", label: "Skills técnicas", coveragePercent: 75 },
+        ],
+        gapsCount: 13,
+      },
+    });
+  });
+
+  it("upload: dispara runRadarGuestAnalysisFlow automaticamente com radarJobId no FormData e mostra gauges + gapsCount real no preview", async () => {
+    runRadarGuestAnalysisFlowMock.mockResolvedValue({
+      kind: "preview",
+      jobId: "analysis-job-1",
+      preview: {
+        status: "succeeded",
+        lastError: null,
+        jobTitle: "Engenheiro de Dados",
+        companyName: "Stefanini",
+        score: { before: 50, after: 86 },
+        breakdown: [
+          { dimension: "skill", label: "Skills técnicas", coveragePercent: 75 },
+        ],
+        gapsCount: 13,
+      },
     });
 
-    expect(screen.getByText("68%")).toBeInTheDocument();
-    expect(screen.getByText("82%")).toBeInTheDocument();
+    const { container } = render(
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+    );
+
+    const fileInput = document.getElementById(
+      "radar-guest-analysis-file-input",
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [makeFile()] } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/SEU RESULTADO PARA ESTA VAGA/i),
+      ).toBeInTheDocument();
+    });
+
+    expect(container.textContent).toContain("50%");
+    expect(container.textContent).toContain("86%");
     expect(
-      screen.getByText(/Criar conta grátis e ver análise completa/i),
+      screen.getByText(/Ver os 13 pontos e minha análise completa/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Outros critérios analisados/i),
     ).toBeInTheDocument();
 
     const formData = runRadarGuestAnalysisFlowMock.mock.calls[0][0]
       .formData as FormData;
     expect(formData.get("radarJobId")).toBe("job-1");
     expect(formData.get("file")).toBeInstanceOf(File);
-    expect(formData.has("jobDescriptionText")).toBe(false);
 
     expect(trackEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ eventName: "radar_analysis_cta_clicked" }),
@@ -136,17 +173,69 @@ describe("RadarGuestAnalysisBand", () => {
       "radar-guest-analysis-file-input",
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
-    fireEvent.click(screen.getByText(/Analisar meu CV para esta vaga/i));
 
     await waitFor(() => {
-      expect(screen.getByText(/Encontramos 3 pontos/i)).toBeInTheDocument();
+      expect(screen.getByText(/Encontramos/i)).toBeInTheDocument();
     });
 
     expect(screen.queryByText(/gapExplanation/i)).toBeNull();
     expect(screen.queryByText(/recommendation/i)).toBeNull();
   });
 
-  it("erro na análise: mostra a mensagem de erro e permanece no estado de upload (nunca mostra preview)", async () => {
+  it("breakdown do preview mostra só Skills técnicas + Experiência (nunca outras dimensões), sempre seguido da linha travada", async () => {
+    runRadarGuestAnalysisFlowMock.mockResolvedValue({
+      kind: "preview",
+      jobId: "analysis-job-3",
+      preview: {
+        status: "succeeded",
+        lastError: null,
+        jobTitle: "Engenheiro de Dados",
+        companyName: "Stefanini",
+        score: { before: 60, after: 90 },
+        breakdown: [
+          {
+            dimension: "education",
+            label: "Formação",
+            coveragePercent: 100,
+          },
+          {
+            dimension: "experience",
+            label: "Experiência",
+            coveragePercent: 40,
+          },
+          { dimension: "skill", label: "Skills técnicas", coveragePercent: 80 },
+          {
+            dimension: "language",
+            label: "Idiomas",
+            coveragePercent: 100,
+          },
+        ],
+        gapsCount: 2,
+      },
+    });
+
+    render(
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+    );
+
+    const fileInput = document.getElementById(
+      "radar-guest-analysis-file-input",
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [makeFile()] } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Skills técnicas")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Experiência")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Outros critérios analisados/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Formação")).toBeNull();
+    expect(screen.queryByText("Idiomas")).toBeNull();
+  });
+
+  it("erro na análise: mostra a mensagem de erro e permanece no estado de upload", async () => {
     runRadarGuestAnalysisFlowMock.mockResolvedValue({
       kind: "error",
       error: "Falha ao analisar CV. Tente novamente.",
@@ -160,14 +249,13 @@ describe("RadarGuestAnalysisBand", () => {
       "radar-guest-analysis-file-input",
     ) as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [makeFile()] } });
-    fireEvent.click(screen.getByText(/Analisar meu CV para esta vaga/i));
 
     await waitFor(() => {
       expect(
         screen.getByText(/Falha ao analisar CV. Tente novamente./i),
       ).toBeInTheDocument();
     });
-    expect(screen.queryByText(/SEU MATCH COM ESTA VAGA/i)).toBeNull();
+    expect(screen.queryByText(/SEU RESULTADO PARA ESTA VAGA/i)).toBeNull();
   });
 
   it("arquivo maior que 5MB: bloqueia antes de sequer chamar o fluxo de análise", () => {

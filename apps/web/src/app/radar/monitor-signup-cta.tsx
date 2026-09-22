@@ -5,14 +5,10 @@ const MONO = "var(--font-geist-mono), monospace";
 
 const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/alerta-vaga-certa")}`;
 
-// Fase 1.1 (Radar v2) — substitui FeatureShowcaseStripV2 nesta posição
-// (fim da descrição, antes do reforço/sidebar): a vitrine genérica do
-// EarlyCV ("também no EarlyCV") virou este CTA único do Monitor, agora com
-// cor de verdade (a única promoção de Monitor que resta na página, depois
-// de remover o card da sidebar e a faixa do rodapé) — precisa chamar
-// atenção, não pode ficar no mesmo cinza-morto do resto dos blocos
-// secundários.
-export function MonitorSignupCtaV2() {
+// Fica no fim da descrição, antes do reforço/sidebar — única promoção do
+// Monitor que existe na página (não tem mais card na sidebar nem faixa no
+// rodapé), então precisa chamar atenção de verdade, com cor.
+export function MonitorSignupCta() {
   if (isJobsGhostModeEnabled()) return null;
 
   return (

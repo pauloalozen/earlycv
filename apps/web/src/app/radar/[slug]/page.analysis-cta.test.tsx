@@ -137,11 +137,11 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     expect(link).toHaveAttribute("href", "/adaptar?jobId=job_1");
   });
 
-  // Fase 1 de conversão do Radar: visitante anônimo nunca é mandado direto
-  // pro /entrar a partir deste CTA secundário — sobe pro bloco de análise
-  // guest inline (RadarGuestAnalysisBand, #radar-guest-analysis) na mesma
-  // página, sem duplicar fluxo de análise.
-  it("usuário não logado: só o botão secundário 'Analisar meu CV' aparece, levando pro bloco de análise inline (nunca direto pro /entrar)", async () => {
+  // Visitante anônimo já tem o CTA de análise em destaque no bloco guest
+  // inline (RadarGuestAnalysisBand, #radar-guest-analysis) no topo da
+  // página — o card de candidatura não duplica esse CTA, mostra "Salvar
+  // para depois" (SaveJobCtaBtn) no lugar.
+  it("usuário não logado: nenhum botão 'Analisar meu CV' no card de candidatura (CTA de análise já está no bloco guest inline)", async () => {
     mocks.getCurrentAppUserFromCookies.mockResolvedValue(null);
 
     const element = await JobPage({
@@ -150,8 +150,12 @@ describe("/radar/[slug] analysis CTA visibility", () => {
     render(element);
 
     expect(screen.queryByTestId("analyze-primary-btn")).not.toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Analisar meu CV/i });
-    expect(link).toHaveAttribute("href", "#radar-guest-analysis");
+    expect(
+      screen.queryByRole("link", { name: /Analisar meu CV/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Salvar para depois/i }),
+    ).toBeInTheDocument();
   });
 });
 

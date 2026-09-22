@@ -7,10 +7,9 @@
 // que o espaço visível, alinha o topo dele logo abaixo da nav — sempre
 // mostra o começo do elemento, nunca corta o topo.
 //
-// Extraído de radarv2/end-of-description-cta.tsx (onde o problema
-// apareceu primeiro, com o card de resultado da análise) — reaproveitado
-// por radar/external-apply-gate.tsx (compartilhado v1/v2) pro mesmo
-// padrão de scroll.
+// Extraído de radar/end-of-description-cta.tsx (onde o problema apareceu
+// primeiro, com o card de resultado da análise) — reaproveitado por
+// radar/external-apply-gate.tsx pro mesmo padrão de scroll.
 export function scrollCenterBelowFixedNav(target: Element) {
   if (typeof window === "undefined") return;
 

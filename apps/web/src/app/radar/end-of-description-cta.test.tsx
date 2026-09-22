@@ -3,15 +3,15 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EndOfDescriptionCta } from "./end-of-description-cta";
 import {
-  RadarV2AnalysisPreviewProvider,
-  useRadarV2AnalysisPreview,
-} from "./radar-analysis-preview-context-v2";
+  RadarAnalysisPreviewProvider,
+  useRadarAnalysisPreview,
+} from "./radar-analysis-preview-context";
 
-// Simula o que RadarGuestAnalysisBandV2 faz de verdade (chama
+// Simula o que RadarGuestAnalysisBand faz de verdade (chama
 // markPreviewRevealed ao terminar a análise) sem precisar montar o band
 // inteiro só pra testar a reação do EndOfDescriptionCta.
 function RevealPreviewButton() {
-  const { markPreviewRevealed } = useRadarV2AnalysisPreview();
+  const { markPreviewRevealed } = useRadarAnalysisPreview();
   return (
     <button type="button" onClick={markPreviewRevealed}>
       revelar preview
@@ -26,9 +26,9 @@ afterEach(() => {
 describe("EndOfDescriptionCta", () => {
   it("anônimo, sem preview ainda: aponta pra âncora do bloco de análise", () => {
     render(
-      <RadarV2AnalysisPreviewProvider>
+      <RadarAnalysisPreviewProvider>
         <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
-      </RadarV2AnalysisPreviewProvider>,
+      </RadarAnalysisPreviewProvider>,
     );
 
     const link = screen.getByRole("link");
@@ -45,10 +45,10 @@ describe("EndOfDescriptionCta", () => {
 
   it("anônimo, depois do preview revelado: troca pra copy/href de cadastro direto", () => {
     render(
-      <RadarV2AnalysisPreviewProvider>
+      <RadarAnalysisPreviewProvider>
         <RevealPreviewButton />
         <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
-      </RadarV2AnalysisPreviewProvider>,
+      </RadarAnalysisPreviewProvider>,
     );
 
     fireEvent.click(screen.getByText("revelar preview"));
@@ -65,14 +65,14 @@ describe("EndOfDescriptionCta", () => {
 
   it("logado: sempre aponta pra âncora do CompatCard, independente do preview guest", () => {
     render(
-      <RadarV2AnalysisPreviewProvider>
+      <RadarAnalysisPreviewProvider>
         <EndOfDescriptionCta isAuthenticated hasMasterCv />
-      </RadarV2AnalysisPreviewProvider>,
+      </RadarAnalysisPreviewProvider>,
     );
 
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
-      "#radarv2-compat-card",
+      "#radar-compat-card",
     );
     expect(
       screen.getByText(/Veja seu match real com ela/i),
@@ -98,9 +98,9 @@ describe("EndOfDescriptionCta", () => {
     document.body.append(target);
 
     render(
-      <RadarV2AnalysisPreviewProvider>
+      <RadarAnalysisPreviewProvider>
         <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
-      </RadarV2AnalysisPreviewProvider>,
+      </RadarAnalysisPreviewProvider>,
     );
 
     fireEvent.click(screen.getByRole("link"));

@@ -2,28 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment, type ReactNode } from "react";
-
-import { PublicFooter } from "@/components/public-footer";
-import { PublicNavBar } from "@/components/public-nav-bar";
-import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { toCompanySlug } from "@/lib/company-slug";
-import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
-import { getMyPlan } from "@/lib/plans-api";
-import {
-  getPublicJobBySlug,
-  listPublicJobs,
-  type PublicJob,
-} from "@/lib/public-jobs-api";
-import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
-import { getMyMasterResume } from "@/lib/resumes-api";
-import { getAbsoluteUrl } from "@/lib/site";
-import { AnalysisCtaButtons } from "../analysis-cta";
-import { CompanyLogo } from "../company-logo";
-import { ExternalApplyGate } from "../external-apply-gate";
-import { JobDetailViewTracker } from "../job-detail-view-tracker";
-import { RadarGuestAnalysisBand } from "../radar-guest-analysis-band";
-import { RadarOpportunityLink } from "../radar-opportunity-link";
+import { AnalysisCtaButtons } from "@/app/radar/analysis-cta";
+import { CompanyLogo } from "@/app/radar/company-logo";
+import { ExternalApplyGate } from "@/app/radar/external-apply-gate";
+import { RadarOpportunityLink } from "@/app/radar/radar-opportunity-link";
 import {
   breakdownPct,
   type MatchBreakdown,
@@ -34,8 +16,27 @@ import {
   ScoreRing,
   SkillChip,
   scoreColor,
-} from "../radar-ui";
-import { SaveJobTextBtn } from "../save-job-btn";
+} from "@/app/radar/radar-ui";
+import { SaveJobCtaBtn, SaveJobTextBtn } from "@/app/radar/save-job-btn";
+import { PublicFooter } from "@/components/public-footer";
+import { PublicNavBar } from "@/components/public-nav-bar";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { toCompanySlug } from "@/lib/company-slug";
+import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { getMyPlan } from "@/lib/plans-api";
+import {
+  getPublicJobBySlug,
+  listPublicJobs,
+  type PublicJob,
+} from "@/lib/public-jobs-api";
+import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
+import { getMyMasterResume } from "@/lib/resumes-api";
+import { getAbsoluteUrl } from "@/lib/site";
+import { EndOfDescriptionCta } from "../end-of-description-cta";
+import { JobDetailViewTracker } from "../job-detail-view-tracker";
+import { MonitorSignupCta } from "../monitor-signup-cta";
+import { RadarAnalysisPreviewProvider } from "../radar-analysis-preview-context";
+import { RadarGuestAnalysisBand } from "../radar-guest-analysis-band";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -65,11 +66,6 @@ const SENIORITY_LABELS: Record<string, string> = {
   staff: "Staff",
   principal: "Principal",
 };
-
-// CTAs de conversão do visitante anônimo (Agressivo-v2) sempre levam pro
-// cadastro com `next` — sem isso, o usuário cai no default (/meu-perfil)
-// depois de criar conta, perdendo o fio da ação que o trouxe até aqui.
-const SIGNUP_NEXT_MONITOR = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent("/alerta-vaga-certa")}`;
 
 type ScoreState = "anonymous" | "no-cv" | "has-cv";
 
@@ -178,28 +174,6 @@ function CompatHead({ isAnalysis = false }: { isAnalysis?: boolean }) {
   );
 }
 
-function BellIcon({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <title>Monitor</title>
-      <path
-        d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"
-        stroke="#c6ff3a"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M13.73 21a2 2 0 01-3.46 0"
-        stroke="#c6ff3a"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function LockIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -220,334 +194,6 @@ function LockIcon({ size = 13 }: { size?: number }) {
         strokeLinecap="round"
       />
     </svg>
-  );
-}
-
-// "Depois da vaga, vem o resto" — vitrine do resto da plataforma pra
-// visitante anônimo, no lugar de mais um CTA repetido de monitor. Mesma
-// linguagem visual do MonitorHighlightBand (faixa preta, eyebrow lime,
-// CTA lime) — reforça que isto é vitrine séria de produto, não só
-// decoração, e sempre termina em CTA de cadastro (antes não tinha nenhum).
-function FeatureShowcaseStrip() {
-  const items: Array<{ label: string; description: string; icon: ReactNode }> = [
-    {
-      label: "Análise de CV com IA",
-      description: "O que te elimina nos filtros, antes de você aplicar.",
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <title>Análise de CV com IA</title>
-          <circle cx="10" cy="10" r="6" stroke="#c6ff3a" strokeWidth="1.8" />
-          <path
-            d="M20 20l-5.5-5.5"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Carta de apresentação",
-      description: "Gerada do mesmo CV, pronta em segundos.",
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <title>Carta de apresentação</title>
-          <rect
-            x="3"
-            y="5"
-            width="18"
-            height="14"
-            rx="2"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-          />
-          <path
-            d="M3 6.5l9 6.5 9-6.5"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ),
-    },
-    {
-      label: "Prep de entrevista",
-      description: "Perguntas prováveis, sob medida pra essa vaga.",
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <title>Prep de entrevista</title>
-          <path
-            d="M4 18v-3a4 4 0 014-4h1M13 11h1a4 4 0 014 4v3"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-          <circle cx="8.5" cy="8" r="2.6" stroke="#c6ff3a" strokeWidth="1.8" />
-          <circle cx="15.5" cy="8" r="2.6" stroke="#c6ff3a" strokeWidth="1.8" />
-        </svg>
-      ),
-    },
-    {
-      label: "Gestão de candidaturas",
-      description: "Cada vaga que você aplicar, num só lugar.",
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <title>Gestão de candidaturas</title>
-          <rect
-            x="3.5"
-            y="4"
-            width="5"
-            height="16"
-            rx="1.3"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-          />
-          <rect
-            x="10"
-            y="4"
-            width="5"
-            height="10"
-            rx="1.3"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-          />
-          <rect
-            x="16.5"
-            y="4"
-            width="4"
-            height="13"
-            rx="1.3"
-            stroke="#c6ff3a"
-            strokeWidth="1.8"
-          />
-        </svg>
-      ),
-    },
-  ];
-
-  return (
-    <div
-      style={{
-        background: "#0a0a0a",
-        borderRadius: 16,
-        padding: "32px 30px",
-        color: "#fafaf6",
-        marginBottom: 26,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: MONO,
-          fontSize: 10.5,
-          letterSpacing: 1.4,
-          color: "#c6ff3a",
-          fontWeight: 600,
-          marginBottom: 12,
-        }}
-      >
-        DEPOIS DA VAGA, VEM O RESTO
-      </div>
-      <div
-        style={{
-          fontSize: 26,
-          fontWeight: 600,
-          letterSpacing: -0.8,
-          lineHeight: 1.2,
-          margin: "0 0 8px",
-          maxWidth: 520,
-        }}
-      >
-        Essa vaga é só o começo. O EarlyCV cuida da candidatura inteira.
-      </div>
-      <p
-        style={{
-          fontSize: 13.5,
-          color: "#a8a6a0",
-          margin: "0 0 26px",
-          lineHeight: 1.6,
-          maxWidth: 480,
-        }}
-      >
-        Um CV master alimenta tudo — análise, carta de apresentação, prep de
-        entrevista e o controle de cada candidatura, sem retrabalho.
-      </p>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 12,
-          marginBottom: 26,
-        }}
-        className="fss-grid"
-      >
-        <style>{`
-          @media (max-width: 640px) {
-            .fss-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          }
-        `}</style>
-        {items.map((item) => (
-          <div
-            key={item.label}
-            style={{
-              background: "rgba(250,250,246,0.045)",
-              border: "1px solid rgba(250,250,246,0.1)",
-              borderRadius: 12,
-              padding: "16px 14px",
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                background: "rgba(198,255,58,0.12)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 12,
-              }}
-            >
-              {item.icon}
-            </div>
-            <div
-              style={{
-                fontSize: 12.5,
-                fontWeight: 600,
-                color: "#fafaf6",
-                marginBottom: 5,
-              }}
-            >
-              {item.label}
-            </div>
-            <div style={{ fontSize: 11, color: "#8a8a85", lineHeight: 1.45 }}>
-              {item.description}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <a
-          href="/entrar?tab=cadastrar&ctx=radar"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            background: "#c6ff3a",
-            color: "#1c2a05",
-            borderRadius: 10,
-            padding: "14px 24px",
-            fontSize: 13.5,
-            fontWeight: 700,
-            textDecoration: "none",
-          }}
-        >
-          Criar minha conta grátis
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M5 12h14M13 6l6 6-6 6"
-              stroke="#1c2a05"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </a>
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 10.5,
-            color: "#6a6560",
-            letterSpacing: 0.3,
-          }}
-        >
-          grátis · sem cartão · leva 1 minuto
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// Destaque grande do Monitor, no lugar do fechamento genérico
-// "outras oportunidades" — reforça o papel central do Monitor antes do
-// visitante sair da página.
-function MonitorHighlightBand() {
-  if (isJobsGhostModeEnabled()) return null;
-  return (
-    <div
-      style={{
-        background: "#0a0a0a",
-        borderRadius: 20,
-        padding: "52px 40px",
-        textAlign: "center",
-        color: "#fafaf6",
-        marginTop: 20,
-      }}
-    >
-      <div style={{ marginBottom: 16 }}>
-        <BellIcon size={34} />
-      </div>
-      <div
-        style={{
-          fontFamily: MONO,
-          fontSize: 10.5,
-          letterSpacing: 1.4,
-          color: "#c6ff3a",
-          fontWeight: 600,
-          marginBottom: 14,
-        }}
-      >
-        MONITOR DE VAGAS
-      </div>
-      <div
-        style={{
-          fontSize: 34,
-          fontWeight: 600,
-          letterSpacing: -1,
-          lineHeight: 1.15,
-          margin: "0 auto 14px",
-          maxWidth: 620,
-        }}
-      >
-        Receba vagas como essa — antes de todo mundo.
-      </div>
-      <div
-        style={{
-          fontSize: 14,
-          color: "#a8a6a0",
-          margin: "0 auto 26px",
-          maxWidth: 460,
-          lineHeight: 1.6,
-        }}
-      >
-        Assim que uma vaga parecida com esta entra no ar, você é avisado por
-        e-mail na hora — não precisa voltar aqui pra procurar de novo.
-      </div>
-      <a
-        href={SIGNUP_NEXT_MONITOR}
-        style={{
-          display: "inline-block",
-          background: "#c6ff3a",
-          color: "#1c2a05",
-          borderRadius: 10,
-          padding: "15px 28px",
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: "none",
-        }}
-      >
-        Ativar Monitor grátis
-      </a>
-    </div>
   );
 }
 
@@ -627,98 +273,6 @@ function CompatCardCta({
   );
 }
 
-// Card #1 da sidebar pra visitante anônimo — Monitor como CTA principal,
-// no lugar do antigo "Cadastre-se para ver sua oportunidade" (genérico e
-// sem prova de valor). Fica acima do card de Candidatura, que continua
-// intacto (AnalysisCtaButtons, aplicação externa, salvar) logo abaixo.
-function MonitorPrimaryCard() {
-  if (isJobsGhostModeEnabled()) return null;
-  const benefits = [
-    "Novas vagas parecidas assim que entram no ar",
-    "Compatibilidade calculada em cada uma",
-    "CV adaptado com um clique quando você quiser aplicar",
-  ];
-
-  return (
-    <CompatCardShell>
-      <div
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          letterSpacing: -0.3,
-          marginBottom: 14,
-        }}
-      >
-        O que você ganha com o Monitor:
-      </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 11,
-          marginBottom: 20,
-        }}
-      >
-        {benefits.map((text) => (
-          <div
-            key={text}
-            style={{ display: "flex", gap: 9, alignItems: "flex-start" }}
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              style={{ flexShrink: 0, marginTop: 1 }}
-            >
-              <title>Incluído</title>
-              <path
-                d="M5 13l4 4L19 7"
-                stroke="#c6ff3a"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span style={{ fontSize: 12.5, color: "#e8e6df" }}>{text}</span>
-          </div>
-        ))}
-      </div>
-      <a
-        href={SIGNUP_NEXT_MONITOR}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          width: "100%",
-          boxSizing: "border-box",
-          background: "#c6ff3a",
-          color: "#1c2a05",
-          borderRadius: 9,
-          padding: "14px 16px",
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: "none",
-          marginBottom: 10,
-        }}
-      >
-        Ativar Monitor grátis
-      </a>
-      <div
-        style={{
-          textAlign: "center",
-          fontFamily: MONO,
-          fontSize: 10.5,
-          color: "#6a6560",
-        }}
-      >
-        grátis · sem cartão · 30s pra configurar
-      </div>
-    </CompatCardShell>
-  );
-}
-
 function CompatCard({
   scoreState,
   match,
@@ -764,8 +318,11 @@ function CompatCard({
     );
   }
 
+  // Sem card de Monitor na sidebar — a promoção do Monitor virou o CTA
+  // colorido único no meio da página (MonitorSignupCta), não duplicada
+  // aqui também.
   if (scoreState === "anonymous") {
-    return <MonitorPrimaryCard />;
+    return null;
   }
 
   if (scoreState === "no-cv") {
@@ -1137,9 +694,7 @@ export default async function JobPage({ params }: JobPageProps) {
   // mesma vaga (radarJobId=job.id) sem duplicar CTA de análise na mesma
   // página (Fase 1 de conversão do Radar).
   const adaptarHref = user ? "/adaptar" : "#radar-guest-analysis";
-  const adaptarJobHref = user
-    ? `${adaptarHref}?jobId=${job.id}`
-    : adaptarHref;
+  const adaptarJobHref = user ? `${adaptarHref}?jobId=${job.id}` : adaptarHref;
 
   const sections = splitHtmlSections(job.descriptionHtml);
   const titleParts = splitJobTitleForDisplay(job.title);
@@ -1272,113 +827,120 @@ export default async function JobPage({ params }: JobPageProps) {
         position: "relative",
       }}
     >
-      <script type="application/ld+json">{JSON.stringify(jobJsonLd)}</script>
-      <script type="application/ld+json">
-        {JSON.stringify(breadcrumbJsonLd)}
-      </script>
-      <JobDetailViewTracker jobId={job.id} />
+      <RadarAnalysisPreviewProvider>
+        <script type="application/ld+json">{JSON.stringify(jobJsonLd)}</script>
+        <script type="application/ld+json">
+          {JSON.stringify(breadcrumbJsonLd)}
+        </script>
+        <JobDetailViewTracker jobId={job.id} />
 
-      <div
-        aria-hidden
-        style={{
-          position: "fixed",
-          inset: 0,
-          pointerEvents: "none",
-          opacity: 0.5,
-          mixBlendMode: "multiply",
-          zIndex: 0,
-          backgroundImage: GRAIN,
-        }}
-      />
-
-      <PublicNavBar
-        hideHowItWorksLink
-        hideJobsLink
-        fixed
-        userName={user?.name}
-        userRole={user?.internalRole}
-        credits={availableCredits}
-      />
-
-      <div
-        style={{
-          maxWidth: 1200,
-          margin: "0 auto",
-          padding: "108px clamp(16px,4vw,48px) 80px",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {/* Breadcrumb */}
-        <nav
-          aria-label="Breadcrumb"
-          className="job-breadcrumb"
+        <div
+          aria-hidden
           style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            color: "#8a8a85",
-            letterSpacing: 0.3,
-            marginBottom: 20,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "wrap",
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            opacity: 0.5,
+            mixBlendMode: "multiply",
+            zIndex: 0,
+            backgroundImage: GRAIN,
+          }}
+        />
+
+        <PublicNavBar
+          hideHowItWorksLink
+          hideJobsLink
+          fixed
+          userName={user?.name}
+          userRole={user?.internalRole}
+          credits={availableCredits}
+          guestCtaLabel="Criar conta grátis →"
+          guestCtaHref="/entrar?tab=cadastrar&ctx=radar"
+        />
+
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "108px clamp(16px,4vw,48px) 80px",
+            position: "relative",
+            zIndex: 1,
           }}
         >
-          <Link
-            href="/radar"
-            style={{ color: "#5a5a55", textDecoration: "none", flexShrink: 0 }}
+          {/* Breadcrumb */}
+          <nav
+            aria-label="Breadcrumb"
+            className="job-breadcrumb"
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              color: "#8a8a85",
+              letterSpacing: 0.3,
+              marginBottom: 20,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
           >
-            Vagas
-          </Link>
-          <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
-          <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
-            {job.title}
-          </span>
-        </nav>
+            <Link
+              href="/radar"
+              style={{
+                color: "#5a5a55",
+                textDecoration: "none",
+                flexShrink: 0,
+              }}
+            >
+              Vagas
+            </Link>
+            <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
+            <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
+              {job.title}
+            </span>
+          </nav>
 
-        {/* Internal linking — discreto, contextual às landing pages de SEO
+          {/* Internal linking — discreto, contextual às landing pages de SEO
         (área/empresa/remotas). job.dominantArea vem do enrichment
         (JobEnrichment), pode ser null pra vagas ainda sem enriquecimento
         completo — nesse caso o link de área simplesmente não entra na
         lista. job.company é sempre preenchido, então o link de empresa
         aparece pra toda vaga. */}
-        {internalLinks.length > 0 ? (
-          <div
-            className="job-internal-links"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-              fontFamily: MONO,
-              fontSize: 11,
-              marginBottom: 20,
-              marginTop: -8,
-            }}
-          >
-            {internalLinks.map((link, index) => (
-              <Fragment key={link.href}>
-                {index > 0 ? (
-                  <span
-                    className="job-internal-links-sep"
-                    style={{ color: "#c8c6bf" }}
+          {internalLinks.length > 0 ? (
+            <div
+              className="job-internal-links"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                fontFamily: MONO,
+                fontSize: 11,
+                marginBottom: 20,
+                marginTop: -8,
+              }}
+            >
+              {internalLinks.map((link, index) => (
+                <Fragment key={link.href}>
+                  {index > 0 ? (
+                    <span
+                      className="job-internal-links-sep"
+                      style={{ color: "#c8c6bf" }}
+                    >
+                      |
+                    </span>
+                  ) : null}
+                  <Link
+                    href={link.href}
+                    style={{ color: "#6a6560", textDecoration: "none" }}
                   >
-                    |
-                  </span>
-                ) : null}
-                <Link
-                  href={link.href}
-                  style={{ color: "#6a6560", textDecoration: "none" }}
-                >
-                  {link.label}
-                </Link>
-              </Fragment>
-            ))}
-          </div>
-        ) : null}
+                    {link.label}
+                  </Link>
+                </Fragment>
+              ))}
+            </div>
+          ) : null}
 
-        <style>{`
+          <style>{`
           @media (max-width: 640px) {
             /* Long job titles ("Product Owner | Scrum Master - Pleno")
              * wrapped across 2-3 lines right under "Vagas ›", and the
@@ -1405,238 +967,224 @@ export default async function JobPage({ params }: JobPageProps) {
           }
         `}</style>
 
-        {/* Job header */}
-        <header style={{ marginBottom: 32 }}>
-          {/* Company row */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              marginBottom: 22,
-            }}
-          >
-            <CompanyLogo
-              name={job.company}
-              logoUrl={job.companyLogoUrl}
-              websiteUrl={job.companyWebsiteUrl}
-              size={44}
-              borderRadius={10}
-              fontSize={13}
-            />
-            <div>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 500,
-                  letterSpacing: -0.3,
-                  marginBottom: 2,
-                }}
-              >
-                {job.company}
-              </div>
-              {job.location ? (
-                <div style={{ fontSize: 12, color: "#6a6560" }}>
-                  {job.location}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Title */}
-          <h1
-            style={{
-              fontSize: "clamp(1.75rem,4vw,2.75rem)",
-              fontWeight: 500,
-              letterSpacing: -1.6,
-              lineHeight: 1.05,
-              marginBottom: 20,
-              color: "#0a0a0a",
-              maxWidth: 760,
-            }}
-          >
-            {titleParts.emphasis ? (
-              <>
-                {titleParts.lead}
-                <br />
-                <em
+          {/* Job header */}
+          <header style={{ marginBottom: 32 }}>
+            {/* Company row */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginBottom: 22,
+              }}
+            >
+              <CompanyLogo
+                name={job.company}
+                logoUrl={job.companyLogoUrl}
+                websiteUrl={job.companyWebsiteUrl}
+                size={44}
+                borderRadius={10}
+                fontSize={13}
+              />
+              <div>
+                <div
                   style={{
-                    fontFamily: SERIF,
-                    fontWeight: 400,
-                    fontStyle: "italic",
-                    color: "#3a3a38",
-                  }}
-                >
-                  {titleParts.emphasis}.
-                </em>
-              </>
-            ) : (
-              titleParts.lead
-            )}
-          </h1>
-
-          {/* Badges */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 6,
-              marginBottom: 26,
-              alignItems: "center",
-            }}
-          >
-            {workModelLabel ? (
-              <span
-                style={{
-                  background: "#c6ff3a",
-                  color: "#405410",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 10px",
-                  borderRadius: 5,
-                  fontWeight: 600,
-                  letterSpacing: 0.2,
-                }}
-              >
-                {workModelLabel}
-              </span>
-            ) : null}
-            {seniorityLabel ? (
-              <span
-                style={{
-                  background: "rgba(10,10,10,0.05)",
-                  color: "#3a3a38",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 9px",
-                  borderRadius: 5,
-                }}
-              >
-                {seniorityLabel}
-              </span>
-            ) : null}
-            {job.employmentType ? (
-              <span
-                style={{
-                  background: "#fafaf6",
-                  color: "#3a3a38",
-                  border: "1px solid rgba(10,10,10,0.1)",
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  padding: "4px 9px",
-                  borderRadius: 5,
-                }}
-              >
-                {formatEmploymentType(job.employmentType)}
-              </span>
-            ) : null}
-          </div>
-
-          {/* Meta cards */}
-          <style>{`
-            .job-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
-            @media (max-width: 640px) {
-              .job-meta-grid { grid-template-columns: repeat(2, 1fr); }
-            }
-          `}</style>
-          <div className="job-meta-grid">
-            {[
-              {
-                k: "LOCALIZAÇÃO",
-                v: job.location ?? "Não informado",
-                sub: null,
-                highlight: false,
-              },
-              {
-                k: "MODELO",
-                v: workModelLabel ?? "Não informado",
-                sub: null,
-                highlight: false,
-              },
-              {
-                k: "PUBLICADA",
-                v: publishedDate ?? "Não informado",
-                sub: isRecentlyPublished ? "recém publicada" : null,
-                highlight: isRecentlyPublished,
-              },
-              {
-                k: "PRIMEIRA CAPTURA",
-                v: new Date(job.firstSeenAt).toLocaleDateString("pt-BR"),
-                sub: "EarlyCV",
-                mono: true,
-                highlight: false,
-              },
-            ].map((item) => (
-              <div
-                key={item.k}
-                style={{
-                  background: item.highlight
-                    ? "rgba(198,255,58,0.1)"
-                    : "#fafaf6",
-                  border: `1px solid ${item.highlight ? "rgba(64,84,16,0.18)" : "rgba(10,10,10,0.08)"}`,
-                  borderRadius: 10,
-                  padding: "14px 16px",
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 9.5,
-                    letterSpacing: 1.2,
-                    color: "#8a8a85",
-                    margin: "0 0 6px",
-                    fontWeight: 500,
-                  }}
-                >
-                  {item.k}
-                </p>
-                <p
-                  style={{
-                    fontSize: "mono" in item ? 13 : 14,
+                    fontSize: 15,
                     fontWeight: 500,
                     letterSpacing: -0.3,
-                    color: "#0a0a0a",
-                    margin: "0 0 2px",
-                    fontFamily: "mono" in item ? MONO : GEIST,
+                    marginBottom: 2,
                   }}
                 >
-                  {item.v}
-                </p>
-                {item.sub ? (
-                  <p
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: "#8a8a85",
-                      margin: 0,
-                    }}
-                  >
-                    {item.sub}
-                  </p>
+                  {job.company}
+                </div>
+                {job.location ? (
+                  <div style={{ fontSize: 12, color: "#6a6560" }}>
+                    {job.location}
+                  </div>
                 ) : null}
               </div>
-            ))}
-          </div>
-        </header>
+            </div>
 
-        {/* Fase 1 de conversão do Radar — entrada principal de análise
+            {/* Title */}
+            <h1
+              style={{
+                fontSize: "clamp(1.75rem,4vw,2.75rem)",
+                fontWeight: 500,
+                letterSpacing: -1.6,
+                lineHeight: 1.05,
+                marginBottom: 20,
+                color: "#0a0a0a",
+                maxWidth: 760,
+              }}
+            >
+              {titleParts.emphasis ? (
+                <>
+                  {titleParts.lead}
+                  <br />
+                  <em
+                    style={{
+                      fontFamily: SERIF,
+                      fontWeight: 400,
+                      fontStyle: "italic",
+                      color: "#3a3a38",
+                    }}
+                  >
+                    {titleParts.emphasis}.
+                  </em>
+                </>
+              ) : (
+                titleParts.lead
+              )}
+            </h1>
+
+            {/* Badges */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginBottom: 26,
+                alignItems: "center",
+              }}
+            >
+              {workModelLabel ? (
+                <span
+                  style={{
+                    background: "#c6ff3a",
+                    color: "#405410",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    padding: "4px 10px",
+                    borderRadius: 5,
+                    fontWeight: 600,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  {workModelLabel}
+                </span>
+              ) : null}
+              {seniorityLabel ? (
+                <span
+                  style={{
+                    background: "rgba(10,10,10,0.05)",
+                    color: "#3a3a38",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    padding: "4px 9px",
+                    borderRadius: 5,
+                  }}
+                >
+                  {seniorityLabel}
+                </span>
+              ) : null}
+              {job.employmentType ? (
+                <span
+                  style={{
+                    background: "#fafaf6",
+                    color: "#3a3a38",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    padding: "4px 9px",
+                    borderRadius: 5,
+                  }}
+                >
+                  {formatEmploymentType(job.employmentType)}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Meta info — mesmos 4 dados de sempre (localização, modelo,
+          publicação, primeira captura), só que como linha de tags discreta
+          em vez de grid de 4 cards grandes: essa informação não é o motivo
+          de a pessoa estar aqui, então não deveria disputar espaço com o
+          bloco de análise logo abaixo. */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginBottom: 4,
+              }}
+            >
+              <span
+                style={{
+                  background: "#fff",
+                  border: "1px solid rgba(10,10,10,0.1)",
+                  borderRadius: 8,
+                  padding: "7px 12px",
+                  fontSize: 12,
+                  color: "#4a4a45",
+                }}
+              >
+                📍 {job.location ?? "Não informado"}
+              </span>
+              {workModelLabel ? (
+                <span
+                  style={{
+                    background: "#fff",
+                    border: "1px solid rgba(10,10,10,0.1)",
+                    borderRadius: 8,
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    color: "#4a4a45",
+                  }}
+                >
+                  {workModelLabel}
+                </span>
+              ) : null}
+              {publishedDate ? (
+                <span
+                  style={{
+                    background: isRecentlyPublished
+                      ? "rgba(198,255,58,0.14)"
+                      : "#fff",
+                    border: `1px solid ${isRecentlyPublished ? "rgba(64,84,16,0.2)" : "rgba(10,10,10,0.1)"}`,
+                    borderRadius: 8,
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    color: isRecentlyPublished ? "#405410" : "#4a4a45",
+                  }}
+                >
+                  Publicada {publishedDate}
+                  {isRecentlyPublished ? " · recém publicada" : ""}
+                </span>
+              ) : null}
+              <span
+                style={{
+                  background: "#fff",
+                  border: "1px solid rgba(10,10,10,0.1)",
+                  borderRadius: 8,
+                  padding: "7px 12px",
+                  fontSize: 12,
+                  fontFamily: MONO,
+                  color: "#8a8a85",
+                }}
+              >
+                capturada em{" "}
+                {new Date(job.firstSeenAt).toLocaleDateString("pt-BR")}
+              </span>
+            </div>
+          </header>
+
+          {/* Fase 1 de conversão do Radar — entrada principal de análise
         acima da dobra, só visitante anônimo; usuário logado já vê o
         CompatCard real na sidebar, não precisa deste bloco. */}
-        {!user ? (
-          <RadarGuestAnalysisBand jobId={job.id} jobTitle={job.title} />
-        ) : null}
+          {!user ? (
+            <RadarGuestAnalysisBand jobId={job.id} jobTitle={job.title} />
+          ) : null}
 
-        {/* Two-column body */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 340px",
-            gap: 28,
-            alignItems: "start",
-          }}
-          className="vagas-detail-grid"
-        >
-          <style>{`
+          {/* Two-column body */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) 340px",
+              gap: 28,
+              alignItems: "start",
+            }}
+            className="vagas-detail-grid"
+          >
+            <style>{`
             @media (max-width: 900px) {
               .vagas-detail-grid { grid-template-columns: 1fr !important; }
             }
@@ -1646,352 +1194,388 @@ export default async function JobPage({ params }: JobPageProps) {
             .job-prose strong { font-weight: 600; }
           `}</style>
 
-          {/* Description */}
-          <div
-            style={{
-              background: "#fafaf6",
-              border: "1px solid rgba(10,10,10,0.08)",
-              borderRadius: 14,
-              padding: "clamp(20px,4vw,30px)",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-            }}
-          >
-            {sections.map((section, idx) => (
-              <div
-                key={section.title}
-                style={{
-                  borderTop: idx > 0 ? "1px solid rgba(10,10,10,0.07)" : "none",
-                  paddingTop: idx > 0 ? 28 : 0,
-                  marginBottom: 28,
-                }}
-              >
-                <h2
+            {/* Description */}
+            <div
+              style={{
+                background: "#fafaf6",
+                border: "1px solid rgba(10,10,10,0.08)",
+                borderRadius: 14,
+                padding: "clamp(20px,4vw,30px)",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+              }}
+            >
+              {sections.map((section, idx) => (
+                <div
+                  key={section.title}
                   style={{
-                    fontSize: 18,
-                    fontWeight: 600,
-                    letterSpacing: -0.3,
-                    margin: "0 0 14px",
-                    color: "#0a0a0a",
+                    borderTop:
+                      idx > 0 ? "1px solid rgba(10,10,10,0.07)" : "none",
+                    paddingTop: idx > 0 ? 28 : 0,
+                    marginBottom: 28,
                   }}
                 >
-                  {section.title}
-                </h2>
-                <div
-                  className="job-prose"
-                  style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
-                  dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
-                />
-              </div>
-            ))}
+                  <h2
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 600,
+                      letterSpacing: -0.3,
+                      margin: "0 0 14px",
+                      color: "#0a0a0a",
+                    }}
+                  >
+                    {section.title}
+                  </h2>
+                  <div
+                    className="job-prose"
+                    style={{ fontSize: 14, lineHeight: 1.7, color: "#3a3a38" }}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
+                    dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
+                  />
+                </div>
+              ))}
 
-            {/* Vitrine do resto da plataforma — só visitante anônimo */}
-            {!user ? <FeatureShowcaseStrip /> : null}
-          </div>
+              {/* Reforço de fim de descrição — sempre volta pro mesmo CTA
+            principal da vaga (bloco de análise guest no topo, ou o
+            CompatCard real na sidebar de quem já está logado). */}
+              <EndOfDescriptionCta
+                isAuthenticated={!!user}
+                hasMasterCv={scoreState === "has-cv"}
+              />
 
-          {/* Sidebar */}
-          <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* Compat card */}
-            <CompatCard
-              scoreState={scoreState}
-              match={match}
-              existingApplication={existingApplication}
-            />
+              {/* CTA do Monitor — única promoção de Monitor que resta na
+            página (sidebar e faixa de rodapé removidas), só anônimo */}
+              {!user ? <MonitorSignupCta /> : null}
+            </div>
 
-            {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto só
+            {/* Sidebar */}
+            <aside
+              id="radar-compat-card"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+                scrollMarginTop: 24,
+              }}
+            >
+              {/* Compat card */}
+              <CompatCard
+                scoreState={scoreState}
+                match={match}
+                existingApplication={existingApplication}
+              />
+
+              {/* Distinção match (Radar) vs. análise (CV Adaptation) — texto só
                 aparece quando há score de oportunidade pra explicar e ainda
                 não existe uma análise real (nesse caso o card já mostra o
                 score real, a distinção deixa de fazer sentido) */}
-            {match && !hasExistingAnalysisScore ? (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 11,
-                  lineHeight: 1.5,
-                  color: "#8a8a85",
-                }}
-              >
-                Indica o quanto esta vaga combina com seu perfil. É diferente do
-                score da análise do currículo.
-              </p>
-            ) : null}
-
-            {/* Candidatura card */}
-            <div
-              style={{
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 14,
-                padding: 18,
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  letterSpacing: 1.4,
-                  color: "#8a8a85",
-                  fontWeight: 500,
-                  marginBottom: 12,
-                }}
-              >
-                CANDIDATURA
-              </div>
-              {hasExistingAnalysisScore && existingApplication ? (
-                <a
-                  href={`/candidaturas/${existingApplication.id}`}
-                  data-testid="view-application-btn"
+              {match && !hasExistingAnalysisScore ? (
+                <p
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    width: "100%",
-                    boxSizing: "border-box",
-                    background: "#0a0a0a",
-                    color: "#fafaf6",
-                    border: "none",
-                    borderRadius: 8,
-                    padding: "13px 18px",
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    fontFamily: GEIST,
-                    marginBottom: 8,
+                    margin: 0,
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    color: "#8a8a85",
                   }}
                 >
-                  Ver minha candidatura
-                  <span style={{ opacity: 0.6, fontFamily: MONO }}>
-                    · {Math.round(existingApplication.bestScore as number)}%
-                  </span>
-                </a>
-              ) : (
-                <AnalysisCtaButtons
-                  isLoggedIn={!!user}
-                  masterResumeId={masterResumeId}
-                  radarJobId={job.id}
-                  jobDescriptionText={job.description}
-                  score={match?.score}
-                  secondaryHref={adaptarJobHref}
-                />
-              )}
-              {!user || !hasExistingAnalysisScore ? (
-                <ExternalApplyGate
-                  href={job.sourceJobUrl}
-                  company={job.company}
-                  jobId={job.id}
-                  isAuthenticated={!!user}
-                />
-              ) : (
-                <a
-                  href={job.sourceJobUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    width: "100%",
-                    display: "block",
-                    background: "#fff",
-                    color: "#0a0a0a",
-                    border: "1px solid rgba(10,10,10,0.15)",
-                    borderRadius: 9,
-                    padding: "11px",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    textAlign: "center",
-                    fontFamily: GEIST,
-                    marginBottom: 8,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  Candidatar-se externamente ↗
-                </a>
-              )}
-              <SaveJobTextBtn
-                jobId={job.id}
-                initialSaved={isSaved}
-                isLoggedIn={!!user}
-              />
-            </div>
+                  Indica o quanto esta vaga combina com seu perfil. É diferente
+                  do score da análise do currículo.
+                </p>
+              ) : null}
 
-            {/* Job details card */}
-            <div
-              style={{
-                background: "#fafaf6",
-                border: "1px solid rgba(10,10,10,0.08)",
-                borderRadius: 14,
-                padding: 18,
-              }}
-            >
+              {/* Candidatura card */}
               <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  letterSpacing: 1.4,
-                  color: "#8a8a85",
-                  fontWeight: 500,
-                  marginBottom: 12,
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 14,
+                  padding: 18,
                 }}
               >
-                DETALHES
-              </div>
-              <dl style={{ margin: 0 }}>
-                {(
-                  [
-                    { label: "Empresa", value: job.company },
-                    job.location
-                      ? { label: "Localização", value: job.location }
-                      : null,
-                    workModelLabel
-                      ? { label: "Modelo", value: workModelLabel }
-                      : null,
-                    job.employmentType
-                      ? {
-                          label: "Contrato",
-                          value: formatEmploymentType(job.employmentType),
-                        }
-                      : null,
-                    {
-                      label: "Fonte",
-                      value: new URL(job.sourceJobUrl).hostname.replace(
-                        /^www\./,
-                        "",
-                      ),
-                      link: job.sourceJobUrl,
-                    },
-                  ] as (null | {
-                    label: string;
-                    value: string;
-                    link?: string;
-                  })[]
-                )
-                  .filter(
-                    (
-                      item,
-                    ): item is {
-                      label: string;
-                      value: string;
-                      link?: string;
-                    } => item !== null,
-                  )
-                  .map((item, idx, arr) => (
-                    <div
-                      key={item.label}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 14,
-                        padding: "8px 0",
-                        borderBottom:
-                          idx < arr.length - 1
-                            ? "1px solid rgba(10,10,10,0.05)"
-                            : "none",
-                      }}
-                    >
-                      <span style={{ fontSize: 12, color: "#6a6560" }}>
-                        {item.label}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 12.5,
-                          color: "#0a0a0a",
-                          fontWeight: 500,
-                          textAlign: "right",
-                        }}
-                      >
-                        {item.link ? (
-                          <a
-                            href={item.link}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              color: "#3a3a38",
-                              textDecoration: "underline",
-                              textUnderlineOffset: 3,
-                              textDecorationColor: "rgba(10,10,10,0.2)",
-                            }}
-                          >
-                            {item.value} ↗
-                          </a>
-                        ) : (
-                          item.value
-                        )}
-                      </span>
-                    </div>
-                  ))}
-              </dl>
-            </div>
-          </aside>
-        </div>
-
-        {/* Similar jobs */}
-        {similarJobs.length > 0 ? (
-          <div style={{ marginTop: 36 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
-                marginBottom: 16,
-              }}
-            >
-              <div>
                 <div
                   style={{
                     fontFamily: MONO,
-                    fontSize: 10.5,
+                    fontSize: 10,
                     letterSpacing: 1.4,
                     color: "#8a8a85",
-                    marginBottom: 5,
                     fontWeight: 500,
+                    marginBottom: 12,
                   }}
                 >
-                  SIMILARES
+                  CANDIDATURA
                 </div>
-                <div
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 500,
-                    letterSpacing: -0.6,
-                    color: "#0a0a0a",
-                  }}
-                >
-                  Outras vagas recentes
-                </div>
+                {hasExistingAnalysisScore && existingApplication ? (
+                  <a
+                    href={`/candidaturas/${existingApplication.id}`}
+                    data-testid="view-application-btn"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      width: "100%",
+                      boxSizing: "border-box",
+                      background: "#0a0a0a",
+                      color: "#fafaf6",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "13px 18px",
+                      fontSize: 13.5,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      fontFamily: GEIST,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Ver minha candidatura
+                    <span style={{ opacity: 0.6, fontFamily: MONO }}>
+                      · {Math.round(existingApplication.bestScore as number)}%
+                    </span>
+                  </a>
+                ) : user ? (
+                  <AnalysisCtaButtons
+                    isLoggedIn
+                    masterResumeId={masterResumeId}
+                    radarJobId={job.id}
+                    jobDescriptionText={job.description}
+                    score={match?.score}
+                    secondaryHref={adaptarJobHref}
+                  />
+                ) : (
+                  // Anônimo: o CTA de análise já está em destaque no topo da
+                  // página (RadarGuestAnalysisBand) — um segundo "Analisar
+                  // meu CV" aqui embaixo seria redundante. No lugar dele,
+                  // "Salvar para depois" (mesmo ícone/toggle do link que já
+                  // existia neste card).
+                  <SaveJobCtaBtn
+                    jobId={job.id}
+                    initialSaved={isSaved}
+                    isLoggedIn={false}
+                  />
+                )}
+                {!user || !hasExistingAnalysisScore ? (
+                  <ExternalApplyGate
+                    href={job.sourceJobUrl}
+                    company={job.company}
+                    jobId={job.id}
+                    isAuthenticated={!!user}
+                  />
+                ) : (
+                  <a
+                    href={job.sourceJobUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      width: "100%",
+                      display: "block",
+                      background: "#fff",
+                      color: "#0a0a0a",
+                      border: "1px solid rgba(10,10,10,0.15)",
+                      borderRadius: 9,
+                      padding: "11px",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      textAlign: "center",
+                      fontFamily: GEIST,
+                      marginBottom: 8,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    Candidatar-se externamente ↗
+                  </a>
+                )}
+                {/* Logado: "salvar" já não tem um CTA próprio na sidebar
+              (o CTA principal é sempre análise) — mantém o link discreto.
+              Anônimo: SaveJobCtaBtn acima já cobre "salvar", sem duplicar. */}
+                {user ? (
+                  <SaveJobTextBtn
+                    jobId={job.id}
+                    initialSaved={isSaved}
+                    isLoggedIn
+                  />
+                ) : null}
               </div>
-              <Link
-                href="/radar"
+
+              {/* Job details card */}
+              <div
                 style={{
-                  fontFamily: MONO,
-                  fontSize: 11.5,
-                  color: "#3a3a38",
-                  textDecoration: "underline",
-                  textUnderlineOffset: 3,
-                  textDecorationColor: "rgba(10,10,10,0.2)",
+                  background: "#fafaf6",
+                  border: "1px solid rgba(10,10,10,0.08)",
+                  borderRadius: 14,
+                  padding: 18,
                 }}
               >
-                ver todas →
-              </Link>
-            </div>
-            <style>{`
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    letterSpacing: 1.4,
+                    color: "#8a8a85",
+                    fontWeight: 500,
+                    marginBottom: 12,
+                  }}
+                >
+                  DETALHES
+                </div>
+                <dl style={{ margin: 0 }}>
+                  {(
+                    [
+                      { label: "Empresa", value: job.company },
+                      job.location
+                        ? { label: "Localização", value: job.location }
+                        : null,
+                      workModelLabel
+                        ? { label: "Modelo", value: workModelLabel }
+                        : null,
+                      job.employmentType
+                        ? {
+                            label: "Contrato",
+                            value: formatEmploymentType(job.employmentType),
+                          }
+                        : null,
+                      {
+                        label: "Fonte",
+                        value: new URL(job.sourceJobUrl).hostname.replace(
+                          /^www\./,
+                          "",
+                        ),
+                        link: job.sourceJobUrl,
+                      },
+                    ] as (null | {
+                      label: string;
+                      value: string;
+                      link?: string;
+                    })[]
+                  )
+                    .filter(
+                      (
+                        item,
+                      ): item is {
+                        label: string;
+                        value: string;
+                        link?: string;
+                      } => item !== null,
+                    )
+                    .map((item, idx, arr) => (
+                      <div
+                        key={item.label}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 14,
+                          padding: "8px 0",
+                          borderBottom:
+                            idx < arr.length - 1
+                              ? "1px solid rgba(10,10,10,0.05)"
+                              : "none",
+                        }}
+                      >
+                        <span style={{ fontSize: 12, color: "#6a6560" }}>
+                          {item.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12.5,
+                            color: "#0a0a0a",
+                            fontWeight: 500,
+                            textAlign: "right",
+                          }}
+                        >
+                          {item.link ? (
+                            <a
+                              href={item.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                color: "#3a3a38",
+                                textDecoration: "underline",
+                                textUnderlineOffset: 3,
+                                textDecorationColor: "rgba(10,10,10,0.2)",
+                              }}
+                            >
+                              {item.value} ↗
+                            </a>
+                          ) : (
+                            item.value
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                </dl>
+              </div>
+            </aside>
+          </div>
+
+          {/* Similar jobs */}
+          {similarJobs.length > 0 ? (
+            <div style={{ marginTop: 36 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  marginBottom: 16,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10.5,
+                      letterSpacing: 1.4,
+                      color: "#8a8a85",
+                      marginBottom: 5,
+                      fontWeight: 500,
+                    }}
+                  >
+                    SIMILARES
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 500,
+                      letterSpacing: -0.6,
+                      color: "#0a0a0a",
+                    }}
+                  >
+                    Outras vagas recentes
+                  </div>
+                </div>
+                <Link
+                  href="/radar"
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 11.5,
+                    color: "#3a3a38",
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                    textDecorationColor: "rgba(10,10,10,0.2)",
+                  }}
+                >
+                  ver todas →
+                </Link>
+              </div>
+              <style>{`
               .job-similar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
               @media (max-width: 900px) {
                 .job-similar-grid { grid-template-columns: 1fr; }
               }
             `}</style>
-            <div className="job-similar-grid">
-              {similarJobs.map((j) => (
-                <SimCard key={j.id} job={j} showMatchLock={!user} />
-              ))}
+              <div className="job-similar-grid">
+                {similarJobs.map((j) => (
+                  <SimCard key={j.id} job={j} showMatchLock={!user} />
+                ))}
+              </div>
             </div>
+          ) : null}
+        </div>
 
-            {/* Destaque grande do Monitor — só visitante anônimo */}
-            {!user ? <MonitorHighlightBand /> : null}
-          </div>
-        ) : null}
-      </div>
-
-      <PublicFooter />
+        <PublicFooter
+          tagline="Tudo que você precisa para conquistar mais entrevistas, em um só lugar."
+          ctaLabel="Criar minha conta grátis agora →"
+          ctaHref="/entrar?tab=cadastrar&ctx=radar"
+        />
+      </RadarAnalysisPreviewProvider>
     </main>
   );
 }

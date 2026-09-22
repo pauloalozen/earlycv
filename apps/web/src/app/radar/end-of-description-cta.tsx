@@ -1,7 +1,7 @@
 "use client";
 
 import { scrollCenterBelowFixedNav } from "@/lib/scroll-center-below-fixed-nav";
-import { useRadarV2AnalysisPreview } from "./radar-analysis-preview-context-v2";
+import { useRadarAnalysisPreview } from "./radar-analysis-preview-context";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
@@ -9,19 +9,19 @@ const SIGNUP_HREF = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
   "/adaptar/resultado",
 )}`;
 
-// Fase 1.1 (Radar v2) — reforço pedido explicitamente: depois de ler a
-// descrição inteira da vaga, a pessoa nunca deveria ter que rolar de volta
-// procurando o CTA — este bloco aparece bem no fim do conteúdo e leva de
-// volta pro MESMO CTA principal da página (nunca abre um segundo fluxo).
+// Reforço pedido explicitamente: depois de ler a descrição inteira da
+// vaga, a pessoa nunca deveria ter que rolar de volta procurando o CTA —
+// este bloco aparece bem no fim do conteúdo e leva de volta pro MESMO CTA
+// principal da página (nunca abre um segundo fluxo).
 //
 // Anônimo ANTES de analisar → âncora pro bloco de análise guest
-// (RadarGuestAnalysisBandV2, #radar-guest-analysis), com scroll
+// (RadarGuestAnalysisBand, #radar-guest-analysis), com scroll
 // centralizado (ver handleClick). Anônimo DEPOIS de já ver o preview
-// (useRadarV2AnalysisPreview) → o "curtiu a vaga, veja se seu CV se
+// (useRadarAnalysisPreview) → o "curtiu a vaga, veja se seu CV se
 // encaixa" não faz mais sentido (a pessoa já viu que se encaixa, parcial)
 // — a copy muda pra reforçar o gate de cadastro, e o CTA passa a ir direto
 // pro signup, sem mais precisar rolar a página. Logado com/sem CV master →
-// âncora pro CompatCard real na sidebar (#radarv2-compat-card), sempre por
+// âncora pro CompatCard real na sidebar (#radar-compat-card), sempre por
 // scroll (nunca perde a análise em andamento nesse card).
 export function EndOfDescriptionCta({
   isAuthenticated,
@@ -30,11 +30,11 @@ export function EndOfDescriptionCta({
   isAuthenticated: boolean;
   hasMasterCv: boolean;
 }) {
-  const { hasPreview } = useRadarV2AnalysisPreview();
+  const { hasPreview } = useRadarAnalysisPreview();
   const showSignupGate = !isAuthenticated && hasPreview;
 
   const targetId = isAuthenticated
-    ? "radarv2-compat-card"
+    ? "radar-compat-card"
     : "radar-guest-analysis";
 
   const title = showSignupGate

@@ -178,10 +178,10 @@ export function SaveJobTextBtn({
 
 // Variante em formato de CTA — mesma régua visual (preto, sem borda) que
 // "Analisar meu CV" tinha nesse exato lugar antes de virar este botão —
-// usada no Radar v2 (radarv2/[slug]/page.tsx) no lugar do CTA de análise
-// quando ele já existe em destaque acima na mesma página
-// (RadarGuestAnalysisBandV2), tornando um segundo "Analisar meu CV" ali
-// redundante.
+// usada em radar/[slug]/page.tsx no lugar do CTA de análise pra
+// visitante anônimo, quando ele já existe em destaque acima na mesma
+// página (RadarGuestAnalysisBand), tornando um segundo "Analisar meu CV"
+// ali redundante.
 export function SaveJobCtaBtn({
   jobId,
   initialSaved = false,
