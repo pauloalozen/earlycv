@@ -450,6 +450,20 @@ export async function createCompany(
   });
 }
 
+export async function updateCompany(
+  companyId: string,
+  payload: { name: string },
+  token?: string,
+) {
+  return apiRequest<CompanyRecord>(`/companies/${companyId}`, token, {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "PUT",
+  });
+}
+
 export async function createJobSource(
   payload: CreateJobSourcePayload,
   token?: string,
@@ -724,6 +738,24 @@ export async function updateJobSource(
       "Content-Type": "application/json",
     },
     method: "PUT",
+  });
+}
+
+export async function reassignJobSourceCompany(
+  jobSourceId: string,
+  companyName: string,
+  token?: string,
+) {
+  return apiRequest<{
+    merged: boolean;
+    jobsMoved: number;
+    jobSource: JobSourceRecord;
+  }>(`/job-sources/${jobSourceId}/reassign-company`, token, {
+    body: JSON.stringify({ companyName }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
   });
 }
 

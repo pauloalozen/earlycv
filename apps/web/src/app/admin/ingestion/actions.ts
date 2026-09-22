@@ -12,9 +12,11 @@ import {
   createJobSource,
   deleteJobSource,
   importCompanySourcesCsv,
+  reassignJobSourceCompany,
   runGlobalSchedulerNow,
   runJobSourceAdHoc,
   startManualAdapterRun,
+  updateCompany,
   updateGlobalSchedulerConfig,
   updateJobSource,
 } from "@/lib/admin-ingestion-api";
@@ -417,6 +419,78 @@ export async function updateJobSourceAction(formData: FormData) {
       "Fonte atualizada com sucesso.",
     ),
   );
+}
+
+export async function reassignJobSourceCompanyAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const jobSourceId = String(formData.get("jobSourceId") ?? "").trim();
+  const companyName = String(formData.get("companyName") ?? "").trim();
+
+  if (!jobSourceId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a fonte."));
+  }
+  if (!companyName) {
+    redirect(
+      buildAdminRedirect(redirectPath, "error", "Informe o nome da empresa."),
+    );
+  }
+
+  try {
+    const result = await reassignJobSourceCompany(jobSourceId, companyName);
+    redirect(
+      buildAdminRedirect(
+        redirectPath,
+        "success",
+        result.merged
+          ? `Fonte fundida em "${result.jobSource.company.name}" (${result.jobsMoved} vaga(s) movida(s)).`
+          : `Fonte movida para "${result.jobSource.company.name}" (${result.jobsMoved} vaga(s) movida(s)).`,
+      ),
+    );
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao trocar a empresa da fonte.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
+}
+
+export async function renameCompanyAction(formData: FormData) {
+  const redirectPath = String(
+    formData.get("redirectPath") ?? `${ROOT_REDIRECT_PATH}`,
+  );
+  const companyId = String(formData.get("companyId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+
+  if (!companyId) {
+    redirect(buildAdminRedirect(redirectPath, "error", "Informe a empresa."));
+  }
+  if (!name) {
+    redirect(
+      buildAdminRedirect(redirectPath, "error", "Informe o nome da empresa."),
+    );
+  }
+
+  try {
+    const company = await updateCompany(companyId, { name });
+    redirect(
+      buildAdminRedirect(
+        redirectPath,
+        "success",
+        `Empresa renomeada para "${company.name}".`,
+      ),
+    );
+  } catch (error) {
+    if (isRedirectControlFlowError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Falha ao renomear a empresa.";
+    redirect(buildAdminRedirect(redirectPath, "error", message));
+  }
 }
 
 export async function runGlobalSchedulerNowAction(formData: FormData) {

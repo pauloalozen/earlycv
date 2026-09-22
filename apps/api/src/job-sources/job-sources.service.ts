@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -8,12 +9,14 @@ import { Prisma } from "@prisma/client";
 
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
+import { normalizeCompanyName } from "../ingestion/name-normalization";
 import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
 import type { BulkDeleteJobSourcesDto } from "./dto/bulk-delete-job-sources.dto";
 import type { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import type { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import type { CreateJobSourceDto } from "./dto/create-job-source.dto";
 import type { ListJobSourcesDto } from "./dto/list-job-sources.dto";
+import type { ReassignCompanyDto } from "./dto/reassign-company.dto";
 import type { UpdateJobSourceDto } from "./dto/update-job-source.dto";
 
 @Injectable()
@@ -253,6 +256,85 @@ export class JobSourcesService {
     } catch (error) {
       this.rethrowKnownError(error);
     }
+  }
+
+  // Correção manual pra quando o heurístico de company-source-audit não
+  // pegou o erro (fonte atribuída a empresa errada desde a criação): move
+  // a MESMA fonte (URL preservada) e todo o histórico de vagas dela pra
+  // outra Company, achada por nome ou criada na hora se ainda não existir.
+  // A Company errada não é tocada além de perder essa fonte/essas vagas —
+  // segue existindo, do jeito que sobrar.
+  async reassignCompany(jobSourceId: string, dto: ReassignCompanyDto) {
+    const source = await this.getById(jobSourceId);
+
+    const normalizedName = normalizeCompanyName(dto.companyName);
+    if (!normalizedName) {
+      throw new BadRequestException("nome de empresa inválido");
+    }
+
+    if (normalizedName === source.company.normalizedName) {
+      throw new ConflictException(
+        `a fonte já pertence a "${source.company.name}"`,
+      );
+    }
+
+    let targetCompany = await this.database.company.findUnique({
+      where: { normalizedName },
+    });
+    targetCompany ??= await this.database.company.create({
+      data: { name: dto.companyName, normalizedName, isActive: true },
+    });
+
+    // Empresa certa já tem outra fonte com essa mesma URL (ex: foi corrigida
+    // uma vez, ou já existia legitimamente) — funde nela em vez de duplicar.
+    const existingTargetSource = await this.database.jobSource.findFirst({
+      where: { companyId: targetCompany.id, sourceUrl: source.sourceUrl },
+    });
+
+    const targetCompanyId = targetCompany.id;
+    return this.database.$transaction(async (tx) => {
+      if (existingTargetSource) {
+        const { count } = await tx.job.updateMany({
+          where: { jobSourceId: source.id },
+          data: { companyId: targetCompanyId, jobSourceId: existingTargetSource.id },
+        });
+        await tx.jobSource.delete({ where: { id: source.id } });
+
+        return {
+          merged: true as const,
+          jobsMoved: count,
+          jobSource: await tx.jobSource.findUniqueOrThrow({
+            where: { id: existingTargetSource.id },
+            include: {
+              company: true,
+              ingestionRuns: {
+                orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+                take: 1,
+              },
+            },
+          }),
+        };
+      }
+
+      const { count } = await tx.job.updateMany({
+        where: { jobSourceId: source.id },
+        data: { companyId: targetCompanyId },
+      });
+
+      const updatedSource = await tx.jobSource.update({
+        where: { id: source.id },
+        data: { companyId: targetCompanyId },
+        include: {
+          company: true,
+          ingestionRuns: {
+            orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+            take: 1,
+          },
+        },
+      });
+
+      return { merged: false as const, jobsMoved: count, jobSource: updatedSource };
+    });
   }
 
   async bulkUpdateSchedule(dto: BulkUpdateScheduleDto) {

@@ -12,6 +12,8 @@ import { humanScheduleLabel } from "../_components/job-source-schedule-format";
 import { RunSourceSubmitButton } from "../_components/run-source-submit-button";
 import {
   bulkSetJobsStatusByJobSourceAction,
+  reassignJobSourceCompanyAction,
+  renameCompanyAction,
   runJobSourceAction,
   updateJobSourceAction,
   updateJobSourceScheduleAction,
@@ -253,6 +255,101 @@ export default async function JobSourceAdminPage({
                   Salvar fonte
                 </button>
               </div>
+            </form>
+          </Card>
+
+          <Card className="space-y-4" padding="lg">
+            <h2 className="text-lg font-bold tracking-tight">
+              Renomear empresa
+            </h2>
+            <p className="text-sm text-stone-600">
+              Corrige só o nome de <strong>{source.company.name}</strong> (ex:
+              razão social errada). Não mexe na fonte, na URL nem nas vagas —
+              use "Fonte é de outra empresa" abaixo se o problema é a fonte
+              apontar pra empresa completamente diferente.
+            </p>
+
+            <form
+              action={renameCompanyAction}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <input
+                name="companyId"
+                type="hidden"
+                value={source.company.id}
+              />
+              <input name="redirectPath" type="hidden" value={redirectPath} />
+
+              <label
+                className="flex-1 space-y-2"
+                htmlFor="rename-company-name"
+                style={{ minWidth: "16rem" }}
+              >
+                <span className="text-sm font-semibold text-stone-800">
+                  Nome da empresa
+                </span>
+                <input
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  defaultValue={source.company.name}
+                  id="rename-company-name"
+                  name="name"
+                  required
+                />
+              </label>
+
+              <button
+                className={buttonVariants({ size: "sm" })}
+                type="submit"
+              >
+                Salvar nome
+              </button>
+            </form>
+          </Card>
+
+          <Card className="space-y-4 border-amber-200 bg-amber-50" padding="lg">
+            <h2 className="text-lg font-bold tracking-tight">
+              Fonte é de outra empresa
+            </h2>
+            <p className="text-sm text-stone-600">
+              Use isto quando a fonte (URL <code>{source.sourceUrl}</code>) foi
+              atribuída à empresa errada na origem — nada que dá pra corrigir
+              editando só o nome da fonte acima. Ao confirmar, a URL é
+              preservada e o histórico de vagas dessa fonte é movido junto
+              para a empresa informada abaixo (nova ou já existente); a
+              empresa atual (<strong>{source.company.name}</strong>) continua
+              existindo, só fica sem esta fonte e sem essas vagas.
+            </p>
+
+            <form
+              action={reassignJobSourceCompanyAction}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <input name="jobSourceId" type="hidden" value={source.id} />
+              <input name="redirectPath" type="hidden" value={redirectPath} />
+
+              <label
+                className="flex-1 space-y-2"
+                htmlFor="reassign-company-name"
+                style={{ minWidth: "16rem" }}
+              >
+                <span className="text-sm font-semibold text-stone-800">
+                  Nome correto da empresa
+                </span>
+                <input
+                  className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-stone-400"
+                  id="reassign-company-name"
+                  name="companyName"
+                  placeholder="Ex: Solar Grid"
+                  required
+                />
+              </label>
+
+              <button
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                type="submit"
+              >
+                Mover fonte e vagas
+              </button>
             </form>
           </Card>
 
