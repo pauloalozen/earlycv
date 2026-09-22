@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { scrollCenterBelowFixedNav } from "@/lib/scroll-center-below-fixed-nav";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -47,6 +48,20 @@ export function ExternalApplyGate({
   function continueExternally() {
     window.open(href, "_blank", "noopener,noreferrer");
     setOpen(false);
+  }
+
+  // Anônimo: fecha o popup e rola até o bloco de análise (mesmo scroll
+  // centralizado do CTA de reforço no fim da descrição, ver
+  // scroll-center-below-fixed-nav.ts) em vez de deixar o navegador seguir
+  // a âncora puro (que não centraliza nem descontava a nav fixa — cortava
+  // o card). Logado: navegação normal pro /adaptar, sem interceptar.
+  function handleAnalyzeClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (isAuthenticated) return;
+    const target = document.getElementById("radar-guest-analysis");
+    setOpen(false);
+    if (!target) return;
+    e.preventDefault();
+    scrollCenterBelowFixedNav(target);
   }
 
   return (
@@ -201,7 +216,7 @@ export function ExternalApplyGate({
 
             <a
               href={analyzeHref}
-              onClick={isAuthenticated ? undefined : () => setOpen(false)}
+              onClick={handleAnalyzeClick}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -219,9 +234,7 @@ export function ExternalApplyGate({
                 marginBottom: 8,
               }}
             >
-              {isAuthenticated
-                ? "Fazer minha análise →"
-                : "Criar usuário e fazer minha análise →"}
+              Fazer minha análise →
             </a>
             <div
               style={{
