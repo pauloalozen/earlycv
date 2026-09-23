@@ -1,4 +1,7 @@
-import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
+import {
+  extractApiErrorMessage,
+  sanitizeDomainErrorMessage,
+} from "./cv-adaptation-api-errors";
 
 export type RadarAnalysisPreviewStatus =
   | "pending"
@@ -89,7 +92,10 @@ export async function pollRadarAnalysisPreview(
     if (preview.status === "failed") {
       return {
         ok: false,
-        error: preview.lastError ?? "Falha ao analisar CV. Tente novamente.",
+        error: sanitizeDomainErrorMessage(
+          preview.lastError,
+          "Falha ao analisar CV. Tente novamente.",
+        ),
       };
     }
 

@@ -1,5 +1,8 @@
 import type { CvAnalysisData } from "./cv-adaptation-api";
-import { extractApiErrorMessage } from "./cv-adaptation-api-errors";
+import {
+  extractApiErrorMessage,
+  sanitizeDomainErrorMessage,
+} from "./cv-adaptation-api-errors";
 
 export type AnalysisJobStatusDto = {
   jobId: string;
@@ -102,7 +105,10 @@ export async function pollAnalysisJob(
     if (status.status === "failed") {
       return {
         ok: false,
-        error: status.lastError ?? "Falha ao analisar CV. Tente novamente.",
+        error: sanitizeDomainErrorMessage(
+          status.lastError,
+          "Falha ao analisar CV. Tente novamente.",
+        ),
       };
     }
 
