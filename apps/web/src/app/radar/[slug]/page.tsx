@@ -1196,6 +1196,32 @@ export default async function JobPage({ params }: JobPageProps) {
             .job-prose li { margin-bottom: 4px; }
             .job-prose p { margin: 0 0 12px; }
             .job-prose strong { font-weight: 600; }
+            /* Achado real (2026-09-23): descrição de vaga colada de
+               Excel/Word chega com <table width="950"> e <col width="…">
+               em pixels fixos — isso empurra a caixa de descrição inteira
+               pra mais larga que a coluna do grid, vazando texto por baixo
+               da sidebar. As larguras em pixel vêm de atributos HTML
+               (menor prioridade de cascata que qualquer regra CSS), então
+               sobrescrever aqui basta — nunca precisa mexer no HTML
+               sanitizado em si. overflow-x no container é rede de
+               segurança pra qualquer outro elemento largo que passe pela
+               sanitização (ex.: imagem grande) — em vez de vazar pra fora
+               da página, só aquele elemento ganha scroll horizontal
+               próprio. */
+            .job-prose { overflow-x: auto; overflow-wrap: anywhere; }
+            .job-prose table {
+              width: 100% !important;
+              max-width: 100%;
+              table-layout: auto;
+              border-collapse: collapse;
+            }
+            .job-prose col { width: auto !important; }
+            .job-prose td, .job-prose th {
+              width: auto !important;
+              max-width: 100%;
+              word-break: break-word;
+            }
+            .job-prose img { max-width: 100%; height: auto; }
           `}</style>
 
             {/* Description */}
