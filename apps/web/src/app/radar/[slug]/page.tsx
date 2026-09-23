@@ -1171,7 +1171,11 @@ export default async function JobPage({ params }: JobPageProps) {
         acima da dobra, só visitante anônimo; usuário logado já vê o
         CompatCard real na sidebar, não precisa deste bloco. */}
           {!user ? (
-            <RadarGuestAnalysisBand jobId={job.id} jobTitle={job.title} />
+            <RadarGuestAnalysisBand
+              jobId={job.id}
+              jobTitle={job.title}
+              jobSlug={job.slug}
+            />
           ) : null}
 
           {/* Two-column body */}
@@ -1240,6 +1244,7 @@ export default async function JobPage({ params }: JobPageProps) {
               <EndOfDescriptionCta
                 isAuthenticated={!!user}
                 hasMasterCv={scoreState === "has-cv"}
+                jobSlug={job.slug}
               />
 
               {/* CTA do Monitor — única promoção de Monitor que resta na

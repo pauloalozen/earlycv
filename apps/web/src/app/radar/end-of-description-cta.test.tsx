@@ -27,7 +27,11 @@ describe("EndOfDescriptionCta", () => {
   it("anônimo, sem preview ainda: aponta pra âncora do bloco de análise", () => {
     render(
       <RadarAnalysisPreviewProvider>
-        <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
+        <EndOfDescriptionCta
+          isAuthenticated={false}
+          hasMasterCv={false}
+          jobSlug="vaga-exemplo"
+        />
       </RadarAnalysisPreviewProvider>,
     );
 
@@ -37,7 +41,13 @@ describe("EndOfDescriptionCta", () => {
   });
 
   it("anônimo, sem provider (fallback neutro): comporta-se como sem preview", () => {
-    render(<EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />);
+    render(
+      <EndOfDescriptionCta
+        isAuthenticated={false}
+        hasMasterCv={false}
+        jobSlug="vaga-exemplo"
+      />,
+    );
 
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "#radar-guest-analysis");
@@ -47,7 +57,11 @@ describe("EndOfDescriptionCta", () => {
     render(
       <RadarAnalysisPreviewProvider>
         <RevealPreviewButton />
-        <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
+        <EndOfDescriptionCta
+          isAuthenticated={false}
+          hasMasterCv={false}
+          jobSlug="vaga-exemplo"
+        />
       </RadarAnalysisPreviewProvider>,
     );
 
@@ -58,6 +72,12 @@ describe("EndOfDescriptionCta", () => {
       "href",
       expect.stringContaining("/entrar?tab=cadastrar"),
     );
+    // O fallback pós-cadastro precisa voltar pra vaga (nunca
+    // "/adaptar/resultado" cru, que bounce pra "/adaptar" sem contexto).
+    expect(link).toHaveAttribute(
+      "href",
+      expect.stringContaining(encodeURIComponent("/radar/vaga-exemplo")),
+    );
     expect(
       screen.getByText(/Libere sua análise completa/i),
     ).toBeInTheDocument();
@@ -66,7 +86,11 @@ describe("EndOfDescriptionCta", () => {
   it("logado: sempre aponta pra âncora do CompatCard, independente do preview guest", () => {
     render(
       <RadarAnalysisPreviewProvider>
-        <EndOfDescriptionCta isAuthenticated hasMasterCv />
+        <EndOfDescriptionCta
+          isAuthenticated
+          hasMasterCv
+          jobSlug="vaga-exemplo"
+        />
       </RadarAnalysisPreviewProvider>,
     );
 
@@ -99,7 +123,11 @@ describe("EndOfDescriptionCta", () => {
 
     render(
       <RadarAnalysisPreviewProvider>
-        <EndOfDescriptionCta isAuthenticated={false} hasMasterCv={false} />
+        <EndOfDescriptionCta
+          isAuthenticated={false}
+          hasMasterCv={false}
+          jobSlug="vaga-exemplo"
+        />
       </RadarAnalysisPreviewProvider>,
     );
 

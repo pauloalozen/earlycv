@@ -536,9 +536,11 @@ function PreviewState({
 export function RadarGuestAnalysisBand({
   jobId,
   jobTitle,
+  jobSlug,
 }: {
   jobId: string;
   jobTitle: string;
+  jobSlug: string;
 }) {
   const {
     turnstileSiteKey,
@@ -557,8 +559,13 @@ export function RadarGuestAnalysisBand({
   const [ctaTracked, setCtaTracked] = useState(false);
   const { markPreviewRevealed } = useRadarAnalysisPreview();
 
+  // O fallback aqui só é usado quando o claim da análise guest falha
+  // (não confirma nem fica pendente). Precisa apontar pra um lugar com
+  // contexto — nunca "/adaptar/resultado" cru, pois essa página trata a
+  // ausência de adaptationId/claimJobId como entrada inválida e força
+  // bounce pra "/adaptar", deixando o usuário perdido.
   const signupHref = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
-    "/adaptar/resultado",
+    `/radar/${jobSlug}`,
   )}`;
 
   function trackCtaClickOnce() {

@@ -41,11 +41,22 @@ export async function claimGuestAnalysisJobServerSide(
     );
 
     if (!response.ok) {
+      // Diagnóstico do bug do redirect pós-cadastro do radar (2026-09-22):
+      // sem isso, todo claim que falha vira "error" genérico aqui e some —
+      // nenhum rastro do status/corpo real que a API devolveu.
+      const body = await response.text().catch(() => "<sem corpo>");
+      console.error(
+        `[claimGuestAnalysisJobServerSide] claim falhou jobId=${jobId} status=${response.status} body=${body}`,
+      );
       return { status: "error" };
     }
 
     return (await response.json()) as ClaimGuestAnalysisJobResult;
-  } catch {
+  } catch (err) {
+    console.error(
+      `[claimGuestAnalysisJobServerSide] claim lançou exceção jobId=${jobId}`,
+      err,
+    );
     return { status: "error" };
   }
 }

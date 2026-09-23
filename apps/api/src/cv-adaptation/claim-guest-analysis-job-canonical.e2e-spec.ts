@@ -19,6 +19,7 @@ import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { MasterDesignationSubjectMismatchError } from "../cv-processing/cv-processing.errors";
 import { CvAdaptationService } from "./cv-adaptation.service";
 
 const CvAdaptationServiceCtor = CvAdaptationService as unknown as new (
@@ -51,7 +52,75 @@ class ClaimSourceGrantSpy {
   }
 }
 
-function buildService(claimSourceGrantService: ClaimSourceGrantSpy) {
+// Achado real de produção (2026-09-22, bug do redirect pós-cadastro do
+// radar): sem retry, uma única MasterDesignationSubjectMismatchError
+// (erro de domínio que ClaimSourceGrantService#claim já traduz quando a
+// trigger trg_master_designation_subject_match rejeita o commit — ver
+// comentário lá) deixava AnalysisJob.userId reatribuído mas o claim
+// granular nunca completo (nem grant, nem promoção de Master). Este double
+// simula esse erro se repetindo `failTimes` vezes antes de finalmente
+// suceder, pra exercitar o retry de claimGuestAnalysisJob.
+class ClaimSourceGrantFlakySpy {
+  calls = 0;
+
+  constructor(private failTimes: number) {}
+
+  async claim(_input: {
+    userId: string;
+    analysisJobId: string;
+    cvProcessingJobId: string;
+  }) {
+    this.calls += 1;
+    if (this.calls <= this.failTimes) {
+      throw new MasterDesignationSubjectMismatchError(
+        "simulado: trigger rejeitou o commit",
+      );
+    }
+    return {
+      cvSourceId: "n/a",
+      grantCreated: true,
+      equivalence: null,
+      subject: null,
+      master: null,
+    };
+  }
+}
+
+class ClaimSourceGrantAlwaysFailsSpy {
+  calls = 0;
+
+  async claim(_input: {
+    userId: string;
+    analysisJobId: string;
+    cvProcessingJobId: string;
+  }): Promise<never> {
+    this.calls += 1;
+    throw new MasterDesignationSubjectMismatchError(
+      "simulado: trigger rejeitou o commit sempre",
+    );
+  }
+}
+
+class ClaimSourceGrantNonRecoverableSpy {
+  calls = 0;
+
+  async claim(_input: {
+    userId: string;
+    analysisJobId: string;
+    cvProcessingJobId: string;
+  }): Promise<never> {
+    this.calls += 1;
+    throw new Error("erro genérico, não é MasterDesignationSubjectMismatchError");
+  }
+}
+
+function buildService(
+  claimSourceGrantService:
+    | ClaimSourceGrantSpy
+    | ClaimSourceGrantFlakySpy
+    | ClaimSourceGrantAlwaysFailsSpy
+    | ClaimSourceGrantNonRecoverableSpy,
+) {
   return new CvAdaptationServiceCtor(
     database, // database
     undefined, // _aiService
@@ -221,6 +290,98 @@ test("flag ligada + AnalysisJob COM cvProcessingJobId: roda o claim granular nov
     analysisJobId: job.id,
     cvProcessingJobId: cvProcessingJob.id,
   });
+});
+
+// Extraído dos setups repetidos nos testes de retry abaixo — mesmo estado
+// "pronto pro claim granular" do segundo teste acima (CvSource GUEST +
+// CvProcessingJob READY + grant pré-existente simulando reatribuição de
+// ownership já commitada, igual ao caminho real do funil radar → cadastro).
+async function createReadyClaimSetup(userId: string) {
+  const snapshot = await createSucceededSnapshot();
+  const cvSource = await prisma.cvSource.create({
+    data: {
+      ownerType: "GUEST",
+      talentSubjectId: (await prisma.talentSubject.create({ data: {} })).id,
+      textStorageKey: `inline:${randomUUID()}`,
+      textSha256: randomUUID(),
+    },
+  });
+  const cvSubmission = await prisma.cvSubmission.create({
+    data: { cvSourceId: cvSource.id, origin: "PASTED_TEXT" },
+  });
+  const structuredProfile = await prisma.cvStructuredProfile.create({
+    data: {
+      cvSourceId: cvSource.id,
+      extractorVersion: "v1",
+      schemaVersion: "v1",
+      status: "READY",
+      canonicalJson: {},
+      coverageJson: {},
+      confidenceJson: {},
+      evidenceJson: {},
+    },
+  });
+  const cvProcessingJob = await prisma.cvProcessingJob.create({
+    data: {
+      cvSourceId: cvSource.id,
+      cvSubmissionId: cvSubmission.id,
+      status: "READY",
+      cvStructuredProfileId: structuredProfile.id,
+    },
+  });
+  await prisma.claimSourceGrant.create({
+    data: {
+      cvSourceId: cvSource.id,
+      userId,
+      provenByAnalysisJobId: "seed",
+    },
+  });
+  const job = await createSucceededGuestAnalysisJob({
+    userId,
+    snapshotId: snapshot.id,
+    cvProcessingJobId: cvProcessingJob.id,
+    cvSubmissionId: cvSubmission.id,
+    cvStructuredProfileId: structuredProfile.id,
+  });
+  return { job, cvProcessingJob };
+}
+
+test("claim granular falha com MasterDesignationSubjectMismatchError uma vez: retry converge e claimGuestAnalysisJob ainda sucede (bug real do redirect pós-cadastro do radar)", async () => {
+  const user = await createUser();
+  const { job } = await createReadyClaimSetup(user.id);
+
+  const spy = new ClaimSourceGrantFlakySpy(1);
+  const service = buildService(spy);
+
+  const result = await service.claimGuestAnalysisJob(user.id, job.id);
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(spy.calls, 2, "deveria ter tentado de novo depois da 1ª falha");
+});
+
+test("claim granular falha com MasterDesignationSubjectMismatchError em todas as tentativas: propaga o erro (não fica preso num estado intermediário silencioso)", async () => {
+  const user = await createUser();
+  const { job } = await createReadyClaimSetup(user.id);
+
+  const spy = new ClaimSourceGrantAlwaysFailsSpy();
+  const service = buildService(spy);
+
+  await assert.rejects(
+    () => service.claimGuestAnalysisJob(user.id, job.id),
+    MasterDesignationSubjectMismatchError,
+  );
+  assert.equal(spy.calls, 3, "deveria ter esgotado as 3 tentativas");
+});
+
+test("claim granular falha com erro NÃO recuperável: propaga na primeira tentativa, sem retry", async () => {
+  const user = await createUser();
+  const { job } = await createReadyClaimSetup(user.id);
+
+  const spy = new ClaimSourceGrantNonRecoverableSpy();
+  const service = buildService(spy);
+
+  await assert.rejects(() => service.claimGuestAnalysisJob(user.id, job.id));
+  assert.equal(spy.calls, 1, "erro não recuperável não deveria ter retry");
 });
 
 test("flag ligada + AnalysisJob ainda não succeeded: nem o legado nem o claim novo materializam nada", async () => {

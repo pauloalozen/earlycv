@@ -5,9 +5,14 @@ import { useRadarAnalysisPreview } from "./radar-analysis-preview-context";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 
-const SIGNUP_HREF = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
-  "/adaptar/resultado",
-)}`;
+function buildSignupHref(jobSlug: string) {
+  // Fallback só usado se o claim da análise guest falhar após o cadastro;
+  // precisa voltar pra vaga (com contexto), nunca "/adaptar/resultado" cru
+  // — essa página bounce pra "/adaptar" sem adaptationId/claimJobId.
+  return `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
+    `/radar/${jobSlug}`,
+  )}`;
+}
 
 // Reforço pedido explicitamente: depois de ler a descrição inteira da
 // vaga, a pessoa nunca deveria ter que rolar de volta procurando o CTA —
@@ -26,12 +31,15 @@ const SIGNUP_HREF = `/entrar?tab=cadastrar&ctx=radar&next=${encodeURIComponent(
 export function EndOfDescriptionCta({
   isAuthenticated,
   hasMasterCv,
+  jobSlug,
 }: {
   isAuthenticated: boolean;
   hasMasterCv: boolean;
+  jobSlug: string;
 }) {
   const { hasPreview } = useRadarAnalysisPreview();
   const showSignupGate = !isAuthenticated && hasPreview;
+  const signupHref = buildSignupHref(jobSlug);
 
   const targetId = isAuthenticated
     ? "radar-compat-card"
@@ -61,7 +69,7 @@ export function EndOfDescriptionCta({
 
   return (
     <a
-      href={showSignupGate ? SIGNUP_HREF : `#${targetId}`}
+      href={showSignupGate ? signupHref : `#${targetId}`}
       onClick={handleClick}
       style={{
         display: "flex",

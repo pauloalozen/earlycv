@@ -46,7 +46,7 @@ describe("RadarGuestAnalysisBand", () => {
 
   it("estado inicial: mostra a área de upload convidando a arrastar o CV, sem preview", () => {
     render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     expect(screen.getByText(/Arraste seu currículo aqui/i)).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe("RadarGuestAnalysisBand", () => {
     );
 
     render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     const fileInput = document.getElementById(
@@ -112,7 +112,7 @@ describe("RadarGuestAnalysisBand", () => {
     });
 
     const { container } = render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     const fileInput = document.getElementById(
@@ -166,7 +166,7 @@ describe("RadarGuestAnalysisBand", () => {
     });
 
     render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     const fileInput = document.getElementById(
@@ -215,7 +215,7 @@ describe("RadarGuestAnalysisBand", () => {
     });
 
     render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     const fileInput = document.getElementById(
@@ -242,7 +242,7 @@ describe("RadarGuestAnalysisBand", () => {
     });
 
     render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     const fileInput = document.getElementById(
@@ -260,7 +260,7 @@ describe("RadarGuestAnalysisBand", () => {
 
   it("arquivo maior que 5MB: bloqueia antes de sequer chamar o fluxo de análise", () => {
     render(
-      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" />,
+      <RadarGuestAnalysisBand jobId="job-1" jobTitle="Engenheiro de Dados" jobSlug="engenheiro-de-dados" />,
     );
 
     const bigFile = new File(

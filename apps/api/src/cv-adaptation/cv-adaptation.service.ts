@@ -36,7 +36,10 @@ import {
 } from "../common/guest-possession-token";
 import { ClaimSourceGrantService } from "../cv-processing/claim-source-grant.service";
 import { CvMasterPromotionService } from "../cv-processing/cv-master-promotion.service";
-import { NoValidMasterCvForProfileAnalysisError } from "../cv-processing/cv-processing.errors";
+import {
+  MasterDesignationSubjectMismatchError,
+  NoValidMasterCvForProfileAnalysisError,
+} from "../cv-processing/cv-processing.errors";
 import { isCvStructuredProfilePipelineEnabled } from "../cv-processing/cv-processing.flags";
 import { CvProcessingEntrypointService } from "../cv-processing/cv-processing-entrypoint.service";
 import { CvProcessingFlagResolverService } from "../cv-processing/cv-processing-flag-resolver.service";
@@ -2670,11 +2673,56 @@ export class CvAdaptationService {
     // legado de verdade e cai no saveGuestPreview de sempre.
     let preResolvedMasterResumeId: string | undefined;
     if (job.cvProcessingJobId && this.claimSourceGrantService) {
-      const claimed = await this.claimSourceGrantService.claim({
-        userId,
-        analysisJobId: job.id,
-        cvProcessingJobId: job.cvProcessingJobId,
-      });
+      // MasterDesignationSubjectMismatchError é o erro de domínio que
+      // ClaimSourceGrantService#claim já traduz quando a trigger
+      // trg_master_designation_subject_match (DEFERRABLE INITIALLY
+      // DEFERRED) rejeita o commit — o próprio serviço documenta isso como
+      // "recuperável, chame claim() de novo" (mesmo padrão que o worker
+      // assíncrono de CvProcessingJob já usa via retry de fila). Aqui, no
+      // endpoint HTTP síncrono do cadastro, não existe fila: sem retry
+      // aqui, uma única colisão perdia a análise pro usuário pra sempre
+      // (achado real de produção, 2026-09-22 — claim abortava depois de
+      // AnalysisJob.userId já reatribuído, sem nunca criar o
+      // ClaimSourceGrant nem promover o Master). claim() é idempotente
+      // (grant/sujeito/Master são todos find-then-create), então retry
+      // sequencial é seguro.
+      const MAX_CLAIM_ATTEMPTS = 3;
+      let claimed: Awaited<ReturnType<ClaimSourceGrantService["claim"]>>;
+      let attempt = 1;
+      for (;;) {
+        try {
+          claimed = await this.claimSourceGrantService.claim({
+            userId,
+            analysisJobId: job.id,
+            cvProcessingJobId: job.cvProcessingJobId,
+          });
+          break;
+        } catch (err) {
+          const recoverable = err instanceof MasterDesignationSubjectMismatchError;
+          const exhausted = !recoverable || attempt >= MAX_CLAIM_ATTEMPTS;
+          // Tag fixa [GUEST_CLAIM_RACE] + timestamp ISO explícito no corpo
+          // da mensagem (não só o prefixo do Nest Logger) — pra dar pra
+          // grep/copiar direto pro incidente em produção, igual ao caso
+          // real de 2026-09-22 (redirect pós-cadastro do radar caindo em
+          // /adaptar). EXHAUSTED = usuário ficou preso de verdade (mesmo
+          // estado do incidente); as demais são recuperadas pelo retry e
+          // não exigem ação, mas ficam no log pra medir a frequência real
+          // da corrida nos próximos dias.
+          this.logger.error(
+            `[GUEST_CLAIM_RACE] ${new Date().toISOString()} claimSourceGrantService.claim falhou (tentativa ${attempt}/${MAX_CLAIM_ATTEMPTS}, recuperável=${recoverable}, ${exhausted ? "EXHAUSTED" : "vai tentar de novo"}) userId=${userId} analysisJobId=${job.id} cvProcessingJobId=${job.cvProcessingJobId}: ${err instanceof Error ? err.message : String(err)}`,
+            err instanceof Error ? err.stack : undefined,
+          );
+          if (exhausted) {
+            throw err;
+          }
+          attempt += 1;
+        }
+      }
+      if (attempt > 1) {
+        this.logger.warn(
+          `[GUEST_CLAIM_RACE] ${new Date().toISOString()} claimSourceGrantService.claim recuperou depois de retry (tentativa ${attempt}/${MAX_CLAIM_ATTEMPTS}) userId=${userId} analysisJobId=${job.id} cvProcessingJobId=${job.cvProcessingJobId}`,
+        );
+      }
       // Quando o claim granular já promoveu (ou reconheceu, em retry
       // idempotente) o Master do usuário a partir da MESMA fonte/perfil
       // estruturado do guest, saveGuestPreview abaixo NUNCA deve criar um

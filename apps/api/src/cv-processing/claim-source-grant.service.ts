@@ -126,6 +126,20 @@ export class ClaimSourceGrantService {
       where: { id: processingJob.cvSourceId },
     });
 
+    // Serialização por fonte via advisory lock transacional (mesmo padrão
+    // de cv-master-promotion.service.ts#runPromotionDecision, ver o
+    // comentário lá sobre por que não é um SELECT ... FOR UPDATE literal).
+    // Acha real de produção (bug do redirect pós-cadastro do radar): um
+    // mesmo guest pode gerar várias AnalysisJob apontando pro MESMO
+    // CvSource (CV deduplicado por talentSubjectId+textSha256, uma análise
+    // por vaga) — sem lock aqui, duas chamadas de claim() para essa mesma
+    // fonte podiam colidir no commit da trigger
+    // trg_master_designation_subject_match (DEFERRABLE INITIALLY DEFERRED),
+    // que só reavalia o estado no fim da transação. Travar por cvSourceId
+    // serializa esse par: quem trava por último processa e comita com o
+    // estado já resolvido pelo primeiro (idempotente, ver ensureGrant).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`claim-source-grant:${source.id}`}))`;
+
     // Passo 2 (seção 4.2): grant idempotente. CvSource NUNCA muda de
     // dono aqui, com ou sem colisão de hash (seção 4.3) — só o grant é
     // criado.
