@@ -49,7 +49,7 @@ export function EndOfDescriptionCta({
     ? "Libere sua análise completa agora mesmo, criando sua conta grátis."
     : isAuthenticated
       ? hasMasterCv
-        ? "Curtiu a vaga? Faça sua análise completa agora mesmo com ela."
+        ? "Curtiu a vaga? Faça sua análise completa agora mesmo."
         : "Curtiu a vaga? Suba seu CV e veja seu match."
       : "Curtiu a vaga? Veja se seu CV se encaixa.";
 
