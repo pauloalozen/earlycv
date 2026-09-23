@@ -49,18 +49,40 @@ export function EndOfDescriptionCta({
     ? "Libere sua análise completa agora mesmo, criando sua conta grátis."
     : isAuthenticated
       ? hasMasterCv
-        ? "Curtiu a vaga? Veja seu match real com ela."
+        ? "Curtiu a vaga? Faça sua análise completa agora mesmo com ela."
         : "Curtiu a vaga? Suba seu CV e veja seu match."
       : "Curtiu a vaga? Veja se seu CV se encaixa.";
 
   const description = showSignupGate
     ? "Seu score e os pontos de melhoria já estão prontos lá em cima — só falta criar a conta pra ver tudo."
     : isAuthenticated
-      ? "Role pra cima e analise seu CV Master contra essa vaga específica."
+      ? hasMasterCv
+        ? null
+        : "Role pra cima e envie seu CV."
       : "Sobe seu currículo lá em cima e receba seu score em segundos.";
 
   function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (showSignupGate) return; // navegação normal pro signup
+
+    // Autenticado com CV Master: mesmo CTA do botão "Analisar meu CV" do
+    // card de Candidatura (AnalysisCtaButtons, data-testid
+    // analyze-primary-btn) — dispara a análise de verdade, não só rola até
+    // lá. O botão só existe quando ainda não há candidatura/análise prévia
+    // pra essa vaga (ver hasExistingAnalysisScore em page.tsx); nesse caso
+    // cai pro fallback de sempre (rolar até o card, que já mostra "Ver
+    // minha candidatura").
+    if (isAuthenticated && hasMasterCv) {
+      const analyzeButton = document.querySelector<HTMLButtonElement>(
+        '[data-testid="analyze-primary-btn"]',
+      );
+      if (analyzeButton) {
+        e.preventDefault();
+        scrollCenterBelowFixedNav(analyzeButton);
+        analyzeButton.click();
+        return;
+      }
+    }
+
     const target = document.getElementById(targetId);
     if (!target) return;
     e.preventDefault();
@@ -96,7 +118,9 @@ export function EndOfDescriptionCta({
         >
           {title}
         </div>
-        <div style={{ fontSize: 12.5, color: "#a8a6a0" }}>{description}</div>
+        {description ? (
+          <div style={{ fontSize: 12.5, color: "#a8a6a0" }}>{description}</div>
+        ) : null}
       </div>
       <div
         style={{

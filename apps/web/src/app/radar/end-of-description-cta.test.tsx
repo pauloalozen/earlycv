@@ -83,7 +83,7 @@ describe("EndOfDescriptionCta", () => {
     ).toBeInTheDocument();
   });
 
-  it("logado: sempre aponta pra âncora do CompatCard, independente do preview guest", () => {
+  it("logado com CV Master: copy convida a fazer a análise completa, href de fallback aponta pro CompatCard", () => {
     render(
       <RadarAnalysisPreviewProvider>
         <EndOfDescriptionCta
@@ -99,8 +99,61 @@ describe("EndOfDescriptionCta", () => {
       "#radar-compat-card",
     );
     expect(
-      screen.getByText(/Veja seu match real com ela/i),
+      screen.getByText(/Faça sua análise completa agora mesmo com ela/i),
     ).toBeInTheDocument();
+  });
+
+  it("logado com CV Master, botão 'Analisar meu CV' presente na página: clique dispara o MESMO botão do card de Candidatura, em vez de só rolar até lá", () => {
+    vi.stubGlobal("scrollTo", vi.fn());
+    const analyzeButton = document.createElement("button");
+    analyzeButton.setAttribute("data-testid", "analyze-primary-btn");
+    analyzeButton.getBoundingClientRect = () =>
+      ({ top: 400, height: 200 }) as DOMRect;
+    const clickSpy = vi.fn();
+    analyzeButton.addEventListener("click", clickSpy);
+    document.body.append(analyzeButton);
+
+    render(
+      <RadarAnalysisPreviewProvider>
+        <EndOfDescriptionCta
+          isAuthenticated
+          hasMasterCv
+          jobSlug="vaga-exemplo"
+        />
+      </RadarAnalysisPreviewProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("link"));
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+
+    analyzeButton.remove();
+  });
+
+  it("logado com CV Master, mas SEM botão 'Analisar meu CV' (já tem candidatura pra essa vaga): cai no fallback de rolar até o CompatCard", () => {
+    const target = document.createElement("div");
+    target.id = "radar-compat-card";
+    target.getBoundingClientRect = () =>
+      ({ top: 300, height: 400 }) as DOMRect;
+    document.body.append(target);
+    const scrollToMock = vi.fn();
+    vi.stubGlobal("scrollTo", scrollToMock);
+
+    render(
+      <RadarAnalysisPreviewProvider>
+        <EndOfDescriptionCta
+          isAuthenticated
+          hasMasterCv
+          jobSlug="vaga-exemplo"
+        />
+      </RadarAnalysisPreviewProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("link"));
+
+    expect(scrollToMock).toHaveBeenCalledTimes(1);
+
+    target.remove();
   });
 
   it("clique (antes do preview): rola descontando a altura da nav fixa, nunca a altura total do viewport", () => {
