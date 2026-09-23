@@ -687,6 +687,26 @@ export function RadarGuestAnalysisBand({
       />
 
       {phase === "loading" ? (
+        // Enquanto o CV está sendo analisado, ninguém deve conseguir clicar
+        // em nada na página inteira (nav, "candidatar-se externamente",
+        // "salvar para depois" etc.) — pediria pra cancelar/duplicar a
+        // análise em andamento. Sem pointer-events:none (isso deixaria os
+        // cliques passarem direto) e sem overflow próprio (isso preservaria
+        // o scroll normal da página, que continua indo pro documento).
+        <div
+          aria-hidden
+          data-testid="radar-analysis-blocking-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            cursor: "wait",
+            background: "transparent",
+          }}
+        />
+      ) : null}
+
+      {phase === "loading" ? (
         <LoadingState jobTitle={jobTitle} />
       ) : phase === "preview" && preview ? (
         <PreviewState

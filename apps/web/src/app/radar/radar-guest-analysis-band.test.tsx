@@ -94,6 +94,63 @@ describe("RadarGuestAnalysisBand", () => {
     });
   });
 
+  it("durante a análise (phase=loading): cobre a página com um overlay fixo que engole cliques, sem travar o scroll (sem overflow próprio)", async () => {
+    let resolveFlow: (value: unknown) => void = () => undefined;
+    runRadarGuestAnalysisFlowMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFlow = resolve;
+      }),
+    );
+
+    render(
+      <RadarGuestAnalysisBand
+        jobId="job-1"
+        jobTitle="Engenheiro de Dados"
+        jobSlug="engenheiro-de-dados"
+      />,
+    );
+
+    const fileInput = document.getElementById(
+      "radar-guest-analysis-file-input",
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [makeFile()] } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("radar-analysis-blocking-overlay"),
+      ).toBeInTheDocument();
+    });
+    const overlay = screen.getByTestId("radar-analysis-blocking-overlay");
+    expect(overlay).toHaveStyle({ position: "fixed", cursor: "wait" });
+    // Nunca pointer-events: none (isso deixaria cliques passarem direto pro
+    // que está por baixo) e nunca overflow próprio (isso travaria o scroll
+    // da página, que precisa continuar indo pro documento).
+    expect(overlay).not.toHaveStyle({ pointerEvents: "none" });
+    expect(overlay.style.overflow).toBe("");
+
+    resolveFlow({
+      kind: "preview",
+      jobId: "analysis-job-1",
+      preview: {
+        status: "succeeded",
+        lastError: null,
+        jobTitle: "Engenheiro de Dados",
+        companyName: "Stefanini",
+        score: { before: 50, after: 86 },
+        breakdown: [
+          { dimension: "skill", label: "Skills técnicas", coveragePercent: 75 },
+        ],
+        gapsCount: 13,
+      },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("radar-analysis-blocking-overlay"),
+      ).toBeNull();
+    });
+  });
+
   it("upload: dispara runRadarGuestAnalysisFlow automaticamente com radarJobId no FormData e mostra gauges + gapsCount real no preview", async () => {
     runRadarGuestAnalysisFlowMock.mockResolvedValue({
       kind: "preview",
