@@ -35,28 +35,13 @@ services:
       retries: 5
       start_period: 5s
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  s3mock:
+    image: adobe/s3mock:latest
     environment:
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET:-earlycv-local}
     ports:
-      - "9000:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - minio-data:/data
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      - minio
-    entrypoint: >-
-      /bin/sh -c
-      "until mc alias set local http://minio:9000 ${S3_ACCESS_KEY_ID:-minioadmin} ${S3_SECRET_ACCESS_KEY:-minioadmin}; do sleep 1; done &&
-      mc mb --ignore-existing local/${S3_BUCKET:-earlycv-local}"
+      - "9000:9090"
 
 volumes:
   postgres-data:
   redis-data:
-  minio-data:
