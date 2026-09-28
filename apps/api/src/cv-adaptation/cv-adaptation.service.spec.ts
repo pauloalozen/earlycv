@@ -1931,6 +1931,73 @@ test("resolveGenerationMasterCvText uses snapshot text instead of current master
   assert.equal(text, "Texto A do snapshot");
 });
 
+test("resolveGenerationMasterCvText falls back to masterResume/adaptedContentJson when the snapshot row exists but its storage object is gone", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        findUnique: async () => ({ textStorageKey: "snapshot-key.md" }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      putObject: async () => "",
+      getObject: async () => {
+        throw new Error("NoSuchKey: The specified key does not exist.");
+      },
+      deleteObject: async () => undefined,
+    },
+  );
+
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  const text = await (service as any).resolveGenerationMasterCvText({
+    id: "adapt-1",
+    adaptedContentJson: {},
+    analysisCvSnapshotId: "snapshot-1",
+    createdAt: new Date("2026-04-29T14:31:00.000Z"),
+    masterResume: { rawText: "Texto do master resume atual" },
+  });
+
+  assert.equal(text, "Texto do master resume atual");
+});
+
+test("resolveGenerationMasterCvText rethrows the original storage error when there is no fallback source either", async () => {
+  const service = new CvAdaptationServiceCtor(
+    {
+      analysisCvSnapshot: {
+        findUnique: async () => ({ textStorageKey: "snapshot-key.md" }),
+      },
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      putObject: async () => "",
+      getObject: async () => {
+        throw new Error("NoSuchKey: The specified key does not exist.");
+      },
+      deleteObject: async () => undefined,
+    },
+  );
+
+  await assert.rejects(
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    (service as any).resolveGenerationMasterCvText({
+      id: "adapt-1",
+      adaptedContentJson: {},
+      analysisCvSnapshotId: "snapshot-1",
+      createdAt: new Date("2026-04-29T14:31:00.000Z"),
+      masterResume: null,
+    }),
+    /NoSuchKey/,
+  );
+});
+
 test("analyzeAuthenticated uses the same normalized text for AI load and snapshot storage", async () => {
   let aiLoadedText = "";
   let storedMarkdown = "";
