@@ -6803,29 +6803,13 @@ export class CvAdaptationService {
         where: { id: adaptation.analysisCvSnapshotId },
         select: { textStorageKey: true },
       });
-      if (snapshot) {
-        try {
-          const buffer = await this.storage.getObject(snapshot.textStorageKey);
-          return this.normalizeSnapshotText(buffer.toString("utf8"));
-        } catch (err) {
-          // O arquivo do snapshot pode ter sumido do storage (achado em
-          // produção, 2026-09-28) mesmo com a linha do AnalysisCvSnapshot
-          // intacta. Nunca falha aqui sem antes tentar o mesmo fallback já
-          // usado quando não existe snapshot algum (masterResume.rawText,
-          // ou sintetizar do adaptedContentJson) — só relança o erro
-          // original se nenhuma dessas fontes tiver conteúdo de verdade.
-          this.logger.warn(
-            `[deliver] analysis snapshot text unavailable for adaptation ${adaptation.id} (key=${snapshot.textStorageKey}): ${err instanceof Error ? err.message : String(err)} — trying fallback sources`,
-          );
-          const fallback =
-            adaptation.masterResume?.rawText?.trim() ||
-            this.synthesizeMasterCvTextFromGuestAnalysis(
-              adaptation.adaptedContentJson,
-            );
-          if (fallback) return fallback;
-          throw err;
-        }
+      if (!snapshot) {
+        throw new BadRequestException(
+          "Analysis snapshot not found for adaptation.",
+        );
       }
+      const buffer = await this.storage.getObject(snapshot.textStorageKey);
+      return this.normalizeSnapshotText(buffer.toString("utf8"));
     }
 
     if (adaptation.createdAt >= this.getSnapshotEnforcementReleaseDate()) {
