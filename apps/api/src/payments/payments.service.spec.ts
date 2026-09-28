@@ -55,6 +55,37 @@ test("getBrickCheckoutData returns checkout summary for valid pending purchase",
   });
 });
 
+test("getBrickCheckoutData returns full plan units even when originAction is unlock_cv", async () => {
+  const service = new PaymentsService(
+    {
+      planPurchase: {
+        findFirst: async () => ({
+          id: "purchase-2",
+          amountInCents: 9900,
+          currency: "BRL",
+          status: "pending",
+          planType: "turbo",
+          originAction: "unlock_cv",
+          originAdaptationId: "adaptation-1",
+          user: { email: "user-1@earlycv.com.br" },
+        }),
+      },
+      user: {
+        findUnique: async () => ({
+          id: "user-1",
+          email: "user-1@earlycv.com.br",
+        }),
+      },
+    } as never,
+    {} as never,
+  );
+
+  const result = await service.getBrickCheckoutData("user-1", "purchase-2");
+
+  assert.equal(result.unitsIncluded, 10);
+  assert.equal(result.unitPrice, 99 / 10);
+});
+
 test("getBrickCheckoutData rejects unknown purchase", async () => {
   const service = new PaymentsService(
     {

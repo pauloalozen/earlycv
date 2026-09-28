@@ -62,6 +62,7 @@ let transientFirstTouchUtm: UtmParams = {};
 
 export function __resetAnalyticsTrackingForTests() {
   transientFirstTouchUtm = {};
+  transientFirstTouchAffiliateCode = null;
 }
 
 function normalizeGaClientId(value: unknown): string | null {
@@ -490,6 +491,101 @@ export function getPersistedUtmParams(): UtmParams {
   } catch {
     return {};
   }
+}
+
+const AFFILIATE_CODE_STORAGE_KEY = "analytics_first_touch_affiliate_code";
+let transientFirstTouchAffiliateCode: string | null = null;
+
+function readWindowAffiliateCode(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const searchParams = new URLSearchParams(window.location.search);
+  const code = searchParams.get("ref")?.trim();
+  return code ? code : null;
+}
+
+// Mesma lógica de first-touch do UTM (captureAndPersistUtmParams), em
+// paralelo e sem misturar tipos: código de afiliado/criador do link
+// (?ref=<code>), persistido uma única vez até o cadastro. Distinto do
+// cupom aplicado numa compra — isso é atribuição de origem do cadastro.
+export function captureAndPersistAffiliateCode(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storage = window.localStorage;
+  if (
+    !storage ||
+    typeof storage.getItem !== "function" ||
+    typeof storage.setItem !== "function"
+  ) {
+    return readWindowAffiliateCode();
+  }
+
+  const currentCode = readWindowAffiliateCode();
+  const consentState = readAnalyticsConsentState();
+  const allowPersistence =
+    !isAnalyticsConsentGateEnabled() || consentState === "accepted";
+
+  if (!allowPersistence) {
+    if (transientFirstTouchAffiliateCode) {
+      return transientFirstTouchAffiliateCode;
+    }
+    if (currentCode) {
+      transientFirstTouchAffiliateCode = currentCode;
+      return currentCode;
+    }
+    return null;
+  }
+
+  if (!currentCode) {
+    const persisted = getPersistedAffiliateCode();
+    return persisted ?? transientFirstTouchAffiliateCode;
+  }
+
+  const existing = getPersistedAffiliateCode();
+  if (existing) {
+    return existing;
+  }
+
+  storage.setItem(AFFILIATE_CODE_STORAGE_KEY, currentCode);
+  transientFirstTouchAffiliateCode = currentCode;
+  return currentCode;
+}
+
+// Dispara o evento de "visita ao link do criador" só quando ?ref= está
+// presente na URL atual (chegada real via link, não replay do valor
+// persistido em toda navegação). Dedup real (visitor_id+código+dia) é
+// feito no backend (PlansService.trackCouponVisit) — aqui é só a chamada.
+export function reportCouponLinkVisitIfPresent(visitorId: string | null) {
+  if (typeof window === "undefined") return;
+  const code = readWindowAffiliateCode();
+  if (!code) return;
+
+  fetch("/api/plans/coupon/visit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      couponCode: code,
+      visitorId: visitorId ?? undefined,
+    }),
+    keepalive: true,
+  }).catch(() => {
+    // best-effort — nunca bloqueia a navegação por causa de uma métrica.
+  });
+}
+
+export function getPersistedAffiliateCode(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const storage = window.localStorage;
+  if (!storage || typeof storage.getItem !== "function") {
+    return null;
+  }
+  const raw = storage.getItem(AFFILIATE_CODE_STORAGE_KEY);
+  return raw?.trim() ? raw.trim() : null;
 }
 
 export function getAnalyticsBaseProperties(): Record<string, unknown> {

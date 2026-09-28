@@ -104,6 +104,8 @@ const BUSINESS_FUNNEL_EVENT_MAPPING: Record<BusinessFunnelEventName, string> = {
   // Cover Letter
   cover_letter_generate_clicked: "cover_letter_generate_clicked",
   cover_letter_generated: "cover_letter_generated",
+  // Cupom por criador
+  coupon_link_visited: "coupon_link_visited",
 };
 
 const PROTECTION_EVENT_MAPPING: Record<AnalysisProtectionEventName, string> = {

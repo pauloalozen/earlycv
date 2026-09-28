@@ -8,6 +8,8 @@ const useSearchParamsMock = vi.hoisted(() =>
   vi.fn(() => new URLSearchParams()),
 );
 const captureAndPersistUtmParamsMock = vi.hoisted(() => vi.fn(() => ({})));
+const captureAndPersistAffiliateCodeMock = vi.hoisted(() => vi.fn(() => null));
+const reportCouponLinkVisitIfPresentMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
@@ -17,6 +19,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
   captureAndPersistUtmParams: captureAndPersistUtmParamsMock,
+  captureAndPersistAffiliateCode: captureAndPersistAffiliateCodeMock,
+  reportCouponLinkVisitIfPresent: reportCouponLinkVisitIfPresentMock,
 }));
 
 import Template from "./template";

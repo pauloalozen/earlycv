@@ -191,6 +191,7 @@ test("does not record payment_failed when webhook resolution is approved", async
               userId: "user-1",
             }),
             update: async () => ({ ok: true }),
+            updateMany: async () => ({ count: 1 }),
           },
           user: {
             update: async () => ({ ok: true }),
@@ -783,7 +784,7 @@ test("createCheckout reuses recent pending buy_credits checkout on repeated call
           );
         },
         updateMany: async () => ({ count: 1 }),
-        create: async () => {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
           createCalls += 1;
           const purchase = {
             id: `purchase-${createCalls}`,
@@ -794,8 +795,9 @@ test("createCheckout reuses recent pending buy_credits checkout on repeated call
             originAdaptationId: null,
             paymentReference: `pay-ref-${createCalls}`,
             createdAt: new Date(),
+            ...data,
           };
-          purchases.push(purchase);
+          purchases.push(purchase as never);
           return purchase;
         },
       },
@@ -1258,6 +1260,9 @@ test("createCheckout updates existing none purchase to pending before returning 
           planType: "starter",
           status: "none",
           paymentReference: "pay-ref-existing",
+          amountInCents: 1190,
+          creditsGranted: 3,
+          affiliateCodeId: null,
         }),
         updateMany: async ({
           where,
@@ -1403,11 +1408,12 @@ test("applyApprovedPurchase applies pending purchase once", async () => {
       applyApprovedPurchaseInsideTransaction: (
         tx: unknown,
         purchase: { id: string },
-      ) => Promise<void>;
+      ) => Promise<{ applied: boolean; unlockedAdaptationId: string | null }>;
     }
   ).applyApprovedPurchaseInsideTransaction = async (_tx, purchase) => {
     applyCalls += 1;
     assert.equal(purchase.id, "purchase-pending-1");
+    return { applied: true, unlockedAdaptationId: null };
   };
 
   const result = await service.applyApprovedPurchase("purchase-pending-1");
@@ -1446,6 +1452,7 @@ test("webhook approved records payment_approved business funnel event", async ()
               mpPreferenceId: "pref-1",
             }),
             update: async () => ({ ok: true }),
+            updateMany: async () => ({ count: 1 }),
           },
           user: { update: async () => ({ ok: true }) },
           cvUnlock: { upsert: async () => ({ ok: true }) },
@@ -1543,6 +1550,100 @@ test("webhook approved records payment_approved business funnel event", async ()
   assert.equal(ga4Calls[0]?.currency, "BRL");
 });
 
+test("webhook approving a plan purchase with unlock_cv triggers CV delivery for the freshly-unlocked adaptation", async () => {
+  const deliveredAdaptationIds: string[] = [];
+
+  const service = new PlansService(
+    {
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          planPurchase: {
+            findUnique: async () => ({
+              id: "purchase-deliver-1",
+              userId: "user-1",
+              planType: "pro",
+              amountInCents: 2990,
+              currency: "BRL",
+              paymentReference: "pay-ref-deliver-1",
+              status: "pending",
+              creditsGranted: 3,
+              analysisCreditsGranted: 0,
+              originAction: "unlock_cv",
+              originAdaptationId: "adapt-deliver-1",
+              mpPaymentId: null,
+              mpMerchantOrderId: null,
+              mpPreferenceId: "pref-deliver-1",
+            }),
+            update: async () => ({ ok: true }),
+            updateMany: async () => ({ count: 1 }),
+          },
+          user: { update: async () => ({ ok: true }) },
+          cvUnlock: { upsert: async () => ({ ok: true }) },
+          cvAdaptation: {
+            findUnique: async () => ({
+              id: "adapt-deliver-1",
+              userId: "user-1",
+              isUnlocked: false,
+              adaptedContentJson: { summary: "ok" },
+            }),
+            update: async () => ({ ok: true }),
+          },
+        }),
+      paymentAuditLog: { create: async () => ({ id: "audit-deliver-1" }) },
+      planPurchase: {
+        findUnique: async () => ({
+          id: "purchase-deliver-1",
+          userId: "user-1",
+          planType: "pro",
+          amountInCents: 2990,
+          currency: "BRL",
+          paymentReference: "pay-ref-deliver-1",
+          status: "pending",
+          creditsGranted: 3,
+          analysisCreditsGranted: 0,
+          originAction: "unlock_cv",
+          originAdaptationId: "adapt-deliver-1",
+          mpPaymentId: null,
+          mpMerchantOrderId: null,
+          mpPreferenceId: "pref-deliver-1",
+        }),
+      },
+    } as never,
+    { record: async () => ({ event: { id: "evt-deliver-1" }, ingested: true }) } as never,
+    { sendPurchaseEvent: async () => {} } as never,
+    undefined,
+    {
+      deliverAdaptation: async (adaptationId: string) => {
+        deliveredAdaptationIds.push(adaptationId);
+      },
+    } as never,
+  );
+
+  (
+    service as {
+      resolveMercadoPagoPayment: (body: unknown) => Promise<unknown>;
+    }
+  ).resolveMercadoPagoPayment = async () => ({
+    paymentReference: "pay-ref-deliver-1",
+    paymentId: "mp-deliver-1",
+    preferenceId: "pref-deliver-1",
+    merchantOrderId: "ord-deliver-1",
+    status: "approved",
+    rawStatus: "approved",
+  });
+
+  await service.handleWebhook("mercadopago", {
+    data: { id: "mp-deliver-1" },
+    type: "payment",
+  });
+
+  // triggerAdaptationDelivery is fire-and-forget — give its microtask a
+  // tick to run before asserting.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(deliveredAdaptationIds, ["adapt-deliver-1"]);
+});
+
 test("applyApprovedPurchase records payment_approved only once across repeated confirmations", async () => {
   const idempotencyKeys = new Set<string>();
   const ingestedEvents: string[] = [];
@@ -1573,6 +1674,15 @@ test("applyApprovedPurchase records payment_approved only once across repeated c
             update: async () => {
               currentStatus = "completed";
               return { ok: true };
+            },
+            updateMany: async (args: {
+              where: { status: { in: string[] } };
+            }) => {
+              if (!args.where.status.in.includes(currentStatus)) {
+                return { count: 0 };
+              }
+              currentStatus = "completed";
+              return { count: 1 };
             },
           },
           user: { update: async () => ({ ok: true }) },
@@ -1658,6 +1768,7 @@ test("ga4 failure does not break approved purchase flow", async () => {
               mpPreferenceId: null,
             }),
             update: async () => ({ ok: true }),
+            updateMany: async () => ({ count: 1 }),
           },
           user: { update: async () => ({ ok: true }) },
           cvUnlock: { upsert: async () => ({ ok: true }) },
@@ -1828,11 +1939,12 @@ test("applyApprovedPurchase applies processing statuses once", async () => {
         applyApprovedPurchaseInsideTransaction: (
           tx: unknown,
           purchase: { status: string },
-        ) => Promise<void>;
+        ) => Promise<{ applied: boolean; unlockedAdaptationId: string | null }>;
       }
     ).applyApprovedPurchaseInsideTransaction = async (_tx, purchase) => {
       applyCalls += 1;
       assert.equal(purchase.status, status);
+      return { applied: true, unlockedAdaptationId: null };
     };
 
     const result = await service.applyApprovedPurchase(`purchase-${status}`);

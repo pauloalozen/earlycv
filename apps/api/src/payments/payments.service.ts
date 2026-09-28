@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import MercadoPagoConfig, { Payment } from "mercadopago";
 import { DatabaseService } from "../database/database.service";
-import { PlansService } from "../plans/plans.service";
+import { getPlanConfig, type PlanId, PlansService } from "../plans/plans.service";
 import {
   BrickPayloadValidationError,
   parseBrickPaymentPayload,
@@ -239,10 +239,7 @@ export class PaymentsService {
     }
 
     const amount = purchase.amountInCents / 100;
-    const unitsIncluded =
-      purchase.originAction === "unlock_cv"
-        ? 1
-        : getPlanUnits(purchase.planType);
+    const unitsIncluded = getPlanUnits(purchase.planType);
     const unitPrice =
       unitsIncluded && unitsIncluded > 0 ? amount / unitsIncluded : null;
 
@@ -261,6 +258,137 @@ export class PaymentsService {
       checkoutMode: "brick",
       unitsIncluded,
       unitPrice,
+    };
+  }
+
+  // Aplica/troca/remove cupom numa compra pendente já criada (checkout
+  // Brick) — o valor nunca é congelado na criação da compra por causa
+  // disso; toda reprecificação recalcula sempre a partir do preço-base do
+  // plano (nunca do valor atual da purchase), pra não empilhar desconto
+  // entre trocas de cupom. Nunca muta compra que já saiu de
+  // pending/none (corrida com webhook de pagamento vira 409, não
+  // sobrescreve compra paga).
+  async applyCheckoutCoupon(
+    userId: string,
+    purchaseId: string,
+    couponCode: string | null,
+  ): Promise<
+    | ({ applied: true; freeRedemptionAvailable: false } & BrickCheckoutDataResponse & {
+          appliedCoupon: {
+            code: string;
+            discountAmountInCents: number;
+            bonusCreditsGranted: number;
+          } | null;
+        })
+    | { applied: false; freeRedemptionAvailable: false; reason?: string }
+    | {
+        applied: false;
+        freeRedemptionAvailable: true;
+        planId: string;
+        couponCode: string;
+      }
+  > {
+    const purchase = await this.database.planPurchase.findFirst({
+      where: { id: purchaseId, userId },
+      select: { id: true, status: true, planType: true },
+    });
+
+    if (!purchase) {
+      throw new NotFoundException({
+        errorCode: "purchase_not_found",
+        message: "Checkout não encontrado.",
+      });
+    }
+
+    if (purchase.status !== "pending") {
+      throw new ConflictException({
+        errorCode: "purchase_status_invalid",
+        message: "Checkout indisponível para este status.",
+      });
+    }
+
+    const plan = getPlanConfig()[purchase.planType as PlanId];
+    if (!plan) {
+      throw new BadRequestException({
+        errorCode: "purchase_plan_invalid",
+        message: "Plano da compra é inválido.",
+      });
+    }
+
+    const trimmedCode = couponCode?.trim() || null;
+
+    if (!trimmedCode) {
+      const cleared = await this.database.planPurchase.updateMany({
+        where: { id: purchaseId, userId, status: "pending" },
+        data: {
+          amountInCents: plan.amountInCents,
+          creditsGranted: plan.downloadCreditsGranted,
+          affiliateCodeId: null,
+          affiliateCampaignId: null,
+          couponDiscountAmountInCents: 0,
+          couponBonusCreditsGranted: 0,
+        },
+      });
+      if (cleared.count !== 1) {
+        throw new ConflictException({
+          errorCode: "purchase_status_invalid",
+          message: "Checkout indisponível para este status.",
+        });
+      }
+      const data = await this.getBrickCheckoutData(userId, purchaseId);
+      return { applied: true, freeRedemptionAvailable: false, appliedCoupon: null, ...data };
+    }
+
+    const appliedCoupon = await this.plansService.resolveCouponForCheckout(
+      purchase.planType as PlanId,
+      trimmedCode,
+    );
+
+    if (!appliedCoupon) {
+      return {
+        applied: false,
+        freeRedemptionAvailable: false,
+        reason: "invalid_coupon",
+      };
+    }
+
+    if (appliedCoupon.amountInCents === 0) {
+      return {
+        applied: false,
+        freeRedemptionAvailable: true,
+        planId: purchase.planType,
+        couponCode: appliedCoupon.code.code,
+      };
+    }
+
+    const updated = await this.database.planPurchase.updateMany({
+      where: { id: purchaseId, userId, status: "pending" },
+      data: {
+        amountInCents: appliedCoupon.amountInCents,
+        creditsGranted: appliedCoupon.creditsGranted,
+        affiliateCodeId: appliedCoupon.code.id,
+        affiliateCampaignId: appliedCoupon.campaign.id,
+        couponDiscountAmountInCents: appliedCoupon.discountAmountInCents,
+        couponBonusCreditsGranted: appliedCoupon.bonusCreditsGranted,
+      },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictException({
+        errorCode: "purchase_status_invalid",
+        message: "Checkout indisponível para este status.",
+      });
+    }
+
+    const data = await this.getBrickCheckoutData(userId, purchaseId);
+    return {
+      applied: true,
+      freeRedemptionAvailable: false,
+      appliedCoupon: {
+        code: appliedCoupon.code.code,
+        discountAmountInCents: appliedCoupon.discountAmountInCents,
+        bonusCreditsGranted: appliedCoupon.bonusCreditsGranted,
+      },
+      ...data,
     };
   }
 
@@ -383,7 +511,6 @@ export class PaymentsService {
     const mpItem = buildMercadoPagoPlanItem({
       planType: purchase.planType,
       amountInCents: purchase.amountInCents,
-      originAction: purchase.originAction,
     });
     const payerIdentificationPresent = Boolean(
       parsedPayload.payerIdentification,
@@ -1039,12 +1166,8 @@ type MercadoPagoPlanItem = {
 function buildMercadoPagoPlanItem(input: {
   planType: string;
   amountInCents: number;
-  originAction: "buy_credits" | "unlock_cv";
 }): MercadoPagoPlanItem {
-  const unitsIncluded =
-    input.originAction === "unlock_cv"
-      ? 1
-      : (getPlanUnits(input.planType) ?? 1);
+  const unitsIncluded = getPlanUnits(input.planType) ?? 1;
 
   return {
     id: normalizeMercadoPagoPlanItemId(input.planType),

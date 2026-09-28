@@ -8,12 +8,14 @@ import {
   Post,
   Query,
   UseGuards,
+  ValidationPipe,
 } from "@nestjs/common";
 
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { InternalRoles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
+import { ApplyCheckoutCouponDto } from "./dto/apply-checkout-coupon.dto";
 import { PaymentsService } from "./payments.service";
 
 @Controller("payments")
@@ -48,6 +50,27 @@ export class PaymentsController {
     @Param("purchaseId") purchaseId: string,
   ) {
     return this.paymentsService.getBrickCheckoutData(user.id, purchaseId);
+  }
+
+  @Post("brick/:purchaseId/coupon")
+  applyCheckoutCoupon(
+    @AuthenticatedUser() user: { id: string },
+    @Param("purchaseId") purchaseId: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: ApplyCheckoutCouponDto,
+      }),
+    )
+    dto: ApplyCheckoutCouponDto,
+  ) {
+    return this.paymentsService.applyCheckoutCoupon(
+      user.id,
+      purchaseId,
+      dto.couponCode ?? null,
+    );
   }
 
   @Post("brick/:purchaseId/pay")

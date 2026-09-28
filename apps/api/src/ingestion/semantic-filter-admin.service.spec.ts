@@ -232,9 +232,14 @@ test("SemanticFilterAdminService.listJobs filters by status, sourceId and search
   const database = moduleRef.get(DatabaseService);
   const service = moduleRef.get(SemanticFilterAdminService);
 
+  // Token único por execução — "backend"/"desenvolvedor" genéricos colidem
+  // com vagas reais de ingestão acumuladas em bancos persistentes
+  // (earlycv_homolog), inflando bySearch.total além do esperado.
+  const uniqueTerm = `backendzzz${randomUUID().replace(/-/g, "")}`;
+
   const pending = await seedJobWithEnrichment(database, {
     enrichmentStatus: "PENDING",
-    normalizedTitle: "desenvolvedor backend",
+    normalizedTitle: `desenvolvedor ${uniqueTerm}`,
     sourceName: "Fonte X",
   });
   const completed = await seedJobWithEnrichment(database, {
@@ -244,7 +249,7 @@ test("SemanticFilterAdminService.listJobs filters by status, sourceId and search
   });
   await database.job.update({
     where: { id: pending.job.id },
-    data: { title: "Desenvolvedor Backend" },
+    data: { title: `Desenvolvedor ${uniqueTerm}` },
   });
   await database.job.update({
     where: { id: completed.job.id },
@@ -279,7 +284,7 @@ test("SemanticFilterAdminService.listJobs filters by status, sourceId and search
     "SQL",
   ]);
 
-  const bySearch = await service.listJobs({ search: "backend" });
+  const bySearch = await service.listJobs({ search: uniqueTerm });
   assert.equal(bySearch.total, 1);
   assert.equal(bySearch.rows[0]?.id, pending.enrichment.id);
 

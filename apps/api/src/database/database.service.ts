@@ -153,6 +153,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.planPurchase;
   }
 
+  get affiliatePartner() {
+    return this.prisma.affiliatePartner;
+  }
+
+  get affiliateCampaign() {
+    return this.prisma.affiliateCampaign;
+  }
+
+  get affiliateCode() {
+    return this.prisma.affiliateCode;
+  }
+
+  get affiliateFreeRedemption() {
+    return this.prisma.affiliateFreeRedemption;
+  }
+
   get userDailyAnalysisUsage() {
     return this.prisma.userDailyAnalysisUsage;
   }

@@ -72,6 +72,7 @@ export function PaidPlanCheckoutForm({
         checkoutUrl: string;
         checkoutMode: string;
       }>;
+
       if (!payload.purchaseId) {
         throw new Error("invalid-checkout-payload");
       }
@@ -129,6 +130,7 @@ export function PaidPlanCheckoutForm({
             value={keyword}
           />
         ))}
+
         <button
           type="submit"
           style={buttonStyle}

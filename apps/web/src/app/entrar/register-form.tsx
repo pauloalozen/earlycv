@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPersistedAffiliateCode } from "@/lib/analytics-tracking";
 import { getPendingGuestAnalysis } from "@/lib/guest-analysis-pending";
 import {
   SIGNUP_PASSWORD_RULES,
@@ -28,6 +29,7 @@ export function RegisterForm({
   const [visitorId, setVisitorId] = useState("");
   const [guestAnalysisJobId, setGuestAnalysisJobId] = useState("");
   const [guestPossessionToken, setGuestPossessionToken] = useState("");
+  const [affiliateCode, setAffiliateCode] = useState("");
 
   useEffect(() => {
     try {
@@ -37,6 +39,7 @@ export function RegisterForm({
       // correlação de sessão, conversionContext continua enviado.
     }
     setVisitorId(getOrCreateVisitorId() ?? "");
+    setAffiliateCode(getPersistedAffiliateCode() ?? "");
 
     // Fase 5 do gate de autenticação guest: retoma o claim server-side
     // depois do cadastro, sem depender do fluxo Google.
@@ -98,6 +101,9 @@ export function RegisterForm({
         />
       )}
       {visitorId && <input type="hidden" name="visitorId" value={visitorId} />}
+      {affiliateCode && (
+        <input type="hidden" name="affiliateCode" value={affiliateCode} />
+      )}
       {guestAnalysisJobId && (
         <input
           type="hidden"

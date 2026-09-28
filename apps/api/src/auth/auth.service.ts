@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -16,6 +17,7 @@ import { BusinessFunnelEventService } from "../analysis-observability/business-f
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import { EMAIL_SERVICE, type EmailService } from "../email/email.types";
+import { CouponResolutionService } from "../plans/coupon-resolution.service";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
@@ -103,6 +105,9 @@ export class AuthService {
         return { event: {}, ingested: false };
       },
     },
+    @Optional()
+    @Inject(CouponResolutionService)
+    private readonly couponResolutionService?: CouponResolutionService,
   ) {}
 
   private async recordSignupCompleted(input: {
@@ -212,10 +217,23 @@ export class AuthService {
     input: RegisterDto,
     visitorContext?: AuthVisitorContext,
   ): Promise<AuthSession> {
+    // Atribuição de cadastro (seção 1 do plano de cupom): valida só se o
+    // código/campanha existe e está vigente — nunca exige plano, que ainda
+    // não existe neste ponto do funil. Gravado uma única vez, imutável
+    // depois. Diferente do cupom aplicado numa compra futura.
+    const acquisition = input.affiliateCode
+      ? await this.couponResolutionService?.resolveForAcquisition(
+          input.affiliateCode,
+        )
+      : undefined;
+    const signupAffiliateCodeId =
+      acquisition?.valid === true ? acquisition.code.id : null;
+
     const user = await this.createUser({
       email: input.email,
       password: input.password,
       name: input.name,
+      signupAffiliateCodeId,
     });
 
     const conversionContext = input.conversionContext ?? "unknown";
@@ -634,6 +652,7 @@ export class AuthService {
     status?: UserStatus;
     isStaff?: boolean;
     internalRole?: Exclude<AuthInternalRole, "none">;
+    signupAffiliateCodeId?: string | null;
   }) {
     const email = input.email.trim().toLowerCase();
     const existingUser = await this.database.user.findUnique({
@@ -653,6 +672,7 @@ export class AuthService {
         status: input.status ?? "active",
         isStaff: input.isStaff ?? false,
         internalRole: input.internalRole ?? "none",
+        signupAffiliateCodeId: input.signupAffiliateCodeId ?? null,
         profile: { create: {} },
         authAccounts: {
           create: {

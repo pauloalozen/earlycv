@@ -101,6 +101,7 @@ export async function registerWithPassword(
   conversionContext?: string,
   sessionInternalId?: string,
   visitorId?: string,
+  affiliateCode?: string,
 ) {
   return authRequest<AuthApiSession>("/auth/register", {
     body: JSON.stringify({
@@ -110,6 +111,7 @@ export async function registerWithPassword(
       ...(conversionContext ? { conversionContext } : {}),
       ...(sessionInternalId ? { sessionInternalId } : {}),
       ...(visitorId ? { visitorId } : {}),
+      ...(affiliateCode ? { affiliateCode } : {}),
     }),
     method: "POST",
   });

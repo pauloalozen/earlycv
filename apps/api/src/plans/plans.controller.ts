@@ -13,7 +13,10 @@ import {
 import { summarizeWebhookPayload } from "../common/analytics-sanitization";
 import { AuthenticatedUser } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { CouponPreviewDto } from "./dto/coupon-preview.dto";
+import { CouponVisitDto } from "./dto/coupon-visit.dto";
 import { CreatePlanCheckoutDto } from "./dto/create-plan-checkout.dto";
+import { RedeemFreeCouponDto } from "./dto/redeem-free-coupon.dto";
 import { PlansService } from "./plans.service";
 
 @Controller("plans")
@@ -44,6 +47,65 @@ export class PlansController {
       dto.adaptationId,
       dto.selectedMissingKeywords,
       dto.gaClientId,
+      dto.couponCode,
+    );
+  }
+
+  @Post("coupon/preview")
+  @UseGuards(JwtAuthGuard)
+  previewCoupon(
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: CouponPreviewDto,
+      }),
+    )
+    dto: CouponPreviewDto,
+  ) {
+    return this.plansService.previewCoupon(dto.couponCode, dto.planId);
+  }
+
+  // Sem @UseGuards: a visita acontece antes do login/cadastro — dedupe
+  // por visitor_id+código+dia protege contra flood (ver
+  // PlansService.trackCouponVisit).
+  @Post("coupon/visit")
+  trackCouponVisit(
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: CouponVisitDto,
+      }),
+    )
+    dto: CouponVisitDto,
+  ) {
+    return this.plansService.trackCouponVisit(
+      dto.couponCode,
+      dto.visitorId ?? null,
+    );
+  }
+
+  @Post("checkout/redeem-free-coupon")
+  @UseGuards(JwtAuthGuard)
+  redeemFreeCoupon(
+    @AuthenticatedUser() user: { id: string },
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: RedeemFreeCouponDto,
+      }),
+    )
+    dto: RedeemFreeCouponDto,
+  ) {
+    return this.plansService.redeemFreeCoupon(
+      user.id,
+      dto.planId,
+      dto.couponCode,
     );
   }
 

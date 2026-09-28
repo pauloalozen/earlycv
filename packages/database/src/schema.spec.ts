@@ -314,7 +314,7 @@ test("CvAdaptation model exists with CV adaptation enums and payment fields", ()
   assert.match(paymentProvider, /mercadopago/);
 
   assert.match(cvAdaptation, /^\s*userId\s+String$/m);
-  assert.match(cvAdaptation, /^\s*masterResumeId\s+String$/m);
+  assert.match(cvAdaptation, /^\s*masterResumeId\s+String\?$/m);
   assert.match(cvAdaptation, /^\s*templateId\s+String\?$/m);
   assert.match(cvAdaptation, /^\s*jobDescriptionText\s+String$/m);
   assert.match(cvAdaptation, /^\s*jobTitle\s+String\?$/m);

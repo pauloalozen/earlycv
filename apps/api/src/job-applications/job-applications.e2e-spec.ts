@@ -8,6 +8,7 @@ import { type INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 
+import { requestContextMiddleware } from "../analysis-protection/request-context.middleware";
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
 import { StorageService } from "../storage/storage.service";
@@ -50,6 +51,7 @@ async function createApp() {
     .compile();
 
   const app: INestApplication = moduleRef.createNestApplication();
+  app.use(requestContextMiddleware);
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
     new ValidationPipe({

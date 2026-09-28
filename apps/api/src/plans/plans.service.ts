@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -15,6 +16,7 @@ import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import type { ProductOrigin } from "../analysis-observability/product-origin";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
+import { CvAdaptationService } from "../cv-adaptation/cv-adaptation.service";
 import { DatabaseService } from "../database/database.service";
 import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
 import {
@@ -22,14 +24,18 @@ import {
   buildMercadoPagoReturnConfig,
 } from "../payments/mercado-pago-return-config";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
+import {
+  type CouponCheckoutResult,
+  CouponResolutionService,
+} from "./coupon-resolution.service";
 
-type PlanId = "starter" | "pro" | "turbo";
+export type PlanId = "starter" | "pro" | "turbo";
 
 type MercadoPagoPaymentResolution = {
   purchaseId: string | null;
   externalReference: string | null;
   paymentReference: string | null;
-  status: "approved" | "failed" | "pending" | "unknown";
+  status: "approved" | "failed" | "refunded" | "pending" | "unknown";
   paymentId: string | null;
   merchantOrderId: string | null;
   preferenceId: string | null;
@@ -39,6 +45,11 @@ type MercadoPagoPaymentResolution = {
   // "credit_card", "debit_card", "bank_transfer") — null quando o
   // payload não trouxe o campo, nunca inferido/adivinhado.
   paymentMethod: string | null;
+  // Valor e moeda efetivamente pagos, lidos de transaction_amount/
+  // currency_id da API do MP — conferidos contra o pedido persistido antes
+  // de creditar (nunca confia só no external_reference bater).
+  paidAmountInCents: number | null;
+  paidCurrency: string | null;
 };
 
 type PaymentFailureEnrichmentInput = {
@@ -128,9 +139,18 @@ type PlanConfigEntry = {
   analysisCreditsGranted: number;
 };
 
+export type AppliedCouponSummary = {
+  code: { id: string; code: string };
+  campaign: { id: string; name: string };
+  amountInCents: number;
+  creditsGranted: number;
+  discountAmountInCents: number;
+  bonusCreditsGranted: number;
+};
+
 const CHECKOUT_REUSE_WINDOW_MINUTES = 15;
 
-function getPlanConfig(): Record<PlanId, PlanConfigEntry> {
+export function getPlanConfig(): Record<PlanId, PlanConfigEntry> {
   return {
     starter: {
       label: `${requireEnvInt("QNT_CV_PLAN_STARTER")} CV Otimizado — EarlyCV`,
@@ -164,7 +184,25 @@ export class PlansService {
     @Optional()
     @Inject(Ga4MeasurementService)
     private readonly ga4MeasurementService?: Ga4MeasurementService,
+    @Optional()
+    @Inject(CouponResolutionService)
+    private readonly couponResolutionService?: CouponResolutionService,
+    @Optional()
+    @Inject(CvAdaptationService)
+    private readonly cvAdaptationService?: CvAdaptationService,
   ) {}
+
+  // Fire-and-forget, fora da transação — mesmo padrão já usado pelo
+  // resgate por crédito (CvAdaptationService.redeemWithCredit): a
+  // geração/entrega do CV nunca deve prender a resposta do webhook nem a
+  // transação de crédito.
+  private triggerAdaptationDelivery(adaptationId: string): void {
+    this.cvAdaptationService?.deliverAdaptation(adaptationId).catch((err) => {
+      this.logger.error(
+        `[auto-unlock] delivery failed for ${adaptationId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
 
   async listMyPurchases(userId: string): Promise<
     {
@@ -247,10 +285,14 @@ export class PlansService {
     adaptationId?: string,
     selectedMissingKeywords: string[] = [],
     _gaClientId?: string,
+    couponCode?: string,
   ): Promise<{
-    checkoutUrl: string;
-    purchaseId: string;
-    checkoutMode?: "brick";
+    checkoutUrl: string | null;
+    purchaseId: string | null;
+    checkoutMode?: "brick" | "free_coupon_confirmation_required";
+    amountInCents?: number;
+    creditsGranted?: number;
+    appliedCoupon?: AppliedCouponSummary | null;
   }> {
     const plan = getPlanConfig()[planId];
     const payer = await this.resolveMercadoPagoPayer(userId);
@@ -264,10 +306,60 @@ export class PlansService {
       );
     }
 
+    // Resolvido de novo aqui, server-side, mesmo que o preview (endpoint
+    // /plans/coupon/preview) já tenha validado antes — nunca confia no
+    // preview como fonte de verdade do valor cobrado. Cupom inválido nunca
+    // bloqueia o checkout: só não é aplicado, e a resposta reflete isso em
+    // `appliedCoupon: null` para o frontend nunca trocar de preço em
+    // silêncio.
+    const couponResolution = couponCode
+      ? await this.couponResolutionService?.resolveForCheckout(
+          couponCode,
+          planId,
+          plan.amountInCents,
+          plan.downloadCreditsGranted,
+        )
+      : undefined;
+
+    const appliedCoupon = this.toAppliedCouponSummary(couponResolution);
+
+    const finalAmountInCents = appliedCoupon
+      ? appliedCoupon.amountInCents
+      : plan.amountInCents;
+    const finalCreditsGranted = appliedCoupon
+      ? appliedCoupon.creditsGranted
+      : plan.downloadCreditsGranted;
+
+    if (appliedCoupon && finalAmountInCents === 0) {
+      // Desconto de 100%: não escreve nada aqui — só mostra o resumo.
+      // O resgate real (atômico, com limite total/por usuário) só acontece
+      // quando o usuário confirma explicitamente via
+      // redeemFreeCoupon/POST /plans/checkout/redeem-free-coupon.
+      return {
+        checkoutUrl: null,
+        purchaseId: null,
+        checkoutMode: "free_coupon_confirmation_required",
+        amountInCents: 0,
+        creditsGranted: finalCreditsGranted,
+        appliedCoupon,
+      };
+    }
+
+    const effectivePlan: PlanConfigEntry = {
+      ...plan,
+      amountInCents: finalAmountInCents,
+      downloadCreditsGranted: finalCreditsGranted,
+    };
+
     const recentThreshold = new Date(
       Date.now() - CHECKOUT_REUSE_WINDOW_MINUTES * 60 * 1000,
     );
 
+    // Reuso só é seguro quando a oferta é idêntica ao snapshot já
+    // persistido na linha (mesmo cupom OU nenhum cupom nos dois lados, e
+    // mesmo valor/créditos finais) — nunca muta uma compra existente para
+    // representar uma oferta diferente (ver plano, seção 3). Qualquer
+    // divergência cai para a criação de uma compra nova.
     const existing = await this.database.planPurchase.findFirst({
       where: {
         userId,
@@ -276,11 +368,17 @@ export class PlansService {
         createdAt: { gte: recentThreshold },
         originAction: adaptationId ? "unlock_cv" : "buy_credits",
         originAdaptationId: adaptationId ?? null,
+        affiliateCodeId: appliedCoupon?.code.id ?? null,
       },
       orderBy: { createdAt: "desc" },
     });
 
-    if (existing) {
+    const reusable =
+      existing &&
+      existing.amountInCents === finalAmountInCents &&
+      existing.creditsGranted === finalCreditsGranted;
+
+    if (reusable && existing) {
       this.logger.log(
         `[checkout] reusing existing purchase ${existing.id} for user ${userId}`,
       );
@@ -290,36 +388,38 @@ export class PlansService {
         `[checkout] mode_decision purchase=${existing.id} user=${userId} useBrick=${String(brickDecision.useBrick)} reason=${brickDecision.reason}`,
       );
 
-      const existingUpdate = await this.database.planPurchase.updateMany({
-        where: { id: existing.id, userId },
-        data: {
-          amountInCents: plan.amountInCents,
-          creditsGranted: plan.downloadCreditsGranted,
-          analysisCreditsGranted: plan.analysisCreditsGranted,
-          ...(brickDecision.useBrick ? { status: "pending" } : {}),
-        },
-      });
-
-      if (existingUpdate.count !== 1) {
-        throw new NotFoundException("Compra nao encontrada.");
-      }
-
       if (brickDecision.useBrick) {
+        const lockUpdate = await this.database.planPurchase.updateMany({
+          where: { id: existing.id, userId, status: "none" },
+          data: { status: "pending" },
+        });
+        if (lockUpdate.count !== 1 && existing.status !== "pending") {
+          throw new NotFoundException("Compra nao encontrada.");
+        }
         return {
           checkoutUrl: this.buildBrickCheckoutUrl(existing.id),
           purchaseId: existing.id,
           checkoutMode: "brick",
+          amountInCents: finalAmountInCents,
+          creditsGranted: finalCreditsGranted,
+          appliedCoupon,
         };
       }
 
       const checkoutUrl = await this.createMercadoPagoPreference(
         existing.id,
         existing.paymentReference,
-        plan,
+        effectivePlan,
         payer,
         adaptationId,
       );
-      return { checkoutUrl, purchaseId: existing.id };
+      return {
+        checkoutUrl,
+        purchaseId: existing.id,
+        amountInCents: finalAmountInCents,
+        creditsGranted: finalCreditsGranted,
+        appliedCoupon,
+      };
     }
 
     const paymentReference = randomUUID();
@@ -328,14 +428,18 @@ export class PlansService {
       data: {
         userId,
         planType: planId as UserPlanType,
-        amountInCents: plan.amountInCents,
+        amountInCents: finalAmountInCents,
         currency: "BRL",
         paymentProvider: "mercadopago",
         paymentReference,
-        creditsGranted: plan.downloadCreditsGranted,
+        creditsGranted: finalCreditsGranted,
         analysisCreditsGranted: plan.analysisCreditsGranted,
         originAction: adaptationId ? "unlock_cv" : "buy_credits",
         originAdaptationId: adaptationId ?? null,
+        affiliateCodeId: appliedCoupon?.code.id ?? null,
+        affiliateCampaignId: appliedCoupon?.campaign.id ?? null,
+        couponDiscountAmountInCents: appliedCoupon?.discountAmountInCents ?? 0,
+        couponBonusCreditsGranted: appliedCoupon?.bonusCreditsGranted ?? 0,
       },
     });
 
@@ -353,18 +457,281 @@ export class PlansService {
         checkoutUrl: this.buildBrickCheckoutUrl(purchase.id),
         purchaseId: purchase.id,
         checkoutMode: "brick",
+        amountInCents: finalAmountInCents,
+        creditsGranted: finalCreditsGranted,
+        appliedCoupon,
       };
     }
 
     const checkoutUrl = await this.createMercadoPagoPreference(
       purchase.id,
       paymentReference,
-      plan,
+      effectivePlan,
       payer,
       adaptationId,
     );
 
-    return { checkoutUrl, purchaseId: purchase.id };
+    return {
+      checkoutUrl,
+      purchaseId: purchase.id,
+      amountInCents: finalAmountInCents,
+      creditsGranted: finalCreditsGranted,
+      appliedCoupon,
+    };
+  }
+
+  private toAppliedCouponSummary(
+    resolution: CouponCheckoutResult | undefined,
+  ): AppliedCouponSummary | null {
+    if (!resolution?.valid) {
+      return null;
+    }
+    return {
+      code: { id: resolution.code.id, code: resolution.code.code },
+      campaign: { id: resolution.campaign.id, name: resolution.campaign.name },
+      amountInCents: resolution.amountInCents,
+      creditsGranted: resolution.creditsGranted,
+      discountAmountInCents: resolution.discountAmountInCents,
+      bonusCreditsGranted: resolution.bonusCreditsGranted,
+    };
+  }
+
+  // Usado pelo checkout Brick (PaymentsService) para aplicar/trocar cupom
+  // numa compra pendente já criada — mesma resolução server-side de
+  // createCheckout/previewCoupon, nunca confia em valor calculado no
+  // frontend.
+  async resolveCouponForCheckout(
+    planId: PlanId,
+    couponCode: string,
+  ): Promise<AppliedCouponSummary | null> {
+    const plan = getPlanConfig()[planId];
+    const resolution = await this.couponResolutionService?.resolveForCheckout(
+      couponCode,
+      planId,
+      plan.amountInCents,
+      plan.downloadCreditsGranted,
+    );
+    return this.toAppliedCouponSummary(resolution);
+  }
+
+  async previewCoupon(
+    couponCode: string,
+    planId: PlanId,
+  ): Promise<{
+    valid: boolean;
+    discountAmountInCents?: number;
+    bonusCreditsGranted?: number;
+    reason?: string;
+  }> {
+    const plan = getPlanConfig()[planId];
+    const resolution = await this.couponResolutionService?.resolveForCheckout(
+      couponCode,
+      planId,
+      plan.amountInCents,
+      plan.downloadCreditsGranted,
+    );
+
+    if (!resolution?.valid) {
+      return { valid: false, reason: resolution?.reason };
+    }
+
+    return {
+      valid: true,
+      discountAmountInCents: resolution.discountAmountInCents,
+      bonusCreditsGranted: resolution.bonusCreditsGranted,
+    };
+  }
+
+  // Evento de chegada ao link do criador (?ref=<code>) — requisito do
+  // piloto para medir visitas por criador (ver seção 6 do plano). Só
+  // registra se o código/campanha existir e estiver vigente
+  // (resolveForAcquisition, sem exigir plano). Deduplicado por
+  // visitor_id+código+dia via idempotencyKey — evita inflar o número com
+  // reloads/voltas do mesmo visitante no mesmo dia.
+  async trackCouponVisit(
+    couponCode: string,
+    visitorId: string | null,
+  ): Promise<{ tracked: boolean }> {
+    const acquisition =
+      await this.couponResolutionService?.resolveForAcquisition(couponCode);
+    if (!acquisition?.valid) {
+      return { tracked: false };
+    }
+
+    const day = new Date().toISOString().slice(0, 10);
+    const visitorKey = visitorId?.trim() || "unknown";
+
+    const context: AnalysisRequestContext = {
+      correlationId: `coupon-visit:${acquisition.code.id}:${visitorKey}:${day}`,
+      ip: null,
+      requestId: `coupon-visit:${acquisition.code.id}:${visitorKey}:${day}`,
+      routePath: "/api/plans/coupon/visit",
+      sessionInternalId: null,
+      sessionPublicToken: null,
+      userAgentHash: null,
+      userId: null,
+    };
+
+    const result = await this.businessFunnelEventService.record(
+      {
+        eventName: "coupon_link_visited",
+        eventVersion: 1,
+        idempotencyKey: `coupon_visit:${visitorKey}:${acquisition.code.id}:${day}`,
+        metadata: {
+          affiliateCodeId: acquisition.code.id,
+          affiliateCampaignId: acquisition.campaign.id,
+          couponCode: acquisition.code.code,
+          visitorId: visitorId ?? null,
+        },
+        routeKey: "api/plans/coupon/visit",
+      },
+      context,
+      "backend",
+    );
+
+    return { tracked: result.ingested };
+  }
+
+  // Confirmação explícita de resgate de cupom com preço final zero.
+  // createCheckout nunca chega até aqui sozinho — só este endpoint
+  // consome o teto total/por usuário, sempre numa única transação atômica
+  // que reaproveita a mesma trava condicional de applyApprovedPurchaseInsideTransaction
+  // (nunca uma segunda implementação de "credita uma vez").
+  async redeemFreeCoupon(
+    userId: string,
+    planId: PlanId,
+    couponCode: string,
+  ): Promise<{ purchaseId: string; creditsGranted: number }> {
+    const plan = getPlanConfig()[planId];
+    const resolution = await this.couponResolutionService?.resolveForCheckout(
+      couponCode,
+      planId,
+      plan.amountInCents,
+      plan.downloadCreditsGranted,
+    );
+
+    if (!resolution?.valid) {
+      throw new BadRequestException("Cupom invalido para resgate gratuito.");
+    }
+    if (resolution.amountInCents !== 0) {
+      throw new BadRequestException("Este cupom nao zera o preco do plano.");
+    }
+    if (resolution.campaign.freeRedemptionLimitTotal == null) {
+      throw new BadRequestException(
+        "Campanha sem limite de resgates configurado.",
+      );
+    }
+
+    const paymentReference = randomUUID();
+    const campaign = resolution.campaign;
+    const code = resolution.code;
+
+    type RedeemOutcome =
+      | { outcome: "redeemed"; purchaseId: string }
+      | { outcome: "campaign_limit_reached" }
+      | { outcome: "already_redeemed" };
+
+    const result: RedeemOutcome = await this.database
+      .$transaction(async (tx): Promise<RedeemOutcome> => {
+        const campaignLock = await tx.affiliateCampaign.updateMany({
+          where: {
+            id: campaign.id,
+            freeRedemptionsUsed: { lt: campaign.freeRedemptionLimitTotal! },
+          },
+          data: { freeRedemptionsUsed: { increment: 1 } },
+        });
+        if (campaignLock.count !== 1) {
+          return { outcome: "campaign_limit_reached" };
+        }
+
+        const purchase = await tx.planPurchase.create({
+          data: {
+            userId,
+            planType: planId as UserPlanType,
+            amountInCents: 0,
+            currency: "BRL",
+            paymentProvider: "internal_coupon",
+            paymentReference,
+            status: "none",
+            creditsGranted: resolution.creditsGranted,
+            analysisCreditsGranted: plan.analysisCreditsGranted,
+            originAction: "buy_credits",
+            affiliateCodeId: code.id,
+            affiliateCampaignId: campaign.id,
+            couponDiscountAmountInCents: resolution.discountAmountInCents,
+            couponBonusCreditsGranted: resolution.bonusCreditsGranted,
+          },
+        });
+
+        // A unicidade [affiliateCampaignId, userId] garante atomicamente o
+        // limite de 1 resgate por usuário — se já existe, o create abaixo
+        // lança e o Prisma reverte a transação inteira (incluindo o
+        // incremento do teto total acima).
+        await tx.affiliateFreeRedemption.create({
+          data: {
+            affiliateCampaignId: campaign.id,
+            userId,
+            planPurchaseId: purchase.id,
+          },
+        });
+
+        const { applied } = await this.applyApprovedPurchaseInsideTransaction(
+          tx,
+          {
+            id: purchase.id,
+            userId,
+            planType: planId as UserPlanType,
+            paymentReference,
+            status: "none",
+            creditsGranted: resolution.creditsGranted,
+            analysisCreditsGranted: plan.analysisCreditsGranted,
+            originAction: "buy_credits",
+            originAdaptationId: null,
+            mpPaymentId: null,
+            mpMerchantOrderId: null,
+            mpPreferenceId: null,
+          },
+          undefined,
+          { skipPaidAt: true },
+        );
+
+        if (!applied) {
+          // Não deveria acontecer (a linha acabou de ser criada "none"),
+          // mas se acontecer não deixa a transação seguir como sucesso.
+          throw new Error("free_coupon_transition_failed");
+        }
+
+        return { outcome: "redeemed", purchaseId: purchase.id };
+      })
+      .catch((err): RedeemOutcome => {
+        const isUniqueViolation =
+          err instanceof Error &&
+          "code" in err &&
+          (err as { code?: string }).code === "P2002";
+        if (isUniqueViolation) {
+          return { outcome: "already_redeemed" };
+        }
+        throw err;
+      });
+
+    if (result.outcome === "campaign_limit_reached") {
+      throw new ConflictException("Limite de resgates gratuitos esgotado.");
+    }
+    if (result.outcome === "already_redeemed") {
+      throw new ConflictException("Cupom ja resgatado por este usuario.");
+    }
+
+    const purchaseId = result.purchaseId;
+
+    this.logAuditEvent({
+      eventType: "coupon_full_discount_granted",
+      actionTaken: "redeemed",
+      externalReference: paymentReference,
+      internalCheckoutId: purchaseId,
+      internalCheckoutType: "plan",
+    });
+
+    return { purchaseId, creditsGranted: resolution.creditsGranted };
   }
 
   async resumeCheckout(
@@ -639,6 +1006,11 @@ export class PlansService {
       return;
     }
 
+    if (resolution.status === "refunded") {
+      await this.handleRefundedPayment(purchase, auditBase);
+      return;
+    }
+
     if (resolution.status !== "approved") {
       this.logger.log(
         `[webhook:plans] ignored — status is ${resolution.rawStatus}`,
@@ -678,8 +1050,31 @@ export class PlansService {
       return;
     }
 
+    // Confere o valor e a moeda efetivamente pagos (retornados pela API do
+    // MP) contra o pedido persistido antes de creditar — bater só o
+    // external_reference não garante que o valor certo foi pago.
+    if (
+      resolution.paidAmountInCents != null &&
+      (resolution.paidAmountInCents !== purchase.amountInCents ||
+        (resolution.paidCurrency &&
+          resolution.paidCurrency !== purchase.currency))
+    ) {
+      this.logger.error(
+        `[webhook:plans] amount/currency mismatch — purchase ${purchase.id} expected=${purchase.amountInCents}${purchase.currency} paid=${resolution.paidAmountInCents}${resolution.paidCurrency ?? "-"}`,
+      );
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "payment_amount_mismatch",
+        actionTaken: "ignored",
+        internalCheckoutId: purchase.id,
+        errorMessage: `expected=${purchase.amountInCents}${purchase.currency} paid=${resolution.paidAmountInCents}${resolution.paidCurrency ?? "-"}`,
+      });
+      return;
+    }
+
     // Atomic: re-check inside transaction to prevent double-credit on concurrent webhooks
     let purchaseApproved = false;
+    let unlockedAdaptationId: string | null = null;
 
     await this.database.$transaction(async (tx) => {
       const current = await tx.planPurchase.findUnique({
@@ -698,14 +1093,22 @@ export class PlansService {
         return;
       }
 
-      await this.applyApprovedPurchaseInsideTransaction(tx, current, {
-        mpMerchantOrderId: resolution.merchantOrderId,
-        mpPaymentId: resolution.paymentId,
-        mpPreferenceId: resolution.preferenceId,
-      });
-
-      purchaseApproved = true;
+      const result = await this.applyApprovedPurchaseInsideTransaction(
+        tx,
+        current,
+        {
+          mpMerchantOrderId: resolution.merchantOrderId,
+          mpPaymentId: resolution.paymentId,
+          mpPreferenceId: resolution.preferenceId,
+        },
+      );
+      purchaseApproved = result.applied;
+      unlockedAdaptationId = result.unlockedAdaptationId;
     });
+
+    if (unlockedAdaptationId) {
+      this.triggerAdaptationDelivery(unlockedAdaptationId);
+    }
 
     if (purchaseApproved) {
       await this.recordPaymentApprovedBusinessEvent({
@@ -734,8 +1137,132 @@ export class PlansService {
     });
   }
 
+  // Webhook de refunded/charged_back. Política operacional explícita para o
+  // piloto (não é uma prova de origem por unidade — User.creditsRemaining é
+  // um saldo agregado único, sem ledger por compra): reverte no máximo
+  // min(creditsGranted, saldo atual), nunca deixa o saldo negativo, e
+  // registra tanto o que foi retirado quanto o que ficou pendente de
+  // recuperação para conferência manual. CVs já entregues (CvUnlock) nunca
+  // são revogados automaticamente.
+  private async handleRefundedPayment(
+    purchase: WebhookPurchaseRecord | null,
+    auditBase: Omit<AuditEntry, "eventType" | "actionTaken">,
+  ): Promise<void> {
+    if (!purchase) {
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "webhook_received",
+        actionTaken: "ignored",
+        errorMessage: "purchase not found for refund",
+      });
+      return;
+    }
+
+    if (purchase.status !== "completed") {
+      // Nunca chegou a completar (ou já foi revertida antes) — mesmo
+      // tratamento do branch "failed", sem nenhuma ação de crédito.
+      if (purchase.status !== "failed" && purchase.status !== "refunded") {
+        await this.database.planPurchase.update({
+          where: { id: purchase.id },
+          data: { status: "failed" },
+        });
+      }
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "payment_rejected",
+        actionTaken: "failed",
+        internalCheckoutId: purchase.id,
+        errorMessage: "refund_before_completion",
+      });
+      return;
+    }
+
+    let shortfall = 0;
+    let appliedAmount = 0;
+    let reversed = false;
+
+    await this.database.$transaction(async (tx) => {
+      // Trava atômica: só reverte se ainda estiver "completed" no momento
+      // do update — impede dois webhooks de refunded concorrentes de
+      // reverter duas vezes.
+      const transition = await tx.planPurchase.updateMany({
+        where: { id: purchase.id, status: "completed" },
+        data: { status: "refunded" },
+      });
+      if (transition.count !== 1) return;
+
+      const user = await tx.user.findUnique({
+        where: { id: purchase.userId },
+        select: { creditsRemaining: true, analysisCreditsRemaining: true },
+      });
+      if (!user) return;
+
+      appliedAmount = Math.min(purchase.creditsGranted, user.creditsRemaining);
+      shortfall = purchase.creditsGranted - appliedAmount;
+      const appliedAnalysis = Math.min(
+        purchase.analysisCreditsGranted,
+        user.analysisCreditsRemaining,
+      );
+
+      await tx.user.update({
+        where: { id: purchase.userId },
+        data: {
+          creditsRemaining: { decrement: appliedAmount },
+          analysisCreditsRemaining: { decrement: appliedAnalysis },
+        },
+      });
+
+      await tx.planPurchase.update({
+        where: { id: purchase.id },
+        data: {
+          creditReversalAppliedAmount: appliedAmount,
+          creditReversalShortfall: shortfall,
+        },
+      });
+
+      reversed = true;
+    });
+
+    if (!reversed) {
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "webhook_duplicated",
+        actionTaken: "duplicated",
+        internalCheckoutId: purchase.id,
+        errorMessage: "refund_already_processed",
+      });
+      return;
+    }
+
+    this.logger.log(
+      `[webhook:plans] payment refunded — purchase ${purchase.id} appliedAmount=${appliedAmount} shortfall=${shortfall}`,
+    );
+    this.logAuditEvent({
+      ...auditBase,
+      eventType: "payment_refunded_reversed",
+      actionTaken: "reversed",
+      internalCheckoutId: purchase.id,
+      errorMessage:
+        shortfall > 0
+          ? `appliedAmount=${appliedAmount} shortfall=${shortfall}`
+          : null,
+    });
+
+    if (shortfall > 0) {
+      this.logAuditEvent({
+        ...auditBase,
+        eventType: "refund_credit_shortfall",
+        actionTaken: "flagged_for_review",
+        internalCheckoutId: purchase.id,
+        errorMessage: `appliedAmount=${appliedAmount} shortfall=${shortfall}`,
+      });
+    }
+  }
+
   // Used by reconciliation: applies credit for an already-verified approved purchase
   async applyApprovedPurchase(purchaseId: string): Promise<boolean> {
+    let unlockedAdaptationId: string | null = null;
+
     const appliedPurchase = await this.database.$transaction(async (tx) => {
       const purchase = await tx.planPurchase.findUnique({
         where: { id: purchaseId },
@@ -749,10 +1276,18 @@ export class PlansService {
         return null;
       }
 
-      await this.applyApprovedPurchaseInsideTransaction(tx, purchase);
+      const result = await this.applyApprovedPurchaseInsideTransaction(
+        tx,
+        purchase,
+      );
+      unlockedAdaptationId = result.unlockedAdaptationId;
 
-      return purchase;
+      return result.applied ? purchase : null;
     });
+
+    if (unlockedAdaptationId) {
+      this.triggerAdaptationDelivery(unlockedAdaptationId);
+    }
 
     if (!appliedPurchase) {
       return false;
@@ -1053,7 +1588,8 @@ export class PlansService {
       mpMerchantOrderId?: string | null;
       mpPreferenceId?: string | null;
     },
-  ): Promise<void> {
+    options?: { skipPaidAt?: boolean },
+  ): Promise<{ applied: boolean; unlockedAdaptationId: string | null }> {
     const analysisCredits = this.resolveAnalysisCreditsForActivation(
       purchase.planType,
       purchase.analysisCreditsGranted,
@@ -1063,11 +1599,32 @@ export class PlansService {
       ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       : null;
 
-    await tx.planPurchase.update({
-      where: { id: purchase.id },
+    // Trava atômica: a checagem de elegibilidade do chamador (leitura
+    // separada antes desta transação) não é suficiente sob concorrência —
+    // duas transações podem ler o mesmo status elegível antes de qualquer
+    // uma commitar. A condição de status precisa estar na própria cláusula
+    // WHERE do update (mesmo padrão de payments.service.ts:349-366,
+    // submitBrickPayment) para garantir que só uma delas credita.
+    const transition = await tx.planPurchase.updateMany({
+      where: {
+        id: purchase.id,
+        status: {
+          in: Array.from(APPROVED_PURCHASE_ELIGIBLE_STATUSES) as (
+            | "none"
+            | "pending"
+            | "processing_payment"
+            | "pending_payment"
+          )[],
+        },
+      },
       data: {
         status: "completed",
-        paidAt: new Date(),
+        // Resgate de cupom com preço zero (internal_coupon) nunca finge que
+        // houve pagamento: paidAt fica vazio, couponRedeemedAt marca a
+        // conclusão do resgate (ver redeemFreeCoupon).
+        ...(options?.skipPaidAt
+          ? { couponRedeemedAt: new Date() }
+          : { paidAt: new Date() }),
         ...(!purchase.mpPaymentId && updates?.mpPaymentId
           ? { mpPaymentId: updates.mpPaymentId }
           : {}),
@@ -1079,6 +1636,12 @@ export class PlansService {
           : {}),
       },
     });
+
+    if (transition.count !== 1) {
+      // Outra transação concorrente já processou esta compra entre a
+      // leitura do chamador e esta atualização — não credita de novo.
+      return { applied: false, unlockedAdaptationId: null };
+    }
 
     await tx.user.update({
       where: { id: purchase.userId },
@@ -1100,7 +1663,7 @@ export class PlansService {
       !purchase.originAdaptationId ||
       isUnlimited
     ) {
-      return;
+      return { applied: true, unlockedAdaptationId: null };
     }
 
     if (purchase.creditsGranted <= 0) {
@@ -1110,7 +1673,7 @@ export class PlansService {
           autoUnlockError: "purchase has no credits to auto-unlock",
         },
       });
-      return;
+      return { applied: true, unlockedAdaptationId: null };
     }
 
     const adaptation = await tx.cvAdaptation.findUnique({
@@ -1130,7 +1693,7 @@ export class PlansService {
           autoUnlockError: "origin adaptation not found",
         },
       });
-      return;
+      return { applied: true, unlockedAdaptationId: null };
     }
 
     if (adaptation.userId !== purchase.userId) {
@@ -1140,7 +1703,7 @@ export class PlansService {
           autoUnlockError: "origin adaptation ownership mismatch",
         },
       });
-      return;
+      return { applied: true, unlockedAdaptationId: null };
     }
 
     if (adaptation.isUnlocked) {
@@ -1151,7 +1714,10 @@ export class PlansService {
           autoUnlockError: null,
         },
       });
-      return;
+      // Já estava desbloqueada antes desta compra (ex.: outro crédito) —
+      // a entrega (deliverAdaptation) já rodou ou está em andamento em
+      // outro fluxo; não dispara de novo aqui.
+      return { applied: true, unlockedAdaptationId: null };
     }
 
     if (!adaptation.adaptedContentJson) {
@@ -1161,7 +1727,7 @@ export class PlansService {
           autoUnlockError: "origin adaptation has no adapted content",
         },
       });
-      return;
+      return { applied: true, unlockedAdaptationId: null };
     }
 
     await tx.user.update({
@@ -1203,6 +1769,14 @@ export class PlansService {
         autoUnlockError: null,
       },
     });
+
+    // Único branch onde a adaptação acabou de ser desbloqueada por esta
+    // compra — o chamador (fora da transação) dispara a entrega
+    // (deliverAdaptation, que gera o Resume final e marca "delivered").
+    // Sem isso a tela /adaptacao-cv/:id fica presa no skeleton de geração
+    // pra sempre: o auto-unlock via compra de plano nunca chamava
+    // deliverAdaptation (só o fluxo de resgate por crédito chamava).
+    return { applied: true, unlockedAdaptationId: adaptation.id };
   }
 
   private async assertAdaptationCanBeAutoUnlocked(
@@ -1503,6 +2077,8 @@ export class PlansService {
       rawStatus: null,
       statusDetail: null,
       paymentMethod: null,
+      paidAmountInCents: null,
+      paidCurrency: null,
     };
 
     if (!body || typeof body !== "object") return empty;
@@ -1536,10 +2112,20 @@ export class PlansService {
       preference_id?: string;
       order?: { id?: number };
       payment_type_id?: string;
+      transaction_amount?: number;
+      currency_id?: string;
     };
     const paymentMethod =
       typeof mp.payment_type_id === "string" && mp.payment_type_id.trim()
         ? mp.payment_type_id.trim()
+        : null;
+    const paidAmountInCents =
+      typeof mp.transaction_amount === "number"
+        ? Math.round(mp.transaction_amount * 100)
+        : null;
+    const paidCurrency =
+      typeof mp.currency_id === "string" && mp.currency_id.trim()
+        ? mp.currency_id.trim()
         : null;
 
     const externalReference = payment.external_reference ?? null;
@@ -1569,15 +2155,33 @@ export class PlansService {
         rawStatus,
         statusDetail,
         paymentMethod,
+        paidAmountInCents,
+        paidCurrency,
       };
     }
 
-    if (
-      payment.status === "cancelled" ||
-      payment.status === "charged_back" ||
-      payment.status === "rejected" ||
-      payment.status === "refunded"
-    ) {
+    // refunded/charged_back são distintos de rejected/cancelled: só os
+    // primeiros representam "foi pago e depois estornado", exigindo
+    // reversão de crédito (ver branch dedicado em handleWebhook). Colapsar
+    // os dois em "failed" (comportamento anterior) escondia essa diferença.
+    if (payment.status === "refunded" || payment.status === "charged_back") {
+      return {
+        paymentReference,
+        purchaseId: metadataPurchaseId,
+        externalReference,
+        status: "refunded",
+        paymentId,
+        merchantOrderId,
+        preferenceId,
+        rawStatus,
+        statusDetail,
+        paymentMethod,
+        paidAmountInCents,
+        paidCurrency,
+      };
+    }
+
+    if (payment.status === "cancelled" || payment.status === "rejected") {
       return {
         paymentReference,
         purchaseId: metadataPurchaseId,
@@ -1589,6 +2193,8 @@ export class PlansService {
         rawStatus,
         statusDetail,
         paymentMethod,
+        paidAmountInCents,
+        paidCurrency,
       };
     }
 
@@ -1603,6 +2209,8 @@ export class PlansService {
       rawStatus,
       statusDetail,
       paymentMethod,
+      paidAmountInCents,
+      paidCurrency,
     };
   }
 
