@@ -32,11 +32,44 @@
 //   // --ids restringe o grupo B a uma lista (smoke test antes do lote todo):
 //   npm run fix:stuck-unlock-cv-delivery --workspace @earlycv/api -- --apply --apply-full --ids=id1,id2,id3
 
+import { execFileSync } from "node:child_process";
+
 import { NestFactory } from "@nestjs/core";
 import { PrismaClient } from "@prisma/client";
 
 import { CvAdaptationModule } from "../cv-adaptation/cv-adaptation.module";
 import { CvAdaptationService } from "../cv-adaptation/cv-adaptation.service";
+
+// `railway run` sempre injeta o DATABASE_URL interno
+// (postgres.railway.internal) do serviço linkado — só alcançável de
+// dentro da rede do Railway, nunca de uma máquina local. Rodando este
+// script via `railway run` (RAILWAY_ENVIRONMENT setado), troca
+// automaticamente pro DATABASE_PUBLIC_URL do serviço Postgres (proxy TCP
+// público), sem precisar de nenhum comando shell frágil por fora.
+function resolveDatabaseUrlForLocalRun() {
+  const current = process.env.DATABASE_URL ?? "";
+  const runningUnderRailway = Boolean(process.env.RAILWAY_ENVIRONMENT);
+  if (!runningUnderRailway || !current.includes(".railway.internal")) {
+    return;
+  }
+  console.log(
+    "DATABASE_URL aponta pra rede interna do Railway — resolvendo o DATABASE_PUBLIC_URL do serviço Postgres...",
+  );
+  const output = execFileSync(
+    "railway",
+    ["variables", "--service", "Postgres", "--kv"],
+    { encoding: "utf8" },
+  );
+  const match = output
+    .split("\n")
+    .find((line) => line.startsWith("DATABASE_PUBLIC_URL="));
+  if (!match) {
+    throw new Error(
+      "Não achei DATABASE_PUBLIC_URL nas variáveis do serviço Postgres — resolva manualmente.",
+    );
+  }
+  process.env.DATABASE_URL = match.slice("DATABASE_PUBLIC_URL=".length);
+}
 
 const APPLY = process.argv.includes("--apply");
 const APPLY_FULL = process.argv.includes("--apply-full");
@@ -51,6 +84,7 @@ const ONLY_IDS = IDS_ARG
   : null;
 
 async function main() {
+  resolveDatabaseUrlForLocalRun();
   const prisma = new PrismaClient();
 
   try {
