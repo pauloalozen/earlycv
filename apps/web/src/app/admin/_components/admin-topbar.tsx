@@ -9,6 +9,11 @@ const NAV_ITEMS = [
   { id: "usuarios", label: "Usuários", href: "/admin/usuarios" },
   { id: "talentos", label: "Talentos", href: "/admin/talentos" },
   { id: "pagamentos", label: "Pagamentos", href: "/admin/pagamentos" },
+  {
+    id: "campanhas-cupom",
+    label: "Campanhas de Cupom",
+    href: "/admin/campanhas-cupom",
+  },
   { id: "recuperacao", label: "Recuperação", href: "/admin/payment-recovery" },
   { id: "liberacoes", label: "Liberações", href: "/admin/liberacoes-cv" },
   { id: "ingestao", label: "Radar Oportunidades", href: "/admin/ingestion" },

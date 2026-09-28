@@ -11,6 +11,7 @@ type CheckoutPayload = {
   adaptationId?: string;
   selectedMissingKeywords?: string[];
   gaClientId?: string;
+  couponCode?: string;
 };
 
 export async function POST(request: Request) {
@@ -35,12 +36,20 @@ export async function POST(request: Request) {
       payload.adaptationId?.trim() || undefined,
       payload.selectedMissingKeywords,
       payload.gaClientId?.trim() || undefined,
+      payload.couponCode?.trim() || undefined,
     );
 
     return NextResponse.json({
       checkoutUrl: result.checkoutUrl,
       purchaseId: result.purchaseId,
       ...(result.checkoutMode ? { checkoutMode: result.checkoutMode } : {}),
+      ...(result.amountInCents != null
+        ? { amountInCents: result.amountInCents }
+        : {}),
+      ...(result.creditsGranted != null
+        ? { creditsGranted: result.creditsGranted }
+        : {}),
+      appliedCoupon: result.appliedCoupon ?? null,
     });
   } catch {
     return NextResponse.json({ message: "checkout-failed" }, { status: 502 });

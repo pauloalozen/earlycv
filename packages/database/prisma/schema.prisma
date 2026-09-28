@@ -165,6 +165,11 @@ enum AffiliateRewardType {
   fixed_amount
 }
 
+enum AffiliateCreditBonusType {
+  multiplier
+  fixed_extra
+}
+
 enum AffiliateCommissionStatus {
   pending
   approved
@@ -230,6 +235,7 @@ enum PaymentStatus {
 enum PaymentProvider {
   mercadopago
   stripe
+  internal_coupon
 }
 
 enum PaymentRecoveryEligibilityStatus {
@@ -450,6 +456,9 @@ model User {
   dailyAnalysisUsages          UserDailyAnalysisUsage[]
   affiliateAttributions        AffiliateAttribution[]
   affiliateCommissionEvents    AffiliateCommissionEvent[]
+  affiliateFreeRedemptions     AffiliateFreeRedemption[]
+  signupAffiliateCodeId        String?
+  signupAffiliateCode          AffiliateCode?               @relation("UserSignupAffiliateCode", fields: [signupAffiliateCodeId], references: [id], onDelete: SetNull)
   analysisSessions             AnalysisSession[]
   analysisRequestFingerprints  AnalysisRequestFingerprint[]
   analysisUsageCounters        AnalysisUsageCounter[]
@@ -475,6 +484,8 @@ model User {
   // Fase 1: só schema aditivo, nenhum código lê/escreve nestas relações ainda.
   cvSources         CvSource[]
   claimSourceGrants ClaimSourceGrant[]
+
+  @@index([signupAffiliateCodeId])
 }
 
 model UserDailyAnalysisUsage {
@@ -509,13 +520,25 @@ model PlanPurchase {
   originAdaptationId     String?
   autoUnlockProcessedAt  DateTime?
   autoUnlockError        String?
+  affiliateCodeId        String?
+  affiliateCampaignId    String?
+  couponDiscountAmountInCents Int @default(0)
+  couponBonusCreditsGranted   Int @default(0)
+  couponRedeemedAt            DateTime?
+  creditReversalAppliedAmount Int @default(0)
+  creditReversalShortfall     Int @default(0)
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  affiliateCode     AffiliateCode?     @relation(fields: [affiliateCodeId], references: [id], onDelete: SetNull)
+  affiliateCampaign AffiliateCampaign? @relation(fields: [affiliateCampaignId], references: [id], onDelete: SetNull)
+  affiliateFreeRedemption AffiliateFreeRedemption?
 
   @@index([userId, createdAt])
   @@index([originAdaptationId])
+  @@index([affiliateCodeId])
+  @@index([affiliateCampaignId])
   @@index([paymentReference])
   @@index([mpPaymentId])
 }
@@ -1532,44 +1555,84 @@ model AffiliatePartner {
   status    AffiliatePartnerStatus @default(draft)
   createdAt DateTime               @default(now())
   updatedAt DateTime               @updatedAt
-  campaigns AffiliateCampaign[]
+  codes     AffiliateCode[]
 }
 
 model AffiliateCampaign {
   id                     String                     @id @default(cuid())
-  partnerId              String
   name                   String
   attributionWindowDays  Int                        @default(30)
   defaultCurrency        String                     @default("BRL")
   defaultDiscountType    AffiliateRewardType?
   defaultDiscountValue   Int?
-  defaultCommissionType  AffiliateRewardType
-  defaultCommissionValue Int
+  defaultCommissionType  AffiliateRewardType?
+  defaultCommissionValue Int?
   status                 AffiliateCampaignStatus    @default(draft)
+  // Vigência: as duas formas coexistem. `startsAt`/`endsAt` são opcionais
+  // (campanha "sem vigência definida por enquanto"); quando setados, a
+  // campanha só é aplicável dentro da janela. `status` continua controlando
+  // ativação/desativação manual independente das datas.
+  startsAt               DateTime?
+  endsAt                 DateTime?
+  // Planos elegíveis, escolhidos explicitamente na criação da campanha
+  // (nunca tratado como "todos os planos" quando vazio).
+  eligiblePlanIds        String[]                   @default([])
+  creditBonusType        AffiliateCreditBonusType?
+  creditBonusValue       Int?
+  partnershipCostInCents Int?
+  // Resgate gratuito (desconto de 100%): obrigatório definir um teto total
+  // antes de ativar uma campanha que pode chegar a preço zero (ver
+  // CouponResolutionService / redeem-free-coupon).
+  freeRedemptionPerUserLimit Int                    @default(1)
+  freeRedemptionLimitTotal   Int?
+  freeRedemptionsUsed        Int                    @default(0)
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
-  partner                AffiliatePartner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   codes                  AffiliateCode[]
   attributions           AffiliateAttribution[]
   commissionEvents       AffiliateCommissionEvent[]
-
-  @@index([partnerId])
+  planPurchases          PlanPurchase[]
+  freeRedemptions        AffiliateFreeRedemption[]
 }
 
 model AffiliateCode {
   id               String                     @id @default(cuid())
   campaignId       String
+  partnerId        String
   code             String                     @unique
   landingPageUrl   String?
   status           AffiliateCodeStatus        @default(draft)
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
   campaign         AffiliateCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  partner          AffiliatePartner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   attributions     AffiliateAttribution[]
   commissionEvents AffiliateCommissionEvent[]
+  planPurchases    PlanPurchase[]
+  signupUsers      User[]                     @relation("UserSignupAffiliateCode")
 
   @@unique([id, campaignId])
   @@index([campaignId])
+  @@index([partnerId])
+}
+
+// Ledger de resgates de cupom com preço final zero (desconto 100%). A
+// unicidade [affiliateCampaignId, userId] é a prova atômica do limite de 1
+// resgate por usuário por campanha (não uma checagem de leitura antes de
+// escrever) — ver seção 3b do plano de cupom por criador.
+model AffiliateFreeRedemption {
+  id                  String            @id @default(cuid())
+  affiliateCampaignId String
+  userId              String
+  planPurchaseId      String            @unique
+  createdAt           DateTime          @default(now())
+
+  affiliateCampaign AffiliateCampaign @relation(fields: [affiliateCampaignId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planPurchase      PlanPurchase      @relation(fields: [planPurchaseId], references: [id], onDelete: Cascade)
+
+  @@unique([affiliateCampaignId, userId])
+  @@index([userId])
 }
 
 model AffiliateAttribution {

@@ -5117,7 +5117,11 @@ export class CvAdaptationService {
     return "experience";
   }
 
-  private async deliverAdaptation(adaptationId: string): Promise<void> {
+  // Público: também chamado pelo PlansService após o auto-unlock via
+  // compra de plano (PlanPurchase.originAction = "unlock_cv"), que — assim
+  // como o resgate por crédito — precisa desta chamada pra sair de
+  // status "paid" e chegar em "delivered".
+  async deliverAdaptation(adaptationId: string): Promise<void> {
     const adaptation = await this.database.cvAdaptation.findUnique({
       where: { id: adaptationId },
       include: { masterResume: true, template: true },

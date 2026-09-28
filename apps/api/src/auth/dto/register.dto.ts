@@ -60,4 +60,15 @@ export class RegisterDto {
   @IsString()
   @MaxLength(128)
   visitorId?: string;
+
+  // Código de afiliado/criador capturado no first-touch (mesmo mecanismo do
+  // UTM em analytics-tracking.ts) e preservado até o cadastro. É atribuição
+  // de origem do cadastro — distinto do cupom aplicado numa compra
+  // (PlanPurchase.affiliateCodeId). Resolvido só via
+  // CouponResolutionService.resolveForAcquisition (nunca exige plano, que
+  // ainda não existe neste momento do funil).
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  affiliateCode?: string;
 }

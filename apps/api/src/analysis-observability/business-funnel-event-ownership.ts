@@ -124,4 +124,6 @@ export const FUNNEL_EVENT_OWNERSHIP: Record<
   // Cover Letter
   cover_letter_generate_clicked: "frontend",
   cover_letter_generated: "backend",
+  // Cupom por criador
+  coupon_link_visited: "backend",
 };

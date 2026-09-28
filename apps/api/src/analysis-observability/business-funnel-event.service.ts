@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { sanitizeAnalyticsPayload } from "../common/analytics-sanitization";
@@ -72,6 +77,14 @@ export class BusinessFunnelEventService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelProjectionService)
     private readonly projection: BusinessFunnelProjectionService,
+    // Optional: AnalysisObservabilityModule não importa
+    // PosthogIntegrationModule diretamente — em produção o PostHog fica
+    // disponível porque PosthogIntegrationModule é @Global() e é importado
+    // em algum ponto da árvore do AppModule real, mas módulos de teste
+    // estreitos (só AuthModule/CompaniesModule/etc.) não o importam. Sem
+    // @Optional() aqui, a resolução de DI falha nesses testes mesmo
+    // existindo o fallback NOOP_POSTHOG_EXPORTER abaixo.
+    @Optional()
     @Inject(PosthogEventExporter)
     private readonly posthogExporter: BusinessFunnelPosthogExporter = NOOP_POSTHOG_EXPORTER,
   ) {}

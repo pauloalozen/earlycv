@@ -26,6 +26,8 @@ export async function POST(request: Request) {
     String(formData.get("guestAnalysisJobId") ?? "").trim() || undefined;
   const guestPossessionToken =
     String(formData.get("guestPossessionToken") ?? "").trim() || undefined;
+  const affiliateCode =
+    String(formData.get("affiliateCode") ?? "").trim() || undefined;
 
   try {
     const session = await registerWithPassword(
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
       conversionContext,
       sessionInternalId,
       visitorId,
+      affiliateCode,
     );
     await persistAppSession(session);
 

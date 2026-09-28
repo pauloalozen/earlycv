@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
   type AnalysisProtectionEventName,
@@ -8,6 +8,16 @@ import { sanitizeAnalyticsPayload } from "../common/analytics-sanitization";
 import { DatabaseService } from "../database/database.service";
 import { PosthogEventExporter } from "../posthog-integration/posthog-event-exporter.service";
 import type { AnalysisRequestContext } from "./types";
+
+type ProtectionPosthogExporter = {
+  shouldExportProtectionEvent: PosthogEventExporter["shouldExportProtectionEvent"];
+  exportProtectionEvent: PosthogEventExporter["exportProtectionEvent"];
+};
+
+const NOOP_PROTECTION_POSTHOG_EXPORTER: ProtectionPosthogExporter = {
+  shouldExportProtectionEvent: () => false,
+  exportProtectionEvent: () => {},
+};
 
 export type AnalysisTelemetryEventName = AnalysisProtectionEventName;
 
@@ -24,8 +34,12 @@ export class AnalysisTelemetryService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    // Optional pelo mesmo motivo do BusinessFunnelEventService: módulos de
+    // teste estreitos não importam PosthogIntegrationModule (@Global(), só
+    // ativa em módulos que o importam em algum ponto da própria árvore).
+    @Optional()
     @Inject(PosthogEventExporter)
-    private readonly posthogExporter: PosthogEventExporter,
+    private readonly posthogExporter: ProtectionPosthogExporter = NOOP_PROTECTION_POSTHOG_EXPORTER,
   ) {}
 
   async emit(

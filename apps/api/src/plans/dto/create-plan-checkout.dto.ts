@@ -25,4 +25,9 @@ export class CreatePlanCheckoutDto {
   @IsString()
   @MaxLength(128)
   gaClientId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  couponCode?: string;
 }

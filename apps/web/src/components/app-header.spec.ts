@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
 test("AppHeader exposes Meu Perfil in the global menu", () => {
-  const filePath = resolve(currentDir, "app-header.tsx");
+  // Itens do menu do usuário foram extraídos para app-header-user-menu.tsx
+  // num refactor anterior — o teste ainda checava app-header.tsx.
+  const filePath = resolve(currentDir, "app-header-user-menu.tsx");
   const content = readFileSync(filePath, "utf8");
 
   assert.match(content, /label: "Meu Perfil"/g);

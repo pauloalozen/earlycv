@@ -9,6 +9,7 @@ import { Logo } from "@/components/logo";
 import { PageShell } from "@/components/page-shell";
 import { trackEvent } from "@/lib/analytics-tracking";
 import {
+  applyCheckoutCouponClient,
   type BrickCheckoutResponse,
   type BrickPayResponse,
   type CheckoutApiError,
@@ -40,6 +41,23 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
   const brickControlRef = useRef<{ unmount?: () => void } | null>(null);
   const brickInitializedRef = useRef(false);
   const submitAttemptedRef = useRef(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponStatus, setCouponStatus] = useState<
+    "idle" | "checking" | "applied" | "invalid"
+  >("idle");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmountInCents: number;
+    bonusCreditsGranted: number;
+  } | null>(null);
+  const [freeRedemption, setFreeRedemption] = useState<{
+    planId: string;
+    couponCode: string;
+  } | null>(null);
+  const [freeRedemptionLoading, setFreeRedemptionLoading] = useState(false);
+  const [freeRedemptionError, setFreeRedemptionError] = useState<
+    string | null
+  >(null);
   const router = useRouter();
   const isProduction =
     (process.env.NEXT_PUBLIC_APP_ENV ?? "development") === "production";
@@ -312,6 +330,73 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
       setPixCopied(true);
     } catch {
       setSubmitError("Nao foi possivel copiar o codigo PIX automaticamente.");
+    }
+  }
+
+  async function handleApplyCoupon() {
+    const trimmed = couponInput.trim();
+    if (!trimmed || couponStatus === "checking") return;
+    setCouponStatus("checking");
+    setFreeRedemption(null);
+    try {
+      const result = await applyCheckoutCouponClient(purchaseId, trimmed);
+      if (result.applied) {
+        setData(result);
+        setAppliedCoupon(result.appliedCoupon);
+        setCouponStatus("applied");
+      } else if (result.freeRedemptionAvailable) {
+        setFreeRedemption({
+          planId: result.planId,
+          couponCode: result.couponCode,
+        });
+        setCouponStatus("idle");
+      } else {
+        setCouponStatus("invalid");
+      }
+    } catch {
+      setCouponStatus("invalid");
+    }
+  }
+
+  async function handleRemoveCoupon() {
+    if (couponStatus === "checking") return;
+    setCouponStatus("checking");
+    try {
+      const result = await applyCheckoutCouponClient(purchaseId, null);
+      if (result.applied) {
+        setData(result);
+      }
+    } finally {
+      setAppliedCoupon(null);
+      setCouponInput("");
+      setCouponStatus("idle");
+    }
+  }
+
+  async function handleConfirmFreeRedemption() {
+    if (!freeRedemption || freeRedemptionLoading) return;
+    setFreeRedemptionError(null);
+    setFreeRedemptionLoading(true);
+    try {
+      const response = await fetch("/api/plans/checkout/redeem-free-coupon", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          planId: freeRedemption.planId,
+          couponCode: freeRedemption.couponCode,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("redeem-failed");
+      }
+      router.push("/dashboard?cupom=resgatado");
+    } catch {
+      setFreeRedemptionError(
+        "Nao foi possivel confirmar o resgate gratuito. O cupom pode ter esgotado — tente novamente ou continue com o pagamento normal.",
+      );
+      setFreeRedemption(null);
+    } finally {
+      setFreeRedemptionLoading(false);
     }
   }
 
@@ -735,6 +820,234 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
                     </div>
                   )}
 
+                {/* Coupon field */}
+                <div style={{ margin: "0 0 16px" }}>
+                  {appliedCoupon ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "9px 12px",
+                        borderRadius: 8,
+                        background: "rgba(198,255,58,0.14)",
+                        border: "1px solid rgba(64,84,16,0.15)",
+                      }}
+                    >
+                      <span style={{ fontSize: 12.5, color: "#3a3a38" }}>
+                        Cupom{" "}
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontWeight: 600,
+                            color: "#405410",
+                            letterSpacing: "0.02em",
+                          }}
+                        >
+                          {appliedCoupon.code}
+                        </span>{" "}
+                        aplicado — {describeCouponBenefit(appliedCoupon)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        disabled={couponStatus === "checking"}
+                        style={{
+                          flexShrink: 0,
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          letterSpacing: "0.06em",
+                          color: "#6a6560",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          textUnderlineOffset: 3,
+                          padding: 0,
+                        }}
+                      >
+                        REMOVER
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          letterSpacing: "0.12em",
+                          color: "#8a8a85",
+                          marginBottom: 6,
+                          fontWeight: 500,
+                        }}
+                      >
+                        CUPOM
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type="text"
+                          placeholder="Cupom (opcional)"
+                          value={couponInput}
+                          onChange={(event) => {
+                            setCouponInput(event.target.value);
+                            setCouponStatus("idle");
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void handleApplyCoupon();
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: "9px 11px",
+                            fontSize: 13,
+                            borderRadius: 6,
+                            border: "1px solid rgba(10,10,10,0.1)",
+                            background: "#fafaf6",
+                            color: "#0a0a0a",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleApplyCoupon}
+                          disabled={
+                            !couponInput.trim() || couponStatus === "checking"
+                          }
+                          style={{
+                            padding: "9px 16px",
+                            fontSize: 12.5,
+                            fontWeight: 500,
+                            borderRadius: 6,
+                            border: "1px solid rgba(10,10,10,0.1)",
+                            background: "#fff",
+                            color: "#0a0a0a",
+                            cursor:
+                              !couponInput.trim() || couponStatus === "checking"
+                                ? "default"
+                                : "pointer",
+                            opacity:
+                              !couponInput.trim() || couponStatus === "checking"
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          {couponStatus === "checking"
+                            ? "Aplicando..."
+                            : "Aplicar"}
+                        </button>
+                      </div>
+                      {couponStatus === "invalid" && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: "9px 12px",
+                            borderRadius: 8,
+                            background: "rgba(220,38,38,0.05)",
+                            border: "1px solid rgba(220,38,38,0.15)",
+                          }}
+                        >
+                          <p style={{ fontSize: 12.5, color: "#b91c1c" }}>
+                            Cupom inválido — o benefício não será aplicado.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {freeRedemption && (
+                  <div
+                    style={{
+                      margin: "0 0 16px",
+                      padding: 12,
+                      borderRadius: 8,
+                      background: "rgba(198,255,58,0.14)",
+                      border: "1px solid rgba(64,84,16,0.15)",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#3a3a38",
+                        margin: "0 0 10px",
+                      }}
+                    >
+                      Cupom{" "}
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontWeight: 600,
+                          color: "#405410",
+                          letterSpacing: "0.02em",
+                        }}
+                      >
+                        {freeRedemption.couponCode}
+                      </span>{" "}
+                      dá 100% de desconto. Confirme para resgatar sem
+                      pagamento — isso substitui esta compra.
+                    </p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        disabled={freeRedemptionLoading}
+                        onClick={handleConfirmFreeRedemption}
+                        style={{
+                          padding: "9px 16px",
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          border: "none",
+                          background: "#0a0a0a",
+                          color: "#fff",
+                          cursor: freeRedemptionLoading ? "default" : "pointer",
+                          opacity: freeRedemptionLoading ? 0.6 : 1,
+                        }}
+                      >
+                        {freeRedemptionLoading
+                          ? "Confirmando..."
+                          : "Confirmar resgate gratuito"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={freeRedemptionLoading}
+                        onClick={() => {
+                          setFreeRedemption(null);
+                          setCouponInput("");
+                        }}
+                        style={{
+                          padding: "9px 16px",
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          borderRadius: 6,
+                          border: "1px solid rgba(10,10,10,0.1)",
+                          background: "#fff",
+                          color: "#0a0a0a",
+                          cursor: freeRedemptionLoading ? "default" : "pointer",
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    {freeRedemptionError && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          padding: "9px 12px",
+                          borderRadius: 8,
+                          background: "rgba(220,38,38,0.05)",
+                          border: "1px solid rgba(220,38,38,0.15)",
+                        }}
+                      >
+                        <p style={{ fontSize: 12.5, color: "#b91c1c" }}>
+                          {freeRedemptionError}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div
                   style={{
                     display: "flex",
@@ -1133,6 +1446,27 @@ export function BrickCheckoutClientPage({ purchaseId }: Props) {
       </div>
     </PageShell>
   );
+}
+
+function formatCents(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function describeCouponBenefit(coupon: {
+  discountAmountInCents: number;
+  bonusCreditsGranted: number;
+}): string {
+  const parts: string[] = [];
+  if (coupon.discountAmountInCents > 0) {
+    parts.push(`${formatCents(coupon.discountAmountInCents)} de desconto`);
+  }
+  if (coupon.bonusCreditsGranted > 0) {
+    parts.push(`${coupon.bonusCreditsGranted} créditos extra`);
+  }
+  return parts.join(" + ");
 }
 
 function PriceDisplay({ amount }: { amount: number }) {

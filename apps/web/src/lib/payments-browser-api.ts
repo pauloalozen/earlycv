@@ -51,6 +51,24 @@ export type CheckoutApiError = Error & {
   errorCode?: string;
 };
 
+export type ApplyCheckoutCouponResponse =
+  | ({
+      applied: true;
+      freeRedemptionAvailable: false;
+      appliedCoupon: {
+        code: string;
+        discountAmountInCents: number;
+        bonusCreditsGranted: number;
+      } | null;
+    } & BrickCheckoutResponse)
+  | { applied: false; freeRedemptionAvailable: false; reason?: string }
+  | {
+      applied: false;
+      freeRedemptionAvailable: true;
+      planId: string;
+      couponCode: string;
+    };
+
 export async function getCheckoutStatusClient(
   checkoutId: string,
   params?: {
@@ -127,6 +145,32 @@ export async function getBrickCheckoutClient(
   }
 
   return response.json() as Promise<BrickCheckoutResponse>;
+}
+
+export async function applyCheckoutCouponClient(
+  purchaseId: string,
+  couponCode: string | null,
+): Promise<ApplyCheckoutCouponResponse> {
+  const response = await fetch(`/api/payments/brick/${purchaseId}/coupon`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ couponCode }),
+    cache: "no-store",
+  });
+
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as Partial<ApplyCheckoutCouponResponse>;
+
+  if (!response.ok) {
+    const error = new Error(
+      "Nao foi possivel aplicar o cupom.",
+    ) as CheckoutApiError;
+    error.status = response.status;
+    throw error;
+  }
+
+  return payload as ApplyCheckoutCouponResponse;
 }
 
 export async function submitBrickPaymentClient(

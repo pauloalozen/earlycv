@@ -8,6 +8,7 @@ import { AdminProductUpdatesModule } from "./admin-product-updates/admin-product
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminTalentProfilesModule } from "./admin-talent-profiles/admin-talent-profiles.module";
+import { AdminAffiliatesModule } from "./admin-affiliates/admin-affiliates.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AnalysisObservabilityModule } from "./analysis-observability/analysis-observability.module";
 import { AnalysisProtectionModule } from "./analysis-protection/analysis-protection.module";
@@ -55,6 +56,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     HealthModule,
     AuthModule,
     AdminUsersModule,
+    AdminAffiliatesModule,
     AdminMonitorModule,
     ProductUpdatesModule,
     AdminProductUpdatesModule,

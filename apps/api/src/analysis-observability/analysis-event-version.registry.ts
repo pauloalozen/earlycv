@@ -132,6 +132,9 @@ export const BUSINESS_FUNNEL_EVENT_VERSION_MAP = {
   // Cover Letter
   cover_letter_generate_clicked: 1,
   cover_letter_generated: 1,
+  // Cupom por criador — visita ao link (?ref=<code>), deduplicada por
+  // visitor_id+código+dia (ver PlansController.trackCouponVisit).
+  coupon_link_visited: 1,
 } as const;
 
 export type BusinessFunnelEventName =

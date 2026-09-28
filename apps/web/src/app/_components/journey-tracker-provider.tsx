@@ -7,7 +7,9 @@ import {
   readAnalyticsConsentState,
 } from "@/lib/analytics-consent";
 import {
+  captureAndPersistAffiliateCode,
   captureAndPersistUtmParams,
+  reportCouponLinkVisitIfPresent,
   trackEvent,
 } from "@/lib/analytics-tracking";
 import {
@@ -28,6 +30,7 @@ import {
   markSessionStartedEmitted,
   markSessionStartedFailed,
 } from "@/lib/session-started-guard";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 // React comita TODOS os layout effects da árvore (pai e filhos) antes de
 // QUALQUER effect passivo (useEffect). RadarViewTracker/JobDetailViewTracker
@@ -337,6 +340,10 @@ function buildMetadata(input: {
   const auth = getAuthContext();
   const posthogSessionId = getPosthogSessionId();
   const firstTouchUtm = captureAndPersistUtmParams();
+  // Mesmo mecanismo de first-touch, código de afiliado/criador (?ref=) —
+  // side effect de persistência dispara aqui, valor só é lido de novo no
+  // cadastro (ver register-form / RegisterDto.affiliateCode).
+  captureAndPersistAffiliateCode();
 
   return {
     app: "earlycv",
@@ -562,6 +569,14 @@ export function JourneyTrackerProvider({
   const internalNavigationInProgressRef = useRef<boolean>(false);
   const internalNavigationResetTimeoutRef = useRef<number | null>(null);
   const pendingNavigationRef = useRef<PendingNavigation | null>(null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: precisa rodar de novo a cada troca de query string (?ref=), mesmo lendo window.location.search direto no corpo
+  useEffect(() => {
+    // Visita ao link do criador (?ref=<code>) — só dispara quando o param
+    // está na URL desta navegação (chegada real), nunca em replay do
+    // valor persistido. Dedup real é server-side.
+    reportCouponLinkVisitIfPresent(getOrCreateVisitorId());
+  }, [search]);
 
   useEffect(() => {
     const markInternalNavigation = () => {

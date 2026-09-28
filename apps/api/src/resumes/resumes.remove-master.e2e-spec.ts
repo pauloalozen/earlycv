@@ -34,7 +34,7 @@ class FakeStorage {
     return "fake://noop";
   }
   async getObject(): Promise<Buffer> {
-    throw new Error("not used in this suite");
+    return Buffer.from("Conteudo de CV fake para o teste.");
   }
 }
 
@@ -595,7 +595,11 @@ test("remove(): exclusão do Master DEPOIS de um claim real (guest -> conta) lim
       new ProfileReadinessService(),
     );
     const masterPromotion = new CvMasterPromotionService(database, userProfileSync);
-    const claimService = new ClaimSourceGrantService(database, masterPromotion);
+    const claimService = new ClaimSourceGrantService(
+      database,
+      masterPromotion,
+      new FakeStorage() as never,
+    );
     const resumesService = new ResumesService(
       database,
       new FakeStorage() as never,

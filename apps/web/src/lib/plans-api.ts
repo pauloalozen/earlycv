@@ -45,29 +45,101 @@ export async function listMyPurchases(): Promise<PurchaseItem[]> {
   return response.json() as Promise<PurchaseItem[]>;
 }
 
+export type AppliedCouponSummary = {
+  code: { id: string; code: string };
+  campaign: { id: string; name: string };
+  amountInCents: number;
+  creditsGranted: number;
+  discountAmountInCents: number;
+  bonusCreditsGranted: number;
+};
+
+export type CreatePlanCheckoutResult = {
+  checkoutUrl: string | null;
+  purchaseId: string | null;
+  checkoutMode?: "brick" | "free_coupon_confirmation_required";
+  amountInCents?: number;
+  creditsGranted?: number;
+  appliedCoupon?: AppliedCouponSummary | null;
+};
+
 export async function createPlanCheckout(
   planId: "starter" | "pro" | "turbo",
   adaptationId?: string,
   selectedMissingKeywords: string[] = [],
   gaClientId?: string,
-): Promise<{
-  checkoutUrl: string;
-  purchaseId: string;
-  checkoutMode?: "brick";
-}> {
+  couponCode?: string,
+): Promise<CreatePlanCheckoutResult> {
   const response = await apiRequest("POST", "/plans/checkout", {
     planId,
     ...(adaptationId ? { adaptationId } : {}),
     ...(selectedMissingKeywords.length > 0 ? { selectedMissingKeywords } : {}),
     ...(gaClientId ? { gaClientId } : {}),
+    ...(couponCode ? { couponCode } : {}),
   });
   if (!response.ok) {
     const err = await response.text();
     throw new Error(`Checkout failed: ${err}`);
   }
+  return response.json() as Promise<CreatePlanCheckoutResult>;
+}
+
+export async function previewPlanCoupon(
+  planId: "starter" | "pro" | "turbo",
+  couponCode: string,
+): Promise<{
+  valid: boolean;
+  discountAmountInCents?: number;
+  bonusCreditsGranted?: number;
+  reason?: string;
+}> {
+  const response = await apiRequest("POST", "/plans/coupon/preview", {
+    planId,
+    couponCode,
+  });
+  if (!response.ok) {
+    return { valid: false, reason: "preview-failed" };
+  }
   return response.json() as Promise<{
-    checkoutUrl: string;
+    valid: boolean;
+    discountAmountInCents?: number;
+    bonusCreditsGranted?: number;
+    reason?: string;
+  }>;
+}
+
+export async function trackCouponVisit(
+  couponCode: string,
+  visitorId?: string,
+): Promise<{ tracked: boolean }> {
+  const response = await apiRequest("POST", "/plans/coupon/visit", {
+    couponCode,
+    ...(visitorId ? { visitorId } : {}),
+  });
+  if (!response.ok) {
+    return { tracked: false };
+  }
+  return response.json() as Promise<{ tracked: boolean }>;
+}
+
+export async function redeemFreePlanCoupon(
+  planId: "starter" | "pro" | "turbo",
+  couponCode: string,
+): Promise<{ purchaseId: string; creditsGranted: number }> {
+  const response = await apiRequest(
+    "POST",
+    "/plans/checkout/redeem-free-coupon",
+    {
+      planId,
+      couponCode,
+    },
+  );
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Free coupon redemption failed: ${err}`);
+  }
+  return response.json() as Promise<{
     purchaseId: string;
-    checkoutMode?: "brick";
+    creditsGranted: number;
   }>;
 }

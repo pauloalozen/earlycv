@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
 test("adaptar upload box keeps stable height and truncates filename", () => {
-  const pagePath = resolve(currentDir, "../app/adaptar/page.tsx");
+  // page.tsx virou um wrapper de servidor fino (redirects/gate) num
+  // refactor anterior — a UI da caixa de upload está em adaptar-client.tsx.
+  const pagePath = resolve(currentDir, "../app/adaptar/adaptar-client.tsx");
   const content = readFileSync(pagePath, "utf8");
 
   assert.match(content, /padding:\s*"35px 20px"/);

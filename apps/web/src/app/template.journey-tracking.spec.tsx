@@ -11,6 +11,8 @@ const firstTouchUtmState = vi.hoisted(() => ({
   value: {} as Record<string, string | undefined>,
 }));
 const captureAndPersistUtmParamsMock = vi.hoisted(() => vi.fn());
+const captureAndPersistAffiliateCodeMock = vi.hoisted(() => vi.fn(() => null));
+const reportCouponLinkVisitIfPresentMock = vi.hoisted(() => vi.fn());
 const waitForPosthogSessionIdMock = vi.hoisted(() => vi.fn());
 const getPosthogSessionIdMock = vi.hoisted(() => vi.fn());
 
@@ -22,6 +24,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/analytics-tracking", () => ({
   trackEvent: trackEventMock,
   captureAndPersistUtmParams: captureAndPersistUtmParamsMock,
+  captureAndPersistAffiliateCode: captureAndPersistAffiliateCodeMock,
+  reportCouponLinkVisitIfPresent: reportCouponLinkVisitIfPresentMock,
 }));
 
 vi.mock("@/lib/posthog-session", () => ({
