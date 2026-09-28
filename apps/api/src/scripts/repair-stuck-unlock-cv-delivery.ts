@@ -18,11 +18,17 @@
 //    sem IA, sem duplicar Resume.
 //
 // B) Nem "adaptedResumeId" nem "aiAuditJson" existem — a adaptação nunca foi
-//    de fato entregue (nem baixada). Precisa rodar o pipeline real:
-//    CvAdaptationService.deliverAdaptation(id) (cria o Resume, gera o
-//    conteúdo estruturado via IA quando necessário, aí sim marca
-//    "delivered"). Só roda com --apply-full (flag separada — tem custo de
-//    IA e é bem mais pesado que o reparo A).
+//    de fato entregue (nem baixada). Chama
+//    CvAdaptationService.backfillStructuredProfileAndDeliver(id) — NUNCA lê
+//    texto bruto como substituto (isso é o que o pipeline canônico existe
+//    pra eliminar): gera o CvStructuredProfile de verdade a partir do
+//    master resume atual do usuário, pelo mesmo caminho único usado em
+//    todo o resto do sistema (CvProcessingEntrypointService), espera o
+//    CvProcessingWorker terminar, linka na adaptação, só então entrega.
+//    Só roda com --apply-full (flag separada — pode custar IA e é bem
+//    mais pesado que o reparo A). Falha explicitamente (sem marcar "ok")
+//    quando o usuário não tem master resume nenhum pra reprocessar —
+//    esses precisam reenviar o CV, não tem dado pra recuperar sozinho.
 //
 // Por padrão roda em --dry-run (só lista os dois grupos e contagens).
 //
@@ -176,7 +182,7 @@ async function main() {
     let failed = 0;
     for (const a of groupB) {
       try {
-        await cvAdaptationService.deliverAdaptation(a.id);
+        await cvAdaptationService.backfillStructuredProfileAndDeliver(a.id);
         ok += 1;
         console.log(`  ok: ${a.id}`);
       } catch (err) {

@@ -1877,6 +1877,118 @@ test("validateAndClaimSnapshot allows guest snapshot without session hash", asyn
   assert.equal(result.id, "snapshot-legacy-null-hash");
 });
 
+// Índice 16 = cvProcessingEntrypoint (17º parâmetro posicional do
+// construtor) — ver cv-adaptation.service.ts. Helper só pra não ter que
+// contar 22 posições toda vez que um teste precisa só do database e do
+// cvProcessingEntrypoint.
+function buildBackfillArgs(overrides: {
+  database?: unknown;
+  cvProcessingEntrypoint?: unknown;
+}): unknown[] {
+  const args = new Array(22).fill({});
+  args[0] = overrides.database ?? {};
+  args[16] = overrides.cvProcessingEntrypoint ?? {};
+  return args;
+}
+
+test("backfillStructuredProfileAndDeliver throws a clear error when the user has no master resume text to reprocess — never falls back to reading raw text", async () => {
+  const service = new CvAdaptationServiceCtor(
+    ...buildBackfillArgs({
+      database: {
+        cvAdaptation: {
+          findUniqueOrThrow: async () => ({
+            id: "adapt-1",
+            userId: "user-1",
+            cvStructuredProfileId: null,
+          }),
+        },
+        resume: { findFirst: async () => null },
+      },
+      cvProcessingEntrypoint: {
+        enqueueFromUserText: async () => {
+          throw new Error("should never be called without master resume text");
+        },
+      },
+    }),
+  );
+
+  await assert.rejects(
+    service.backfillStructuredProfileAndDeliver("adapt-1"),
+    /não tem master resume com texto disponível/,
+  );
+});
+
+test("backfillStructuredProfileAndDeliver throws when the CvProcessingJob fails instead of silently giving up", async () => {
+  const service = new CvAdaptationServiceCtor(
+    ...buildBackfillArgs({
+      database: {
+        cvAdaptation: {
+          findUniqueOrThrow: async () => ({
+            id: "adapt-1",
+            userId: "user-1",
+            cvStructuredProfileId: null,
+          }),
+        },
+        resume: {
+          findFirst: async () => ({
+            id: "resume-1",
+            rawText: "Texto do master resume",
+          }),
+        },
+        cvProcessingJob: {
+          findUnique: async () => ({
+            id: "job-1",
+            status: "FAILED",
+            cvStructuredProfileId: null,
+            lastError: "extraction blew up",
+          }),
+        },
+      },
+      cvProcessingEntrypoint: {
+        enqueueFromUserText: async () => ({ job: { id: "job-1" } }),
+      },
+    }),
+  );
+
+  await assert.rejects(
+    service.backfillStructuredProfileAndDeliver("adapt-1"),
+    /não chegou a READY/,
+  );
+});
+
+test("backfillStructuredProfileAndDeliver skips straight to delivery when cvStructuredProfileId is already set", async () => {
+  let deliverCalled = false;
+  const service = new CvAdaptationServiceCtor(
+    ...buildBackfillArgs({
+      database: {
+        cvAdaptation: {
+          findUniqueOrThrow: async () => ({
+            id: "adapt-1",
+            userId: "user-1",
+            cvStructuredProfileId: "profile-1",
+          }),
+        },
+      },
+      cvProcessingEntrypoint: {
+        enqueueFromUserText: async () => {
+          throw new Error(
+            "should never enqueue a new extraction when one already exists",
+          );
+        },
+      },
+    }),
+  );
+
+  (
+    service as unknown as { deliverAdaptation: (id: string) => Promise<void> }
+  ).deliverAdaptation = async () => {
+    deliverCalled = true;
+  };
+
+  await service.backfillStructuredProfileAndDeliver("adapt-1");
+  assert.equal(deliverCalled, true);
+});
+
 test("resolveGenerationMasterCvText rejects new adaptations without snapshot", async () => {
   const service = new CvAdaptationServiceCtor(
     { analysisCvSnapshot: { findUnique: async () => null } },

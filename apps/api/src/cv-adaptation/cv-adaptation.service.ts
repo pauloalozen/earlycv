@@ -5117,6 +5117,86 @@ export class CvAdaptationService {
     return "experience";
   }
 
+  // Reparo (achado em produção 2026-09-28): adaptações antigas (anteriores
+  // ao pipeline canônico) podem ter cvStructuredProfileId vazio mesmo com
+  // status pago/desbloqueado, e o texto legado (AnalysisCvSnapshot em
+  // S3/R2) pode ter sumido do storage — sem NENHUM dos dois,
+  // deliverAdaptation nunca consegue gerar o conteúdo. A correção NUNCA é
+  // ler texto bruto como substituto (isso é exatamente o que o pipeline
+  // canônico existe pra eliminar) — é rodar o mesmo caminho único usado
+  // por todo o resto do sistema (CvProcessingEntrypointService,
+  // enqueueCanonicalMasterProcessing) a partir do master resume atual do
+  // usuário, esperar o CvProcessingWorker gerar o CvStructuredProfile de
+  // verdade, linkar na adaptação, e só então entregar.
+  async backfillStructuredProfileAndDeliver(
+    adaptationId: string,
+  ): Promise<void> {
+    const adaptation = await this.database.cvAdaptation.findUniqueOrThrow({
+      where: { id: adaptationId },
+      select: { id: true, userId: true, cvStructuredProfileId: true },
+    });
+
+    if (adaptation.cvStructuredProfileId) {
+      await this.deliverAdaptation(adaptationId);
+      return;
+    }
+
+    if (!this.cvProcessingEntrypoint) {
+      throw new Error(
+        `Adaptation ${adaptationId}: CvProcessingEntrypointService indisponível — não é possível gerar o CvStructuredProfile.`,
+      );
+    }
+
+    const masterResume = await this.database.resume.findFirst({
+      where: { userId: adaptation.userId, isMaster: true, kind: "master" },
+      select: { id: true, rawText: true },
+    });
+    const text = masterResume?.rawText?.trim();
+    if (!masterResume || !text) {
+      throw new Error(
+        `Adaptation ${adaptationId}: usuário ${adaptation.userId} não tem master resume com texto disponível — precisa reenviar o CV, não tem dado nenhum pra reprocessar.`,
+      );
+    }
+
+    const enqueued = await this.cvProcessingEntrypoint.enqueueFromUserText({
+      userId: adaptation.userId,
+      text,
+      masterIntent: "PROMOTE_EXPLICIT",
+      resumeId: masterResume.id,
+      submission: { origin: "PASTED_TEXT" },
+    });
+
+    const jobId = enqueued.job.id;
+    const deadline = Date.now() + 90_000;
+    let job = await this.database.cvProcessingJob.findUnique({
+      where: { id: jobId },
+    });
+    while (
+      job &&
+      job.status !== "READY" &&
+      job.status !== "FAILED" &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      job = await this.database.cvProcessingJob.findUnique({
+        where: { id: jobId },
+      });
+    }
+
+    if (!job || job.status !== "READY" || !job.cvStructuredProfileId) {
+      throw new Error(
+        `Adaptation ${adaptationId}: CvProcessingJob ${jobId} não chegou a READY (status=${job?.status ?? "desconhecido"}, erro=${job?.lastError ?? "-"}).`,
+      );
+    }
+
+    await this.database.cvAdaptation.update({
+      where: { id: adaptationId },
+      data: { cvStructuredProfileId: job.cvStructuredProfileId },
+    });
+
+    await this.deliverAdaptation(adaptationId);
+  }
+
   // Público: também chamado pelo PlansService após o auto-unlock via
   // compra de plano (PlanPurchase.originAction = "unlock_cv"), que — assim
   // como o resgate por crédito — precisa desta chamada pra sair de
