@@ -29,6 +29,13 @@ async function createCheckoutRedirect(
       );
     }
 
+    if (!checkout.checkoutUrl) {
+      return createPostRedirectResponse(
+        requestUrl,
+        "/planos?error=checkout-failed",
+      );
+    }
+
     return Response.redirect(checkout.checkoutUrl, 303);
   } catch {
     return createPostRedirectResponse(
