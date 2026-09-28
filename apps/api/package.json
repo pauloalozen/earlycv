@@ -33,7 +33,7 @@
     "apply:company-source-audit": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-company-source-audit.ts",
     "cleanup:foreign-jobs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-foreign-jobs.ts",
     "fix:mismatched-sources": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-mismatched-sources.ts",
-    "fix:stuck-unlock-cv-delivery": "NODE_OPTIONS='--conditions=development' tsx src/scripts/repair-stuck-unlock-cv-delivery.ts"
+    "fix:stuck-unlock-cv-delivery": "sh -c 'if [ -f ../../.env ]; then set -a && . ../../.env && set +a; fi && NODE_OPTIONS=\"--conditions=development\" tsx src/scripts/repair-stuck-unlock-cv-delivery.ts \"$@\"' --"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
