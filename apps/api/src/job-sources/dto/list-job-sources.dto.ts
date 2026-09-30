@@ -31,6 +31,10 @@ export class ListJobSourcesDto {
 
   @IsOptional()
   @IsString()
+  companyId?: string;
+
+  @IsOptional()
+  @IsString()
   statusFilter?: string;
 
   @IsOptional()

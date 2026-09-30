@@ -4,8 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 import type { ResumeStatus, UserPlanType } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { SetAdminUserAnalysisCreditsDto } from "./dto/set-admin-user-analysis-credits.dto";
@@ -53,7 +53,7 @@ function blankFieldWhere(
 // arvore de decisao (perfil ausente > perfil incompleto > sem cv master >
 // completo), so que como filtro SQL em vez de computado em cima do payload
 // inteiro ja carregado.
-function buildCompletenessStatusWhere(
+export function buildCompletenessStatusWhere(
   status: string,
 ): Prisma.UserWhereInput | null {
   const allBlank: Prisma.UserWhereInput = {
@@ -110,31 +110,75 @@ function buildCompletenessStatusWhere(
   }
 }
 
+// Espelha buildUserProfileStatus (admin-users-operations.ts): só olha o
+// preenchimento do perfil (ausente > incompleto > completo), sem considerar
+// CV master. Usado pela tela /admin/perfis, paginada no servidor.
+function buildProfileStatusWhere(status: string): Prisma.UserWhereInput | null {
+  const allBlank: Prisma.UserWhereInput = {
+    profile: {
+      is: {
+        AND: [
+          blankFieldWhere("headline"),
+          blankFieldWhere("city"),
+          blankFieldWhere("country"),
+        ],
+      },
+    },
+  };
+  const complete: Prisma.UserWhereInput = {
+    profile: {
+      is: {
+        AND: [
+          { NOT: blankFieldWhere("headline") },
+          { NOT: blankFieldWhere("city") },
+          { NOT: blankFieldWhere("country") },
+        ],
+      },
+    },
+  };
+
+  switch (status) {
+    case "perfil ausente":
+      return { OR: [{ profile: null }, allBlank] };
+    case "perfil incompleto":
+      return {
+        AND: [{ NOT: { profile: null } }, { NOT: allBlank }, { NOT: complete }],
+      };
+    case "completo":
+      return complete;
+    default:
+      return null;
+  }
+}
+
 @Injectable()
 export class AdminUsersService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
-  async list(filters: {
-    page?: number;
-    limit?: number;
-    planType?: UserPlanType;
-    query?: string;
-    status?: string;
-  } = {}) {
+  async list(
+    filters: {
+      page?: number;
+      limit?: number;
+      planType?: UserPlanType;
+      profileStatus?: string;
+      query?: string;
+      status?: string;
+    } = {},
+  ) {
     const page = filters.page && filters.page > 0 ? filters.page : 1;
+    // SEMPRE paginado (padrão 50, máx. 100). Antes, sem page/limit a API
+    // devolvia todos os usuários com currículos — as telas que precisavam da
+    // base inteira agora usam contagens (visão geral), consulta por id
+    // (detalhes) ou esta mesma listagem paginada.
     const limit =
       filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 50;
-    // Sem page/limit explicitos, mantem o comportamento antigo (devolve
-    // todo mundo, sem take) — os agregados do dashboard (/admin) e os
-    // lookups por id (perfis/curriculos/usuarios/[id]) ainda dependem de
-    // ver a base inteira de uma vez. So pagina de verdade quando quem
-    // chamou pediu explicitamente (a tela /admin/usuarios agora sempre
-    // pede).
-    const paginate = filters.page !== undefined || filters.limit !== undefined;
     const statusWhere = filters.status
       ? buildCompletenessStatusWhere(filters.status)
+      : null;
+    const profileStatusWhere = filters.profileStatus
+      ? buildProfileStatusWhere(filters.profileStatus)
       : null;
 
     // AND explicito em vez de espalhar cada filtro no mesmo objeto: tanto
@@ -147,6 +191,7 @@ export class AdminUsersService {
         { isStaff: false },
         ...(filters.planType ? [{ planType: filters.planType }] : []),
         ...(statusWhere ? [statusWhere] : []),
+        ...(profileStatusWhere ? [profileStatusWhere] : []),
         ...(filters.query
           ? [
               {
@@ -166,7 +211,8 @@ export class AdminUsersService {
         where,
         ...adminUserArgs,
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        ...(paginate ? { skip: (page - 1) * limit, take: limit } : {}),
+        skip: (page - 1) * limit,
+        take: limit,
       }),
       this.database.user.count({ where }),
     ]);
@@ -179,13 +225,15 @@ export class AdminUsersService {
     };
   }
 
-  async listResumes(filters: {
-    page?: number;
-    limit?: number;
-    kind?: "master" | "base" | "adapted";
-    query?: string;
-    status?: ResumeStatus;
-  } = {}) {
+  async listResumes(
+    filters: {
+      page?: number;
+      limit?: number;
+      kind?: "master" | "base" | "adapted";
+      query?: string;
+      status?: ResumeStatus;
+    } = {},
+  ) {
     const page = filters.page && filters.page > 0 ? filters.page : 1;
     const limit =
       filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 50;
@@ -211,7 +259,9 @@ export class AdminUsersService {
               { id: { contains: filters.query, mode: "insensitive" } },
               { title: { contains: filters.query, mode: "insensitive" } },
               {
-                user: { name: { contains: filters.query, mode: "insensitive" } },
+                user: {
+                  name: { contains: filters.query, mode: "insensitive" },
+                },
               },
               {
                 user: {

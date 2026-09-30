@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { isForeignLocation } from "../jobs/geo-normalizer";
@@ -295,38 +296,55 @@ export class CompanySourceAuditService {
     status?: AuditStatus;
     tier?: AuditTier;
     search?: string;
+    page?: number;
+    pageSize?: number;
   }) {
-    return this.database.jobSourceAudit.findMany({
-      where: {
-        ...(params.status ? { status: params.status } : {}),
-        ...(params.tier ? { tier: params.tier } : {}),
-        ...(params.search
-          ? {
-              OR: [
-                {
-                  currentUrl: { contains: params.search, mode: "insensitive" },
+    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 50));
+    const page = Math.max(1, params.page ?? 1);
+    const where: Prisma.JobSourceAuditWhereInput = {
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.tier ? { tier: params.tier } : {}),
+      ...(params.search
+        ? {
+            OR: [
+              {
+                currentUrl: { contains: params.search, mode: "insensitive" },
+              },
+              {
+                suspectedOwnerName: {
+                  contains: params.search,
+                  mode: "insensitive",
                 },
-                {
-                  suspectedOwnerName: {
-                    contains: params.search,
-                    mode: "insensitive",
-                  },
+              },
+              {
+                company: {
+                  name: { contains: params.search, mode: "insensitive" },
                 },
-                {
-                  company: {
-                    name: { contains: params.search, mode: "insensitive" },
-                  },
-                },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        company: { select: { id: true, name: true } },
-        suspectedOwner: { select: { id: true, name: true } },
-      },
-      orderBy: [{ tier: "asc" }, { confidence: "asc" }],
-    });
+              },
+            ],
+          }
+        : {}),
+    };
+    const [findings, total] = await Promise.all([
+      this.database.jobSourceAudit.findMany({
+        where,
+        include: {
+          company: { select: { id: true, name: true } },
+          suspectedOwner: { select: { id: true, name: true } },
+        },
+        orderBy: [{ tier: "asc" }, { confidence: "asc" }, { id: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.jobSourceAudit.count({ where }),
+    ]);
+    return {
+      findings,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
   async countByStatus() {

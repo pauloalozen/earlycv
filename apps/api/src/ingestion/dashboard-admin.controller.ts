@@ -16,6 +16,21 @@ export class DashboardAdminController {
     private readonly dashboardAdminService: DashboardAdminService,
   ) {}
 
+  @Get("overview-stats")
+  async getOverviewStats(
+    @Res({ passthrough: true }) response: Response,
+    @Query("from") fromRaw?: string,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    const parsed = fromRaw ? new Date(fromRaw) : null;
+    const since =
+      parsed && !Number.isNaN(parsed.getTime())
+        ? parsed
+        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    return this.dashboardAdminService.getOverviewStats(since);
+  }
+
   @Get("indexing-log")
   async getIndexingLog(
     @Res({ passthrough: true }) response: Response,

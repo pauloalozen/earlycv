@@ -145,9 +145,7 @@ test("GET /api/admin/users lists product users and returns detail with ordered r
     .expect(({ body }) => {
       assert.equal(Array.isArray(body.users), true);
       assert.equal(
-        body.users.some(
-          (user: { id: string }) => user.id === staffUser.userId,
-        ),
+        body.users.some((user: { id: string }) => user.id === staffUser.userId),
         false,
       );
 

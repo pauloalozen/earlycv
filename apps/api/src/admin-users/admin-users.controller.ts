@@ -50,11 +50,13 @@ export class AdminUsersController {
     @Query("planType") planType?: UserPlanType,
     @Query("query") query?: string,
     @Query("status") status?: string,
+    @Query("profileStatus") profileStatus?: string,
   ) {
     return this.adminUsersService.list({
       limit: limit ? Number.parseInt(limit, 10) : undefined,
       page: page ? Number.parseInt(page, 10) : undefined,
       planType,
+      profileStatus,
       query,
       status,
     });

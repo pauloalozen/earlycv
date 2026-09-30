@@ -2,13 +2,13 @@ import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
-
+import { AdminAffiliatesModule } from "./admin-affiliates/admin-affiliates.module";
 import { AdminMonitorModule } from "./admin-monitor/admin-monitor.module";
+import { AdminPendingModule } from "./admin-pending/admin-pending.module";
 import { AdminProductUpdatesModule } from "./admin-product-updates/admin-product-updates.module";
 import { AdminProfilesModule } from "./admin-profiles/admin-profiles.module";
 import { AdminResumesModule } from "./admin-resumes/admin-resumes.module";
 import { AdminTalentProfilesModule } from "./admin-talent-profiles/admin-talent-profiles.module";
-import { AdminAffiliatesModule } from "./admin-affiliates/admin-affiliates.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AnalysisObservabilityModule } from "./analysis-observability/analysis-observability.module";
 import { AnalysisProtectionModule } from "./analysis-protection/analysis-protection.module";
@@ -55,6 +55,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     Ga4Module,
     HealthModule,
     AuthModule,
+    AdminPendingModule,
     AdminUsersModule,
     AdminAffiliatesModule,
     AdminMonitorModule,
