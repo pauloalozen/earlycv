@@ -2,8 +2,9 @@ import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { AdminPageWrap } from "@/app/admin/_components/admin-primitives";
 import {
-  listDiscoveredCompanies,
-  listJobSources,
+  countDiscoveredCompanies,
+  type JobSourceOption,
+  listJobSourceOptions,
   listJobSourcesPaginated,
 } from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -186,10 +187,12 @@ export default async function AdminIngestionPage({
   const needsSourcesFirstPage = activeTab === "fontes";
 
   try {
-    const [sourcesResult, sourcesFirstPageResult, promotableDiscoveries] =
+    const [sourcesResult, sourcesFirstPageResult, promotableDiscoveriesCount] =
       await Promise.all([
         needsSources
-          ? listJobSources().catch((e: unknown) => e)
+          ? listJobSourceOptions({ limit: 500 })
+              .then((result) => result.options)
+              .catch((e: unknown) => e)
           : Promise.resolve([]),
         needsSourcesFirstPage
           ? listJobSourcesPaginated({
@@ -197,18 +200,17 @@ export default async function AdminIngestionPage({
               typeFilter: sourceType,
             }).catch((e: unknown) => e)
           : Promise.resolve(null),
-        listDiscoveredCompanies([
+        countDiscoveredCompanies([
           "VALIDATED",
           "NO_TECH_JOBS",
           "NO_ACTIVE_JOBS",
-        ]).catch(() => []),
+        ]).catch(() => 0),
       ]);
-    const promotableDiscoveriesCount = promotableDiscoveries.length;
 
     const sources =
       sourcesResult instanceof Error
         ? []
-        : (sourcesResult as Awaited<ReturnType<typeof listJobSources>>);
+        : (sourcesResult as JobSourceOption[]);
     const sourcesFirstPage =
       sourcesFirstPageResult instanceof Error
         ? null
@@ -224,7 +226,10 @@ export default async function AdminIngestionPage({
         : null;
 
     if (sourcesError) {
-      console.error("[admin/ingestion] listJobSources falhou:", sourcesError);
+      console.error(
+        "[admin/ingestion] listJobSourceOptions falhou:",
+        sourcesError,
+      );
     }
     if (sourcesPageError) {
       console.error(

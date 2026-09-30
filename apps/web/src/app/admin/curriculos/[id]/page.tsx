@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Badge, Card, InfoField } from "@/components/ui";
-import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { getAdminResumeOwnerDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminUserState,
@@ -40,11 +40,15 @@ export default async function AdminResumeDetailPage({
     );
   }
 
-  const usersDataResult = await getAdminUsersDataSafely();
+  const ownerDataResult = await getAdminResumeOwnerDataSafely(id);
 
-  if (usersDataResult.kind !== "ok") {
+  if (ownerDataResult.kind === "not-found") {
+    notFound();
+  }
+
+  if (ownerDataResult.kind !== "ok") {
     const state = buildAdminStateModel(
-      usersDataResult.kind,
+      ownerDataResult.kind,
       `/admin/curriculos/${id}`,
     );
 
@@ -55,17 +59,7 @@ export default async function AdminResumeDetailPage({
     );
   }
 
-  const { adminUserViews } = usersDataResult.data;
-
-  const owner =
-    adminUserViews.find((user) =>
-      user.resumes.some((resume) => resume.id === id),
-    ) ?? null;
-  const resume = owner?.resumes.find((item) => item.id === id) ?? null;
-
-  if (!owner || !resume) {
-    notFound();
-  }
+  const { owner, resume } = ownerDataResult.data;
 
   const resumeKind = getResumeDisplayKind(resume);
 

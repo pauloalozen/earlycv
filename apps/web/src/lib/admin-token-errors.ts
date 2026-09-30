@@ -30,3 +30,8 @@ export function getAdminDataErrorKind(error: unknown): AdminDataErrorKind {
 
   return "unexpected-error";
 }
+
+// A API responde 404 como Error("API 404: ...") nos clientes do admin.
+export function isApiNotFoundError(error: unknown) {
+  return error instanceof Error && error.message.startsWith("API 404:");
+}

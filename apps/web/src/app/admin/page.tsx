@@ -8,9 +8,12 @@ import {
   AdminStatsRow,
   AT,
 } from "@/app/admin/_components/admin-primitives";
-import { listAdminPayments } from "@/lib/admin-payments-api";
-import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import {
+  getAdminOverviewStats,
+  getAdminPaymentsSummary,
+} from "@/lib/admin-overview-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
+import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "./_components/admin-shell-header";
@@ -166,13 +169,17 @@ async function OverviewContent({ period }: { period: Period }) {
   const sinceIso = since.toISOString();
   const subLabel = periodSubLabel(period);
 
-  const [overviewDataResult, paymentsResult] = await Promise.all([
-    getPhaseOneAdminDataSafely(),
-    listAdminPayments({ from: sinceIso, limit: 1000 }).catch(() => null),
+  // Só agregados (COUNT/SUM no banco): a visão geral nunca carrega listas
+  // de usuários, currículos, empresas, fontes ou pagamentos.
+  const [statsResult, paymentsSummary] = await Promise.all([
+    getAdminOverviewStats(sinceIso)
+      .then((data) => ({ data, kind: "ok" }) as const)
+      .catch((error: unknown) => ({ kind: getAdminDataErrorKind(error) }) as const),
+    getAdminPaymentsSummary(sinceIso).catch(() => null),
   ]);
 
-  if (overviewDataResult.kind !== "ok") {
-    const state = buildAdminStateModel(overviewDataResult.kind, "/admin");
+  if (statsResult.kind !== "ok") {
+    const state = buildAdminStateModel(statsResult.kind, "/admin");
 
     return (
       <div className="px-6 py-10 md:px-10">
@@ -181,27 +188,9 @@ async function OverviewContent({ period }: { period: Period }) {
     );
   }
 
-  const { adminUsers, adminUserViews } = overviewDataResult.data;
-
-  // ── Period-sensitive metrics ───────────────────────────────────
-  const newUsers = adminUsers.filter((u) => u.createdAt >= sinceIso).length;
-
-  const approved =
-    paymentsResult?.items.filter(
-      (p) => p.status === "approved" || p.status === "completed",
-    ) ?? [];
-  const approvedPaymentsCount = approved.length;
-  const revenueInCents = approved.reduce(
-    (sum, p) => sum + (p.amountInCents ?? 0),
-    0,
-  );
-
-  // ── State metrics (current snapshot) ──────────────────────────
-  const totalUsers = adminUsers.length;
-  const totalAdaptedResumes = adminUserViews.reduce(
-    (sum, u) => sum + u.adaptedResumeCount,
-    0,
-  );
+  const { newUsers, totalAdaptedResumes, totalUsers } = statsResult.data;
+  const approvedPaymentsCount = paymentsSummary?.approvedCount ?? 0;
+  const revenueInCents = paymentsSummary?.revenueInCents ?? 0;
 
   return (
     <>

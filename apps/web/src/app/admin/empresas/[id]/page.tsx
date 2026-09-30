@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState } from "@/components/ui";
-import {
-  buildCompanyDetailData,
-  getPhaseOneAdminDataSafely,
-} from "@/lib/admin-phase-one-data";
+import { getCompany, listJobSourcesPaginated } from "@/lib/admin-ingestion-api";
+import { buildCompanyStatus, buildSourceStatus } from "@/lib/admin-operations";
 import { buildAdminStateModel } from "@/lib/admin-state";
+import {
+  getAdminDataErrorKind,
+  isApiNotFoundError,
+} from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
@@ -70,7 +72,29 @@ export default async function AdminCompanyDetailPage({
     );
   }
 
-  const companyDataResult = await getPhaseOneAdminDataSafely();
+  // Consulta pontual: a empresa por id + as fontes DELA (máx. 100 por página,
+  // paginadas no banco). Antes carregava todas as empresas, fontes e usuários
+  // só para achar esta empresa.
+  const companyDataResult = await Promise.all([
+    getCompany(id, token),
+    listJobSourcesPaginated(
+      { companyId: id, pageSize: 100, sortBy: "sourceName" },
+      token,
+    ),
+  ])
+    .then(([companyRecord, sourcesPage]) => ({
+      data: { companyRecord, sourcesPage },
+      kind: "ok",
+    }) as const)
+    .catch((error: unknown) =>
+      isApiNotFoundError(error)
+        ? ({ kind: "not-found" } as const)
+        : ({ kind: getAdminDataErrorKind(error) } as const),
+    );
+
+  if (companyDataResult.kind === "not-found") {
+    notFound();
+  }
 
   if (companyDataResult.kind !== "ok") {
     const state = buildAdminStateModel(
@@ -85,12 +109,16 @@ export default async function AdminCompanyDetailPage({
     );
   }
 
-  const { companies, sourceViews } = companyDataResult.data;
-  const company = buildCompanyDetailData(id, companies, sourceViews);
-
-  if (!company) {
-    notFound();
-  }
+  const { companyRecord, sourcesPage } = companyDataResult.data;
+  const relatedSources = sourcesPage.rows.map((source) => ({
+    ...source,
+    status: buildSourceStatus(source),
+  }));
+  const company = {
+    ...companyRecord,
+    relatedSources,
+    status: buildCompanyStatus(companyRecord, relatedSources),
+  };
 
   return (
     <div className="px-6 py-10 md:px-10">

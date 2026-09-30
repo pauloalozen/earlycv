@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState, Input } from "@/components/ui";
-import { filterCompanies } from "@/lib/admin-operations";
-import { getPhaseOneAdminDataSafely } from "@/lib/admin-phase-one-data";
+import {
+  type CompanyStatusLabel,
+  listCompaniesPaginated,
+} from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
+import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -13,14 +16,34 @@ import { FetchLogoButton } from "./_components/fetch-logo-button";
 
 export const metadata = buildAdminMetadata("Empresas");
 
+const PAGE_SIZE = 20;
+
+const COMPANY_STATUS_VALUES: CompanyStatusLabel[] = [
+  "incompleta",
+  "aguardando primeiro run",
+  "com falha recente",
+  "completa",
+];
+
 type CompaniesPageProps = {
-  searchParams: Promise<{ query?: string; status?: string; token?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    query?: string;
+    status?: string;
+    token?: string;
+  }>;
 };
 
 export default async function AdminCompaniesPage({
   searchParams,
 }: CompaniesPageProps) {
-  const { query, status } = await searchParams;
+  const { page, query, status } = await searchParams;
+  const pageNum = Math.max(1, Number.parseInt(page ?? "1", 10) || 1);
+  const statusFilter = COMPANY_STATUS_VALUES.includes(
+    status as CompanyStatusLabel,
+  )
+    ? (status as CompanyStatusLabel)
+    : undefined;
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -33,7 +56,19 @@ export default async function AdminCompaniesPage({
     );
   }
 
-  const companiesDataResult = await getPhaseOneAdminDataSafely();
+  // Busca, filtro de status e paginação NO SERVIDOR: a API devolve só a
+  // página pedida, já com fontes contadas e status calculado.
+  const companiesDataResult = await listCompaniesPaginated(
+    {
+      page: pageNum,
+      pageSize: PAGE_SIZE,
+      search: query || undefined,
+      status: statusFilter,
+    },
+    token,
+  )
+    .then((data) => ({ data, kind: "ok" }) as const)
+    .catch((error: unknown) => ({ kind: getAdminDataErrorKind(error) }) as const);
 
   if (companiesDataResult.kind !== "ok") {
     const state = buildAdminStateModel(
@@ -48,8 +83,12 @@ export default async function AdminCompaniesPage({
     );
   }
 
-  const { companyViews } = companiesDataResult.data;
-  const filteredCompanies = filterCompanies(companyViews, { query, status });
+  const {
+    rows: filteredCompanies,
+    total,
+    totalPages,
+  } = companiesDataResult.data;
+  const safePageNum = Math.min(pageNum, totalPages);
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -131,7 +170,7 @@ export default async function AdminCompaniesPage({
                         {company.name}
                       </p>
                       <p className="text-sm text-stone-600">
-                        {company.relatedSources.length} fonte(s) conectada(s)
+                        {company.sourcesCount} fonte(s) conectada(s)
                       </p>
                     </div>
                   </div>
@@ -151,7 +190,7 @@ export default async function AdminCompaniesPage({
                   >
                     Abrir detalhe
                   </Link>
-                  {company.relatedSources.length === 0 ? (
+                  {company.sourcesCount === 0 ? (
                     <Link
                       className={buttonVariants({ variant: "outline" })}
                       href={`/admin/empresas/${company.id}`}
@@ -165,7 +204,53 @@ export default async function AdminCompaniesPage({
             ))}
           </div>
         )}
+
+        {totalPages > 1 && total > 0 && (
+          <div className="flex items-center justify-between text-sm text-stone-600">
+            <span>
+              Página {safePageNum} de {totalPages} · {total} empresas
+            </span>
+            <div className="flex gap-2">
+              {safePageNum > 1 && (
+                <Link
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={buildPageHref({
+                    page: safePageNum - 1,
+                    query,
+                    status: statusFilter,
+                  })}
+                >
+                  ← Anterior
+                </Link>
+              )}
+              {safePageNum < totalPages && (
+                <Link
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={buildPageHref({
+                    page: safePageNum + 1,
+                    query,
+                    status: statusFilter,
+                  })}
+                >
+                  Próxima →
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function buildPageHref(params: {
+  page: number;
+  query?: string;
+  status?: string;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("page", String(params.page));
+  if (params.query) qs.set("query", params.query);
+  if (params.status) qs.set("status", params.status);
+  return `/admin/empresas?${qs}`;
 }

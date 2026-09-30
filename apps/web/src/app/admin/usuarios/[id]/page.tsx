@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card, EmptyState, InfoField } from "@/components/ui";
-import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { getAdminUserViewDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   buildAdminProfileDetailHref,
@@ -53,11 +53,15 @@ export default async function AdminUserDetailPage({
     );
   }
 
-  const usersDataResult = await getAdminUsersDataSafely();
+  const userDataResult = await getAdminUserViewDataSafely(id);
 
-  if (usersDataResult.kind !== "ok") {
+  if (userDataResult.kind === "not-found") {
+    notFound();
+  }
+
+  if (userDataResult.kind !== "ok") {
     const state = buildAdminStateModel(
-      usersDataResult.kind,
+      userDataResult.kind,
       `/admin/usuarios/${id}`,
     );
 
@@ -68,13 +72,7 @@ export default async function AdminUserDetailPage({
     );
   }
 
-  const { adminUserViews } = usersDataResult.data;
-
-  const user = adminUserViews.find((item) => item.id === id) ?? null;
-
-  if (!user) {
-    notFound();
-  }
+  const user = userDataResult.data;
 
   const assistedSession = buildAssistedSessionState(
     user.assistedSession,

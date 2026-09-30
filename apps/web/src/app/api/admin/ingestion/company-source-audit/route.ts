@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
           (searchParams.get("tier") as CompanySourceAuditTier | null) ??
           undefined,
         search: searchParams.get("search") ?? undefined,
+        page: Number.parseInt(searchParams.get("page") ?? "", 10) || undefined,
       },
       token,
     );

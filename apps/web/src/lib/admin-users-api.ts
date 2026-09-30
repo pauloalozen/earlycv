@@ -147,6 +147,7 @@ export async function listAdminUsers(
     page?: number;
     limit?: number;
     planType?: string;
+    profileStatus?: string;
     query?: string;
     status?: string;
   } = {},
@@ -156,6 +157,7 @@ export async function listAdminUsers(
   if (filters.page) params.set("page", String(filters.page));
   if (filters.limit) params.set("limit", String(filters.limit));
   if (filters.planType) params.set("planType", filters.planType);
+  if (filters.profileStatus) params.set("profileStatus", filters.profileStatus);
   if (filters.query) params.set("query", filters.query);
   if (filters.status) params.set("status", filters.status);
   const qs = params.toString();
@@ -166,6 +168,14 @@ export async function listAdminUsers(
     total: number;
     users: AdminUserRecord[];
   }>(`/admin/users${qs ? `?${qs}` : ""}`, token);
+}
+
+// Currículo por id (telas de detalhe) — nunca carrega a base inteira.
+export async function getAdminResume(resumeId: string, token?: string) {
+  return apiRequest<{ id: string; userId: string }>(
+    `/admin/resumes/${resumeId}`,
+    token,
+  );
 }
 
 export type AdminResumeListRecord = AdminUserResumeRecord & {

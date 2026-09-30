@@ -2,21 +2,22 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { Card } from "@/components/ui";
-import { getCompany, listJobSources } from "@/lib/admin-ingestion-api";
+import {
+  getCompany,
+  getJobSource,
+  listJobSourceOptions,
+} from "@/lib/admin-ingestion-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import {
   getAdminDataErrorKind,
   isInvalidAdminTokenError,
   isMissingAdminRoleError,
+  isApiNotFoundError,
 } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 
 export const metadata = buildAdminMetadata("Detalhe da fonte");
-
-function isApiNotFoundError(error: unknown) {
-  return error instanceof Error && error.message.startsWith("API 404:");
-}
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -52,20 +53,26 @@ export default async function AdminSourceAliasPage({
   }
 
   try {
-    const sources = await listJobSources();
-    const sourceById = sources.find((source) => source.id === id) ?? null;
+    // O identificador pode ser o id de uma fonte OU de uma empresa. Antes
+    // isto carregava TODAS as fontes só para procurar um id; agora são duas
+    // consultas pontuais (fonte por id; fontes da empresa, máx. 2).
+    const sourceById = await getJobSource(id).catch((error: unknown) => {
+      if (isApiNotFoundError(error)) return null;
+      throw error;
+    });
 
     if (sourceById) {
       redirect(`/admin/ingestion/${sourceById.id}`);
     }
 
-    const companySources = sources.filter((source) => source.companyId === id);
+    const { options: companySources, total: companySourcesTotal } =
+      await listJobSourceOptions({ companyId: id, limit: 2 });
 
-    if (companySources.length === 1) {
+    if (companySourcesTotal === 1) {
       redirect(`/admin/ingestion/${companySources[0]?.id}`);
     }
 
-    if (companySources.length > 1) {
+    if (companySourcesTotal > 1) {
       redirect(`/admin/empresas/${id}`);
     }
 
