@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import type {
   IngestionRun,
@@ -17,6 +18,7 @@ import { DatabaseService } from "../database/database.service";
 import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
 import { isForeignLocation } from "../jobs/geo-normalizer";
 import { buildPublicJobSlug } from "../jobs/public-job-view";
+import { WebRevalidationService } from "../web-revalidation/web-revalidation.service";
 import {
   AshbyAdapter,
   CustomApiAdapter,
@@ -124,6 +126,11 @@ export class IngestionService {
     @Inject(EightfoldAdapter) eightfoldAdapter: EightfoldAdapter,
     @Inject(GoogleIndexingService)
     private readonly googleIndexingService: GoogleIndexingService,
+    // Opcional e por último: cache do front (ISR do detalhe da vaga). Nunca
+    // lança nem bloqueia — ver WebRevalidationService.
+    @Optional()
+    @Inject(WebRevalidationService)
+    private readonly webRevalidation?: WebRevalidationService,
   ) {
     this.adapters = new Map<JobSource["sourceType"], IngestionSourceAdapter>([
       [customHtmlAdapter.sourceType, customHtmlAdapter],
@@ -1020,6 +1027,17 @@ export class IngestionService {
       data: updateData,
     });
 
+    // Cache do front (ISR do detalhe): vaga que muda de status ou de
+    // conteúdo. Só enfileira (não lança/bloqueia); o TTL cobre falhas.
+    const nextStatus = observation.status ?? "active";
+    if (existingJob.status === "active" && nextStatus !== "active") {
+      this.requestWebRevalidation(existingJob.slug, "inactivated");
+    } else if (existingJob.status !== "active" && nextStatus === "active") {
+      this.requestWebRevalidation(existingJob.slug, "published");
+    } else if (existingJob.status === "active" && contentChanged) {
+      this.requestWebRevalidation(existingJob.slug, "updated");
+    }
+
     return {
       previewItem: {
         action: "updated",
@@ -1028,6 +1046,21 @@ export class IngestionService {
         title: observation.title,
       } satisfies IngestionPreviewItem,
     };
+  }
+
+  // Nunca deixa uma falha do cache do front interromper a ingestão: o serviço
+  // já não lança, e aqui há uma segunda barreira. O TTL do ISR cobre o resto.
+  private requestWebRevalidation(
+    slug: string | null,
+    reason: "updated" | "published" | "inactivated",
+  ) {
+    try {
+      this.webRevalidation?.requestJobRevalidation(slug, reason);
+    } catch (error) {
+      this.logger.warn(
+        `web revalidation request failed for ${slug ?? "job without slug"}: ${error instanceof Error ? error.message : "unknown"}`,
+      );
+    }
   }
 
   private async markSourceJobsAsInactiveWhenStale(
@@ -1055,6 +1088,12 @@ export class IngestionService {
         status: "inactive",
       },
     });
+
+    // Invalida o cache do front ANTES do laço do Google (que é awaited e
+    // lento): só enfileira, nunca lança nem bloqueia a ingestão.
+    for (const job of staleJobs) {
+      this.requestWebRevalidation(job.slug, "inactivated");
+    }
 
     for (const job of staleJobs) {
       if (!job.slug) continue;

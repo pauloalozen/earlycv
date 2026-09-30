@@ -26,6 +26,7 @@ function createIngestionServiceFixture(options?: {
     title?: string;
   }>;
   sourceType?: JobSourceType;
+  webRevalidationThrows?: boolean;
 }) {
   const updatedJobs = new Map<
     string,
@@ -121,6 +122,8 @@ function createIngestionServiceFixture(options?: {
             // sem precisar de outro fixture.
             title: "job-a",
             descriptionClean: "desc",
+            slug: "job-a-slug",
+            status: "active",
           };
         }
 
@@ -130,6 +133,7 @@ function createIngestionServiceFixture(options?: {
             canonicalKey: "job-reappear",
             firstSeenAt: new Date("2026-05-01T10:00:00.000Z"),
             lastSeenAt: new Date("2026-05-10T10:00:00.000Z"),
+            slug: "job-reappear-slug",
             status: "inactive",
           };
         }
@@ -187,6 +191,16 @@ function createIngestionServiceFixture(options?: {
     },
   };
 
+  const revalidationCalls: Array<{ slug: string | null; reason: string }> = [];
+  const webRevalidation = {
+    requestJobRevalidation: (slug: string | null, reason: string) => {
+      revalidationCalls.push({ slug, reason });
+      if (options?.webRevalidationThrows) {
+        throw new Error("webhook misbehaving");
+      }
+    },
+  };
+
   const adapter = {
     sourceType: "custom_html" as const,
     collect: async (_jobSource: unknown, context?: IngestionCollectContext) => {
@@ -227,6 +241,7 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "pandape", collect: async () => [] } as never,
     { sourceType: "eightfold", collect: async () => [] } as never,
     googleIndexingService as never,
+    webRevalidation as never,
   );
 
   return {
@@ -234,6 +249,7 @@ function createIngestionServiceFixture(options?: {
     createdJobs,
     indexingCalls,
     rawJobUpdates,
+    revalidationCalls,
     service,
     setStaleCount(count: number) {
       staleUpdateManyCount = count;
@@ -601,6 +617,102 @@ test("IngestionService sets contentUpdatedAt on the update payload when title ch
     jobAUpdate.data.contentUpdatedAt instanceof Date,
     "contentUpdatedAt must be set when title diverges from what's persisted",
   );
+});
+
+test("IngestionService requests web cache invalidation ('inactivated') for each job marked stale", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+  });
+  fixture.setStaleCount(2);
+
+  await fixture.service.runJobSource("source-1");
+
+  const inactivated = fixture.revalidationCalls.filter(
+    (call) => call.reason === "inactivated",
+  );
+  assert.deepEqual(inactivated.map((call) => call.slug).sort(), [
+    "stale-job-0",
+    "stale-job-1",
+  ]);
+});
+
+test("IngestionService requests 'published' when a previously inactive job reappears", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-reappear" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  assert.deepEqual(fixture.revalidationCalls, [
+    { slug: "job-reappear-slug", reason: "published" },
+  ]);
+});
+
+test("IngestionService requests 'updated' only when title/description really changed on an active job", async () => {
+  const unchanged = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+  });
+  await unchanged.service.runJobSource("source-1");
+  assert.deepEqual(unchanged.revalidationCalls, []);
+
+  const changed = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", title: "Titulo Novo Da Fonte" }],
+  });
+  await changed.service.runJobSource("source-1");
+  assert.deepEqual(changed.revalidationCalls, [
+    { slug: "job-a-slug", reason: "updated" },
+  ]);
+});
+
+test("IngestionService requests 'inactivated' when the source reports an active job as closed", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", status: "inactive" }],
+  });
+
+  await fixture.service.runJobSource("source-1");
+
+  assert.deepEqual(fixture.revalidationCalls, [
+    { slug: "job-a-slug", reason: "inactivated" },
+  ]);
+});
+
+test("IngestionService keeps running and reports success when the web revalidation service misbehaves", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [
+      { canonicalKey: "job-a", title: "Titulo Novo Da Fonte" },
+      { canonicalKey: "job-reappear" },
+    ],
+    webRevalidationThrows: true,
+  });
+  fixture.setStaleCount(2);
+
+  const result = await fixture.service.runJobSource("source-1");
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.failedCount, 0);
+  assert.equal(result.staleMarkedCount, 2);
+  // Google Indexing continua sendo notificado mesmo com o webhook quebrado.
+  assert.equal(
+    fixture.indexingCalls.filter((call) => call.type === "removal").length,
+    2,
+  );
+  assert.ok(fixture.revalidationCalls.length >= 3);
+});
+
+test("IngestionService works without any web revalidation service configured", async () => {
+  // Constrói sem o 14º argumento opcional (comportamento anterior).
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a", title: "Outro Titulo" }],
+  });
+  const service = fixture.service as unknown as {
+    webRevalidation?: unknown;
+    runJobSource: (id: string) => Promise<{ status: string }>;
+  };
+  service.webRevalidation = undefined;
+
+  const result = await service.runJobSource("source-1");
+
+  assert.equal(result.status, "completed");
 });
 
 test("IngestionService keeps staleMarkedCount zero when no old jobs are found", async () => {
