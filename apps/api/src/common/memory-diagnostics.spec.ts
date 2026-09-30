@@ -232,6 +232,11 @@ describe("memory-diagnostics", () => {
         (call) =>
           (JSON.parse(String(call.arguments[0])) as { event: string }).event,
       );
+      const boot = JSON.parse(String(log.mock.calls[0].arguments[0])) as Record<
+        string,
+        unknown
+      >;
+      assert.ok("pid1Comm" in boot, "mem_boot deve registrar o PID 1");
       assert.deepEqual(events, [
         "mem_boot",
         "mem_sample",

@@ -595,6 +595,8 @@ export function startMemoryDiagnostics() {
       event: "mem_boot",
       nodeVersion: process.version,
       pid: process.pid,
+      // Confirma em producao quem e o PID 1 (esperado: tini) e o pai do Node.
+      pid1Comm: readTextOrNull("/proc/1/comm")?.trim() ?? null,
       ppid: process.ppid,
       sampleIntervalMs: envMs(
         "MEMORY_DIAGNOSTICS_INTERVAL_MS",
