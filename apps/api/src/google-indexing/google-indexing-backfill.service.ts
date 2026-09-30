@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { GoogleIndexingService } from "./google-indexing.service";
@@ -20,20 +21,6 @@ function startOfSaoPauloDay(from: Date): Date {
 }
 
 export type IndexingStatus = "pending" | "notified" | "failed";
-
-type EligibleJob = {
-  id: string;
-  slug: string;
-  title: string;
-  companyName: string;
-  firstSeenAt: Date;
-};
-
-type LatestLog = {
-  status: string;
-  createdAt: Date;
-  errorMsg: string | null;
-};
 
 // Vagas que passaram pelo enrichment antes de GOOGLE_INDEXING_ENABLED ligar
 // nunca disparam notifyIndexing (job-enrichment.worker.ts só notifica no
@@ -73,83 +60,49 @@ export class GoogleIndexingBackfillService {
     });
   }
 
-  private async getEligibleJobs(): Promise<EligibleJob[]> {
-    const jobs = await this.database.job.findMany({
-      where: {
-        slug: { not: null },
-        status: "active",
-        enrichment: { enrichmentStatus: "COMPLETED" },
-      },
-      select: {
-        company: { select: { name: true } },
-        firstSeenAt: true,
-        id: true,
-        slug: true,
-        title: true,
-      },
-      orderBy: { firstSeenAt: "desc" },
-    });
+  // Vagas elegiveis (ativas, com slug e enrichment concluido) e o log de
+  // indexacao (GoogleIndexingLog nao tem FK pra Job de proposito — ver
+  // schema — entao o cruzamento e por slug). Tudo resolvido no banco: nada
+  // de carregar todas as vagas nem listas de slugs em memoria.
+  private readonly eligibleFromSql = Prisma.sql`
+    FROM "Job" j
+    JOIN "JobEnrichment" e ON e."jobId" = j.id
+    JOIN "Company" c ON c.id = j."companyId"`;
 
-    return jobs
-      .filter((job): job is typeof job & { slug: string } => job.slug !== null)
-      .map((job) => ({
-        companyName: job.company.name,
-        firstSeenAt: job.firstSeenAt,
-        id: job.id,
-        slug: job.slug,
-        title: job.title,
-      }));
+  private readonly eligibleWhereSql = Prisma.sql`
+    WHERE j.slug IS NOT NULL
+      AND j.status = 'active'
+      AND e."enrichmentStatus" = 'COMPLETED'`;
+
+  private readonly notNotifiedSql = Prisma.sql`
+    AND NOT EXISTS (
+      SELECT 1 FROM "GoogleIndexingLog" l
+      WHERE l.slug = j.slug AND l.type = 'URL_UPDATED' AND l.status = 'SUCCESS'
+    )`;
+
+  // Slugs ainda sem nenhuma notificacao URL_UPDATED com sucesso, das mais
+  // recentes para as mais antigas, limitado ao que o lote precisa.
+  async getPendingSlugs(limit: number): Promise<string[]> {
+    if (limit <= 0) return [];
+    const rows = await this.database.$queryRaw<Array<{ slug: string }>>`
+      SELECT j.slug ${this.eligibleFromSql} ${this.eligibleWhereSql} ${this.notNotifiedSql}
+      ORDER BY j."firstSeenAt" DESC
+      LIMIT ${limit}`;
+    return rows.map((row) => row.slug);
   }
 
-  // slugs de vagas elegíveis que já têm pelo menos uma notificação
-  // URL_UPDATED com sucesso — GoogleIndexingLog não tem FK pra Job de
-  // propósito (ver comentário no schema), então a interseção é feita aqui
-  // em memória em vez de um NOT EXISTS no banco.
-  private async getNotifiedSlugs(slugs: string[]): Promise<Set<string>> {
-    if (slugs.length === 0) return new Set();
-
-    const logs = await this.database.googleIndexingLog.findMany({
-      where: { slug: { in: slugs }, type: "URL_UPDATED", status: "SUCCESS" },
-      select: { slug: true },
-    });
-    return new Set(logs.map((log) => log.slug));
-  }
-
-  // Última tentativa (sucesso ou erro) por slug — usada tanto pra separar
-  // "nunca tentado" (pending) de "tentou e falhou" (failed) quanto pra
-  // exibir o motivo do erro na listagem admin.
-  private async getLatestAttemptBySlug(
-    slugs: string[],
-  ): Promise<Map<string, LatestLog>> {
-    if (slugs.length === 0) return new Map();
-
-    const logs = await this.database.googleIndexingLog.findMany({
-      where: { slug: { in: slugs }, type: "URL_UPDATED" },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true, errorMsg: true, slug: true, status: true },
-    });
-
-    const bySlug = new Map<string, LatestLog>();
-    for (const log of logs) {
-      if (!bySlug.has(log.slug)) {
-        bySlug.set(log.slug, {
-          createdAt: log.createdAt,
-          errorMsg: log.errorMsg,
-          status: log.status,
-        });
-      }
-    }
-    return bySlug;
-  }
-
-  async getPendingSlugs(): Promise<string[]> {
-    const eligible = await this.getEligibleJobs();
-    const notified = await this.getNotifiedSlugs(
-      eligible.map((job) => job.slug),
-    );
-    return eligible
-      .filter((job) => !notified.has(job.slug))
-      .map((job) => job.slug);
+  private async getCounts(): Promise<{ total: number; notified: number }> {
+    const [row] = await this.database.$queryRaw<
+      Array<{ total: number; notified: number }>
+    >`
+      SELECT count(*)::int AS total,
+             (count(*) FILTER (WHERE EXISTS (
+               SELECT 1 FROM "GoogleIndexingLog" l
+               WHERE l.slug = j.slug AND l.type = 'URL_UPDATED'
+                 AND l.status = 'SUCCESS'
+             )))::int AS notified
+      ${this.eligibleFromSql} ${this.eligibleWhereSql}`;
+    return { notified: row?.notified ?? 0, total: row?.total ?? 0 };
   }
 
   async runBackfillBatch(): Promise<{
@@ -162,8 +115,7 @@ export class GoogleIndexingBackfillService {
     const dailyLimit = this.getDailyLimit();
     const notifiedToday = await this.getNotifiedTodayCount();
     const remainingToday = Math.max(0, dailyLimit - notifiedToday);
-    const pendingSlugs = await this.getPendingSlugs();
-    const batch = pendingSlugs.slice(0, remainingToday);
+    const batch = await this.getPendingSlugs(remainingToday);
     const runStartedAt = new Date();
     let processed = 0;
 
@@ -195,7 +147,7 @@ export class GoogleIndexingBackfillService {
     const failed = processed - succeeded;
 
     this.logger.log(
-      `backfill batch complete: processed=${processed} succeeded=${succeeded} failed=${failed} notifiedToday=${notifiedToday + succeeded}/${dailyLimit} remainingAfter=${pendingSlugs.length - succeeded}`,
+      `backfill batch complete: processed=${processed} succeeded=${succeeded} failed=${failed} notifiedToday=${notifiedToday + succeeded}/${dailyLimit} batchSize=${batch.length}`,
     );
 
     return {
@@ -216,13 +168,10 @@ export class GoogleIndexingBackfillService {
     estimatedDaysRemaining: number;
     ingestionJobId: string | null;
   }> {
-    const eligible = await this.getEligibleJobs();
-    const notified = await this.getNotifiedSlugs(
-      eligible.map((job) => job.slug),
-    );
+    const counts = await this.getCounts();
     const dailyLimit = this.getDailyLimit();
     const notifiedToday = await this.getNotifiedTodayCount();
-    const pending = eligible.length - notified.size;
+    const pending = counts.total - counts.notified;
     // Resolvido por jobType (não pelo id fixo do seed) — se o job precisar
     // ser recriado manualmente algum dia, o botão "Rodar agora" continua
     // funcionando sem precisar tocar no frontend.
@@ -235,10 +184,10 @@ export class GoogleIndexingBackfillService {
       dailyLimit,
       estimatedDaysRemaining: Math.max(0, Math.ceil(pending / dailyLimit)),
       ingestionJobId: ingestionJob?.id ?? null,
-      notified: notified.size,
+      notified: counts.notified,
       notifiedToday,
       pending,
-      totalEligible: eligible.length,
+      totalEligible: counts.total,
     };
   }
 
@@ -261,39 +210,79 @@ export class GoogleIndexingBackfillService {
     page: number;
     pageSize: number;
   }> {
-    const eligible = await this.getEligibleJobs();
-    const latestBySlug = await this.getLatestAttemptBySlug(
-      eligible.map((job) => job.slug),
-    );
+    const pageSize = Math.min(100, Math.max(1, params.pageSize));
+    const offset = (Math.max(1, params.page) - 1) * pageSize;
+    // "notified" = ultima tentativa com sucesso; "failed" = ultima com erro;
+    // "pending" = nunca tentada (mesma semantica de antes).
+    const bucket =
+      params.status === "notified"
+        ? Prisma.sql`AND lt.status = 'SUCCESS'`
+        : params.status === "failed"
+          ? Prisma.sql`AND lt.status = 'ERROR'`
+          : Prisma.sql`AND lt.slug IS NULL`;
 
-    const filtered = eligible.filter((job) => {
-      const latest = latestBySlug.get(job.slug);
-      if (params.status === "notified") return latest?.status === "SUCCESS";
-      if (params.status === "failed") return latest?.status === "ERROR";
-      return !latest;
-    });
+    const rows = await this.database.$queryRaw<
+      Array<{
+        companyName: string;
+        firstSeenAt: Date;
+        id: string;
+        lastAttemptAt: Date | null;
+        lastAttemptStatus: string | null;
+        lastError: string | null;
+        slug: string;
+        title: string;
+        total: number;
+      }>
+    >`
+      WITH latest AS (
+        SELECT DISTINCT ON (slug) slug, status, "createdAt", "errorMsg"
+        FROM "GoogleIndexingLog"
+        WHERE type = 'URL_UPDATED'
+        ORDER BY slug, "createdAt" DESC
+      )
+      SELECT j.id, j.slug, j.title, c.name AS "companyName",
+             j."firstSeenAt", lt."createdAt" AS "lastAttemptAt",
+             lt.status AS "lastAttemptStatus", lt."errorMsg" AS "lastError",
+             (count(*) OVER ())::int AS total
+      ${this.eligibleFromSql}
+      LEFT JOIN latest lt ON lt.slug = j.slug
+      ${this.eligibleWhereSql}
+      ${bucket}
+      ORDER BY j."firstSeenAt" DESC, j.id
+      LIMIT ${pageSize} OFFSET ${offset}`;
 
-    const total = filtered.length;
-    const start = (params.page - 1) * params.pageSize;
-    const pageItems = filtered.slice(start, start + params.pageSize);
+    let total = rows[0]?.total ?? 0;
+    if (rows.length === 0 && offset > 0) {
+      // Pagina alem do fim: ainda devolve o total real do balde.
+      const [row] = await this.database.$queryRaw<Array<{ total: number }>>`
+        WITH latest AS (
+          SELECT DISTINCT ON (slug) slug, status
+          FROM "GoogleIndexingLog"
+          WHERE type = 'URL_UPDATED'
+          ORDER BY slug, "createdAt" DESC
+        )
+        SELECT count(*)::int AS total
+        ${this.eligibleFromSql}
+        LEFT JOIN latest lt ON lt.slug = j.slug
+        ${this.eligibleWhereSql}
+        ${bucket}`;
+      total = row?.total ?? 0;
+    }
 
     return {
-      jobs: pageItems.map((job) => {
-        const latest = latestBySlug.get(job.slug) ?? null;
-        return {
-          companyName: job.companyName,
-          firstSeenAt: job.firstSeenAt,
-          id: job.id,
-          lastAttemptAt: latest?.createdAt ?? null,
-          lastAttemptStatus:
-            (latest?.status as "SUCCESS" | "ERROR" | undefined) ?? null,
-          lastError: latest?.errorMsg ?? null,
-          slug: job.slug,
-          title: job.title,
-        };
-      }),
+      jobs: rows.map((row) => ({
+        companyName: row.companyName,
+        firstSeenAt: row.firstSeenAt,
+        id: row.id,
+        lastAttemptAt: row.lastAttemptAt,
+        lastAttemptStatus:
+          (row.lastAttemptStatus as "SUCCESS" | "ERROR" | null) ?? null,
+        lastError: row.lastError,
+        slug: row.slug,
+        title: row.title,
+      })),
       page: params.page,
-      pageSize: params.pageSize,
+      pageSize,
       total,
     };
   }
