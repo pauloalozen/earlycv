@@ -2,12 +2,9 @@ import Link from "next/link";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
 import { AT } from "@/app/admin/_components/admin-primitives";
 import { Card, EmptyState, Input } from "@/components/ui";
-import { getAdminUsersDataSafely } from "@/lib/admin-phase-one-data";
+import { getAdminUsersListDataSafely } from "@/lib/admin-phase-one-data";
 import { buildAdminStateModel } from "@/lib/admin-state";
-import {
-  buildAdminProfileDetailHref,
-  filterAdminUsers,
-} from "@/lib/admin-users-operations";
+import { buildAdminProfileDetailHref } from "@/lib/admin-users-operations";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
@@ -44,7 +41,14 @@ export default async function AdminProfilesPage({
     );
   }
 
-  const usersDataResult = await getAdminUsersDataSafely();
+  // Paginação, busca e filtro de status NO SERVIDOR: a API recebe
+  // page/limit/query/profileStatus e devolve só a página pedida.
+  const usersDataResult = await getAdminUsersListDataSafely({
+    limit: PAGE_SIZE,
+    page: pageNum,
+    profileStatus: status || undefined,
+    query: query || undefined,
+  });
 
   if (usersDataResult.kind !== "ok") {
     const state = buildAdminStateModel(usersDataResult.kind, "/admin/perfis");
@@ -56,21 +60,13 @@ export default async function AdminProfilesPage({
     );
   }
 
-  const { adminUserViews } = usersDataResult.data;
-
-  const profileViews = filterAdminUsers(adminUserViews, { query })
-    .map((user) => ({
-      profileStatus: user.profileStatus,
-      user,
-    }))
-    .filter((item) => !status || item.profileStatus.label === status);
-
-  const totalPages = Math.max(1, Math.ceil(profileViews.length / PAGE_SIZE));
+  const { adminUserViews, limit, total } = usersDataResult.data;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePageNum = Math.min(pageNum, totalPages);
-  const paginatedProfileViews = profileViews.slice(
-    (safePageNum - 1) * PAGE_SIZE,
-    safePageNum * PAGE_SIZE,
-  );
+  const paginatedProfileViews = adminUserViews.map((user) => ({
+    profileStatus: user.profileStatus,
+    user,
+  }));
 
   return (
     <div className="px-6 py-10 md:px-10">
@@ -113,7 +109,7 @@ export default async function AdminProfilesPage({
           </form>
         </Card>
 
-        {profileViews.length === 0 ? (
+        {total === 0 ? (
           <EmptyState
             description="Nenhum perfil corresponde aos filtros atuais."
             title="Nenhum resultado"
@@ -157,14 +153,13 @@ export default async function AdminProfilesPage({
           </div>
         )}
 
-        {totalPages > 1 && profileViews.length > 0 && (
+        {totalPages > 1 && total > 0 && (
           <div
             className="flex items-center justify-between text-sm"
             style={{ color: AT.muted }}
           >
             <span>
-              Página {safePageNum} de {totalPages} · {profileViews.length}{" "}
-              perfis
+              Página {safePageNum} de {totalPages} · {total} perfis
             </span>
             <div className="flex gap-2">
               {safePageNum > 1 && (

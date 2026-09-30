@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
   ValidationPipe,
 } from "@nestjs/common";
@@ -17,6 +18,7 @@ import { RolesGuard } from "../common/roles.guard";
 import { CompanyLogoFetchService } from "../ingestion/company-logo/company-logo-fetch.service";
 import { CompaniesService } from "./companies.service";
 import { CreateCompanyDto } from "./dto/create-company.dto";
+import { ListCompaniesDto } from "./dto/list-companies.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 
 const companiesValidationOptions = {
@@ -49,9 +51,21 @@ export class CompaniesController {
     return this.companiesService.create(dto);
   }
 
-  @Get()
-  list() {
-    return this.companiesService.list();
+  // Paginada no banco (busca + status). Substitui o antigo GET /companies,
+  // que devolvia todas as empresas.
+  @Get("paginated")
+  listPaginated(
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: false,
+        expectedType: ListCompaniesDto,
+      }),
+    )
+    dto: ListCompaniesDto,
+  ) {
+    return this.companiesService.listPaginated(dto);
   }
 
   @Get(":id")

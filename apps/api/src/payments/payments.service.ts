@@ -12,7 +12,11 @@ import {
 } from "@nestjs/common";
 import MercadoPagoConfig, { Payment } from "mercadopago";
 import { DatabaseService } from "../database/database.service";
-import { getPlanConfig, type PlanId, PlansService } from "../plans/plans.service";
+import {
+  getPlanConfig,
+  type PlanId,
+  PlansService,
+} from "../plans/plans.service";
 import {
   BrickPayloadValidationError,
   parseBrickPaymentPayload,
@@ -273,7 +277,10 @@ export class PaymentsService {
     purchaseId: string,
     couponCode: string | null,
   ): Promise<
-    | ({ applied: true; freeRedemptionAvailable: false } & BrickCheckoutDataResponse & {
+    | ({
+        applied: true;
+        freeRedemptionAvailable: false;
+      } & BrickCheckoutDataResponse & {
           appliedCoupon: {
             code: string;
             discountAmountInCents: number;
@@ -336,7 +343,12 @@ export class PaymentsService {
         });
       }
       const data = await this.getBrickCheckoutData(userId, purchaseId);
-      return { applied: true, freeRedemptionAvailable: false, appliedCoupon: null, ...data };
+      return {
+        applied: true,
+        freeRedemptionAvailable: false,
+        appliedCoupon: null,
+        ...data,
+      };
     }
 
     const appliedCoupon = await this.plansService.resolveCouponForCheckout(
@@ -832,33 +844,57 @@ export class PaymentsService {
         : {}),
       ...dateFilter,
     };
-    const plans = await this.database.planPurchase.findMany({
-      where,
-      include: { user: { select: { email: true } } },
-      orderBy: { createdAt: "desc" },
+    // Paginação no banco (skip/take + count). Antes carregava TODAS as
+    // compras com o usuário e fatiava em memória.
+    const [plans, total] = await Promise.all([
+      this.database.planPurchase.findMany({
+        where,
+        include: { user: { select: { email: true } } },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.database.planPurchase.count({ where }),
+    ]);
+
+    const items = plans.map((p) => ({
+      checkoutId: p.id,
+      type: "plan" as const,
+      userId: p.userId,
+      userEmail: p.user?.email ?? null,
+      planName: planTypeToName(p.planType),
+      status: p.status,
+      mpPaymentId: p.mpPaymentId ?? null,
+      mpPreferenceId: p.mpPreferenceId ?? null,
+      externalReference: p.paymentReference,
+      amountInCents: p.amountInCents,
+      createdAt: p.createdAt.toISOString(),
+      updatedAt: p.updatedAt.toISOString(),
+    }));
+
+    return { items, total };
+  }
+
+  // Resumo por agregação (contagem e soma) — a visão geral do /admin não
+  // precisa das linhas de pagamento, só destes dois números.
+  async getPaymentsSummary(filters: { from?: string; to?: string }) {
+    const createdAt = {
+      ...(filters.from ? { gte: new Date(filters.from) } : {}),
+      ...(filters.to ? { lte: new Date(filters.to) } : {}),
+    };
+    const result = await this.database.planPurchase.aggregate({
+      where: {
+        status: "completed",
+        ...(filters.from || filters.to ? { createdAt } : {}),
+      },
+      _count: { _all: true },
+      _sum: { amountInCents: true },
     });
 
-    const all = plans
-      .map((p) => ({
-        checkoutId: p.id,
-        type: "plan" as const,
-        userId: p.userId,
-        userEmail: p.user?.email ?? null,
-        planName: planTypeToName(p.planType),
-        status: p.status,
-        mpPaymentId: p.mpPaymentId ?? null,
-        mpPreferenceId: p.mpPreferenceId ?? null,
-        externalReference: p.paymentReference,
-        amountInCents: p.amountInCents,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      }))
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-
-    return { items: all.slice(skip, skip + limit), total: all.length };
+    return {
+      approvedCount: result._count._all,
+      revenueInCents: result._sum.amountInCents ?? 0,
+    };
   }
 
   async getPaymentDetail(checkoutId: string): Promise<PaymentDetailRecord> {

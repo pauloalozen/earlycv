@@ -66,8 +66,18 @@ async function buildFixture() {
       },
       resumes: {
         create: [
-          { isMaster: true, kind: "master", status: "reviewed", title: "CV master" },
-          { isMaster: false, kind: "master", status: "draft", title: "CV base" },
+          {
+            isMaster: true,
+            kind: "master",
+            status: "reviewed",
+            title: "CV master",
+          },
+          {
+            isMaster: false,
+            kind: "master",
+            status: "draft",
+            title: "CV base",
+          },
           {
             isMaster: false,
             kind: "adapted",
@@ -84,14 +94,24 @@ async function buildFixture() {
     await database.resume.deleteMany({
       where: {
         userId: {
-          in: [userAusente.id, userIncompleto.id, userSemMaster.id, userCompleto.id],
+          in: [
+            userAusente.id,
+            userIncompleto.id,
+            userSemMaster.id,
+            userCompleto.id,
+          ],
         },
       },
     });
     await database.userProfile.deleteMany({
       where: {
         userId: {
-          in: [userAusente.id, userIncompleto.id, userSemMaster.id, userCompleto.id],
+          in: [
+            userAusente.id,
+            userIncompleto.id,
+            userSemMaster.id,
+            userCompleto.id,
+          ],
         },
       },
     });

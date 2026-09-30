@@ -32,11 +32,6 @@ export class AdminResumesController {
     private readonly adminResumesService: AdminResumesService,
   ) {}
 
-  @Get()
-  list() {
-    return this.adminResumesService.list();
-  }
-
   @Get(":id")
   getById(@Param("id") id: string) {
     return this.adminResumesService.getById(id);

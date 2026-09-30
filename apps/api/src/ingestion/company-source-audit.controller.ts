@@ -50,16 +50,20 @@ export class CompanySourceAuditController {
     @Query("status") status?: string,
     @Query("tier") tier?: string,
     @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
   ) {
-    const [findings, counts] = await Promise.all([
+    const [result, counts] = await Promise.all([
       this.service.listFindings({
         status: isAuditStatus(status) ? status : undefined,
         tier: isAuditTier(tier) ? tier : undefined,
         search: search?.trim() || undefined,
+        page: Number.parseInt(page ?? "", 10) || undefined,
+        pageSize: Number.parseInt(pageSize ?? "", 10) || undefined,
       }),
       this.service.countByStatus(),
     ]);
-    return { findings, counts };
+    return { ...result, counts };
   }
 
   @Post("run")

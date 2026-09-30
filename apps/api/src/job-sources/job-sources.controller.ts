@@ -23,6 +23,8 @@ import { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import { CreateJobSourceDto } from "./dto/create-job-source.dto";
 // biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
+import { ListJobSourceOptionsDto } from "./dto/list-job-source-options.dto";
+// biome-ignore lint/style/useImportType: DTO precisa de import em runtime para reflection do NestJS ValidationPipe
 import { ListJobSourcesDto } from "./dto/list-job-sources.dto";
 import { ReassignCompanyDto } from "./dto/reassign-company.dto";
 import { UpdateJobSourceDto } from "./dto/update-job-source.dto";
@@ -62,9 +64,20 @@ export class JobSourcesController {
     return this.jobSourcesService.create(dto);
   }
 
-  @Get()
-  list() {
-    return this.jobSourcesService.list();
+  // Opções leves e limitadas (filtros/seletores). Substitui o antigo
+  // GET /job-sources, que devolvia TODAS as fontes com a última run inteira.
+  @Get("options")
+  listOptions(
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: false,
+      }),
+    )
+    dto: ListJobSourceOptionsDto,
+  ) {
+    return this.jobSourcesService.listOptions(dto);
   }
 
   @Get("duplicates")

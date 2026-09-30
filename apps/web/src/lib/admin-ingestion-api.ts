@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { JobSourceTypeOption } from "./admin-ingestion-flow";
+import type { AdminStatus } from "./admin-operations";
 import { getBackofficeSessionToken } from "./backoffice-session.server";
 
 // null = Job existe mas sem JobEnrichment (vaga antiga). undefined = campo
@@ -323,8 +324,29 @@ async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
   return (await response.json()) as T;
 }
 
-export async function listJobSources(token?: string) {
-  return apiRequest<JobSourceRecord[]>("/job-sources", token);
+export type JobSourceOption = {
+  company: { id: string; name: string };
+  companyId: string;
+  id: string;
+  sourceName: string;
+  sourceType: string;
+};
+
+// Opções leves (sem runs, sem colunas grandes) para filtros e seletores.
+// Sempre limitadas pela API (máx. 500) — nunca a base inteira de fontes.
+export async function listJobSourceOptions(
+  params: { companyId?: string; limit?: number; search?: string } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.companyId) qs.set("companyId", params.companyId);
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.search) qs.set("search", params.search);
+  return apiRequest<{
+    limit: number;
+    options: JobSourceOption[];
+    total: number;
+  }>(`/job-sources/options${qs.size > 0 ? `?${qs}` : ""}`, token);
 }
 
 export type JobSourceSortBy =
@@ -336,6 +358,7 @@ export type JobSourceSortBy =
 
 export async function listJobSourcesPaginated(
   params: {
+    companyId?: string;
     page?: number;
     pageSize?: number;
     search?: string;
@@ -347,6 +370,7 @@ export async function listJobSourcesPaginated(
   token?: string,
 ) {
   const qs = new URLSearchParams();
+  if (params.companyId) qs.set("companyId", params.companyId);
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("pageSize", String(params.pageSize));
   if (params.search) qs.set("search", params.search);
@@ -360,8 +384,81 @@ export async function listJobSourcesPaginated(
   );
 }
 
-export async function listCompanies(token?: string) {
-  return apiRequest<CompanyRecord[]>("/companies", token);
+export type CompanyListRow = CompanyRecord & {
+  sourcesCount: number;
+  status: AdminStatus;
+};
+
+export type CompanyStatusLabel =
+  | "incompleta"
+  | "aguardando primeiro run"
+  | "com falha recente"
+  | "completa";
+
+// Paginada no banco (busca por nome + filtro de status). Nunca a lista
+// inteira: o status já vem calculado pela API.
+export async function listCompaniesPaginated(
+  params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    status?: CompanyStatusLabel;
+  } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.search) qs.set("search", params.search);
+  if (params.status) qs.set("status", params.status);
+  return apiRequest<{
+    page: number;
+    pageSize: number;
+    rows: CompanyListRow[];
+    total: number;
+    totalPages: number;
+  }>(`/companies/paginated?${qs}`, token);
+}
+
+export type PendingType =
+  | "company-missing-source"
+  | "source-missing-first-run"
+  | "source-failed-recent-run"
+  | "user-missing-profile"
+  | "user-incomplete-profile"
+  | "user-missing-master-resume";
+
+export type PendingItemRecord = {
+  cta: string;
+  description: string;
+  entityId: string;
+  priority: "alta";
+  title: string;
+  type: PendingType;
+};
+
+export async function listAdminPending(
+  params: {
+    page?: number;
+    pageSize?: number;
+    query?: string;
+    type?: PendingType;
+  } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.query) qs.set("query", params.query);
+  if (params.type) qs.set("type", params.type);
+  return apiRequest<{
+    counts: Record<PendingType, number>;
+    items: PendingItemRecord[];
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  }>(`/admin/pending?${qs}`, token);
 }
 
 export async function getCompany(companyId: string, token?: string) {
@@ -571,15 +668,19 @@ export type DiscoveredCompanyStatus =
   | "IMPORTED"
   | "DISMISSED";
 
-export async function listDiscoveredCompanies(
+// Só a contagem (badge da aba). Pede 1 linha e lê `total`: o endpoint
+// devolve { rows, total, ... } paginado — nunca precisa trazer as linhas.
+export async function countDiscoveredCompanies(
   statuses?: DiscoveredCompanyStatus[],
   token?: string,
 ) {
-  const qs = statuses?.length ? `?status=${statuses.join(",")}` : "";
-  return apiRequest<{ id: string; status: DiscoveredCompanyStatus }[]>(
-    `/admin/discovery${qs}`,
+  const qs = new URLSearchParams({ page: "1", pageSize: "1" });
+  if (statuses?.length) qs.set("status", statuses.join(","));
+  const result = await apiRequest<{ total: number }>(
+    `/admin/discovery?${qs}`,
     token,
   );
+  return result.total;
 }
 
 export async function getGlobalSchedulerConfig(token?: string) {
@@ -902,16 +1003,24 @@ export async function listCompanySourceAudits(
     status?: CompanySourceAuditStatus;
     tier?: CompanySourceAuditTier;
     search?: string;
+    page?: number;
+    pageSize?: number;
   },
   token?: string,
 ) {
   const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
   if (params.status) qs.set("status", params.status);
   if (params.tier) qs.set("tier", params.tier);
   if (params.search) qs.set("search", params.search);
   return apiRequest<{
     findings: CompanySourceAuditFinding[];
     counts: CompanySourceAuditCounts;
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
   }>(`/admin/company-source-audit?${qs}`, token);
 }
 

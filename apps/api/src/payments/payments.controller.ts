@@ -107,6 +107,13 @@ export class PaymentsController {
     });
   }
 
+  @Get("admin/summary")
+  @UseGuards(RolesGuard)
+  @InternalRoles("superadmin")
+  getPaymentsSummary(@Query("from") from?: string, @Query("to") to?: string) {
+    return this.paymentsService.getPaymentsSummary({ from, to });
+  }
+
   @Get("admin/:checkoutId")
   @UseGuards(RolesGuard)
   @InternalRoles("superadmin")

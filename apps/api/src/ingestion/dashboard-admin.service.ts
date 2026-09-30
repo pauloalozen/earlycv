@@ -7,6 +7,27 @@ export class DashboardAdminService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
+  // Números da visão geral do /admin só com COUNTs: nada de carregar
+  // usuários/currículos para contar em memória. Usuários de staff ficam de
+  // fora, como sempre ficaram na listagem do admin.
+  async getOverviewStats(since: Date) {
+    const [totalUsers, newUsers, totalAdaptedResumes] = await Promise.all([
+      this.database.user.count({ where: { isStaff: false } }),
+      this.database.user.count({
+        where: { isStaff: false, createdAt: { gte: since } },
+      }),
+      this.database.resume.count({
+        where: {
+          isMaster: false,
+          kind: "adapted",
+          user: { isStaff: false },
+        },
+      }),
+    ]);
+
+    return { newUsers, totalAdaptedResumes, totalUsers };
+  }
+
   async getIndexingLog(limit: number) {
     return this.database.googleIndexingLog.findMany({
       orderBy: { createdAt: "desc" },

@@ -14,17 +14,6 @@ export class AdminResumesService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
-  list() {
-    return this.database.resume.findMany({
-      where: {
-        user: {
-          isStaff: false,
-        },
-      },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    });
-  }
-
   async getById(resumeId: string) {
     return this.loadProductResumeById(resumeId);
   }

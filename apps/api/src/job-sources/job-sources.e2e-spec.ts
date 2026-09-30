@@ -390,9 +390,7 @@ test("global ingestion run endpoints list and fetch run details across sources",
     .expect(({ body }) => {
       assert.equal(Array.isArray(body.runs), true);
       assert.equal(
-        body.runs.some(
-          (run: { id: string }) => run.id === runResponse.body.id,
-        ),
+        body.runs.some((run: { id: string }) => run.id === runResponse.body.id),
         true,
       );
     });

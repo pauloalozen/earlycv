@@ -14,14 +14,17 @@ const WRONG_SOURCE = {
   crawlStrategy: "api",
   checkIntervalMinutes: 60,
   isFallbackAdapter: false,
-  company: { id: "company-wrong", name: "Itaqui Energia", normalizedName: "itaqui-energia" },
+  company: {
+    id: "company-wrong",
+    name: "Itaqui Energia",
+    normalizedName: "itaqui-energia",
+  },
   ingestionRuns: [],
 };
 
-function makeDatabase(overrides: {
-  targetCompany?: unknown;
-  existingTargetSource?: unknown;
-} = {}) {
+function makeDatabase(
+  overrides: { targetCompany?: unknown; existingTargetSource?: unknown } = {},
+) {
   const calls: Record<string, unknown[]> = {
     companyCreate: [],
     companyFindUnique: [],
@@ -38,12 +41,19 @@ function makeDatabase(overrides: {
         calls.jobSourceFindFirst.push(args);
         return overrides.existingTargetSource ?? null;
       },
-      update: async (args: { where: { id: string }; data: { companyId: string } }) => {
+      update: async (args: {
+        where: { id: string };
+        data: { companyId: string };
+      }) => {
         calls.jobSourceUpdate.push(args);
         return {
           ...WRONG_SOURCE,
           companyId: args.data.companyId,
-          company: { id: args.data.companyId, name: "Solar Grid", normalizedName: "solar-grid" },
+          company: {
+            id: args.data.companyId,
+            name: "Solar Grid",
+            normalizedName: "solar-grid",
+          },
         };
       },
       delete: async (args: unknown) => {
@@ -54,7 +64,11 @@ function makeDatabase(overrides: {
         ...WRONG_SOURCE,
         id: args.where.id,
         companyId: "company-target",
-        company: { id: "company-target", name: "Solar Grid", normalizedName: "solar-grid" },
+        company: {
+          id: "company-target",
+          name: "Solar Grid",
+          normalizedName: "solar-grid",
+        },
       }),
     },
     company: {
@@ -107,6 +121,7 @@ test("reassignCompany() cria empresa nova e move a fonte + vagas quando ninguem 
     include: {
       company: true,
       ingestionRuns: {
+        omit: { previewJson: true },
         orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
         take: 1,
       },
@@ -130,7 +145,10 @@ test("reassignCompany() funde na fonte existente quando a empresa certa ja tem e
     normalizedName: "solar-grid",
     isActive: true,
   };
-  const { database, calls } = makeDatabase({ targetCompany, existingTargetSource });
+  const { database, calls } = makeDatabase({
+    targetCompany,
+    existingTargetSource,
+  });
   const service = new JobSourcesService(database as never, {} as never);
 
   const result = await service.reassignCompany("js-wrong", {

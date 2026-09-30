@@ -1,25 +1,16 @@
 import "server-only";
 
+import { listAllIngestionRuns } from "./admin-ingestion-api";
+import { sortRunsDescending } from "./admin-operations";
 import {
-  type CompanyRecord,
-  type IngestionRunSummary,
-  type JobRecord,
-  type JobSourceRecord,
-  listAllIngestionRuns,
-  listCompanies,
-  listJobSources,
-} from "./admin-ingestion-api";
-import {
-  buildCompanyStatus,
-  buildPendingItems,
-  buildSourceStatus,
-  groupSourcesByCompany,
-  sortRunsDescending,
-} from "./admin-operations";
-import { getAdminDataErrorKind } from "./admin-token-errors";
+  getAdminDataErrorKind,
+  isApiNotFoundError,
+} from "./admin-token-errors";
 import {
   type AdminUserRecord,
   type AssistedSessionRecord,
+  getAdminResume,
+  getAdminUser,
   listAdminResumes,
   listAdminUsers,
 } from "./admin-users-api";
@@ -31,14 +22,10 @@ import {
   getMasterResume,
 } from "./admin-users-operations";
 
-export type AdminCompanyView = CompanyRecord & {
-  relatedSources: JobSourceRecord[];
-  status: ReturnType<typeof buildCompanyStatus>;
-};
-
-export type AdminJobSourceView = JobSourceRecord & {
-  status: ReturnType<typeof buildSourceStatus>;
-};
+// REGRA desta camada: nenhuma função aqui carrega uma base inteira. Listagens
+// são paginadas NO SERVIDOR (a API recebe page/limit e filtros) e telas de
+// detalhe consultam um registro por id. Números agregados vêm de COUNT/SUM
+// (ver admin-overview-api.ts), nunca de somar listas no front.
 
 export type AdminUserView = AdminUserRecord & {
   adaptedResumeCount: number;
@@ -51,75 +38,6 @@ export type AdminUserView = AdminUserRecord & {
 type AdminUserWithAssistedSession = AdminUserRecord & {
   assistedSession?: AssistedSessionRecord | null;
 };
-
-export async function getPhaseOneAdminData(token?: string) {
-  // Nao busca listAllIngestionRuns aqui: nenhuma das paginas que chamam
-  // essa funcao (/admin, /admin/empresas, /admin/empresas/[id]) usa o
-  // historico de runs — so /admin/runs usa, via getRunsData abaixo. Essa
-  // lista carrega previewJson de cada run (pode ser um blob grande) sem
-  // paginacao, entao buscar sem necessidade pesava a tela toda.
-  const [adminUsersResult, companies, jobSources] = await Promise.all([
-    listAdminUsers({}, token),
-    listCompanies(token),
-    listJobSources(token),
-  ]);
-  const adminUsers =
-    adminUsersResult.users as AdminUserWithAssistedSession[];
-  const groupedSources = groupSourcesByCompany(jobSources);
-  const companyViews = companies.map((company) => {
-    const relatedSources = groupedSources.get(company.id) ?? [];
-
-    return {
-      ...company,
-      relatedSources,
-      status: buildCompanyStatus(company, relatedSources),
-    } satisfies AdminCompanyView;
-  });
-  const sourceViews = jobSources.map((jobSource) => ({
-    ...jobSource,
-    status: buildSourceStatus(jobSource),
-  })) satisfies AdminJobSourceView[];
-  const adminUserViews = adminUsers.map((user) => {
-    const userState = buildAdminUserState(user);
-
-    return {
-      ...user,
-      adaptedResumeCount: countAdaptedResumes(user.resumes),
-      completenessStatus: buildUserCompletenessStatus({
-        hasAnyProfile: userState.hasAnyProfile,
-        hasMasterResume: userState.hasMasterResume,
-        hasProfile: userState.hasProfile,
-      }),
-      masterResume: getMasterResume(user.resumes),
-      profileStatus: buildUserProfileStatus(userState),
-    };
-  }) satisfies AdminUserView[];
-  const pendingItems = buildPendingItems({
-    adminUsers,
-    companies,
-    jobSources,
-  });
-
-  return {
-    adminUserViews,
-    adminUsers,
-    companies,
-    companyViews,
-    pendingItems,
-    sourceViews,
-  };
-}
-
-export async function getPhaseOneAdminDataSafely(token?: string) {
-  try {
-    return {
-      data: await getPhaseOneAdminData(token),
-      kind: "ok",
-    } as const;
-  } catch (error) {
-    return { kind: getAdminDataErrorKind(error) } as const;
-  }
-}
 
 function toAdminUserView(user: AdminUserWithAssistedSession) {
   const userState = buildAdminUserState(user);
@@ -137,28 +55,52 @@ function toAdminUserView(user: AdminUserWithAssistedSession) {
   } satisfies AdminUserView;
 }
 
-// Usada pelas paginas de detalhe por id (usuarios/perfis/curriculos/[id])
-// e por qualquer lugar que precise olhar a base inteira de uma vez — sem
-// page/limit explicitos, o backend mantem o comportamento antigo (devolve
-// todo mundo). Pra listagem paginada de verdade, ver getAdminUsersListData
-// abaixo.
-export async function getAdminUsersData(token?: string) {
-  const { users } = await listAdminUsers({}, token);
-  const adminUsers = users as AdminUserWithAssistedSession[];
+// Detalhe de um usuário por id (GET /admin/users/:id) — telas
+// usuarios/[id], perfis/[id] e o dono de curriculos/[id].
+export async function getAdminUserViewData(userId: string, token?: string) {
+  const user = (await getAdminUser(
+    userId,
+    token,
+  )) as AdminUserWithAssistedSession;
 
-  return {
-    adminUsers,
-    adminUserViews: adminUsers.map(toAdminUserView),
-  };
+  return toAdminUserView(user);
 }
 
-export async function getAdminUsersDataSafely(token?: string) {
+// Currículo por id + o usuário dono (duas consultas pontuais).
+export async function getAdminResumeOwnerData(
+  resumeId: string,
+  token?: string,
+) {
+  const resume = await getAdminResume(resumeId, token);
+  return getAdminUserViewData(resume.userId, token);
+}
+
+export async function getAdminUserViewDataSafely(
+  userId: string,
+  token?: string,
+) {
   try {
     return {
-      data: await getAdminUsersData(token),
+      data: await getAdminUserViewData(userId, token),
       kind: "ok",
     } as const;
   } catch (error) {
+    if (isApiNotFoundError(error)) return { kind: "not-found" } as const;
+    return { kind: getAdminDataErrorKind(error) } as const;
+  }
+}
+
+export async function getAdminResumeOwnerDataSafely(
+  resumeId: string,
+  token?: string,
+) {
+  try {
+    const owner = await getAdminResumeOwnerData(resumeId, token);
+    const resume = owner.resumes.find((item) => item.id === resumeId) ?? null;
+    if (!resume) return { kind: "not-found" } as const;
+    return { data: { owner, resume }, kind: "ok" } as const;
+  } catch (error) {
+    if (isApiNotFoundError(error)) return { kind: "not-found" } as const;
     return { kind: getAdminDataErrorKind(error) } as const;
   }
 }
@@ -168,6 +110,7 @@ export async function getAdminUsersListData(
     page: number;
     limit?: number;
     planType?: string;
+    profileStatus?: string;
     query?: string;
     status?: string;
   },
@@ -189,6 +132,7 @@ export async function getAdminUsersListDataSafely(
     page: number;
     limit?: number;
     planType?: string;
+    profileStatus?: string;
     query?: string;
     status?: string;
   },
@@ -232,69 +176,6 @@ export async function getAdminResumesListDataSafely(
       data: await getAdminResumesListData(filters, token),
       kind: "ok",
     } as const;
-  } catch (error) {
-    return { kind: getAdminDataErrorKind(error) } as const;
-  }
-}
-
-export function buildCompanyDetailData(
-  companyId: string,
-  companies: CompanyRecord[],
-  jobSources: AdminJobSourceView[],
-) {
-  const company = companies.find((item) => item.id === companyId) ?? null;
-
-  if (!company) {
-    return null;
-  }
-
-  const relatedSources = jobSources.filter(
-    (item) => item.companyId === companyId,
-  );
-
-  return {
-    ...company,
-    relatedSources,
-    status: buildCompanyStatus(company, relatedSources),
-  } satisfies AdminCompanyView;
-}
-
-export function buildSourceRunViews(
-  jobSourceId: string,
-  runs: IngestionRunSummary[],
-  jobSources: JobSourceRecord[],
-) {
-  const jobSource = jobSources.find((item) => item.id === jobSourceId) ?? null;
-
-  if (!jobSource) {
-    return null;
-  }
-
-  return {
-    jobSource,
-    runs: runs.filter((item) => item.jobSourceId === jobSourceId),
-  };
-}
-
-export function buildJobsBySource(jobSourceId: string, jobs: JobRecord[]) {
-  return jobs.filter((job) => job.jobSourceId === jobSourceId);
-}
-
-async function getPendingData(token?: string) {
-  const [adminUsersResult, companies, jobSources] = await Promise.all([
-    listAdminUsers({}, token),
-    listCompanies(token),
-    listJobSources(token),
-  ]);
-  const adminUsers =
-    adminUsersResult.users as AdminUserWithAssistedSession[];
-  const pendingItems = buildPendingItems({ adminUsers, companies, jobSources });
-  return { pendingItems };
-}
-
-export async function getPendingDataSafely(token?: string) {
-  try {
-    return { data: await getPendingData(token), kind: "ok" } as const;
   } catch (error) {
     return { kind: getAdminDataErrorKind(error) } as const;
   }

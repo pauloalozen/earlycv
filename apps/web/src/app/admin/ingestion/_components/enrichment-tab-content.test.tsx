@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getActiveSemanticFilterConfigMock = vi.hoisted(() => vi.fn());
 const listEnrichmentJobsMock = vi.hoisted(() => vi.fn());
-const listJobSourcesMock = vi.hoisted(() => vi.fn());
+const listJobSourceOptionsMock = vi.hoisted(() => vi.fn());
 const getCrawlerDiscardsCountMock = vi.hoisted(() => vi.fn());
 const listCrawlerDiscardsMock = vi.hoisted(() => vi.fn());
 
@@ -14,7 +14,7 @@ vi.mock("@/lib/admin-semantic-filter-api", () => ({
 }));
 
 vi.mock("@/lib/admin-ingestion-api", () => ({
-  listJobSources: listJobSourcesMock,
+  listJobSourceOptions: listJobSourceOptionsMock,
 }));
 
 vi.mock("@/lib/admin-crawler-discards-api", () => ({
@@ -51,7 +51,7 @@ describe("EnrichmentTabContent crawler discards panel", () => {
   it("shows the discards card with the total count", async () => {
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
-    listJobSourcesMock.mockResolvedValue([]);
+    listJobSourceOptionsMock.mockResolvedValue({ options: [] });
     getCrawlerDiscardsCountMock.mockResolvedValue(7);
 
     const content = await EnrichmentTabContent({ searchParams: {} });
@@ -66,7 +66,7 @@ describe("EnrichmentTabContent crawler discards panel", () => {
   it("renders the discards tab and table when enrichTab=discards", async () => {
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
-    listJobSourcesMock.mockResolvedValue([]);
+    listJobSourceOptionsMock.mockResolvedValue({ options: [] });
     getCrawlerDiscardsCountMock.mockResolvedValue(1);
     listCrawlerDiscardsMock.mockResolvedValue({
       page: 1,
@@ -101,7 +101,7 @@ describe("EnrichmentTabContent crawler discards panel", () => {
   it("does not fetch discards list when enrichTab is enrichment (default)", async () => {
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
-    listJobSourcesMock.mockResolvedValue([]);
+    listJobSourceOptionsMock.mockResolvedValue({ options: [] });
     getCrawlerDiscardsCountMock.mockResolvedValue(0);
 
     const content = await EnrichmentTabContent({ searchParams: {} });
@@ -116,7 +116,7 @@ describe("EnrichmentTabContent crawler discards panel", () => {
   it("shows whitelisted pill for already-whitelisted discards", async () => {
     getActiveSemanticFilterConfigMock.mockResolvedValue(null);
     listEnrichmentJobsMock.mockResolvedValue(jobsPage());
-    listJobSourcesMock.mockResolvedValue([]);
+    listJobSourceOptionsMock.mockResolvedValue({ options: [] });
     getCrawlerDiscardsCountMock.mockResolvedValue(1);
     listCrawlerDiscardsMock.mockResolvedValue({
       page: 1,

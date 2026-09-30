@@ -78,6 +78,9 @@ export function AuditTabClient() {
     null,
   );
   const [counts, setCounts] = useState<CompanySourceAuditCounts | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [runPending, setRunPending] = useState(false);
   const [decidePendingId, setDecidePendingId] = useState<string | null>(null);
@@ -94,9 +97,10 @@ export function AuditTabClient() {
       status: CompanySourceAuditStatus | "";
       tier: CompanySourceAuditTier | "";
       search: string;
+      page: number;
     }) => {
       try {
-        const qs = new URLSearchParams();
+        const qs = new URLSearchParams({ page: String(params.page) });
         if (params.status) qs.set("status", params.status);
         if (params.tier) qs.set("tier", params.tier);
         if (params.search) qs.set("search", params.search);
@@ -108,6 +112,8 @@ export function AuditTabClient() {
         const data = await res.json();
         setFindings(data.findings);
         setCounts(data.counts);
+        setTotalPages(data.totalPages ?? 1);
+        setTotal(data.total ?? data.findings.length);
         setError(null);
       } catch (err) {
         setError(
@@ -121,8 +127,14 @@ export function AuditTabClient() {
   );
 
   useEffect(() => {
-    load({ status: statusFilter, tier: tierFilter, search });
-  }, [statusFilter, tierFilter, search, load]);
+    load({ status: statusFilter, tier: tierFilter, search, page });
+  }, [statusFilter, tierFilter, search, page, load]);
+
+  // Filtro novo volta para a primeira página.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset só quando o filtro muda
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, tierFilter, search]);
 
   function handleSearchChange(value: string) {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -143,7 +155,7 @@ export function AuditTabClient() {
       window.alert(
         `Auditoria concluída: ${data.found} achado(s) — ${data.created} novo(s), ${data.updated} atualizado(s), ${data.skippedReviewed} já revisado(s) mantido(s).`,
       );
-      await load({ status: statusFilter, tier: tierFilter, search });
+      await load({ status: statusFilter, tier: tierFilter, search, page });
     } finally {
       setRunPending(false);
     }
@@ -165,7 +177,7 @@ export function AuditTabClient() {
         window.alert(data?.error ?? "Falha ao atualizar o achado.");
         return;
       }
-      await load({ status: statusFilter, tier: tierFilter, search });
+      await load({ status: statusFilter, tier: tierFilter, search, page });
     } finally {
       setDecidePendingId(null);
     }
@@ -196,7 +208,7 @@ export function AuditTabClient() {
         return;
       }
       setApplyResult(data);
-      await load({ status: statusFilter, tier: tierFilter, search });
+      await load({ status: statusFilter, tier: tierFilter, search, page });
     } finally {
       setApplyPending(false);
     }
@@ -493,6 +505,38 @@ export function AuditTabClient() {
           ))}
         </tbody>
       </AdminTable>
+
+      {totalPages > 1 && (
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            fontSize: 12.5,
+            gap: 8,
+            justifyContent: "flex-end",
+          }}
+        >
+          <span style={{ color: AT.muted }}>
+            {total} achados · página {page} de {totalPages}
+          </span>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            type="button"
+          >
+            Anterior
+          </button>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            type="button"
+          >
+            Próxima
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8 }}>
         <button

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { listCompanies } from "@/lib/admin-ingestion-api";
+import { listCompaniesPaginated } from "@/lib/admin-ingestion-api";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
+
+// Exportação completa por natureza, mas lida em páginas de 100 (a API
+// pagina no banco) — nunca uma única consulta com todas as empresas.
+const EXPORT_PAGE_SIZE = 100;
+const EXPORT_MAX_PAGES = 200;
 
 const CSV_HEADER = ["nome", "setor", "site_url", "careers_url", "linkedin_url"];
 
@@ -15,9 +20,19 @@ export async function GET() {
   }
 
   try {
-    const companies = await listCompanies(token);
+    const companies: Awaited<
+      ReturnType<typeof listCompaniesPaginated>
+    >["rows"] = [];
+    for (let page = 1; page <= EXPORT_MAX_PAGES; page += 1) {
+      const result = await listCompaniesPaginated(
+        { page, pageSize: EXPORT_PAGE_SIZE },
+        token,
+      );
+      companies.push(...result.rows);
+      if (page >= result.totalPages) break;
+    }
+
     const rows = companies
-      .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((company) =>
         [

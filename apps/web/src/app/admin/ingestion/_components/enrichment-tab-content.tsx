@@ -13,7 +13,7 @@ import {
   getCrawlerDiscardsCount,
   listCrawlerDiscards,
 } from "@/lib/admin-crawler-discards-api";
-import { listJobSources } from "@/lib/admin-ingestion-api";
+import { listJobSourceOptions } from "@/lib/admin-ingestion-api";
 import {
   type EnrichmentStatusValue,
   getActiveSemanticFilterConfig,
@@ -122,7 +122,7 @@ export async function EnrichmentTabContent({
       sourceId: sp.sourceId,
       status: enrichStatus,
     }),
-    listJobSources(),
+    listJobSourceOptions({ limit: 500 }).then((result) => result.options),
     getCrawlerDiscardsCount(),
   ]);
 

@@ -15,9 +15,19 @@ import type { BulkDeleteJobSourcesDto } from "./dto/bulk-delete-job-sources.dto"
 import type { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import type { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
 import type { CreateJobSourceDto } from "./dto/create-job-source.dto";
+import type { ListJobSourceOptionsDto } from "./dto/list-job-source-options.dto";
 import type { ListJobSourcesDto } from "./dto/list-job-sources.dto";
 import type { ReassignCompanyDto } from "./dto/reassign-company.dto";
 import type { UpdateJobSourceDto } from "./dto/update-job-source.dto";
+
+// A última run vem junto das fontes só pra montar rótulos de status
+// (status, contadores, datas). previewJson é um blob grande por run e nunca
+// é lido pelas telas de fontes/empresas: carregá-lo para cada linha era a
+// causa de ~1,5 GB de memória nativa por chamada em GET /job-sources.
+const RUN_LIST_OMIT = { previewJson: true } as const;
+
+const OPTIONS_DEFAULT_LIMIT = 200;
+const OPTIONS_MAX_LIMIT = 500;
 
 @Injectable()
 export class JobSourcesService {
@@ -27,17 +37,48 @@ export class JobSourcesService {
     private readonly companiesService: CompaniesService,
   ) {}
 
-  list() {
-    return this.database.jobSource.findMany({
-      include: {
-        company: true,
-        ingestionRuns: {
-          orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-          take: 1,
+  // Opções leves (id/nome/empresa/tipo) para filtros e seletores do admin.
+  // Nunca devolve runs nem colunas grandes e sempre tem teto de linhas —
+  // substitui o antigo list(), que carregava todas as fontes com a última
+  // run inteira (previewJson incluso).
+  async listOptions(dto: ListJobSourceOptionsDto) {
+    const limit = Math.min(
+      OPTIONS_MAX_LIMIT,
+      Math.max(1, dto.limit ?? OPTIONS_DEFAULT_LIMIT),
+    );
+    const where: Prisma.JobSourceWhereInput = {
+      ...(dto.companyId ? { companyId: dto.companyId } : {}),
+      ...(dto.search
+        ? {
+            OR: [
+              { sourceName: { contains: dto.search, mode: "insensitive" } },
+              {
+                company: {
+                  name: { contains: dto.search, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.database.jobSource.findMany({
+        where,
+        select: {
+          id: true,
+          companyId: true,
+          sourceName: true,
+          sourceType: true,
+          company: { select: { id: true, name: true } },
         },
-      },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    });
+        orderBy: [{ company: { name: "asc" } }, { sourceName: "asc" }],
+        take: limit,
+      }),
+      this.database.jobSource.count({ where }),
+    ]);
+
+    return { limit, options: rows, total };
   }
 
   async listPaginated(dto: ListJobSourcesDto) {
@@ -46,6 +87,10 @@ export class JobSourcesService {
     const skip = (page - 1) * pageSize;
 
     const where: Prisma.JobSourceWhereInput = {};
+
+    if (dto.companyId) {
+      where.companyId = dto.companyId;
+    }
 
     if (dto.search) {
       where.OR = [
@@ -76,6 +121,7 @@ export class JobSourcesService {
     const sourceInclude = {
       company: true,
       ingestionRuns: {
+        omit: RUN_LIST_OMIT,
         orderBy: [
           { startedAt: "desc" as const },
           { createdAt: "desc" as const },
@@ -94,47 +140,55 @@ export class JobSourcesService {
             ? [{ sourceType: sortDir }]
             : dto.sortBy === "createdAt"
               ? [{ createdAt: sortDir }]
-              // Default is alphabetical by name — sorting by updatedAt
-              // made any toggle/run/edit jump that source to the top,
-              // reordering the table on every action.
-              : [{ sourceName: "asc" }];
+              : // Default is alphabetical by name — sorting by updatedAt
+                // made any toggle/run/edit jump that source to the top,
+                // reordering the table on every action.
+                [{ sourceName: "asc" }];
 
-    // activeJobsCount is derived (not a column), so it can't be sorted at
-    // the database level — fetch every matching row, sort in memory, then
-    // paginate. Fine at this module's current scale (low hundreds of rows).
+    // activeJobsCount é derivado (não é coluna), então não dá para ordenar no
+    // banco. Em vez de carregar todas as fontes (com empresa e run) e ordenar
+    // em memória, ordena só os ids: uma consulta de ids + um groupBy leve e
+    // depois busca apenas as linhas da página pedida.
     if (dto.sortBy === "activeJobsCount") {
-      const allRows = await this.database.jobSource.findMany({
+      const idRows = await this.database.jobSource.findMany({
         where,
-        include: sourceInclude,
+        select: { id: true },
       });
-
-      const allIds = allRows.map((s) => s.id);
-      const allCounts =
-        allIds.length > 0
-          ? await this.database.job.groupBy({
-              by: ["jobSourceId"],
-              where: { jobSourceId: { in: allIds }, status: "active" },
-              _count: { id: true },
+      const matchingIds = new Set(idRows.map((r) => r.id));
+      const counts = await this.database.job.groupBy({
+        by: ["jobSourceId"],
+        where: { status: "active", jobSourceId: { in: [...matchingIds] } },
+        _count: { id: true },
+      });
+      const countById = new Map(
+        counts.map((r) => [r.jobSourceId, r._count.id]),
+      );
+      const sortedIds = [...matchingIds].sort((a, b) => {
+        const diff = (countById.get(a) ?? 0) - (countById.get(b) ?? 0);
+        if (diff !== 0) return sortDir === "asc" ? diff : -diff;
+        return a < b ? -1 : 1;
+      });
+      const pageIds = sortedIds.slice(skip, skip + pageSize);
+      const pageRows =
+        pageIds.length > 0
+          ? await this.database.jobSource.findMany({
+              where: { id: { in: pageIds } },
+              include: sourceInclude,
             })
           : [];
-      const allCountMap = new Map(
-        allCounts.map((r) => [r.jobSourceId, r._count.id]),
-      );
-
-      const sorted = allRows
-        .map((r) => ({ ...r, activeJobsCount: allCountMap.get(r.id) ?? 0 }))
-        .sort((a, b) =>
-          sortDir === "asc"
-            ? a.activeJobsCount - b.activeJobsCount
-            : b.activeJobsCount - a.activeJobsCount,
-        );
+      const rowById = new Map(pageRows.map((r) => [r.id, r]));
 
       return {
         page,
         pageSize,
-        rows: sorted.slice(skip, skip + pageSize),
-        total: sorted.length,
-        totalPages: Math.max(1, Math.ceil(sorted.length / pageSize)),
+        rows: pageIds.flatMap((id) => {
+          const row = rowById.get(id);
+          return row
+            ? [{ ...row, activeJobsCount: countById.get(id) ?? 0 }]
+            : [];
+        }),
+        total: sortedIds.length,
+        totalPages: Math.max(1, Math.ceil(sortedIds.length / pageSize)),
       };
     }
 
@@ -181,6 +235,7 @@ export class JobSourcesService {
       include: {
         company: true,
         ingestionRuns: {
+          omit: RUN_LIST_OMIT,
           orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
           take: 10,
         },
@@ -208,6 +263,7 @@ export class JobSourcesService {
         include: {
           company: true,
           ingestionRuns: {
+            omit: RUN_LIST_OMIT,
             orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
             take: 1,
           },
@@ -234,6 +290,7 @@ export class JobSourcesService {
         include: {
           company: true,
           ingestionRuns: {
+            omit: RUN_LIST_OMIT,
             orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
             take: 1,
           },
@@ -296,7 +353,10 @@ export class JobSourcesService {
       if (existingTargetSource) {
         const { count } = await tx.job.updateMany({
           where: { jobSourceId: source.id },
-          data: { companyId: targetCompanyId, jobSourceId: existingTargetSource.id },
+          data: {
+            companyId: targetCompanyId,
+            jobSourceId: existingTargetSource.id,
+          },
         });
         await tx.jobSource.delete({ where: { id: source.id } });
 
@@ -308,6 +368,7 @@ export class JobSourcesService {
             include: {
               company: true,
               ingestionRuns: {
+                omit: RUN_LIST_OMIT,
                 orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
                 take: 1,
               },
@@ -327,13 +388,18 @@ export class JobSourcesService {
         include: {
           company: true,
           ingestionRuns: {
+            omit: RUN_LIST_OMIT,
             orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
             take: 1,
           },
         },
       });
 
-      return { merged: false as const, jobsMoved: count, jobSource: updatedSource };
+      return {
+        merged: false as const,
+        jobsMoved: count,
+        jobSource: updatedSource,
+      };
     });
   }
 
@@ -343,7 +409,11 @@ export class JobSourcesService {
       data: { scheduleEnabled: dto.scheduleEnabled },
     });
 
-    return { count, scheduleEnabled: dto.scheduleEnabled, sourceType: dto.sourceType };
+    return {
+      count,
+      scheduleEnabled: dto.scheduleEnabled,
+      sourceType: dto.sourceType,
+    };
   }
 
   async bulkUpdateActive(dto: BulkUpdateActiveDto) {
