@@ -195,22 +195,30 @@ function DraftRow({
 export function DraftsPanel() {
   const [drafts, setDrafts] = useState<CompanySourceAuditDraft[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(
-        "/api/admin/ingestion/company-source-audit/drafts",
+        `/api/admin/ingestion/company-source-audit/drafts?page=${page}`,
         { cache: "no-store" },
       );
       if (!res.ok) throw new Error("Falha ao carregar rascunhos.");
-      setDrafts(await res.json());
+      const data = await res.json();
+      setDrafts(data.drafts);
+      setTotalPages(data.totalPages ?? 1);
+      setTotal(data.total ?? data.drafts.length);
+      // Ativar/descartar o último item de uma página deixa ela vazia.
+      if (data.drafts.length === 0 && page > 1) setPage(page - 1);
       setError(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Falha ao carregar rascunhos.",
       );
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     load();
@@ -258,6 +266,37 @@ export function DraftsPanel() {
           ))}
         </tbody>
       </AdminTable>
+      {totalPages > 1 && (
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            fontSize: 12.5,
+            gap: 8,
+            justifyContent: "flex-end",
+          }}
+        >
+          <span style={{ color: AT.muted }}>
+            {total} rascunhos · página {page} de {totalPages}
+          </span>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            type="button"
+          >
+            Anterior
+          </button>
+          <button
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            type="button"
+          >
+            Próxima
+          </button>
+        </div>
+      )}
     </div>
   );
 }

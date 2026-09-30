@@ -11,6 +11,7 @@ import { AdminPendingService } from "./admin-pending/admin-pending.service";
 import { AdminUsersService } from "./admin-users/admin-users.service";
 import { CompaniesService } from "./companies/companies.service";
 import { DatabaseService } from "./database/database.service";
+import { CompanySourceAuditService } from "./ingestion/company-source-audit.service";
 import { DashboardAdminService } from "./ingestion/dashboard-admin.service";
 import { JobSourcesService } from "./job-sources/job-sources.service";
 import { PaymentRecoveryEligibilityService } from "./payment-recovery/payment-recovery-eligibility.service";
@@ -517,5 +518,27 @@ describe("Visão geral e pagamentos — só agregados / paginação real", () =>
     await prisma.planPurchase.deleteMany({
       where: { userId: { in: [pendingUser.id, paidUser.id] } },
     });
+  });
+
+  it("achados e rascunhos do audit paginam no banco", async () => {
+    const audit = new CompanySourceAuditService(database);
+    for (let i = 0; i < 3; i += 1) {
+      await prisma.company.create({
+        data: {
+          isActive: false,
+          name: `${tag} draft ${i}`,
+          normalizedName: `${tag}-draft-${i}`,
+        },
+      });
+    }
+
+    const page = await audit.listDrafts({ page: 1, pageSize: 2 });
+    assert.equal(page.drafts.length, 2);
+    assert.ok(page.total >= 3);
+    assert.equal(page.pageSize, 2);
+
+    const findings = await audit.listFindings({ page: 1, pageSize: 5 });
+    assert.ok(findings.findings.length <= 5);
+    assert.equal(findings.pageSize, 5);
   });
 });

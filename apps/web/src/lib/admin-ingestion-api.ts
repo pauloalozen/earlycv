@@ -1093,11 +1093,20 @@ export type CompanySourceAuditDraft = {
   jobCounts: { active: number; inactive: number; removed: number };
 };
 
-export async function listCompanySourceAuditDrafts(token?: string) {
-  return apiRequest<CompanySourceAuditDraft[]>(
-    "/admin/company-source-audit/drafts",
-    token,
-  );
+export async function listCompanySourceAuditDrafts(
+  params: { page?: number; pageSize?: number } = {},
+  token?: string,
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  return apiRequest<{
+    drafts: CompanySourceAuditDraft[];
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  }>(`/admin/company-source-audit/drafts?${qs}`, token);
 }
 
 export async function renameCompanySourceAuditDraft(
