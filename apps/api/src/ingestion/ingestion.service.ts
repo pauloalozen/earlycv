@@ -102,6 +102,8 @@ function toRunSummary(run: IngestionRunRecord): IngestionRunSummary {
   };
 }
 
+const DASHBOARD_LIST_LIMIT = 50;
+
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
@@ -578,106 +580,138 @@ export class IngestionService {
     return { completed, failed, pending, skipped, total: jobIds.length };
   }
 
+  // Painel leve da aba Fontes: tudo agregado no banco, nunca carrega vagas
+  // nem a tabela inteira de fontes. As listas expansiveis sao limitadas a
+  // DASHBOARD_LIST_LIMIT itens; os totais reais vao em *Total.
   async getDashboard() {
     const now = new Date();
     const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const pausedWhere = { pausedUntil: { gt: now } };
+    const forbiddenWhere = {
+      consecutive403Count: { gt: 0 },
+      OR: [{ pausedUntil: null }, { pausedUntil: { lte: now } }],
+    };
+    const sourceSelect = {
+      id: true,
+      sourceName: true,
+      company: { select: { name: true } },
+    } as const;
 
-    const [allSources, runs24h, runningNow, staleJobsCount] = await Promise.all(
-      [
-        this.database.jobSource.findMany({
-          include: { company: { select: { name: true } } },
-        }),
-        this.database.ingestionRun.findMany({
-          where: { startedAt: { gte: cutoff24h } },
-          select: {
-            id: true,
-            status: true,
-            newCount: true,
-            skippedCount: true,
-          },
-        }),
-        this.database.ingestionRun.count({ where: { status: "running" } }),
-        this.database.job.count({
-          where: { status: "inactive", updatedAt: { gte: cutoff24h } },
-        }),
-      ],
-    );
+    const [
+      pausedTotal,
+      pausedRows,
+      forbiddenTotal,
+      forbiddenRows,
+      driftRows,
+      runsAggregate,
+      runningNow,
+      staleJobsCount,
+    ] = await Promise.all([
+      this.database.jobSource.count({ where: pausedWhere }),
+      this.database.jobSource.findMany({
+        where: pausedWhere,
+        select: {
+          ...sourceSelect,
+          pausedUntil: true,
+          pauseReason: true,
+          consecutive403Count: true,
+        },
+        orderBy: { pausedUntil: "asc" },
+        take: DASHBOARD_LIST_LIMIT,
+      }),
+      this.database.jobSource.count({ where: forbiddenWhere }),
+      this.database.jobSource.findMany({
+        where: forbiddenWhere,
+        select: {
+          ...sourceSelect,
+          consecutive403Count: true,
+          lastErrorAt: true,
+          lastErrorMessage: true,
+        },
+        orderBy: { consecutive403Count: "desc" },
+        take: DASHBOARD_LIST_LIMIT,
+      }),
+      // Drift: fontes em que mais da metade das vagas vistas nas ultimas 24h
+      // esta sem descricao. Agrega no banco (nao traz descriptionClean).
+      this.database.$queryRaw<
+        Array<{
+          jobSourceId: string;
+          sourceName: string;
+          companyName: string;
+          total: number;
+          withoutDesc: number;
+          driftTotal: number;
+        }>
+      >`
+        WITH drift AS (
+          SELECT j."jobSourceId",
+                 count(*)::int AS total,
+                 (count(*) FILTER (
+                   WHERE j."descriptionClean" IS NULL
+                      OR btrim(j."descriptionClean") = ''
+                 ))::int AS "withoutDesc"
+          FROM "Job" j
+          WHERE j."lastSeenAt" > ${cutoff24h} AND j."jobSourceId" IS NOT NULL
+          GROUP BY j."jobSourceId"
+          HAVING (count(*) FILTER (
+                   WHERE j."descriptionClean" IS NULL
+                      OR btrim(j."descriptionClean") = ''
+                 )) * 2 > count(*)
+        )
+        SELECT d."jobSourceId", s."sourceName", c."name" AS "companyName",
+               d.total, d."withoutDesc",
+               (count(*) OVER ())::int AS "driftTotal"
+        FROM drift d
+        JOIN "JobSource" s ON s.id = d."jobSourceId"
+        JOIN "Company" c ON c.id = s."companyId"
+        ORDER BY d."withoutDesc" DESC
+        LIMIT ${DASHBOARD_LIST_LIMIT}
+      `,
+      this.database.ingestionRun.aggregate({
+        where: { startedAt: { gte: cutoff24h } },
+        _count: { _all: true },
+        _sum: { newCount: true, skippedCount: true },
+      }),
+      this.database.ingestionRun.count({ where: { status: "running" } }),
+      this.database.job.count({
+        where: { status: "inactive", updatedAt: { gte: cutoff24h } },
+      }),
+    ]);
 
-    const pausedSources = allSources
-      .filter((s) => s.pausedUntil && s.pausedUntil > now)
-      .map((s) => ({
+    return {
+      pausedTotal,
+      pausedSources: pausedRows.map((s) => ({
         id: s.id,
         sourceName: s.sourceName,
         companyName: s.company.name,
         pausedUntil: s.pausedUntil?.toISOString(),
         pauseReason: s.pauseReason,
         consecutive403Count: s.consecutive403Count,
-      }));
-
-    const sources403 = allSources
-      .filter(
-        (s) =>
-          s.consecutive403Count > 0 && (!s.pausedUntil || s.pausedUntil <= now),
-      )
-      .map((s) => ({
+      })),
+      sources403Total: forbiddenTotal,
+      sources403: forbiddenRows.map((s) => ({
         id: s.id,
         sourceName: s.sourceName,
         companyName: s.company.name,
         consecutive403Count: s.consecutive403Count,
         lastErrorAt: s.lastErrorAt?.toISOString() ?? null,
         lastErrorMessage: s.lastErrorMessage,
-      }));
-
-    const recentJobs = await this.database.job.findMany({
-      where: { lastSeenAt: { gt: cutoff24h } },
-      select: { jobSourceId: true, descriptionClean: true },
-    });
-
-    const sourceInfoMap = new Map(
-      allSources.map((s) => [
-        s.id,
-        { sourceName: s.sourceName, companyName: s.company.name },
-      ]),
-    );
-    const driftMap = new Map<string, { total: number; withoutDesc: number }>();
-    for (const job of recentJobs) {
-      if (!job.jobSourceId) continue;
-      const entry = driftMap.get(job.jobSourceId) ?? {
-        total: 0,
-        withoutDesc: 0,
-      };
-      entry.total += 1;
-      if (!job.descriptionClean || job.descriptionClean.trim() === "") {
-        entry.withoutDesc += 1;
-      }
-      driftMap.set(job.jobSourceId, entry);
-    }
-    const driftSources = [...driftMap.entries()]
-      .filter(([, d]) => d.total > 0 && d.withoutDesc / d.total > 0.5)
-      .map(([sourceId, d]) => ({
-        id: sourceId,
-        ...(sourceInfoMap.get(sourceId) ?? {
-          sourceName: sourceId,
-          companyName: "",
-        }),
+      })),
+      driftTotal: driftRows[0]?.driftTotal ?? 0,
+      driftSources: driftRows.map((d) => ({
+        id: d.jobSourceId,
+        sourceName: d.sourceName,
+        companyName: d.companyName,
         total: d.total,
         withoutDesc: d.withoutDesc,
         pctWithoutDesc: Math.round((d.withoutDesc / d.total) * 100),
-      }));
-
-    const newJobs24h = runs24h.reduce((sum, r) => sum + r.newCount, 0);
-    const dedupSkipped24h = runs24h.reduce((sum, r) => sum + r.skippedCount, 0);
-
-    return {
-      pausedSources,
-      sources403,
-      driftSources,
+      })),
       summary24h: {
-        totalRuns: runs24h.length,
+        totalRuns: runsAggregate._count._all,
         runningNow,
-        newJobs: newJobs24h,
+        newJobs: runsAggregate._sum.newCount ?? 0,
         staleJobs: staleJobsCount,
-        dedupSkipped: dedupSkipped24h,
+        dedupSkipped: runsAggregate._sum.skippedCount ?? 0,
       },
     };
   }
