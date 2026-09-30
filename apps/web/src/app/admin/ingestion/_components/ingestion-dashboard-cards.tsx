@@ -35,6 +35,9 @@ type DriftSource = {
 };
 
 type Dashboard = {
+  pausedTotal: number;
+  sources403Total: number;
+  driftTotal: number;
   pausedSources: PausedSource[];
   sources403: Source403[];
   driftSources: DriftSource[];
@@ -113,28 +116,54 @@ function SourceRow({ label, sub }: { label: string; sub?: string }) {
 export function IngestionDashboardCards() {
   const [data, setData] = useState<Dashboard | null>(null);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Consulta ao abrir e quando o usuário pede (sem polling).
   const fetchDashboard = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const res = await fetch("/api/admin/ingestion/dashboard");
+      const res = await fetch("/api/admin/ingestion/dashboard", {
+        cache: "no-store",
+      });
       if (res.ok) setData(await res.json());
     } catch {
-      // silently ignore polling errors
+      // mantém os dados anteriores se a consulta falhar
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchDashboard();
-    const id = setInterval(fetchDashboard, 30_000);
-    return () => clearInterval(id);
   }, [fetchDashboard]);
 
-  const pausedCount = data?.pausedSources.length ?? 0;
-  const count403 = data?.sources403.length ?? 0;
-  const driftCount = data?.driftSources.length ?? 0;
+  const pausedCount = data?.pausedTotal ?? 0;
+  const count403 = data?.sources403Total ?? 0;
+  const driftCount = data?.driftTotal ?? 0;
   const s = data?.summary24h;
 
   return (
     <div style={{ marginBottom: 20 }}>
+      <div
+        style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}
+      >
+        <button
+          disabled={refreshing}
+          onClick={fetchDashboard}
+          style={{
+            background: "none",
+            border: "none",
+            color: AT.info,
+            cursor: refreshing ? "default" : "pointer",
+            fontFamily: '"Geist Mono", monospace',
+            fontSize: 11,
+            padding: 0,
+          }}
+          type="button"
+        >
+          {refreshing ? "atualizando..." : "↻ atualizar"}
+        </button>
+      </div>
       <AdminStatsRow cols={4}>
         {/* Card 1 — Paused */}
         <div
@@ -170,7 +199,9 @@ export function IngestionDashboardCards() {
             {data === null ? "—" : pausedCount}
           </div>
           {pausedCount > 0 && data && (
-            <ExpandList title={`ver ${pausedCount}`}>
+            <ExpandList
+              title={`ver ${data.pausedSources.length}${pausedCount > data.pausedSources.length ? ` de ${pausedCount}` : ""}`}
+            >
               {data.pausedSources.map((s) => (
                 <SourceRow
                   key={s.id}
@@ -216,7 +247,9 @@ export function IngestionDashboardCards() {
             {data === null ? "—" : count403}
           </div>
           {count403 > 0 && data && (
-            <ExpandList title={`ver ${count403}`}>
+            <ExpandList
+              title={`ver ${data.sources403.length}${count403 > data.sources403.length ? ` de ${count403}` : ""}`}
+            >
               {data.sources403.map((s) => (
                 <SourceRow
                   key={s.id}
@@ -262,7 +295,9 @@ export function IngestionDashboardCards() {
             {data === null ? "—" : driftCount}
           </div>
           {driftCount > 0 && data && (
-            <ExpandList title={`ver ${driftCount}`}>
+            <ExpandList
+              title={`ver ${data.driftSources.length}${driftCount > data.driftSources.length ? ` de ${driftCount}` : ""}`}
+            >
               {data.driftSources.map((d) => (
                 <SourceRow
                   key={d.id}
