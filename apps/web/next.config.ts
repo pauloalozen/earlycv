@@ -98,6 +98,29 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Detalhe de vaga em cache para visitante SEM sessão: /radar/<slug> é
+  // reescrito para a rota interna /radar-pub/<slug> (ISR, 300s) somente
+  // quando o request não traz NENHUM dos cookies de sessão. Com qualquer um
+  // deles a rota dinâmica de sempre atende. `beforeFiles` (afterFiles não
+  // captura, pois [slug] conta como rota de filesystem) + exclusão explícita
+  // dos segmentos reservados de /radar. Cookies e reservados são conferidos
+  // contra o código por radar-job-cache.test.ts.
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: "/radar/:slug((?!junior$|remotas$|senior$)[^/]+)",
+          missing: [
+            { type: "cookie" as const, key: "earlycv-access-token" },
+            { type: "cookie" as const, key: "earlycv-refresh-token" },
+          ],
+          destination: "/radar-pub/:slug",
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   async redirects() {
     return [
       {
