@@ -16,24 +16,6 @@ export class DashboardAdminController {
     private readonly dashboardAdminService: DashboardAdminService,
   ) {}
 
-  @Get("ingestion-by-adapter")
-  async getIngestionByAdapter(@Res({ passthrough: true }) response: Response) {
-    response.setHeader("Cache-Control", "no-store");
-    return this.dashboardAdminService.getIngestionByAdapter();
-  }
-
-  @Get("enrichment-summary")
-  async getEnrichmentSummary(@Res({ passthrough: true }) response: Response) {
-    response.setHeader("Cache-Control", "no-store");
-    return this.dashboardAdminService.getEnrichmentSummary();
-  }
-
-  @Get("alerts")
-  async getAlerts(@Res({ passthrough: true }) response: Response) {
-    response.setHeader("Cache-Control", "no-store");
-    return this.dashboardAdminService.getAlerts();
-  }
-
   @Get("indexing-log")
   async getIndexingLog(
     @Res({ passthrough: true }) response: Response,

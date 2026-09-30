@@ -15,6 +15,7 @@ import { getAiModel } from "../common/ai-client-factory";
 import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
+import { WebRevalidationService } from "../web-revalidation/web-revalidation.service";
 import { doesSecondsCronMatchDate } from "./cron-utils";
 import { EnrichmentConfigService } from "./enrichment-config.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
@@ -88,6 +89,10 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     @Optional()
     @Inject(JOB_ENRICHMENT_WORKER_OPTIONS)
     options: JobEnrichmentWorkerOptions = {},
+    // Cache do front (ISR do detalhe). Nunca lança nem bloqueia.
+    @Optional()
+    @Inject(WebRevalidationService)
+    private readonly webRevalidation?: WebRevalidationService,
   ) {
     this.maxAttempts = options.maxAttempts ?? 3;
     this.enrich =
@@ -303,6 +308,18 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       return pending.length;
     } finally {
       await this.lockRepository.release(LOCK_ID, owner);
+    }
+  }
+
+  // Nunca deixa uma falha do cache do front afetar o enriquecimento: o serviço
+  // já não lança, e aqui há uma segunda barreira. O TTL do ISR cobre o resto.
+  private requestWebRevalidation(slug: string) {
+    try {
+      this.webRevalidation?.requestJobRevalidation(slug, "published");
+    } catch (error) {
+      this.logger.warn(
+        `web revalidation request failed for ${slug}: ${error instanceof Error ? error.message : "unknown"}`,
+      );
     }
   }
 
@@ -548,6 +565,9 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       // manualmente uma vaga já inativada.
       if (enrichment.job.slug && enrichment.job.status === "active") {
         await this.googleIndexingService.notifyIndexing(enrichment.job.slug);
+        // Vaga passa a ser pública (ou foi reprocessada): expira já o cache
+        // do front, inclusive um 404 em cache de quando ela não existia.
+        this.requestWebRevalidation(enrichment.job.slug);
       }
 
       // Enfileira o matching do Meu Monitor (MonitorMatchingWorker) — nunca

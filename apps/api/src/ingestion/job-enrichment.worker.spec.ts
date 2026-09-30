@@ -189,6 +189,15 @@ function createFixture() {
     notifyRemoval: async () => {},
   };
 
+  const revalidationCalls: Array<{ slug: string; reason: string }> = [];
+  let webRevalidationShouldThrow = false;
+  const webRevalidation = {
+    requestJobRevalidation: (slug: string, reason: string) => {
+      revalidationCalls.push({ slug, reason });
+      if (webRevalidationShouldThrow) throw new Error("webhook misbehaving");
+    },
+  };
+
   const worker = new JobEnrichmentWorker(
     database as never,
     semanticFilterService as never,
@@ -203,6 +212,7 @@ function createFixture() {
       },
       maxAttempts: 3,
     },
+    webRevalidation as never,
   );
 
   function seedEnrichment(overrides: Partial<EnrichmentRecord> = {}) {
@@ -238,6 +248,10 @@ function createFixture() {
     enrichments,
     getEnrichCalls: () => enrichCalls,
     getIndexingCalls: () => indexingCalls,
+    getRevalidationCalls: () => revalidationCalls,
+    setWebRevalidationShouldThrow(value: boolean) {
+      webRevalidationShouldThrow = value;
+    },
     getMonitorMatchJobUpserts: () => monitorMatchJobUpserts,
     setMonitorMatchJobUpsertShouldThrow(value: boolean) {
       monitorMatchJobUpsertShouldThrow = value;
@@ -395,6 +409,32 @@ test("JobEnrichmentWorker notifies Google Indexing API once enrichment completes
   assert.deepEqual(fixture.getIndexingCalls(), [`${record.jobId}-slug`]);
 });
 
+test("JobEnrichmentWorker requests web cache invalidation ('published') once enrichment completes for an active job", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  const record = fixture.seedEnrichment();
+
+  await fixture.worker.processPendingBatch();
+
+  assert.deepEqual(fixture.getRevalidationCalls(), [
+    { slug: `${record.jobId}-slug`, reason: "published" },
+  ]);
+});
+
+test("JobEnrichmentWorker still completes enrichment and notifies Google when the web revalidation service misbehaves", async () => {
+  const fixture = createFixture();
+  fixture.setEnrich(async () => fullResult());
+  const record = fixture.seedEnrichment();
+  fixture.setWebRevalidationShouldThrow(true);
+
+  await fixture.worker.processPendingBatch();
+
+  const [stored] = fixture.enrichments.values();
+  assert.equal(stored.enrichmentStatus, "COMPLETED");
+  assert.deepEqual(fixture.getIndexingCalls(), [`${record.jobId}-slug`]);
+  assert.deepEqual(fixture.getMonitorMatchJobUpserts(), [record.jobId]);
+});
+
 test("JobEnrichmentWorker enqueues a MonitorMatchJob once enrichment completes", async () => {
   const fixture = createFixture();
   fixture.setEnrich(async () => fullResult());
@@ -434,6 +474,11 @@ test("JobEnrichmentWorker does not notify Google Indexing API when the job was i
   await fixture.worker.processPendingBatch();
 
   assert.deepEqual(fixture.getIndexingCalls(), []);
+  assert.deepEqual(
+    fixture.getRevalidationCalls(),
+    [],
+    "vaga inativada antes do fim do enriquecimento não invalida como 'published'",
+  );
 });
 
 test("JobEnrichmentWorker increments attempts on LLM failure and keeps PENDING below max attempts", async () => {
