@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import type { JobSourceType } from "@prisma/client";
 
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { CompanyLogoFetchService } from "./company-logo/company-logo-fetch.service";
 import { DiscoveredCompaniesService } from "./discovered-companies.service";
@@ -178,7 +179,9 @@ export class IngestionManualRunnerService {
     }
 
     try {
-      await this.processNextBatchRun();
+      await trackJob("ingestion-manual-runner", () =>
+        this.processNextBatchRun(),
+      );
     } catch (error) {
       if (isMissingManualBatchTableError(error)) {
         this.logger.warn(

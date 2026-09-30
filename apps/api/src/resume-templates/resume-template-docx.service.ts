@@ -15,9 +15,22 @@ import {
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 
+import { runManagedProcess } from "../common/managed-process";
+import { trackConversion } from "../common/memory-diagnostics";
 import { StorageService } from "../storage/storage.service";
 
 const execFileAsync = promisify(execFile);
+
+const DEFAULT_LIBREOFFICE_TIMEOUT_MS = 60_000;
+
+// Teto por invocacao do LibreOffice/xvfb-run. No timeout o process group
+// inteiro e encerrado (ver common/managed-process.ts).
+function libreOfficeTimeoutMs(): number {
+  const parsed = Number(process.env.LIBREOFFICE_CONVERT_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed >= 1_000
+    ? parsed
+    : DEFAULT_LIBREOFFICE_TIMEOUT_MS;
+}
 
 type ExecFileFailure = NodeJS.ErrnoException & {
   stderr?: string;
@@ -276,6 +289,12 @@ export class ResumeTemplateDocxService implements OnModuleInit {
 
   /** Convert a DOCX buffer to PDF via LibreOffice. */
   async docxToPdf(docxBuffer: Buffer): Promise<Buffer> {
+    return trackConversion("docx-to-pdf", () =>
+      this.docxToPdfUntracked(docxBuffer),
+    );
+  }
+
+  private async docxToPdfUntracked(docxBuffer: Buffer): Promise<Buffer> {
     const id = `earlycv-pdf-${Date.now()}`;
     const docxPath = join(tmpdir(), `${id}.docx`);
     const pdfPath = join(tmpdir(), `${id}.pdf`);
@@ -333,6 +352,12 @@ export class ResumeTemplateDocxService implements OnModuleInit {
   }
 
   private async docxToPng(docxBuffer: Buffer): Promise<Buffer> {
+    return trackConversion("docx-to-png-preview", () =>
+      this.docxToPngUntracked(docxBuffer),
+    );
+  }
+
+  private async docxToPngUntracked(docxBuffer: Buffer): Promise<Buffer> {
     const id = `earlycv-preview-${Date.now()}`;
     const docxPath = join(tmpdir(), `${id}.docx`);
     const pdfPath = join(tmpdir(), `${id}.pdf`);
@@ -417,7 +442,9 @@ export class ResumeTemplateDocxService implements OnModuleInit {
     binary: string,
     args: string[],
   ): Promise<ExecFileSuccess> {
-    return execFileAsync(binary, args);
+    return runManagedProcess(binary, args, {
+      timeoutMs: libreOfficeTimeoutMs(),
+    });
   }
 
   private getLibreOfficeCandidates(): string[] {
@@ -496,6 +523,10 @@ export class ResumeTemplateDocxService implements OnModuleInit {
               `xvfb-run ${binary}: ${xvfbErr.code ?? "UNKNOWN"} ${xvfbErr.message}`,
             );
             lastError = xvfbError;
+            // Timeout = conversao travada, nao binario ausente: mesma regra
+            // da ramificacao sem xvfb (so ENOENT tenta o proximo candidato).
+            // Sem isso, um travamento repetiria o timeout em cada candidato.
+            if (xvfbErr.code === "ETIMEDOUT") break;
             continue;
           }
         }

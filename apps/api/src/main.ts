@@ -7,6 +7,7 @@ import helmet from "helmet";
 
 import { requestContextMiddleware } from "./analysis-protection/request-context.middleware";
 import { AppModule } from "./app.module";
+import { startMemoryDiagnostics } from "./common/memory-diagnostics";
 import { loadAppEnv, loadLocalEnvFileIfPresent } from "./config/env.module";
 import { registerSnsWebhookTextBodyParser } from "./config/sns-text-body-parser";
 
@@ -61,6 +62,9 @@ async function bootstrap() {
   app.use(requestContextMiddleware);
 
   await app.listen(env.API_PORT, env.API_HOST);
+
+  // Diagnostico temporario de memoria; no-op sem MEMORY_DIAGNOSTICS_ENABLED=true.
+  startMemoryDiagnostics();
 }
 
 void bootstrap();

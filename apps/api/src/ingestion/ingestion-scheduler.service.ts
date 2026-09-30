@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 
+import { trackJob } from "../common/memory-diagnostics";
 import { IngestionService } from "./ingestion.service";
 import { ManualIngestionBatchRepository } from "./manual-ingestion-batch.repository";
 
@@ -25,7 +26,9 @@ export class IngestionSchedulerService {
       return;
     }
 
-    await this.ingestionService.recoverStaleRuns();
+    await trackJob("ingestion-recover-stale-runs", () =>
+      this.ingestionService.recoverStaleRuns(),
+    );
   }
 
   // Enqueues an async batch (scheduleEnabled sources only, same as the

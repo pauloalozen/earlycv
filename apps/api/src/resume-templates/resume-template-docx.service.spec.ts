@@ -139,6 +139,39 @@ describe("ResumeTemplateDocxService libreoffice lookup", () => {
     assert.deepEqual(service.attempted, ["soffice", "xvfb-run"]);
   });
 
+  it("does not try the next binary when xvfb-run times out", async () => {
+    const service = new TestResumeTemplateDocxService(async (binary) => {
+      if (binary === "xvfb-run") {
+        const err = new Error("timeout") as NodeJS.ErrnoException;
+        err.code = "ETIMEDOUT";
+        throw err;
+      }
+
+      const err = new Error("display error") as NodeJS.ErrnoException & {
+        stderr?: string;
+      };
+      err.code = "EPIPE";
+      err.stderr = "X11 error: Can't open display:";
+      throw err;
+    });
+
+    await assert.rejects(
+      (
+        service as unknown as {
+          execLibreOfficeConvert(path: string): Promise<void>;
+        }
+      ).execLibreOfficeConvert("/tmp/test.docx"),
+      /Falha ao converter CV para PDF no servidor/,
+    );
+
+    // Uma unica tentativa direta + uma via xvfb-run; nao repete nos demais
+    // candidatos (soffice, libreoffice, /usr/bin/soffice, ...).
+    assert.deepEqual(
+      service.attempted.filter((b) => b === "xvfb-run").length,
+      1,
+    );
+  });
+
   it("retries docxToPdf with xvfb when stdout/stderr report display error", async () => {
     const service = new TestResumeTemplateDocxService(async (binary) => {
       if (binary === "soffice") {

@@ -1,11 +1,11 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
-import { promisify } from "node:util";
 import mammoth from "mammoth";
 
-const execFileAsync = promisify(execFile);
+import { runManagedProcess } from "./managed-process";
+import { trackConversion } from "./memory-diagnostics";
+
 const MIN_CV_CHARS = 100;
 const MAX_CV_CHARS = 30_000;
 const MAX_CV_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -210,9 +210,8 @@ async function convertWithLibreOfficeAndReadText(
 
   await writeFile(sourcePath, buffer);
   try {
-    await withTimeout(
+    await trackConversion("libreoffice-cv-text", () =>
       execLibreOfficeConvertToText(sourcePath, tempDir),
-      EXTRACTION_TIMEOUT_MS,
     );
     return await withTimeout(
       readFile(outputPath, "utf8"),
@@ -240,18 +239,25 @@ async function execLibreOfficeConvertToText(
   let lastError: unknown = null;
   for (const binary of [...new Set(candidates)]) {
     try {
-      await execFileAsync(binary, [
-        "--headless",
-        "--convert-to",
-        "txt:Text",
-        "--outdir",
-        outputDir,
-        sourcePath,
-      ]);
+      // O timeout mata o process group inteiro (soffice + soffice.bin);
+      // o withTimeout antigo so rejeitava a promise e deixava o processo vivo.
+      await runManagedProcess(
+        binary,
+        [
+          "--headless",
+          "--convert-to",
+          "txt:Text",
+          "--outdir",
+          outputDir,
+          sourcePath,
+        ],
+        { timeoutMs: EXTRACTION_TIMEOUT_MS },
+      );
       return;
     } catch (error) {
       lastError = error;
       const err = error as NodeJS.ErrnoException;
+      if (err.code === "ETIMEDOUT") throw new CvExtractionTimeoutError();
       if (err.code !== "ENOENT") break;
     }
   }

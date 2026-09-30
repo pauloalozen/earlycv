@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import {
@@ -67,7 +68,9 @@ export class MonitorProfileMatchingWorker {
     if (process.env.NODE_ENV === "test") {
       return;
     }
-    await this.processPendingBatch();
+    await trackJob("monitor-profile-matching", () =>
+      this.processPendingBatch(),
+    );
   }
 
   async processPendingBatch() {
