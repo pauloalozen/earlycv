@@ -620,12 +620,25 @@ export class CompanySourceAuditService {
   // sempre isActive=false — hoje esse e o UNICO lugar do sistema que cria
   // Company com isActive=false, entao esse campo funciona como o marcador
   // de "e um rascunho pendente de revisao" sem precisar de coluna nova.
-  async listDrafts() {
-    const companies = await this.database.company.findMany({
-      where: { isActive: false },
-      orderBy: { createdAt: "desc" },
-    });
-    if (companies.length === 0) return [];
+  async listDrafts(params: { page?: number; pageSize?: number } = {}) {
+    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 50));
+    const page = Math.max(1, params.page ?? 1);
+    const [companies, total] = await Promise.all([
+      this.database.company.findMany({
+        where: { isActive: false },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.database.company.count({ where: { isActive: false } }),
+    ]);
+    const pageInfo = {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+    if (companies.length === 0) return { drafts: [], ...pageInfo };
 
     const companyIds = companies.map((c) => c.id);
     const [sources, jobCounts] = await Promise.all([
@@ -660,7 +673,7 @@ export class CompanySourceAuditService {
       jobCountsByCompany.set(row.companyId, counts);
     }
 
-    return companies.map((company) => ({
+    const drafts = companies.map((company) => ({
       ...company,
       sources: sourcesByCompany.get(company.id) ?? [],
       jobCounts: jobCountsByCompany.get(company.id) ?? {
@@ -669,6 +682,7 @@ export class CompanySourceAuditService {
         removed: 0,
       },
     }));
+    return { drafts, ...pageInfo };
   }
 
   private async getDraft(companyId: string) {

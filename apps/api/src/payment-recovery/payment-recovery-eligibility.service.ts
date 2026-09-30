@@ -1,5 +1,6 @@
 import { resolveCvAnalysisScores } from "@earlycv/config/cv-analysis-score";
 import { Inject, Injectable } from "@nestjs/common";
+import type { PaymentStatus } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 
@@ -32,7 +33,7 @@ type PurchaseRecord = {
     jobTitle: string | null;
     companyName: string | null;
     isUnlocked: boolean;
-    adaptedContentJson: unknown;
+    adaptedContentJson?: unknown;
   } | null;
 };
 
@@ -181,7 +182,18 @@ export class PaymentRecoveryEligibilityService {
   async listPending(
     filters: PaymentRecoveryListPendingFilters = {},
   ): Promise<PaymentRecoveryEligibilityListOutput> {
+    // Grupos e indices de elegibilidade sao sempre por usuario, e so
+    // interessam grupos com alguma compra pendente. Entao basta carregar
+    // TODAS as compras (qualquer status) dos usuarios que tem pelo menos uma
+    // pendente — o resultado e identico ao de varrer a tabela inteira.
     const purchases = (await this.database.planPurchase.findMany({
+      where: {
+        user: {
+          planPurchases: {
+            some: { status: { in: [...PENDING_STATUSES] as PaymentStatus[] } },
+          },
+        },
+      },
       include: {
         user: {
           select: { id: true, name: true, email: true, creditsRemaining: true },
@@ -207,7 +219,8 @@ export class PaymentRecoveryEligibilityService {
             jobTitle: true,
             companyName: true,
             isUnlocked: true,
-            adaptedContentJson: true,
+            // adaptedContentJson (blob grande) so e lido depois, apenas para
+            // os itens da pagina devolvida — so serve pra calcular score.
           },
         })
       : [];
@@ -267,9 +280,6 @@ export class PaymentRecoveryEligibilityService {
       .map(
         ({ representative, relatedPendingPurchaseCount, groupPurchases }) => {
           const classification = this.classifyPurchase(representative, indexes);
-          const scores = readScoreFields(
-            representative.adaptation?.adaptedContentJson,
-          );
           let recoveryEmailCount = 0;
           let lastRecoveryEmailSentAt: string | null = null;
           let latestSentAt = Number.NEGATIVE_INFINITY;
@@ -305,9 +315,9 @@ export class PaymentRecoveryEligibilityService {
             createdAt: representative.createdAt.toISOString(),
             jobTitle: representative.adaptation?.jobTitle ?? null,
             companyName: representative.adaptation?.companyName ?? null,
-            scoreBefore: scores.scoreBefore,
-            scoreAfter: scores.scoreAfter,
-            scoreDelta: scores.scoreDelta,
+            scoreBefore: null,
+            scoreAfter: null,
+            scoreDelta: null,
             currentUserCredits: representative.user?.creditsRemaining ?? 0,
             hasAvailableCredits:
               (representative.user?.creditsRemaining ?? 0) > 0,
@@ -389,7 +399,40 @@ export class PaymentRecoveryEligibilityService {
     const start = (page - 1) * pageSize;
     const paged = filtered.slice(start, start + pageSize);
 
+    await this.fillScores(paged);
+
     return { items: paged, total: filtered.length, page, pageSize };
+  }
+
+  // Score vem do JSON da adaptacao (pesado): buscado so para os itens da
+  // pagina, nunca para todas as compras candidatas.
+  private async fillScores(
+    items: PaymentRecoveryEligibilityItem[],
+  ): Promise<void> {
+    const adaptationIds = [
+      ...new Set(
+        items
+          .map((item) => item.originAdaptationId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (adaptationIds.length === 0) return;
+
+    const rows = await this.database.cvAdaptation.findMany({
+      where: { id: { in: adaptationIds } },
+      select: { id: true, adaptedContentJson: true },
+    });
+    const jsonById = new Map(
+      rows.map((row) => [row.id, row.adaptedContentJson]),
+    );
+
+    for (const item of items) {
+      if (!item.originAdaptationId) continue;
+      const scores = readScoreFields(jsonById.get(item.originAdaptationId));
+      item.scoreBefore = scores.scoreBefore;
+      item.scoreAfter = scores.scoreAfter;
+      item.scoreDelta = scores.scoreDelta;
+    }
   }
 
   async evaluateByPurchaseId(

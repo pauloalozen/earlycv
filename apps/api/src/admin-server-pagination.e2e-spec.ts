@@ -11,8 +11,10 @@ import { AdminPendingService } from "./admin-pending/admin-pending.service";
 import { AdminUsersService } from "./admin-users/admin-users.service";
 import { CompaniesService } from "./companies/companies.service";
 import { DatabaseService } from "./database/database.service";
+import { CompanySourceAuditService } from "./ingestion/company-source-audit.service";
 import { DashboardAdminService } from "./ingestion/dashboard-admin.service";
 import { JobSourcesService } from "./job-sources/job-sources.service";
+import { PaymentRecoveryEligibilityService } from "./payment-recovery/payment-recovery-eligibility.service";
 import { PaymentsService } from "./payments/payments.service";
 
 const prisma = new PrismaClient();
@@ -117,8 +119,14 @@ before(async () => {
     run: "completed",
     activeJobs: 1,
   });
-  await makeSource("s-completa", "completa", { run: "completed", activeJobs: 2 });
-  await makeSource("s-completa2", "completa", { run: "completed", activeJobs: 0 });
+  await makeSource("s-completa", "completa", {
+    run: "completed",
+    activeJobs: 2,
+  });
+  await makeSource("s-completa2", "completa", {
+    run: "completed",
+    activeJobs: 0,
+  });
 });
 
 after(async () => {
@@ -170,7 +178,10 @@ describe("JobSourcesService — paginação no servidor e sem blobs", () => {
       sortDir: "desc",
     });
     assert.deepEqual(
-      desc.rows.map((r) => [r.sourceName.replace(`${tag} `, ""), r.activeJobsCount]),
+      desc.rows.map((r) => [
+        r.sourceName.replace(`${tag} `, ""),
+        r.activeJobsCount,
+      ]),
       [
         ["s-falha", 3],
         ["s-completa", 2],
@@ -196,7 +207,10 @@ describe("JobSourcesService — paginação no servidor e sem blobs", () => {
       sortDir: "asc",
     });
     const counts = asc.rows.map((r) => r.activeJobsCount);
-    assert.deepEqual(counts, [...counts].sort((a, b) => a - b));
+    assert.deepEqual(
+      counts,
+      [...counts].sort((a, b) => a - b),
+    );
   });
 
   it("filtra por companyId", async () => {
@@ -231,7 +245,9 @@ describe("JobSourcesService — paginação no servidor e sem blobs", () => {
   });
 
   it("getById não devolve previewJson nas runs", async () => {
-    const source = await jobSourcesService.getById(ids.sources["s-falha"] as string);
+    const source = await jobSourcesService.getById(
+      ids.sources["s-falha"] as string,
+    );
     assert.equal("previewJson" in (source.ingestionRuns[0] as object), false);
   });
 });
@@ -259,7 +275,9 @@ describe("CompaniesService.listPaginated — status exato no banco", () => {
     });
     assert.equal(page.rows[0]?.sourcesCount, 2);
     assert.equal(page.rows[0]?.status.tone, "success");
-    const falha = await companiesService.listPaginated({ search: `${tag} falha` });
+    const falha = await companiesService.listPaginated({
+      search: `${tag} falha`,
+    });
     assert.equal(falha.rows[0]?.status.tone, "danger");
   });
 
@@ -305,7 +323,8 @@ describe("AdminPendingService — janela paginada sobre os tipos", () => {
     assert.deepEqual(types.slice(0, 1), ["company-missing-source"]);
     assert.ok(types.includes("source-failed-recent-run"));
     const erro = all.items.find(
-      (i) => i.type === "source-failed-recent-run" && i.title.endsWith("s-erro"),
+      (i) =>
+        i.type === "source-failed-recent-run" && i.title.endsWith("s-erro"),
     );
     assert.equal(erro?.description, "boom");
   });
@@ -320,7 +339,9 @@ describe("AdminPendingService — janela paginada sobre os tipos", () => {
     assert.equal(p1.items.length, 2);
     assert.equal(p2.items.length, 2);
     assert.equal(p3.items.length, 0);
-    const keys = [...p1.items, ...p2.items].map((i) => `${i.type}:${i.entityId}`);
+    const keys = [...p1.items, ...p2.items].map(
+      (i) => `${i.type}:${i.entityId}`,
+    );
     assert.equal(new Set(keys).size, 4, "sem itens repetidos entre páginas");
   });
 
@@ -347,11 +368,18 @@ describe("AdminUsersService — sempre paginado + filtro de perfil", () => {
       });
       ids.users.push(user.id);
       if (profile) {
-        await prisma.userProfile.create({ data: { userId: user.id, ...profile } });
+        await prisma.userProfile.create({
+          data: { userId: user.id, ...profile },
+        });
       }
       if (master) {
         await prisma.resume.create({
-          data: { isMaster: true, kind: "master", title: "cv", userId: user.id },
+          data: {
+            isMaster: true,
+            kind: "master",
+            title: "cv",
+            userId: user.id,
+          },
         });
       }
       return user;
@@ -444,5 +472,73 @@ describe("Visão geral e pagamentos — só agregados / paginação real", () =>
     assert.ok(summary.revenueInCents >= 6000);
 
     await prisma.planPurchase.deleteMany({ where: { userId: user.id } });
+  });
+
+  it("recuperação de pagamento só considera usuários com compra pendente e devolve score da página", async () => {
+    const service = new PaymentRecoveryEligibilityService(database);
+    const pendingUser = await prisma.user.create({
+      data: { email: `${tag}-rec-a@example.com`, name: `${tag} rec-a` },
+    });
+    const paidUser = await prisma.user.create({
+      data: { email: `${tag}-rec-b@example.com`, name: `${tag} rec-b` },
+    });
+    ids.users.push(pendingUser.id, paidUser.id);
+    await prisma.planPurchase.createMany({
+      data: [
+        {
+          amountInCents: 1000,
+          creditsGranted: 1,
+          paymentProvider: "mercadopago",
+          paymentReference: `${tag}-rec-pending`,
+          planType: "starter",
+          status: "pending",
+          userId: pendingUser.id,
+        },
+        {
+          amountInCents: 1000,
+          creditsGranted: 1,
+          paymentProvider: "mercadopago",
+          paymentReference: `${tag}-rec-paid`,
+          planType: "starter",
+          status: "completed",
+          userId: paidUser.id,
+        },
+      ],
+    });
+
+    const result = await service.listPending({
+      eligibilityStatus: "all",
+      search: tag,
+    });
+
+    assert.equal(result.total, 1);
+    assert.equal(result.items[0]?.userId, pendingUser.id);
+    assert.equal(result.items[0]?.eligibilityStatus, "eligible");
+
+    await prisma.planPurchase.deleteMany({
+      where: { userId: { in: [pendingUser.id, paidUser.id] } },
+    });
+  });
+
+  it("achados e rascunhos do audit paginam no banco", async () => {
+    const audit = new CompanySourceAuditService(database);
+    for (let i = 0; i < 3; i += 1) {
+      await prisma.company.create({
+        data: {
+          isActive: false,
+          name: `${tag} draft ${i}`,
+          normalizedName: `${tag}-draft-${i}`,
+        },
+      });
+    }
+
+    const page = await audit.listDrafts({ page: 1, pageSize: 2 });
+    assert.equal(page.drafts.length, 2);
+    assert.ok(page.total >= 3);
+    assert.equal(page.pageSize, 2);
+
+    const findings = await audit.listFindings({ page: 1, pageSize: 5 });
+    assert.ok(findings.findings.length <= 5);
+    assert.equal(findings.pageSize, 5);
   });
 });

@@ -100,8 +100,14 @@ export class CompanySourceAuditController {
   }
 
   @Get("drafts")
-  async listDrafts() {
-    return this.service.listDrafts();
+  async listDrafts(
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return this.service.listDrafts({
+      page: Number.parseInt(page ?? "", 10) || undefined,
+      pageSize: Number.parseInt(pageSize ?? "", 10) || undefined,
+    });
   }
 
   @Post("drafts/:companyId/rename")
