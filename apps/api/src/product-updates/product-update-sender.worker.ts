@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
+import { trackJob } from "../common/memory-diagnostics";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
@@ -52,7 +53,7 @@ export class ProductUpdateSenderWorker {
     if (!this.env.PRODUCT_UPDATES_ENABLED) {
       return;
     }
-    await this.processPendingBatch();
+    await trackJob("product-update-sender", () => this.processPendingBatch());
   }
 
   // Gate em profundidade: mesmo que este método seja chamado diretamente

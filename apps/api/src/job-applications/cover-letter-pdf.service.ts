@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { trackConversion } from "../common/memory-diagnostics";
 
 type CoverLetterDocInput = {
   body: string;
@@ -14,21 +15,26 @@ export class CoverLetterPdfService {
   async generatePdf(input: CoverLetterDocInput): Promise<Buffer> {
     const html = this.buildHtml(input);
 
-    const puppeteer = await import("puppeteer");
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    });
+    return trackConversion("puppeteer-cover-letter-pdf", async () => {
+      const puppeteer = await import("puppeteer");
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      });
 
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
-      return Buffer.from(pdfBuffer);
-    } finally {
-      await browser.close();
-    }
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0" });
+        const pdfBuffer = await page.pdf({
+          format: "A4",
+          printBackground: true,
+        });
+        return Buffer.from(pdfBuffer);
+      } finally {
+        await browser.close();
+      }
+    });
   }
 
   private buildHtml(input: CoverLetterDocInput): string {

@@ -22,6 +22,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import type { CvProcessingJob, CvSource } from "@prisma/client";
 
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import type { MasterCvCanonicalExtractionOutput } from "../master-cv-canonical-extraction/master-cv-canonical-extraction.types";
@@ -93,7 +94,7 @@ export class CvProcessingWorker {
   @Cron(BASE_TICK_CRON)
   async tick() {
     if (process.env.NODE_ENV === "test") return;
-    await this.processPendingBatch();
+    await trackJob("cv-processing", () => this.processPendingBatch());
   }
 
   // Disparo imediato (correção de UX de 2026-09-08 — job não pode depender
@@ -111,7 +112,8 @@ export class CvProcessingWorker {
   //   nada: o job continua no estado em que already estava, recuperável
   //   pelo cron se ainda pending.
   triggerProcessing(jobId: string): void {
-    this.processOneJob(jobId).catch((err) => {
+    const run = () => this.processOneJob(jobId);
+    trackJob("cv-processing-trigger", run).catch((err) => {
       this.logger.error(
         `cv processing trigger(${jobId}) falhou (job permanece pending/claimable, cron recupera): ${
           err instanceof Error ? err.message : String(err)

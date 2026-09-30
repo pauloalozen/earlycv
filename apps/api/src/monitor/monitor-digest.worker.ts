@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { MAX_DIGEST_SEND_ATTEMPTS } from "./monitor-digest.constants";
@@ -43,7 +44,7 @@ export class MonitorDigestWorker {
     if (process.env.NODE_ENV === "test") {
       return;
     }
-    await this.processPendingBatch();
+    await trackJob("monitor-digest-worker", () => this.processPendingBatch());
   }
 
   async processPendingBatch() {

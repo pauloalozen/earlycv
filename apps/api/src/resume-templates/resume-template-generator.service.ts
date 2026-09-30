@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { Inject, Injectable } from "@nestjs/common";
 import type OpenAI from "openai";
 
+import { trackConversion } from "../common/memory-diagnostics";
 import { StorageService } from "../storage/storage.service";
 
 const execFileAsync = promisify(execFile);
@@ -197,25 +198,27 @@ export class ResumeTemplateGeneratorService {
   }
 
   async screenshotHtml(html: string): Promise<Buffer> {
-    const puppeteer = await import("puppeteer");
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setViewport({
-        width: 794,
-        height: 1123,
-        deviceScaleFactor: 2,
+    return trackConversion("puppeteer-template-screenshot", async () => {
+      const puppeteer = await import("puppeteer");
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       });
-      await page.setContent(html, { waitUntil: "networkidle0" });
-      const png = await page.screenshot({ type: "png", fullPage: false });
-      return Buffer.from(png);
-    } finally {
-      await browser.close();
-    }
+
+      try {
+        const page = await browser.newPage();
+        await page.setViewport({
+          width: 794,
+          height: 1123,
+          deviceScaleFactor: 2,
+        });
+        await page.setContent(html, { waitUntil: "networkidle0" });
+        const png = await page.screenshot({ type: "png", fullPage: false });
+        return Buffer.from(png);
+      } finally {
+        await browser.close();
+      }
+    });
   }
 }

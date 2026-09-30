@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { IngestionJobDispatchService } from "./ingestion-job-dispatch.service";
 import { IngestionLockRepository } from "./ingestion-lock.repository";
@@ -35,6 +36,11 @@ export class IngestionJobSchedulerService {
       return;
     }
 
+    await trackJob("ingestion-job-scheduler", () => this.dispatchDueJobs());
+  }
+
+  // Retorna quantos jobs estavam vencidos (tamanho do lote, p/ diagnostico).
+  private async dispatchDueJobs() {
     const now = new Date();
     const dueJobs = await this.findDueJobs(now);
     const owner = `ingestion-job-scheduler-${randomUUID()}`;
@@ -61,6 +67,8 @@ export class IngestionJobSchedulerService {
         await this.lockRepository.release(lockId, owner);
       }
     }
+
+    return dueJobs.length;
   }
 
   findDueJobs(now: Date) {

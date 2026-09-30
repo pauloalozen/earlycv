@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Injectable } from "@nestjs/common";
+import { trackConversion } from "../common/memory-diagnostics";
 import type {
   CvAdaptationOutput,
   CvSection,
@@ -42,21 +43,26 @@ export class CvAdaptationPdfService {
         )
       : this.buildHtml(output, templateSlug, profileFallback, contactMode);
 
-    const puppeteer = await import("puppeteer");
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    });
+    return trackConversion("puppeteer-cv-pdf", async () => {
+      const puppeteer = await import("puppeteer");
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      });
 
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
-      return Buffer.from(pdfBuffer);
-    } finally {
-      await browser.close();
-    }
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0" });
+        const pdfBuffer = await page.pdf({
+          format: "A4",
+          printBackground: true,
+        });
+        return Buffer.from(pdfBuffer);
+      } finally {
+        await browser.close();
+      }
+    });
   }
 
   /** @deprecated Use generatePdf(output, structureJson) instead */

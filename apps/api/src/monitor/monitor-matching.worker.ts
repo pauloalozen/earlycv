@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { SeniorityLevel } from "@prisma/client";
 
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import {
@@ -55,7 +56,7 @@ export class MonitorMatchingWorker {
     if (process.env.NODE_ENV === "test") {
       return;
     }
-    await this.processPendingBatch();
+    await trackJob("monitor-matching", () => this.processPendingBatch());
   }
 
   // Extraído do tick() pra ser testável sem depender do guard de NODE_ENV do

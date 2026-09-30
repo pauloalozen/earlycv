@@ -12,6 +12,7 @@ import type { IngestionJobTrigger } from "@prisma/client";
 import type OpenAI from "openai";
 
 import { getAiModel } from "../common/ai-client-factory";
+import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
 import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
 import { doesSecondsCronMatchDate } from "./cron-utils";
@@ -111,7 +112,7 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       return;
     }
 
-    await this.runScheduledCycle(new Date());
+    await trackJob("job-enrichment", () => this.runScheduledCycle(new Date()));
   }
 
   // Extraido do tick() pra ser testavel sem depender do guard de
