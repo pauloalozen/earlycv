@@ -40,9 +40,9 @@ describe("POST /api/revalidate/job", () => {
     expect((await call({ slug: "a", reason: "updated" }, null)).status).toBe(
       401,
     );
-    expect((await call({ slug: "a", reason: "updated" }, "errado")).status).toBe(
-      401,
-    );
+    expect(
+      (await call({ slug: "a", reason: "updated" }, "errado")).status,
+    ).toBe(401);
     expect(revalidateTagMock).not.toHaveBeenCalled();
   });
 

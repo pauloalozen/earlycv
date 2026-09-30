@@ -1,11 +1,11 @@
 import "server-only";
 
+import type { PublicJob, PublicJobsPage } from "./public-jobs-api";
 import {
   jobCacheTag,
   PUBLIC_JOB_REVALIDATE_SECONDS,
   SIMILAR_JOBS_CACHE_TAG,
 } from "./radar-cache";
-import type { PublicJob, PublicJobsPage } from "./public-jobs-api";
 
 // Cliente de dados PÚBLICOS. Diferente de apiRequest (lib/api-request.ts),
 // nunca lê cookies() e nunca envia Cookie/Authorization: por construção, o
@@ -93,8 +93,8 @@ export function fetchPublicJobCached(slug: string) {
 // Lista genérica (anônima) para "vagas similares". Nunca personalizada:
 // este cliente não envia credenciais.
 export function fetchPublicSimilarJobsCached(limit = 4) {
-  return publicGet<PublicJobsPage>(
-    `/public/jobs?limit=${limit}&page=1`,
-    { kind: "cached", tags: [SIMILAR_JOBS_CACHE_TAG] },
-  );
+  return publicGet<PublicJobsPage>(`/public/jobs?limit=${limit}&page=1`, {
+    kind: "cached",
+    tags: [SIMILAR_JOBS_CACHE_TAG],
+  });
 }

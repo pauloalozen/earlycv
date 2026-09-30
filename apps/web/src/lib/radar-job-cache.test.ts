@@ -2,10 +2,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { buildJobMetadata } from "@/app/radar/[slug]/job-detail";
 import nextConfig from "../../next.config";
 import { proxy } from "../proxy";
-import { buildJobMetadata } from "@/app/radar/[slug]/job-detail";
 import {
   APP_ACCESS_TOKEN_COOKIE_NAME,
   APP_REFRESH_TOKEN_COOKIE_NAME,

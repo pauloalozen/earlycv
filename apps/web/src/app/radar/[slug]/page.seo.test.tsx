@@ -39,6 +39,15 @@ vi.mock("@/lib/public-jobs-api", () => ({
   getPublicJobBySlug: mocks.getPublicJobBySlug,
   listPublicJobs: mocks.listPublicJobs,
 }));
+
+// O detalhe carrega a vaga pelo cliente público (sem cookies); estes testes
+// seguem controlando a vaga via getPublicJobBySlug.
+vi.mock("@/lib/public-jobs-client", () => ({
+  fetchPublicJob: async (slug: string) => {
+    const job = await mocks.getPublicJobBySlug(slug);
+    return job ? { data: job, status: "ok" } : { status: "not-found" };
+  },
+}));
 vi.mock("@/lib/resumes-api", () => ({
   getMyMasterResume: mocks.getMyMasterResume,
 }));

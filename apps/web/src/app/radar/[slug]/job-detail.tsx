@@ -727,7 +727,6 @@ export function JobDetailView({
     !!job.publishedAtSource &&
     Date.now() - new Date(job.publishedAtSource).getTime() < 3 * 86_400_000;
 
-
   const validThrough = new Date(
     new Date(job.lastSeenAt).getTime() + 30 * 86_400_000,
   ).toISOString();
