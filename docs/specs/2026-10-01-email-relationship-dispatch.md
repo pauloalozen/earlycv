@@ -207,3 +207,6 @@ Visão geral (ativação por tipo, cutoff, prontidão, saúde, contagens) · Rel
 
 ### 11.6 Evidências
 API (Postgres real): `admin-emails.service.spec.ts` (10), `email-dispatch-settings.service.spec.ts`, `email-dispatch-template.service.spec.ts`, DI do `AdminEmailsModule`. Web: nav (resolução de rotas, topbar com uma única aba "Emails", layouts), helpers de formulário (cutoff em horário de Brasília, validação de formato), actions, 7 páginas, formulário de configurações e editor de templates (**achados pelos testes:** `Date` aceita lixo como "ontem"; `<form action>` apagava o formulário). Falhas já existentes e alheias: `admin/ingestion/actions.test.ts` e `admin/payment-recovery/page.test.tsx`.
+
+## 12. Estado atual e próximos passos (checkpoint)
+Resumo do que foi feito e do que falta está em **`docs/handoff-email-dispatch-2026-10-01.md`** (commits, o que existe, variáveis do Railway, lista ordenada do que falta, riscos conhecidos e como retomar). Em uma linha: tudo implementado e testado em `develop` local (não enviada ao remoto); falta IAM, a variável `AWS_SES_RELATIONSHIP_TOPIC_NAME`, publicar, o teste real `--real-send --no-db` com as verificações V1–V5 e só então a ativação gradual pelo admin.
