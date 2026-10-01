@@ -22,6 +22,7 @@ export const EMAIL_DISPATCH_MODES: EmailDispatchModeValue[] = [
 export type SettingsSnapshot = {
   welcomeMode: EmailDispatchModeValue;
   feedbackMode: EmailDispatchModeValue;
+  feedbackSecondCallMode: EmailDispatchModeValue;
   purchaseConfirmationMode: EmailDispatchModeValue;
   startAt: Date | null;
   allowlist: string[];
@@ -31,6 +32,7 @@ export type SettingsSnapshot = {
 export const OFF_SNAPSHOT: SettingsSnapshot = {
   welcomeMode: "OFF",
   feedbackMode: "OFF",
+  feedbackSecondCallMode: "OFF",
   purchaseConfirmationMode: "OFF",
   startAt: null,
   allowlist: [],
@@ -45,6 +47,8 @@ export type AdminSettings = SettingsSnapshot & {
 export type UpdateSettingsInput = {
   welcomeMode: EmailDispatchModeValue;
   feedbackMode: EmailDispatchModeValue;
+  // Opcional por compatibilidade com clientes antigos: ausente = mantém o atual.
+  feedbackSecondCallMode?: EmailDispatchModeValue;
   purchaseConfirmationMode: EmailDispatchModeValue;
   startAt: string | null;
   allowlist: string[];
@@ -71,6 +75,7 @@ export function normalizeEmailList(values: string[]): string[] {
 function fromRow(row: {
   welcomeMode: EmailDispatchModeValue;
   feedbackMode: EmailDispatchModeValue;
+  feedbackSecondCallMode: EmailDispatchModeValue;
   purchaseConfirmationMode: EmailDispatchModeValue;
   startAt: Date | null;
   allowlist: string[];
@@ -79,6 +84,7 @@ function fromRow(row: {
   return {
     welcomeMode: row.welcomeMode,
     feedbackMode: row.feedbackMode,
+    feedbackSecondCallMode: row.feedbackSecondCallMode,
     purchaseConfirmationMode: row.purchaseConfirmationMode,
     startAt: row.startAt,
     allowlist: row.allowlist,
@@ -164,6 +170,11 @@ export class EmailDispatchSettingsService {
       ["boas-vindas", input.welcomeMode, previous.welcomeMode],
       ["feedback", input.feedbackMode, previous.feedbackMode],
       [
+        "feedback segunda chamada",
+        input.feedbackSecondCallMode ?? previous.feedbackSecondCallMode,
+        previous.feedbackSecondCallMode,
+      ],
+      [
         "confirmação de compra",
         input.purchaseConfirmationMode,
         previous.purchaseConfirmationMode,
@@ -240,6 +251,8 @@ export class EmailDispatchSettingsService {
     const data = {
       welcomeMode: input.welcomeMode,
       feedbackMode: input.feedbackMode,
+      feedbackSecondCallMode:
+        input.feedbackSecondCallMode ?? before.feedbackSecondCallMode,
       purchaseConfirmationMode: input.purchaseConfirmationMode,
       startAt,
       allowlist,
@@ -266,12 +279,14 @@ export class EmailDispatchSettingsService {
           before: {
             welcomeMode: before.welcomeMode,
             feedbackMode: before.feedbackMode,
+            feedbackSecondCallMode: before.feedbackSecondCallMode,
             purchaseConfirmationMode: before.purchaseConfirmationMode,
             startAt: before.startAt?.toISOString() ?? null,
           },
           after: {
             welcomeMode: row.welcomeMode,
             feedbackMode: row.feedbackMode,
+            feedbackSecondCallMode: row.feedbackSecondCallMode,
             purchaseConfirmationMode: row.purchaseConfirmationMode,
             startAt: row.startAt?.toISOString() ?? null,
             allowlistCount: row.allowlist.length,
@@ -282,7 +297,7 @@ export class EmailDispatchSettingsService {
     });
 
     this.logger.log(
-      `email_dispatch_settings_updated adminId=${adminId} welcome=${row.welcomeMode} feedback=${row.feedbackMode} purchase=${row.purchaseConfirmationMode} startAt=${row.startAt?.toISOString() ?? "unset"}`,
+      `email_dispatch_settings_updated adminId=${adminId} welcome=${row.welcomeMode} feedback=${row.feedbackMode} feedback2=${row.feedbackSecondCallMode} purchase=${row.purchaseConfirmationMode} startAt=${row.startAt?.toISOString() ?? "unset"}`,
     );
 
     return {

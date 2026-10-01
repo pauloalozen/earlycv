@@ -32,6 +32,7 @@ const labelStyle: React.CSSProperties = {
 type Initial = {
   welcomeMode: EmailDispatchMode;
   feedbackMode: EmailDispatchMode;
+  feedbackSecondCallMode: EmailDispatchMode;
   purchaseConfirmationMode: EmailDispatchMode;
   startAtInput: string;
   allowlist: string;
@@ -81,8 +82,13 @@ export function EmailSettingsForm({ initial }: { initial: Initial }) {
   const isPending = isActionPending || isTransitionPending;
   const [welcome, setWelcome] = useState(initial.welcomeMode);
   const [feedback, setFeedback] = useState(initial.feedbackMode);
+  const [feedbackSecondCall, setFeedbackSecondCall] = useState(
+    initial.feedbackSecondCallMode,
+  );
   const [purchase, setPurchase] = useState(initial.purchaseConfirmationMode);
-  const anyLive = [welcome, feedback, purchase].includes("LIVE");
+  const anyLive = [welcome, feedback, feedbackSecondCall, purchase].includes(
+    "LIVE",
+  );
 
   return (
     <>
@@ -122,9 +128,15 @@ export function EmailSettingsForm({ initial }: { initial: Initial }) {
         />
         <ModeSelect
           name="feedbackMode"
-          label="Feedback do primeiro uso"
+          label="Feedback (24h após o cadastro)"
           value={feedback}
           onChange={setFeedback}
+        />
+        <ModeSelect
+          name="feedbackSecondCallMode"
+          label="Feedback segunda chamada (14 dias após o envio do feedback)"
+          value={feedbackSecondCall}
+          onChange={setFeedbackSecondCall}
         />
         <ModeSelect
           name="purchaseConfirmationMode"

@@ -180,6 +180,7 @@ export function buildEnv(overrides: Partial<AppEnv> = {}): AppEnv {
 export type TestSettingsOverrides = {
   EMAIL_WELCOME_MODE?: string;
   EMAIL_FEEDBACK_MODE?: string;
+  EMAIL_FEEDBACK_SECOND_CALL_MODE?: string;
   EMAIL_PURCHASE_CONFIRMATION_MODE?: string;
   EMAIL_RELATIONSHIP_START_AT?: string;
   EMAIL_RELATIONSHIP_ALLOWLIST?: string;
@@ -189,6 +190,7 @@ export type TestSettingsOverrides = {
 const TEST_SETTING_KEYS = [
   "EMAIL_WELCOME_MODE",
   "EMAIL_FEEDBACK_MODE",
+  "EMAIL_FEEDBACK_SECOND_CALL_MODE",
   "EMAIL_PURCHASE_CONFIRMATION_MODE",
   "EMAIL_RELATIONSHIP_START_AT",
   "EMAIL_RELATIONSHIP_ALLOWLIST",
@@ -220,6 +222,7 @@ export function buildSettingsSnapshot(
   return {
     welcomeMode: asMode(overrides.EMAIL_WELCOME_MODE),
     feedbackMode: asMode(overrides.EMAIL_FEEDBACK_MODE),
+    feedbackSecondCallMode: asMode(overrides.EMAIL_FEEDBACK_SECOND_CALL_MODE),
     purchaseConfirmationMode: asMode(
       overrides.EMAIL_PURCHASE_CONFIRMATION_MODE,
     ),

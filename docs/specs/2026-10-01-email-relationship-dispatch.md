@@ -41,8 +41,13 @@ Reaproveitado: fachada `EmailService`, `SesEmailProviderService`, SES List Manag
 ### Feedback (uma vez)
 - Agendado junto com a boas-vindas: `max(cadastro + 24h, boas-vindas + 12h)`, ajustado à janela **08:00–20:00 de Brasília** (fora dela → próximo 08:00). Caso normal = exatamente cadastro + 24h.
 - **Verificação tardia:** quem verifica dias depois do cadastro nunca recebe os dois juntos: o feedback fica ≥12h depois da boas-vindas; no envio ainda espera se a boas-vindas estiver `PENDING/PROCESSING` ou tiver saído há <12h.
-- Variante decidida **no envio** (ver §4): `VIEWED` ou `NEUTRAL`.
+- Texto único (template `FEEDBACK_FIRST_USE`). **Não há mais variante viu/neutro** (decisão de 2026-10-01): o cadastro nasce da primeira análise, então o texto pode falar da análise. A coluna `EmailDispatch.variant` ficou sem uso (mantida por ser aditivo).
 
+### Feedback segunda chamada (`FEEDBACK_SECOND_CALL`)
+- **Criada pelo worker** quando o primeiro feedback vira **`SENT` de verdade**: `scheduledFor = ajusteJanela(sentAt + 14 dias)`, `expiresAt = scheduledFor + 48h`, dedupe `feedback2:{userId}`, `createMany skipDuplicates`. Pulado/falho/sombra no primeiro = **não há segunda chamada**.
+- **Modo próprio** (`feedbackSecondCallMode`, OFF por padrão), com as mesmas regras (cutoff obrigatório, LIVE confirmado). Só nasce se o modo não está OFF **no instante do envio do primeiro**: ligar depois **não** preenche retroativamente quem já recebeu o primeiro.
+- Mesma elegibilidade do relacionamento (verificado, não staff, blocklist, cutoff, descadastro, supressão). Adia só pela janela 08–20h BRT (a regra de boas-vindas é só do primeiro). Erro ao criar a linha nunca afeta o envio já concluído (loga `email_dispatch_enqueue_failed kind=FEEDBACK_SECOND_CALL`).
+- Texto: o antigo "neutro" (`FEEDBACK_NEUTRAL` renomeado para `FEEDBACK_SECOND_CALL` na migration `20261001180000`; texto salvo no admin, se houver, é preservado).
 ### Adiado × descartado (nada fica pendente para sempre)
 | Situação no momento do envio | Resultado |
 |---|---|
@@ -69,13 +74,15 @@ Elegibilidade e preferências são **reavaliadas a cada envio**.
 - Só `sendTest` (script) aceita essas contas, com destinatário informado e sem varrer base.
 - **Base antiga nunca recebe:** `EMAIL_RELATIONSHIP_START_AT` (cutoff) vale no enqueue e no envio.
 
-## 4. Atribuição de `analysis_result_viewed` (validado)
+## 4. Atribuição de `analysis_result_viewed` (histórico — NÃO é mais usado no envio)
+
+> Desde 2026-10-01 o feedback não depende desse evento (variante removida). A análise abaixo fica só como registro.
 
 - O evento é emitido pelo **frontend** (`adaptar/resultado/page.tsx`) com `userId: null` nas properties; o `userId` gravado vem do **JWT verificado** no middleware (`request-context.middleware.ts`), então só existe quando a pessoa estava **logada** ao ver o resultado.
 - `trackEvent` **não envia nada** sem consentimento de analytics (`consentState` desconhecido/negado) → **ausência do evento não prova que não viu**.
 - Visualização como convidado (antes do cadastro) fica sem `userId`; o vínculo guest→usuário existe só indiretamente (`sessionInternalId`) e **não** foi usado.
 - `CvAdaptation`/`AnalysisSession` existentes **não** provam visualização (não usados).
-- **Decisão:** `VIEWED` só com evento `analysis_result_viewed` com `userId` do usuário; senão `NEUTRAL`. Nunca existe variante "não viu".
+- **Decisão original (substituída):** `VIEWED` só com evento com `userId`; senão `NEUTRAL`.
 
 ## 5. Remetente e SES
 
@@ -185,7 +192,7 @@ Migration aditiva; `EmailSuppression` gravada/lida por Monitor e Product Updates
 Uma única aba **Emails** no topo substitui "Alerta de Vagas", "Product Updates" e "Recuperação". Dentro dela uma sub-navegação: **Visão geral · Alerta de Vagas · Product Updates · Recuperação de pagamento · Relacionamento · Compras · Templates · Supressões · Configurações**. As 3 telas antigas **mantêm suas rotas** (`/admin/alerta-vagas`, `/admin/product-updates`, `/admin/payment-recovery`): ganham a sub-navegação por um `layout.tsx` por rota, sem tocar nas páginas (links e testes existentes intactos). As novas ficam em `/admin/emails/*`.
 
 ### 11.2 Configurações no banco (padrão Alerta de Vagas / Product Updates)
-- `EmailDispatchSettings` (singleton `default`): `welcomeMode`, `feedbackMode`, `purchaseConfirmationMode` (`OFF|SHADOW|ALLOWLIST|LIVE`), `startAt` (cutoff), `allowlist`, `extraBlocklist`, `updatedByAdminId`. **Sem linha = tudo OFF e sem cutoff.**
+- `EmailDispatchSettings` (singleton `default`): `welcomeMode`, `feedbackMode`, `feedbackSecondCallMode`, `purchaseConfirmationMode` (`OFF|SHADOW|ALLOWLIST|LIVE`), `startAt` (cutoff), `allowlist`, `extraBlocklist`, `updatedByAdminId`. **Sem linha = tudo OFF e sem cutoff.**
 - **Falha fechada:** erro ao ler as configurações → tudo OFF (nunca "último valor conhecido") + log `email_dispatch_settings_unreadable`. Cache de 10s (invalida na hora na instância que gravou).
 - **Regras no backend** (`EmailDispatchSettingsService.validate`): qualquer modo ligado exige cutoff; `ALLOWLIST` exige allowlist não vazia; **`LIVE` exige confirmação explícita** quando um tipo passa a `LIVE`; e-mails válidos, normalizados, sem duplicados (máx. 200).
 - **Auditoria:** cada alteração grava `MonitorAdminActionLog` (`email_dispatch_settings_updated`, modos antes/depois, **contagens** — nunca os endereços) + log `email_dispatch_settings_updated`.
@@ -193,9 +200,9 @@ Uma única aba **Emails** no topo substitui "Alerta de Vagas", "Product Updates"
 - Variáveis removidas: `EMAIL_WELCOME_MODE`, `EMAIL_FEEDBACK_MODE`, `EMAIL_PURCHASE_CONFIRMATION_MODE`, `EMAIL_RELATIONSHIP_START_AT`, `EMAIL_RELATIONSHIP_ALLOWLIST`, `EMAIL_RELATIONSHIP_BLOCKLIST` (se definidas no ambiente, são ignoradas). `EmailDispatchConfigService.getEffectiveMode/getStartAt/isBlocked/isAllowlisted` passaram a ser assíncronos.
 
 ### 11.3 Conteúdo editável (assunto + corpo)
-- `EmailDispatchTemplate` (uma linha por chave, ausência = texto padrão do código): `WELCOME`, `FEEDBACK_VIEWED`, `FEEDBACK_NEUTRAL`, `PURCHASE_PAID`, `PURCHASE_COUPON`. Corpo em texto com variáveis (`{{saudacao}}`, `{{nome}}`, `{{link}}`, `{{resumo}}`, `{{plano}}`, `{{valor}}`, `{{creditos}}` conforme o tipo); parágrafos separados por linha em branco. O texto padrão renderiza **idêntico** ao anterior (testes de templates inalterados passam).
+- `EmailDispatchTemplate` (uma linha por chave, ausência = texto padrão do código): `WELCOME`, `FEEDBACK_FIRST_USE`, `FEEDBACK_SECOND_CALL`, `PURCHASE_PAID`, `PURCHASE_COUPON`. Corpo em texto com variáveis (`{{saudacao}}`, `{{nome}}`, `{{link}}`, `{{resumo}}`, `{{plano}}`, `{{valor}}`, `{{creditos}}` conforme o tipo); parágrafos separados por linha em branco. O texto padrão renderiza **idêntico** ao anterior (testes de templates inalterados passam).
 - **Não editáveis, de propósito:** o rodapé de descadastro dos e-mails de relacionamento (sempre acrescentado pelo sistema, com `{{amazonSESUnsubscribeUrl}}`) e o bloco `{{resumo}}` da compra (montado do snapshot da compra aprovada, nunca de texto digitado).
-- **Regras aplicadas no salvar E no preview** (`validateTemplate`): assunto 1–150 caracteres, sem quebra de linha nem variáveis; corpo ≤ 5.000; variável desconhecida recusada (typos não vão para o e-mail); `{{amazonSESUnsubscribeUrl}}` proibido; **feedback: exatamente uma pergunta, assunto sem `?`, sem links, e o neutro nunca menciona análise/resultado**; boas-vindas: no máximo um link; compra paga: precisa de `{{resumo}}` (ou plano+valor+créditos); **cupom: sem valor/`R$`/"valor pago"/"recebemos o pagamento"/"pagamento confirmado" e assunto sem "compra"**.
+- **Regras aplicadas no salvar E no preview** (`validateTemplate`): assunto 1–150 caracteres, sem quebra de linha nem variáveis; corpo ≤ 5.000; variável desconhecida recusada (typos não vão para o e-mail); `{{amazonSESUnsubscribeUrl}}` proibido; **feedback (os dois): exatamente uma pergunta, assunto sem `?`, sem links**; boas-vindas: no máximo um link; compra paga: precisa de `{{resumo}}` (ou plano+valor+créditos); **cupom: sem valor/`R$`/"valor pago"/"recebemos o pagamento"/"pagamento confirmado" e assunto sem "compra"**.
 - Edição vale para os próximos envios (inclusive os já agendados). Erro de leitura dos templates → usa o texto padrão (nunca bloqueia um envio) + log `email_dispatch_templates_unreadable`. Salvar/restaurar são auditados (`email_dispatch_template_updated|reset`).
 - Preview (dados de exemplo) e **"enviar teste"** a UM endereço, com o texto **salvo**; o transporte é real só em produção (a tela diz quando é fake).
 

@@ -180,7 +180,7 @@ test("templates: list shows defaults; saving a valid edit marks it custom; an in
 
   await assert.rejects(
     () =>
-      service.updateTemplate(admin, "FEEDBACK_NEUTRAL", {
+      service.updateTemplate(admin, "FEEDBACK_SECOND_CALL", {
         subject: "Oi",
         body: "Duas? Perguntas?",
       }),
@@ -202,7 +202,7 @@ test("template keys are validated: unknown key is a 404", () => {
 test("template preview validates and renders without saving", async () => {
   const { service } = build();
 
-  const ok = service.previewTemplate("FEEDBACK_VIEWED", {
+  const ok = service.previewTemplate("FEEDBACK_FIRST_USE", {
     subject: "Sobre a análise",
     body: "{{saudacao}} O que achou?",
   });
@@ -222,7 +222,7 @@ test("send-test: ONE informed recipient, saved template; fake transport outside 
 
   const staging = build(false);
   const fake = await staging.service.sendTestTemplate(
-    "FEEDBACK_VIEWED",
+    "FEEDBACK_FIRST_USE",
     "paulo.alozen@gmail.com",
   );
   assert.equal(fake.transport, "fake");
@@ -234,8 +234,12 @@ test("send-test: ONE informed recipient, saved template; fake transport outside 
     [Parameters<typeof prod.service.sendTestTemplate>[0], string, string]
   > = [
     ["WELCOME", "RELATIONSHIP", "Boas-vindas ao EarlyCV"],
-    ["FEEDBACK_VIEWED", "RELATIONSHIP", "Sobre a análise do seu currículo"],
-    ["FEEDBACK_NEUTRAL", "RELATIONSHIP", "Sua primeira experiência no EarlyCV"],
+    ["FEEDBACK_FIRST_USE", "RELATIONSHIP", "Sobre a análise do seu currículo"],
+    [
+      "FEEDBACK_SECOND_CALL",
+      "RELATIONSHIP",
+      "Sua primeira experiência no EarlyCV",
+    ],
     ["PURCHASE_PAID", "BILLING", "Confirmação da sua compra no EarlyCV"],
     ["PURCHASE_COUPON", "BILLING", "Seu cupom foi resgatado no EarlyCV"],
   ];
@@ -363,6 +367,7 @@ test("overview: effective modes, transport, readiness (reasons only) and counts;
   );
   assert.equal(overview.runtime.relationshipReadiness.ready, true);
   assert.ok(Array.isArray(overview.counts.byKindStatus));
+  assert.ok(Array.isArray(overview.counts.alertDigests));
   assert.ok(
     overview.counts.byKindStatus.some(
       (r) => r.kind === "WELCOME" && r.status === "SENT",

@@ -1,5 +1,11 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => cleanup());
@@ -15,6 +21,10 @@ const api = vi.hoisted(() => ({
 }));
 const tokenMock = vi.hoisted(() => vi.fn());
 
+const routerPush = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush }),
+}));
 vi.mock("@/lib/admin-emails-api", () => api);
 vi.mock("@/lib/backoffice-session.server", () => ({
   getBackofficeSessionToken: tokenMock,
@@ -39,6 +49,7 @@ import TemplatesPage from "./templates/page";
 const settings = {
   welcomeMode: "SHADOW",
   feedbackMode: "OFF",
+  feedbackSecondCallMode: "OFF",
   purchaseConfirmationMode: "ALLOWLIST",
   startAt: "2026-10-15T11:00:00.000Z",
   allowlist: ["a@x.com"],
@@ -60,11 +71,14 @@ const overview = (overrides: Record<string, unknown> = {}) => ({
     purchaseReadiness: { ready: false, reason: "resend_not_configured" },
   },
   counts: {
-    windowDays: 30,
+    window: { period: "30d", fromDate: "2026-09-02", toDate: "2026-10-01" },
     byKindStatus: [
       { kind: "WELCOME", status: "SENT", count: 7 },
       { kind: "WELCOME", status: "SKIPPED", count: 3 },
+      { kind: "FEEDBACK_FIRST_USE", status: "SENT", count: 4 },
+      { kind: "FEEDBACK_SECOND_CALL", status: "SENT", count: 2 },
     ],
+    alertDigests: [{ status: "SENT", count: 11 }],
     eventsWindowDays: 7,
     events: [{ type: "DELIVERED", count: 5 }],
     suppressions: [{ reason: "HARD_BOUNCE", count: 2 }],
@@ -102,7 +116,7 @@ describe("Emails pages without a session / on API failure", () => {
     tokenMock.mockResolvedValue(null);
     const sp = Promise.resolve({});
     const pages = [
-      () => OverviewPage(),
+      () => OverviewPage({ searchParams: Promise.resolve({}) }),
       () => RelationshipPage({ searchParams: sp }),
       () => PurchasesPage({ searchParams: sp }),
       () => SuppressionsPage({ searchParams: sp }),
@@ -119,16 +133,45 @@ describe("Emails pages without a session / on API failure", () => {
 
   it("an API failure renders the unexpected-error state, not a crash", async () => {
     api.getEmailsOverview.mockRejectedValue(new Error("boom"));
-    render(await OverviewPage());
+    render(await OverviewPage({ searchParams: Promise.resolve({}) }));
     expect(screen.queryByText("Visão geral")).not.toBeInTheDocument();
   });
 });
 
 describe("Overview", () => {
+  it("passes the URL period/range to the API and navigates from the selector", async () => {
+    routerPush.mockClear();
+    api.getEmailsOverview.mockResolvedValue(overview());
+    render(
+      await OverviewPage({
+        searchParams: Promise.resolve({ from: "2026-09-10", to: "2026-09-12" }),
+      }),
+    );
+    expect(api.getEmailsOverview).toHaveBeenLastCalledWith("token", {
+      from: "2026-09-10",
+      to: "2026-09-12",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Esta semana" }));
+    expect(routerPush).toHaveBeenCalledWith("/admin/emails?period=semana", {
+      scroll: false,
+    });
+  });
+
+  it("ignores a malformed range and falls back to the default period", async () => {
+    api.getEmailsOverview.mockResolvedValue(overview());
+    render(
+      await OverviewPage({
+        searchParams: Promise.resolve({ from: "lixo", to: "2026-09-12" }),
+      }),
+    );
+    expect(api.getEmailsOverview).toHaveBeenLastCalledWith("token", {});
+  });
+
   it("shows the fake-transport notice, per-type mode, cutoff, readiness reasons, counts and health", async () => {
     api.getEmailsOverview.mockResolvedValue(overview());
 
-    render(await OverviewPage());
+    render(await OverviewPage({ searchParams: Promise.resolve({}) }));
 
     expect(screen.getByText(/Transporte fake/)).toBeInTheDocument();
     expect(screen.getAllByText("Boas-vindas").length).toBeGreaterThan(0);
@@ -164,7 +207,7 @@ describe("Overview", () => {
       }),
     );
 
-    render(await OverviewPage());
+    render(await OverviewPage({ searchParams: Promise.resolve({}) }));
 
     expect(
       screen.getByText(/não definido — nenhum envio roda/),
@@ -191,7 +234,7 @@ describe("Overview", () => {
       }),
     );
 
-    render(await OverviewPage());
+    render(await OverviewPage({ searchParams: Promise.resolve({}) }));
 
     expect(
       screen.getByText(/Configurado como Ao vivo; efetivo Só allowlist/),
@@ -452,12 +495,12 @@ describe("Settings and Templates pages", () => {
   it("templates: one tab per template, the selected one is edited, customised ones are marked", async () => {
     api.listEmailTemplates.mockResolvedValue([
       template("WELCOME", "Boas-vindas", true),
-      template("FEEDBACK_VIEWED", "Feedback — viu a análise"),
+      template("FEEDBACK_FIRST_USE", "Feedback"),
     ]);
 
     render(
       await TemplatesPage({
-        searchParams: Promise.resolve({ key: "FEEDBACK_VIEWED" }),
+        searchParams: Promise.resolve({ key: "FEEDBACK_FIRST_USE" }),
       }),
     );
 
@@ -466,7 +509,7 @@ describe("Settings and Templates pages", () => {
       links.find((a) => a.textContent === "Boas-vindas ●"),
     ).toHaveAttribute("href", "/admin/emails/templates?key=WELCOME");
     expect(
-      screen.getByRole("heading", { name: "Feedback — viu a análise" }),
+      screen.getByRole("heading", { name: "Feedback" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Texto padrão")).toBeInTheDocument();
   });

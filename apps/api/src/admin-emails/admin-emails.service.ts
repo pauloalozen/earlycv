@@ -21,11 +21,13 @@ import {
   type TemplateContent,
 } from "../email-dispatch/email-dispatch-templates";
 import { PurchaseConfirmationRecoveryService } from "../plans/purchase-confirmation-recovery.service";
+import { type EmailPeriod, resolveEmailWindow } from "./email-period";
 
 const DEFAULT_PAGE_SIZE = 25;
 const RELATIONSHIP_KINDS: EmailDispatchKind[] = [
   "WELCOME",
   "FEEDBACK_FIRST_USE",
+  "FEEDBACK_SECOND_CALL",
 ];
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -60,16 +62,24 @@ export class AdminEmailsService {
 
   // ---- Visão geral --------------------------------------------------------
 
-  async overview(now: Date = new Date()) {
-    const since30d = new Date(now.getTime() - 30 * DAY_MS);
+  async overview(
+    query: { period?: EmailPeriod; from?: string; to?: string } = {},
+    now: Date = new Date(),
+  ) {
+    // Só a tabela de envios segue o período escolhido; eventos (7d) e
+    // supressões têm janela própria.
+    const window = resolveEmailWindow(query, now);
+    const inWindow = { gte: window.from, lt: window.to };
     const since7d = new Date(now.getTime() - 7 * DAY_MS);
 
     const [
       settings,
       welcomeMode,
       feedbackMode,
+      feedbackSecondCallMode,
       purchaseMode,
       byKindStatus,
+      alertDigests,
       events,
       suppressions,
       missing,
@@ -77,10 +87,17 @@ export class AdminEmailsService {
       this.settings.getForAdmin(),
       this.config.getEffectiveMode("WELCOME"),
       this.config.getEffectiveMode("FEEDBACK_FIRST_USE"),
+      this.config.getEffectiveMode("FEEDBACK_SECOND_CALL"),
       this.config.getEffectiveMode("PURCHASE_CONFIRMATION"),
       this.database.emailDispatch.groupBy({
         by: ["kind", "status"],
-        where: { isTest: false, createdAt: { gte: since30d } },
+        where: { isTest: false, createdAt: inWindow },
+        _count: { _all: true },
+      }),
+      // Alerta de Vagas ainda não passa pelo outbox: vem do MonitorDigest.
+      this.database.monitorDigest.groupBy({
+        by: ["status"],
+        where: { createdAt: inWindow },
         _count: { _all: true },
       }),
       this.database.emailDispatchEvent.groupBy({
@@ -108,6 +125,7 @@ export class AdminEmailsService {
         effectiveModes: {
           WELCOME: welcomeMode,
           FEEDBACK_FIRST_USE: feedbackMode,
+          FEEDBACK_SECOND_CALL: feedbackSecondCallMode,
           PURCHASE_CONFIRMATION: purchaseMode,
         },
         // Só pronto/não pronto e o motivo — nunca nomes de lista/tópico/segredos.
@@ -119,9 +137,17 @@ export class AdminEmailsService {
           : { ready: false as const, reason: purchaseReady.reason },
       },
       counts: {
-        windowDays: 30,
+        window: {
+          period: window.period,
+          fromDate: window.fromDate,
+          toDate: window.toDate,
+        },
         byKindStatus: byKindStatus.map((row) => ({
           kind: row.kind,
+          status: row.status,
+          count: row._count._all,
+        })),
+        alertDigests: alertDigests.map((row) => ({
           status: row.status,
           count: row._count._all,
         })),
@@ -187,18 +213,9 @@ export class AdminEmailsService {
       switch (key) {
         case "WELCOME":
           return this.dispatch.sendTest({ ...common, kind: "WELCOME" });
-        case "FEEDBACK_VIEWED":
-          return this.dispatch.sendTest({
-            ...common,
-            kind: "FEEDBACK_FIRST_USE",
-            variant: "VIEWED",
-          });
-        case "FEEDBACK_NEUTRAL":
-          return this.dispatch.sendTest({
-            ...common,
-            kind: "FEEDBACK_FIRST_USE",
-            variant: "NEUTRAL",
-          });
+        case "FEEDBACK_FIRST_USE":
+        case "FEEDBACK_SECOND_CALL":
+          return this.dispatch.sendTest({ ...common, kind: key });
         case "PURCHASE_PAID":
           return this.dispatch.sendTest({
             ...common,

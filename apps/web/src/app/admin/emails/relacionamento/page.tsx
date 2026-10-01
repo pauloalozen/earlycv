@@ -16,7 +16,11 @@ import {
 export const metadata = buildAdminMetadata("Emails — Relacionamento");
 
 const PATH = "/admin/emails/relacionamento";
-const KINDS: EmailDispatchKind[] = ["WELCOME", "FEEDBACK_FIRST_USE"];
+const KINDS: EmailDispatchKind[] = [
+  "WELCOME",
+  "FEEDBACK_FIRST_USE",
+  "FEEDBACK_SECOND_CALL",
+];
 const STATUSES = [
   "PENDING",
   "PROCESSING",
@@ -63,7 +67,7 @@ export default async function AdminEmailsRelationshipPage({
       <AdminShellHeader
         eyebrow="Emails"
         title="Relacionamento"
-        subtitle="Boas-vindas (~10 min depois do e-mail verificado) e feedback (24h após o cadastro, entre 8h e 20h de Brasília). Descadastro pelo tópico próprio do SES, independente de Product Updates."
+        subtitle="Boas-vindas (~10 min depois do e-mail verificado) feedback (24h após o cadastro) e feedback segunda chamada (14 dias após o envio do feedback), ambos entre 8h e 20h de Brasília. Descadastro pelo tópico próprio do SES, independente de Product Updates."
       />
       <DispatchesSection
         basePath={PATH}

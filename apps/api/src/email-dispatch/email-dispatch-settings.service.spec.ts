@@ -286,3 +286,72 @@ test("the dispatch config reads the saved settings: modes, cutoff, allowlist and
   // fora de produção: LIVE vira ALLOWLIST
   assert.equal(await staging.getEffectiveMode("WELCOME"), "ALLOWLIST");
 });
+
+// ---- Feedback segunda chamada (chave própria) ------------------------------
+
+test("second call has its OWN mode: turning only it on needs the cutoff, and it is saved independently of the first feedback", async () => {
+  const { service } = setup();
+
+  assert.match(
+    await messageOf(
+      service.update("a", valid({ feedbackSecondCallMode: "SHADOW" })),
+    ),
+    /cutoff/,
+  );
+
+  const saved = await service.update(
+    "a",
+    valid({
+      feedbackSecondCallMode: "SHADOW",
+      startAt: "2026-10-01T00:00:00.000Z",
+    }),
+  );
+  assert.equal(saved.feedbackSecondCallMode, "SHADOW");
+  assert.equal(saved.feedbackMode, "OFF");
+});
+
+test("second call entering LIVE needs the explicit confirmation, and an omitted field KEEPS the saved mode (old clients)", async () => {
+  const { service } = setup();
+  const base = valid({ startAt: "2026-10-01T00:00:00.000Z" });
+
+  assert.match(
+    await messageOf(
+      service.update("a", { ...base, feedbackSecondCallMode: "LIVE" }),
+    ),
+    /feedback segunda chamada/,
+  );
+  await service.update("a", {
+    ...base,
+    feedbackSecondCallMode: "LIVE",
+    confirmLive: true,
+  });
+
+  const afterOldClient = await service.update("a", base);
+  assert.equal(afterOldClient.feedbackSecondCallMode, "LIVE");
+});
+
+test("second call mode is audited with before/after and drives the effective mode of its own kind", async () => {
+  const { service, monitorAdminActionLog } = setup();
+  await service.update(
+    "a",
+    valid({
+      feedbackSecondCallMode: "SHADOW",
+      startAt: "2026-10-01T00:00:00.000Z",
+    }),
+  );
+
+  const metadata = monitorAdminActionLog.rows[0].metadataJson as {
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+  };
+  assert.equal(metadata.before.feedbackSecondCallMode, "OFF");
+  assert.equal(metadata.after.feedbackSecondCallMode, "SHADOW");
+
+  const config = new EmailDispatchConfigService(
+    {} as never,
+    {} as never,
+    service,
+  );
+  assert.equal(await config.getEffectiveMode("FEEDBACK_SECOND_CALL"), "SHADOW");
+  assert.equal(await config.getEffectiveMode("FEEDBACK_FIRST_USE"), "OFF");
+});

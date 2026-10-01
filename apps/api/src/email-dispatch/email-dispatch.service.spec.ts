@@ -140,16 +140,6 @@ test("enqueue NEVER throws, even if the database fails", async () => {
   assert.deepEqual(result, { welcome: false, feedback: false });
 });
 
-test("resolveFeedbackVariant: VIEWED only with a userId-attributed analysis_result_viewed event, else NEUTRAL", async () => {
-  const f = createFixture({ funnelViewedFor: ["user_with_event"] });
-
-  assert.equal(
-    await f.service.resolveFeedbackVariant("user_with_event"),
-    "VIEWED",
-  );
-  assert.equal(await f.service.resolveFeedbackVariant("user_1"), "NEUTRAL");
-});
-
 test("deliver sends RELATIONSHIP with the relationship topic, correlation tags and text+html", async () => {
   const f = createFixture({ env: allOn, production: true });
 
@@ -158,7 +148,6 @@ test("deliver sends RELATIONSHIP with the relationship topic, correlation tags a
     kind: "WELCOME",
     to: "maria@example.com",
     name: "Maria",
-    variant: null,
     realTransport: true,
   });
 
@@ -193,7 +182,6 @@ test("deliver refuses to send when the send infra is not ready (never falls back
         kind: "WELCOME",
         to: "a@b.com",
         name: null,
-        variant: null,
         realTransport: true,
       }),
     /not ready/,
@@ -208,7 +196,6 @@ test("sendTest: explicit recipient (even a blocked account), recorded as isTest,
     kind: "FEEDBACK_FIRST_USE",
     to: "Paulo.Alozen@gmail.com",
     name: "Paulo",
-    variant: "VIEWED",
     realTransport: true,
   });
 
@@ -220,7 +207,6 @@ test("sendTest: explicit recipient (even a blocked account), recorded as isTest,
   assert.equal(f.emailDispatch.rows[0].isTest, true);
   assert.equal(f.emailDispatch.rows[0].userId, null);
   assert.equal(f.emailDispatch.rows[0].status, "SENT");
-  assert.equal(f.emailDispatch.rows[0].variant, "VIEWED");
 });
 
 test("sendTest refuses when not ready or when the address is suppressed", async () => {
@@ -275,13 +261,16 @@ test("sendTest records a failed provider outcome without retrying", async () => 
 test("deliver with realTransport=false NEVER reaches the provider: fake result, fake id, any kind", async () => {
   const f = createFixture({ env: allOn, production: true });
 
-  for (const kind of ["WELCOME", "FEEDBACK_FIRST_USE"] as const) {
+  for (const kind of [
+    "WELCOME",
+    "FEEDBACK_FIRST_USE",
+    "FEEDBACK_SECOND_CALL",
+  ] as const) {
     const result = await f.service.deliver({
       dispatchId: "disp_9",
       kind,
       to: "maria@example.com",
       name: "Maria",
-      variant: kind === "FEEDBACK_FIRST_USE" ? "NEUTRAL" : null,
       realTransport: false,
     });
     assert.deepEqual(result, {

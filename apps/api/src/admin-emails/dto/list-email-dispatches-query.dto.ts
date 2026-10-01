@@ -4,6 +4,7 @@ import { IsBoolean, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
 const KINDS = [
   "WELCOME",
   "FEEDBACK_FIRST_USE",
+  "FEEDBACK_SECOND_CALL",
   "PURCHASE_CONFIRMATION",
 ] as const;
 const STATUSES = [
@@ -30,7 +31,7 @@ export class ListEmailDispatchesQueryDto {
   @Max(100)
   limit?: number;
 
-  // "relationship" = WELCOME + FEEDBACK_FIRST_USE; "purchase" = PURCHASE_CONFIRMATION.
+  // "relationship" = WELCOME + FEEDBACK_FIRST_USE + FEEDBACK_SECOND_CALL; "purchase" = PURCHASE_CONFIRMATION.
   @IsOptional()
   @IsIn(["relationship", "purchase"])
   group?: "relationship" | "purchase";

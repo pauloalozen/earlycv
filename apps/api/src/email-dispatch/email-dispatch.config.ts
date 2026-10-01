@@ -78,6 +78,7 @@ export class EmailDispatchConfigService {
   ): EmailDispatchModeValue {
     if (kind === "WELCOME") return settings.welcomeMode;
     if (kind === "FEEDBACK_FIRST_USE") return settings.feedbackMode;
+    if (kind === "FEEDBACK_SECOND_CALL") return settings.feedbackSecondCallMode;
     return settings.purchaseConfirmationMode;
   }
 
@@ -100,6 +101,7 @@ export class EmailDispatchConfigService {
     for (const kind of [
       "WELCOME",
       "FEEDBACK_FIRST_USE",
+      "FEEDBACK_SECOND_CALL",
       "PURCHASE_CONFIRMATION",
     ] as const) {
       if ((await this.getEffectiveMode(kind)) !== "OFF") enabled.push(kind);

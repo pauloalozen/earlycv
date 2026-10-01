@@ -39,8 +39,11 @@ test("welcome: falls back to a nameless greeting when the name is empty", () => 
   );
 });
 
-test("feedback VIEWED: exactly one question, the single agreed wording, subject is not a question, no links", () => {
-  const email = renderFeedbackEmail({ name: "Ana", variant: "VIEWED" });
+test("feedback (first): exactly one question, the single agreed wording, subject is not a question, no links", () => {
+  const email = renderFeedbackEmail({
+    name: "Ana",
+    kind: "FEEDBACK_FIRST_USE",
+  });
 
   assert.equal(email.subject, "Sobre a análise do seu currículo");
   assert.match(email.text, /O que você achou da análise do seu currículo\?/);
@@ -49,21 +52,22 @@ test("feedback VIEWED: exactly one question, the single agreed wording, subject 
   assert.equal((email.text.match(/https?:\/\//g) ?? []).length, 0);
 });
 
-test("feedback NEUTRAL: exactly one question, presumes nothing about having seen the analysis", () => {
-  const email = renderFeedbackEmail({ name: "Ana", variant: "NEUTRAL" });
+test("feedback second call: exactly one question, no links, own wording", () => {
+  const email = renderFeedbackEmail({
+    name: "Ana",
+    kind: "FEEDBACK_SECOND_CALL",
+  });
 
   assert.equal(email.subject, "Sua primeira experiência no EarlyCV");
   assert.match(email.text, /Como foi sua primeira experiência com o EarlyCV\?/);
-  assert.doesNotMatch(email.text, /análise/i);
-  assert.doesNotMatch(email.text, /resultado/i);
   assert.equal((email.text.match(/\?/g) ?? []).length, 1);
   assert.doesNotMatch(email.subject, /\?/);
   assert.equal((email.text.match(/https?:\/\//g) ?? []).length, 0);
 });
 
 test("feedback: invites a plain reply, signed by Paulo, with the unsubscribe placeholder, no banner/image", () => {
-  for (const variant of ["VIEWED", "NEUTRAL"] as const) {
-    const email = renderFeedbackEmail({ name: "Ana", variant });
+  for (const kind of ["FEEDBACK_FIRST_USE", "FEEDBACK_SECOND_CALL"] as const) {
+    const email = renderFeedbackEmail({ name: "Ana", kind });
     assert.match(email.text, /Responda este e-mail/);
     assert.match(email.text, /Paulo\nEarlyCV/);
     assert.ok(email.text.includes(SES_UNSUBSCRIBE_PLACEHOLDER));
@@ -74,7 +78,7 @@ test("feedback: invites a plain reply, signed by Paulo, with the unsubscribe pla
 test("html escapes the recipient name", () => {
   const email = renderFeedbackEmail({
     name: `<script>alert(1)</script>`,
-    variant: "NEUTRAL",
+    kind: "FEEDBACK_FIRST_USE",
   });
   assert.doesNotMatch(email.html, /<script>/);
   assert.match(email.html, /&lt;script&gt;/);
@@ -177,8 +181,8 @@ test("relationship e-mails carry the SES unsubscribe placeholder in BOTH text an
 
   for (const email of [
     renderWelcomeEmail({ name: "Ana", appUrl: "https://x.com" }),
-    renderFeedbackEmail({ name: "Ana", variant: "VIEWED" }),
-    renderFeedbackEmail({ name: "Ana", variant: "NEUTRAL" }),
+    renderFeedbackEmail({ name: "Ana", kind: "FEEDBACK_FIRST_USE" }),
+    renderFeedbackEmail({ name: "Ana", kind: "FEEDBACK_SECOND_CALL" }),
   ]) {
     assert.equal(count(email.text), 1);
     assert.equal(count(email.html), 1);

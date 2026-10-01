@@ -24,8 +24,6 @@ import { computeFeedbackScheduledFor } from "./email-dispatch-schedule.util";
 import { EmailDispatchTemplateService } from "./email-dispatch-template.service";
 import {
   type EmailTemplateKeyValue,
-  type FeedbackVariant,
-  feedbackKeyFor,
   type PurchaseConfirmationPayload,
   purchaseKeyFor,
   type RenderedEmail,
@@ -44,7 +42,6 @@ function resolveAppUrl(): string {
 type RenderInput = {
   kind: EmailDispatchKind;
   name: string | null | undefined;
-  variant: FeedbackVariant | null;
   payload?: PurchaseConfirmationPayload | null;
 };
 
@@ -57,7 +54,7 @@ export function templateKeyFor(input: RenderInput): EmailTemplateKeyValue {
     }
     return purchaseKeyFor(input.payload);
   }
-  return feedbackKeyFor(input.variant ?? "NEUTRAL");
+  return input.kind;
 }
 
 // Render SÍNCRONO com o texto padrão (ou o `content` informado). Usado pelo
@@ -82,17 +79,13 @@ export function renderDispatchEmail(
       content,
     );
   }
-  return renderFeedbackEmail(
-    { name: input.name, variant: input.variant ?? "NEUTRAL" },
-    content,
-  );
+  return renderFeedbackEmail({ name: input.name, kind: input.kind }, content);
 }
 
 export type SendTestInput = {
   kind: EmailDispatchKind;
   to: string;
   name?: string | null;
-  variant?: FeedbackVariant;
   // Obrigatório para PURCHASE_CONFIRMATION (valores de exemplo informados).
   payload?: PurchaseConfirmationPayload;
   // Transporte REAL só com esta opção explícita (padrão: fake, em qualquer
@@ -236,21 +229,6 @@ export class EmailDispatchService {
     }
   }
 
-  // VIEWED só com evidência confiável: evento analysis_result_viewed
-  // gravado COM userId. O userId vem do access token JWT verificado no
-  // middleware de contexto — só existe quando a pessoa estava logada ao
-  // ver o resultado. Ausência do evento NÃO prova que não viu: o evento é
-  // emitido pelo frontend e só quando há consentimento de analytics, e a
-  // visualização como convidado (antes do cadastro) fica sem userId. Por
-  // isso o complemento de VIEWED é NEUTRAL, nunca "não viu".
-  async resolveFeedbackVariant(userId: string): Promise<FeedbackVariant> {
-    const evidence = await this.database.businessFunnelEvent.findFirst({
-      where: { userId, eventName: "analysis_result_viewed" },
-      select: { id: true },
-    });
-    return evidence ? "VIEWED" : "NEUTRAL";
-  }
-
   // Confirmação de compra — chamada de DENTRO da transação de aprovação
   // (PlansService.applyApprovedPurchaseInsideTransaction), logo depois que
   // os créditos foram aplicados. Todos os caminhos de aprovação (webhook do
@@ -380,7 +358,6 @@ export class EmailDispatchService {
     kind: EmailDispatchKind;
     to: string;
     name: string | null | undefined;
-    variant: FeedbackVariant | null;
     payload?: PurchaseConfirmationPayload | null;
     realTransport: boolean;
   }): Promise<EmailSendResult> {
@@ -474,10 +451,6 @@ export class EmailDispatchService {
         scheduledFor: now,
         expiresAt: new Date(now.getTime() + HOUR_MS),
         isTest: true,
-        variant:
-          input.kind === "FEEDBACK_FIRST_USE"
-            ? (input.variant ?? "NEUTRAL")
-            : null,
         payloadJson: isPurchase
           ? (input.payload as unknown as Prisma.InputJsonValue)
           : undefined,
@@ -490,10 +463,6 @@ export class EmailDispatchService {
         kind: input.kind,
         to: dispatch.recipientEmail,
         name: input.name,
-        variant:
-          input.kind === "FEEDBACK_FIRST_USE"
-            ? (input.variant ?? "NEUTRAL")
-            : null,
         payload: input.payload ?? null,
         realTransport,
       });

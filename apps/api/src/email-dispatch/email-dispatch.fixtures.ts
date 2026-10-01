@@ -37,7 +37,6 @@ export function createFixture(
     production?: boolean;
     users?: Row[];
     sendResults?: Array<EmailSendResult | (() => never)>;
-    funnelViewedFor?: string[];
     purchases?: Row[];
   } = {},
 ) {
@@ -62,13 +61,6 @@ export function createFixture(
     planPurchase: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         (options.purchases ?? []).find((p) => p.id === where.id) ?? null,
-    },
-    businessFunnelEvent: {
-      findFirst: async ({ where }: { where: Row }) =>
-        options.funnelViewedFor?.includes(where.userId) &&
-        where.eventName === "analysis_result_viewed"
-          ? { id: "evt_1" }
-          : null,
     },
     // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
   } as any;

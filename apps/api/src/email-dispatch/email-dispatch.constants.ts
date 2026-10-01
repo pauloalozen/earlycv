@@ -23,6 +23,11 @@ export const FEEDBACK_DELAY_AFTER_SIGNUP_MS = 24 * HOUR_MS;
 export const FEEDBACK_MIN_GAP_AFTER_WELCOME_MS = 12 * HOUR_MS;
 export const FEEDBACK_EXPIRY_MS = 48 * HOUR_MS;
 
+// Feedback segunda chamada: 14 dias depois do ENVIO do primeiro feedback
+// (a linha só nasce quando o primeiro vira SENT). Mesmo prazo de 48h para
+// adiamento por janela de horário.
+export const FEEDBACK_SECOND_CALL_DELAY_MS = 14 * 24 * HOUR_MS;
+
 // Janela de envio do feedback, horário de Brasília (UTC-3 fixo — o Brasil
 // não tem horário de verão desde 2019).
 export const BRASILIA_UTC_OFFSET_MS = 3 * HOUR_MS;

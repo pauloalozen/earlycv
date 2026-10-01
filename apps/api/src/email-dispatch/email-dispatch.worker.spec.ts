@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { baseUser, createFixture, NOW } from "./email-dispatch.fixtures";
+import { adjustToFeedbackWindow } from "./email-dispatch-schedule.util";
 
 const LIVE = { EMAIL_WELCOME_MODE: "LIVE", EMAIL_FEEDBACK_MODE: "LIVE" };
 const HOUR = 3_600_000;
@@ -58,11 +59,10 @@ test("rows scheduled in the future are not touched", async () => {
   assert.equal(f.emailDispatch.rows[0].status, "PENDING");
 });
 
-test("SHADOW: evaluates and renders everything but NEVER sends; closes SKIPPED shadow_mode with the would-be variant", async () => {
+test("SHADOW: evaluates and renders everything but NEVER sends; closes SKIPPED shadow_mode", async () => {
   const f = createFixture({
     env: { EMAIL_FEEDBACK_MODE: "SHADOW" },
     production: true,
-    funnelViewedFor: ["user_1"],
   });
   await f.addDispatch({
     kind: "FEEDBACK_FIRST_USE",
@@ -74,7 +74,6 @@ test("SHADOW: evaluates and renders everything but NEVER sends; closes SKIPPED s
   assert.equal(f.sent.length, 0);
   assert.equal(f.emailDispatch.rows[0].status, "SKIPPED");
   assert.equal(f.emailDispatch.rows[0].skippedReason, "shadow_mode");
-  assert.equal(f.emailDispatch.rows[0].variant, "VIEWED");
 });
 
 test("SHADOW runs even when send infra is incomplete (it never sends)", async () => {
@@ -353,28 +352,213 @@ test("feedback is DISCARDED (SKIPPED) — not deferred — when the user became 
   );
 });
 
-test("feedback variant: VIEWED with evidence, NEUTRAL without — stored and used in the subject", async () => {
-  const withEvidence = createFixture({
-    env: LIVE,
-    production: true,
-    funnelViewedFor: ["user_1"],
-  });
-  await withEvidence.addDispatch(feedbackRow());
-  await withEvidence.worker.processBatch(NOW);
-  assert.equal(withEvidence.emailDispatch.rows[0].variant, "VIEWED");
-  assert.equal(
-    withEvidence.sent[0].message.subject,
-    "Sobre a análise do seu currículo",
-  );
+test("feedback always sends the single feedback template (no per-user variant)", async () => {
+  const f = createFixture({ env: LIVE, production: true });
+  await f.addDispatch(feedbackRow());
 
-  const without = createFixture({ env: LIVE, production: true });
-  await without.addDispatch(feedbackRow());
-  await without.worker.processBatch(NOW);
-  assert.equal(without.emailDispatch.rows[0].variant, "NEUTRAL");
+  await f.worker.processBatch(NOW);
+
+  assert.equal(f.sent[0].message.subject, "Sobre a análise do seu currículo");
+  assert.equal(f.emailDispatch.rows[0].status, "SENT");
+});
+
+// ---- Feedback segunda chamada (14 dias depois do ENVIO do primeiro) ------
+
+const DAY = 24 * HOUR;
+const BOTH_FEEDBACKS = {
+  EMAIL_FEEDBACK_MODE: "LIVE",
+  EMAIL_FEEDBACK_SECOND_CALL_MODE: "LIVE",
+};
+const secondCallRow = (overrides: Record<string, unknown> = {}) => ({
+  kind: "FEEDBACK_SECOND_CALL",
+  dedupeKey: "feedback2:user_1",
+  ...overrides,
+});
+
+test("second call: created only when the first feedback is really SENT, 14 days after sentAt, inside the 08–20h window, expiring in 48h", async () => {
+  const f = createFixture({ env: BOTH_FEEDBACKS, production: true });
+  await f.addDispatch(feedbackRow());
+
+  await f.worker.processBatch(NOW);
+
+  const first = f.emailDispatch.rows.find(
+    (r) => r.kind === "FEEDBACK_FIRST_USE",
+  );
+  assert.equal(first.status, "SENT");
+  const second = f.emailDispatch.rows.find(
+    (r) => r.kind === "FEEDBACK_SECOND_CALL",
+  );
+  assert.ok(second);
+  assert.equal(second.dedupeKey, "feedback2:user_1");
+  assert.equal(second.userId, "user_1");
+  assert.equal(second.recipientEmail, first.recipientEmail);
+  assert.equal(second.status, "PENDING");
   assert.equal(
-    without.sent[0].message.subject,
+    second.scheduledFor.toISOString(),
+    adjustToFeedbackWindow(
+      new Date(first.sentAt.getTime() + 14 * DAY),
+    ).toISOString(),
+  );
+  assert.ok(second.scheduledFor.getTime() >= first.sentAt.getTime() + 14 * DAY);
+  assert.equal(
+    second.expiresAt.getTime() - second.scheduledFor.getTime(),
+    48 * HOUR,
+  );
+});
+
+test("second call is NOT created when its mode is OFF, when the first was only SHADOW, or when the first was skipped", async () => {
+  const off = createFixture({
+    env: { EMAIL_FEEDBACK_MODE: "LIVE" },
+    production: true,
+  });
+  await off.addDispatch(feedbackRow());
+  await off.worker.processBatch(NOW);
+  assert.equal(off.emailDispatch.rows.length, 1);
+
+  const shadow = createFixture({
+    env: { ...BOTH_FEEDBACKS, EMAIL_FEEDBACK_MODE: "SHADOW" },
+    production: true,
+  });
+  await shadow.addDispatch(feedbackRow());
+  await shadow.worker.processBatch(NOW);
+  assert.equal(shadow.emailDispatch.rows[0].status, "SKIPPED");
+  assert.equal(shadow.emailDispatch.rows.length, 1);
+
+  const unsubscribed = createFixture({
+    env: BOTH_FEEDBACKS,
+    production: true,
+    users: [baseUser({ relationshipEmailPreference: { subscribed: false } })],
+  });
+  await unsubscribed.addDispatch(feedbackRow());
+  await unsubscribed.worker.processBatch(NOW);
+  assert.equal(unsubscribed.emailDispatch.rows[0].status, "SKIPPED");
+  assert.equal(unsubscribed.emailDispatch.rows.length, 1);
+});
+
+test("second call creation is idempotent (dedupe feedback2:{userId})", async () => {
+  const f = createFixture({ env: BOTH_FEEDBACKS, production: true });
+  await f.addDispatch(secondCallRow({ status: "CANCELLED" }));
+  await f.addDispatch(feedbackRow());
+
+  await f.worker.processBatch(NOW);
+
+  assert.equal(
+    f.emailDispatch.rows.filter((r) => r.kind === "FEEDBACK_SECOND_CALL")
+      .length,
+    1,
+  );
+});
+
+test("second call: due row is sent with ITS template and recorded SENT; it never creates another round", async () => {
+  const f = createFixture({ env: BOTH_FEEDBACKS, production: true });
+  await f.addDispatch(secondCallRow());
+
+  await f.worker.processBatch(NOW);
+
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.sent[0].category, "RELATIONSHIP");
+  assert.equal(
+    f.sent[0].message.subject,
     "Sua primeira experiência no EarlyCV",
   );
+  assert.equal(f.emailDispatch.rows[0].status, "SENT");
+  assert.equal(f.emailDispatch.rows.length, 1);
+});
+
+test("second call follows its OWN mode: OFF leaves it untouched, SHADOW never sends, ALLOWLIST filters", async () => {
+  const off = createFixture({
+    env: { EMAIL_FEEDBACK_MODE: "LIVE" },
+    production: true,
+  });
+  await off.addDispatch(secondCallRow());
+  await off.worker.processBatch(NOW);
+  assert.equal(off.sent.length, 0);
+  assert.equal(off.emailDispatch.rows[0].status, "PENDING");
+
+  const shadow = createFixture({
+    env: { EMAIL_FEEDBACK_SECOND_CALL_MODE: "SHADOW" },
+    production: true,
+  });
+  await shadow.addDispatch(secondCallRow());
+  await shadow.worker.processBatch(NOW);
+  assert.equal(shadow.sent.length, 0);
+  assert.equal(shadow.emailDispatch.rows[0].skippedReason, "shadow_mode");
+
+  const allowlist = createFixture({
+    env: {
+      EMAIL_FEEDBACK_SECOND_CALL_MODE: "ALLOWLIST",
+      EMAIL_RELATIONSHIP_ALLOWLIST: "other@example.com",
+    },
+    production: true,
+  });
+  await allowlist.addDispatch(secondCallRow());
+  await allowlist.worker.processBatch(NOW);
+  assert.equal(allowlist.sent.length, 0);
+  assert.equal(
+    allowlist.emailDispatch.rows[0].skippedReason,
+    "not_allowlisted",
+  );
+});
+
+test("second call keeps the eligibility rules: unsubscribed users are skipped", async () => {
+  const f = createFixture({
+    env: BOTH_FEEDBACKS,
+    production: true,
+    users: [baseUser({ relationshipEmailPreference: { subscribed: false } })],
+  });
+  await f.addDispatch(secondCallRow());
+
+  await f.worker.processBatch(NOW);
+
+  assert.equal(f.sent.length, 0);
+  assert.equal(
+    f.emailDispatch.rows[0].skippedReason,
+    "relationship_unsubscribed",
+  );
+});
+
+test("second call outside 08:00–20:00 Brasília is deferred to the next 08:00; a pending welcome does NOT hold it back", async () => {
+  const f = createFixture({ env: BOTH_FEEDBACKS, production: true });
+  const night = new Date("2026-10-06T02:00:00.000Z"); // 23:00 BRT
+  await f.addDispatch({
+    kind: "WELCOME",
+    dedupeKey: "welcome:user_1",
+    scheduledFor: new Date(night.getTime() + 30 * DAY),
+  });
+  await f.addDispatch(
+    secondCallRow({
+      scheduledFor: new Date(night.getTime() - 60_000),
+      expiresAt: new Date(night.getTime() + 48 * HOUR),
+    }),
+  );
+
+  await f.worker.processBatch(night);
+  const row = f.emailDispatch.rows.find(
+    (r) => r.kind === "FEEDBACK_SECOND_CALL",
+  );
+  assert.equal(f.sent.length, 0);
+  assert.equal(row.status, "PENDING");
+  assert.equal(row.scheduledFor.toISOString(), "2026-10-06T11:00:00.000Z");
+
+  await f.worker.processBatch(new Date("2026-10-06T11:00:00.000Z"));
+  assert.equal(f.sent.length, 1);
+  assert.equal(
+    f.emailDispatch.rows.find((r) => r.kind === "FEEDBACK_SECOND_CALL").status,
+    "SENT",
+  );
+});
+
+test("a failure while creating the second call never undoes or fails the first feedback", async () => {
+  const f = createFixture({ env: BOTH_FEEDBACKS, production: true });
+  await f.addDispatch(feedbackRow());
+  f.emailDispatch.createMany = async () => {
+    throw new Error("db down");
+  };
+
+  await f.worker.processBatch(NOW);
+
+  assert.equal(f.emailDispatch.rows[0].status, "SENT");
+  assert.equal(f.sent.length, 1);
 });
 
 // ---- Claim atômico, OUTCOME_UNKNOWN, tentativas -------------------------

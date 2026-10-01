@@ -6,6 +6,7 @@ export type EmailDispatchMode = "OFF" | "SHADOW" | "ALLOWLIST" | "LIVE";
 export type EmailDispatchKind =
   | "WELCOME"
   | "FEEDBACK_FIRST_USE"
+  | "FEEDBACK_SECOND_CALL"
   | "PURCHASE_CONFIRMATION";
 export type EmailDispatchStatus =
   | "PENDING"
@@ -23,14 +24,15 @@ export type EmailDispatchEventType =
   | "REJECTED";
 export type EmailTemplateKey =
   | "WELCOME"
-  | "FEEDBACK_VIEWED"
-  | "FEEDBACK_NEUTRAL"
+  | "FEEDBACK_FIRST_USE"
+  | "FEEDBACK_SECOND_CALL"
   | "PURCHASE_PAID"
   | "PURCHASE_COUPON";
 
 export type EmailSettings = {
   welcomeMode: EmailDispatchMode;
   feedbackMode: EmailDispatchMode;
+  feedbackSecondCallMode: EmailDispatchMode;
   purchaseConfirmationMode: EmailDispatchMode;
   startAt: string | null;
   allowlist: string[];
@@ -42,6 +44,7 @@ export type EmailSettings = {
 export type UpdateEmailSettingsInput = {
   welcomeMode: EmailDispatchMode;
   feedbackMode: EmailDispatchMode;
+  feedbackSecondCallMode: EmailDispatchMode;
   purchaseConfirmationMode: EmailDispatchMode;
   startAt: string | null;
   allowlist: string[];
@@ -60,12 +63,17 @@ export type EmailsOverview = {
     purchaseReadiness: Readiness;
   };
   counts: {
-    windowDays: number;
+    window: {
+      period: EmailsPeriod | "custom";
+      fromDate: string;
+      toDate: string;
+    };
     byKindStatus: Array<{
       kind: EmailDispatchKind;
       status: EmailDispatchStatus;
       count: number;
     }>;
+    alertDigests: Array<{ status: EmailDispatchStatus; count: number }>;
     eventsWindowDays: number;
     events: Array<{ type: EmailDispatchEventType; count: number }>;
     suppressions: Array<{ reason: "HARD_BOUNCE" | "COMPLAINT"; count: number }>;
@@ -240,8 +248,27 @@ const post = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-export function getEmailsOverview(token?: string) {
-  return apiRequest<EmailsOverview>("/admin/emails/overview", token);
+export type EmailsPeriod = "hoje" | "semana" | "7d" | "mes" | "30d";
+
+export type EmailsOverviewRange = {
+  period?: EmailsPeriod;
+  from?: string;
+  to?: string;
+};
+
+export function getEmailsOverview(
+  token?: string,
+  range: EmailsOverviewRange = {},
+) {
+  const qs = new URLSearchParams();
+  if (range.from && range.to) {
+    qs.set("from", range.from);
+    qs.set("to", range.to);
+  } else if (range.period) {
+    qs.set("period", range.period);
+  }
+  const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
+  return apiRequest<EmailsOverview>(`/admin/emails/overview${suffix}`, token);
 }
 
 export function getEmailSettings(token?: string) {

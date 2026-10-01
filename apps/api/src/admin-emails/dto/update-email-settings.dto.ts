@@ -21,6 +21,11 @@ export class UpdateEmailSettingsDto {
   @IsIn(MODES)
   feedbackMode!: Mode;
 
+  // Opcional: ausente = mantém o modo atual (clientes antigos).
+  @IsOptional()
+  @IsIn(MODES)
+  feedbackSecondCallMode?: Mode;
+
   @IsIn(MODES)
   purchaseConfirmationMode!: Mode;
 

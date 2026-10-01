@@ -4,7 +4,6 @@ import type { EmailSendResult, EmailService } from "../email/email.types";
 import type { EmailDispatchConfigService } from "./email-dispatch.config";
 import { buildRelationshipMessage } from "./email-dispatch-message";
 import {
-  type FeedbackVariant,
   renderFeedbackEmail,
   renderWelcomeEmail,
 } from "./email-dispatch-templates";
@@ -19,13 +18,12 @@ export type StandaloneTestResult =
 // correlationId vira "manual-<uuid>": os eventos do SES (Delivery, Subscription...)
 // voltam pelo webhook de produção, que os registra com dispatchId nulo (não há
 // linha para correlacionar) e aplica o descadastro de verdade pelo e-mail do
-// contato. Só relacionamento (welcome/feedback) — confirmação de compra sai
+// contato. Só relacionamento (welcome/feedback/feedback2) — confirmação de compra sai
 // pelo Resend e exige o fluxo com banco.
 export async function sendRelationshipTestWithoutDb(input: {
-  kind: "WELCOME" | "FEEDBACK_FIRST_USE";
+  kind: "WELCOME" | "FEEDBACK_FIRST_USE" | "FEEDBACK_SECOND_CALL";
   to: string;
   name: string | null;
-  variant: FeedbackVariant;
   appUrl: string;
   config: Pick<EmailDispatchConfigService, "checkSendReadiness">;
   emailService: Pick<EmailService, "send">;
@@ -39,7 +37,7 @@ export async function sendRelationshipTestWithoutDb(input: {
   const rendered =
     input.kind === "WELCOME"
       ? renderWelcomeEmail({ name: input.name, appUrl: input.appUrl })
-      : renderFeedbackEmail({ name: input.name, variant: input.variant });
+      : renderFeedbackEmail({ name: input.name, kind: input.kind });
 
   const result = await input.emailService.send({
     category: "RELATIONSHIP",

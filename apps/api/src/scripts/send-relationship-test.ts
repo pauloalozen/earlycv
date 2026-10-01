@@ -10,13 +10,12 @@
 //                FAKE: nada sai pela rede. Usa o banco.
 //   --real-send  Envio REAL (SES/Resend). Opção explícita, um único --to,
 //                exige a infra completa. Grava EmailDispatch isTest.
-//     + --no-db  (welcome/feedback) envia sem abrir o banco nem gravar nada;
+//     + --no-db  (welcome/feedback/feedback2) envia sem abrir o banco nem gravar nada;
 //                os eventos voltam pelo webhook de produção.
 //
 // Uso:
 //   NODE_OPTIONS='--conditions=development' tsx src/scripts/send-relationship-test.ts \
-//     --kind welcome|feedback|purchase --to <email> [--name "Nome"] \
-//     [--variant viewed|neutral] \
+//     --kind welcome|feedback|feedback2|purchase --to <email> [--name "Nome"] \
 //     [--plan pro --amount 4990 --credits 5 --analysis 5 --coupon --unlimited] \
 //     [--fake-send | --real-send [--no-db]]
 import "reflect-metadata";
@@ -61,7 +60,7 @@ async function main() {
     if (error instanceof TestArgsError) {
       console.error(`[relationship-test] ${error.message}`);
       console.error(
-        "uso: send-relationship-test.ts --kind welcome|feedback|purchase --to <um e-mail> [--name X] [--variant viewed|neutral] [--plan --amount --credits --analysis --coupon --unlimited] [--fake-send | --real-send [--no-db]]",
+        "uso: send-relationship-test.ts --kind welcome|feedback|feedback2|purchase --to <um e-mail> [--name X] [--plan --amount --credits --analysis --coupon --unlimited] [--fake-send | --real-send [--no-db]]",
       );
       process.exit(1);
     }
@@ -71,7 +70,6 @@ async function main() {
   const rendered = renderDispatchEmail({
     kind: args.kind,
     name: args.name,
-    variant: args.kind === "FEEDBACK_FIRST_USE" ? args.variant : null,
     payload: args.payload,
   });
 
@@ -81,9 +79,7 @@ async function main() {
     real: args.noDb ? "REAL-SEND sem banco (rede)" : "REAL-SEND (rede)",
   }[args.transport];
   console.log(
-    `[relationship-test] kind=${args.kind} to=${args.to} variant=${
-      args.kind === "FEEDBACK_FIRST_USE" ? args.variant : "-"
-    } mode=${label}`,
+    `[relationship-test] kind=${args.kind} to=${args.to} mode=${label}`,
   );
   console.log(`\nAssunto: ${rendered.subject}\n\n${rendered.text}\n`);
 
@@ -113,10 +109,12 @@ async function main() {
       ),
     );
     const result = await sendRelationshipTestWithoutDb({
-      kind: args.kind as "WELCOME" | "FEEDBACK_FIRST_USE",
+      kind: args.kind as
+        | "WELCOME"
+        | "FEEDBACK_FIRST_USE"
+        | "FEEDBACK_SECOND_CALL",
       to: args.to,
       name: args.name,
-      variant: args.variant,
       appUrl:
         process.env.FRONTEND_URL ??
         process.env.APP_URL ??
@@ -144,7 +142,6 @@ async function main() {
       kind: args.kind,
       to: args.to,
       name: args.name,
-      variant: args.variant,
       payload: args.payload,
       realTransport: args.transport === "real",
     });

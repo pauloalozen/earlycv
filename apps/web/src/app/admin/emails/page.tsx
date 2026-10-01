@@ -18,6 +18,8 @@ import {
   type EmailDispatchKind,
   type EmailDispatchStatus,
   type EmailsOverview,
+  type EmailsOverviewRange,
+  type EmailsPeriod,
   getEmailsOverview,
 } from "@/lib/admin-emails-api";
 import { buildAdminStateModel } from "@/lib/admin-state";
@@ -31,6 +33,7 @@ import {
   readinessLabel,
   STATUS_LABEL,
 } from "./_components/email-labels";
+import { EmailsPeriodSelector } from "./_components/emails-period-selector";
 
 export const metadata = buildAdminMetadata("Emails");
 
@@ -39,8 +42,14 @@ const ROOT_PATH = "/admin/emails";
 const KINDS: EmailDispatchKind[] = [
   "WELCOME",
   "FEEDBACK_FIRST_USE",
+  "FEEDBACK_SECOND_CALL",
   "PURCHASE_CONFIRMATION",
 ];
+type TableRow = {
+  key: string;
+  label: string;
+  count: (status: EmailDispatchStatus) => number;
+};
 const STATUSES: EmailDispatchStatus[] = [
   "PENDING",
   "SENT",
@@ -57,6 +66,11 @@ const EVENT_LABEL: Record<string, string> = {
   COMPLAINED: "Complaint",
   REJECTED: "Rejeitado",
 };
+
+function fmtDay(date: string) {
+  const [y, m, d] = date.split("-");
+  return `${d}/${m}/${y}`;
+}
 
 function Readiness({
   label,
@@ -80,7 +94,29 @@ function Readiness({
   );
 }
 
-export default async function AdminEmailsOverviewPage() {
+const PERIOD_IDS: EmailsPeriod[] = ["hoje", "semana", "7d", "mes", "30d"];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseRange(
+  raw: Record<string, string | string[] | undefined>,
+): EmailsOverviewRange {
+  const one = (v: string | string[] | undefined) =>
+    typeof v === "string" ? v : undefined;
+  const from = one(raw.from);
+  const to = one(raw.to);
+  if (from && to && DATE_RE.test(from) && DATE_RE.test(to)) {
+    return { from, to };
+  }
+  const period = PERIOD_IDS.find((p) => p === one(raw.period));
+  return period ? { period } : {};
+}
+
+export default async function AdminEmailsOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const range = parseRange(await searchParams);
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -94,7 +130,7 @@ export default async function AdminEmailsOverviewPage() {
 
   let overview: EmailsOverview;
   try {
-    overview = await getEmailsOverview(token);
+    overview = await getEmailsOverview(token, range);
   } catch {
     const state = buildAdminStateModel("unexpected-error", ROOT_PATH);
     return (
@@ -108,6 +144,34 @@ export default async function AdminEmailsOverviewPage() {
   const countOf = (kind: EmailDispatchKind, status: EmailDispatchStatus) =>
     counts.byKindStatus.find((r) => r.kind === kind && r.status === status)
       ?.count ?? 0;
+  const tableRows: TableRow[] = [
+    {
+      key: "alert",
+      label: "Alerta de Vagas",
+      count: (status) =>
+        counts.alertDigests.find((r) => r.status === status)?.count ?? 0,
+    },
+    {
+      key: "welcome",
+      label: KIND_LABEL.WELCOME,
+      count: (status) => countOf("WELCOME", status),
+    },
+    {
+      key: "feedback",
+      label: KIND_LABEL.FEEDBACK_FIRST_USE,
+      count: (status) => countOf("FEEDBACK_FIRST_USE", status),
+    },
+    {
+      key: "feedback-second-call",
+      label: KIND_LABEL.FEEDBACK_SECOND_CALL,
+      count: (status) => countOf("FEEDBACK_SECOND_CALL", status),
+    },
+    {
+      key: "purchase",
+      label: KIND_LABEL.PURCHASE_CONFIRMATION,
+      count: (status) => countOf("PURCHASE_CONFIRMATION", status),
+    },
+  ];
   const eventCount = (type: string) =>
     counts.events.find((e) => e.type === type)?.count ?? 0;
   const suppressionTotal = counts.suppressions.reduce(
@@ -117,6 +181,7 @@ export default async function AdminEmailsOverviewPage() {
   const configuredMode = {
     WELCOME: settings.welcomeMode,
     FEEDBACK_FIRST_USE: settings.feedbackMode,
+    FEEDBACK_SECOND_CALL: settings.feedbackSecondCallMode,
     PURCHASE_CONFIRMATION: settings.purchaseConfirmationMode,
   } as const;
 
@@ -150,7 +215,7 @@ export default async function AdminEmailsOverviewPage() {
       </div>
 
       <AdminSectionGroup label="Ativação dos novos envios">
-        <AdminStatsRow cols={3}>
+        <AdminStatsRow cols={4}>
           {KINDS.map((kind) => {
             const effective = runtime.effectiveModes[kind];
             const configured = configuredMode[kind];
@@ -217,8 +282,20 @@ export default async function AdminEmailsOverviewPage() {
         </AdminStatsRow>
       </AdminSectionGroup>
 
-      <AdminSectionGroup label={`Envios dos últimos ${counts.windowDays} dias`}>
+      <AdminSectionGroup
+        label={
+          counts.window.fromDate === counts.window.toDate
+            ? `Envios em ${fmtDay(counts.window.fromDate)}`
+            : `Envios de ${fmtDay(counts.window.fromDate)} a ${fmtDay(counts.window.toDate)}`
+        }
+      >
         <AdminCard>
+          <EmailsPeriodSelector
+            basePath={ROOT_PATH}
+            period={counts.window.period}
+            fromDate={counts.window.fromDate}
+            toDate={counts.window.toDate}
+          />
           <AdminTable>
             <thead>
               <tr>
@@ -231,12 +308,12 @@ export default async function AdminEmailsOverviewPage() {
               </tr>
             </thead>
             <tbody>
-              {KINDS.map((kind) => (
-                <tr key={kind}>
-                  <AdminTd>{KIND_LABEL[kind]}</AdminTd>
+              {tableRows.map((row) => (
+                <tr key={row.key}>
+                  <AdminTd>{row.label}</AdminTd>
                   {STATUSES.map((status) => (
                     <AdminTd key={status} align="right">
-                      {countOf(kind, status)}
+                      {row.count(status)}
                     </AdminTd>
                   ))}
                 </tr>
@@ -244,15 +321,16 @@ export default async function AdminEmailsOverviewPage() {
             </tbody>
           </AdminTable>
           <p style={{ fontSize: 12, color: AT.muted, marginTop: 10 }}>
-            Não inclui envios de teste. Eventos de entrega dos últimos{" "}
+            Não inclui envios de teste. O Alerta de Vagas conta digests (o
+            status Cancelado não existe nele). Eventos de entrega dos últimos{" "}
             {counts.eventsWindowDays} dias:{" "}
             {counts.events.length === 0
               ? "nenhum"
               : counts.events
                   .map((e) => `${EVENT_LABEL[e.type] ?? e.type}: ${e.count}`)
                   .join(" · ")}
-            . O Alerta de Vagas e o Product Updates têm suas próprias métricas
-            nas respectivas abas.
+            . Product Updates e recuperação de pagamento têm suas próprias
+            métricas nas respectivas abas.
           </p>
         </AdminCard>
       </AdminSectionGroup>

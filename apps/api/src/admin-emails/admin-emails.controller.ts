@@ -23,6 +23,7 @@ import { AdminEmailsService, assertTemplateKey } from "./admin-emails.service";
 // "should not exist".
 // biome-ignore-start lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype
 import { ListEmailDispatchesQueryDto } from "./dto/list-email-dispatches-query.dto";
+import { EmailsOverviewQueryDto } from "./dto/overview-query.dto";
 import { EmailsPageQueryDto } from "./dto/page-query.dto";
 import { RecoverPurchaseConfirmationsDto } from "./dto/recover-purchase-confirmations.dto";
 import { SendTestEmailTemplateDto } from "./dto/send-test-email-template.dto";
@@ -41,8 +42,8 @@ export class AdminEmailsController {
   ) {}
 
   @Get("overview")
-  overview() {
-    return this.service.overview();
+  overview(@Query() query: EmailsOverviewQueryDto) {
+    return this.service.overview(query);
   }
 
   @Get("settings")

@@ -26,7 +26,6 @@ const input = {
   kind: "WELCOME" as const,
   to: "paulo.alozen@gmail.com",
   name: "Paulo",
-  variant: "NEUTRAL" as const,
   appUrl: "https://earlycv.com.br",
 };
 
@@ -73,16 +72,22 @@ test("no-db real test sends nothing when the infra is not ready (never falls bac
   assert.equal(sent.length, 0);
 });
 
-test("no-db feedback uses the chosen variant", async () => {
+test("no-db feedback uses the template of the chosen feedback kind", async () => {
   const { sent, emailService, config } = setup();
 
   await sendRelationshipTestWithoutDb({
     ...input,
     kind: "FEEDBACK_FIRST_USE",
-    variant: "VIEWED",
+    config,
+    emailService,
+  });
+  await sendRelationshipTestWithoutDb({
+    ...input,
+    kind: "FEEDBACK_SECOND_CALL",
     config,
     emailService,
   });
 
   assert.equal(sent[0].message.subject, "Sobre a análise do seu currículo");
+  assert.equal(sent[1].message.subject, "Sua primeira experiência no EarlyCV");
 });

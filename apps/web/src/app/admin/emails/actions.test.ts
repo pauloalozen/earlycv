@@ -49,6 +49,7 @@ describe("emails admin actions", () => {
       form({
         welcomeMode: "LIVE",
         feedbackMode: "SHADOW",
+        feedbackSecondCallMode: "SHADOW",
         purchaseConfirmationMode: "ALLOWLIST",
         startAt: "2026-10-15T08:00",
         allowlist: "Tester@example.com\nmaria@example.com",
@@ -64,6 +65,7 @@ describe("emails admin actions", () => {
     expect(api.updateEmailSettings).toHaveBeenCalledWith({
       welcomeMode: "LIVE",
       feedbackMode: "SHADOW",
+      feedbackSecondCallMode: "SHADOW",
       purchaseConfirmationMode: "ALLOWLIST",
       startAt: "2026-10-15T11:00:00.000Z",
       allowlist: ["Tester@example.com", "maria@example.com"],
@@ -134,7 +136,9 @@ describe("emails admin actions", () => {
     api.updateEmailTemplate.mockRejectedValueOnce(
       new Error("O feedback precisa ter exatamente uma pergunta"),
     );
-    expect(await saveEmailTemplateAction("FEEDBACK_VIEWED", "a", "b")).toEqual({
+    expect(
+      await saveEmailTemplateAction("FEEDBACK_FIRST_USE", "a", "b"),
+    ).toEqual({
       ok: false,
       message: "O feedback precisa ter exatamente uma pergunta",
     });

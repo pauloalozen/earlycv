@@ -9,7 +9,7 @@ Checkpoint de 2026-10-01. Leia isto primeiro ao retomar. Detalhes técnicos: `do
 - Por que não houve push: não se sabe se o Railway acompanha `develop` (um push poderia disparar deploy + migration).
 
 ## 2. O que existe
-- **Dispatch** (`apps/api/src/email-dispatch/`): outbox `EmailDispatch`, worker com claim atômico, dedupe, expiração, `OUTCOME_UNKNOWN` nunca reenvia; 3 tipos: `WELCOME`, `FEEDBACK_FIRST_USE` (RELATIONSHIP, SES, tópico + Configuration Set próprios, sem tracking) e `PURCHASE_CONFIRMATION` (BILLING/Resend, sem descadastro).
+- **Dispatch** (`apps/api/src/email-dispatch/`): outbox `EmailDispatch`, worker com claim atômico, dedupe, expiração, `OUTCOME_UNKNOWN` nunca reenvia; 4 tipos: `WELCOME`, `FEEDBACK_FIRST_USE`, `FEEDBACK_SECOND_CALL` (segunda chamada 14 dias após o ENVIO do primeiro; modo próprio; sem variante viu/neutro desde a migration `20261001180000`) (RELATIONSHIP, SES, tópico + Configuration Set próprios, sem tracking) e `PURCHASE_CONFIRMATION` (BILLING/Resend, sem descadastro).
 - **Compra:** gancho único em `PlansService.applyApprovedPurchaseInsideTransaction` (cobre webhook MP, `applyApprovedPurchase`, cupom 100%), insert em `SAVEPOINT`: falha do e-mail nunca derruba créditos. Recuperação de recibos perdidos: `npm run email:recover-purchase-confirmations -w apps/api` (ou botão em Emails → Compras).
 - **Supressão compartilhada** (`EmailSuppression`: hard bounce Permanent + complaint), lida por Monitor e Product Updates. Descadastros por tópico seguem independentes.
 - **Correção no Product Updates:** o handler do evento SES `Subscription` achava o contato em `subscription.source`, mas ali vem o mecanismo ("UnsubscribeHeader"); o e-mail está em `mail.destination[0]` e o status é `OptIn/OptOut`.

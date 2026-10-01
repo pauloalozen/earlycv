@@ -29,8 +29,8 @@ import { TemplateEditor } from "./template-editor";
 const template = (
   overrides: Partial<EmailTemplateInfo["current"]> = {},
 ): EmailTemplateInfo => ({
-  key: "FEEDBACK_VIEWED",
-  label: "Feedback — viu a análise",
+  key: "FEEDBACK_FIRST_USE",
+  label: "Feedback",
   description: "Enviado 24h após o cadastro.",
   variables: [
     { name: "saudacao", description: "Saudação pronta" },
@@ -39,7 +39,7 @@ const template = (
   unsubscribeFooter: true,
   defaults: { subject: "Sobre a análise", body: "{{saudacao}} O que achou?" },
   current: {
-    key: "FEEDBACK_VIEWED",
+    key: "FEEDBACK_FIRST_USE",
     subject: "Sobre a análise",
     body: "{{saudacao}} O que achou?",
     isCustom: false,
@@ -59,7 +59,7 @@ describe("TemplateEditor", () => {
     render(<TemplateEditor template={template()} />);
 
     expect(
-      screen.getByRole("heading", { name: "Feedback — viu a análise" }),
+      screen.getByRole("heading", { name: "Feedback" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Texto padrão")).toBeInTheDocument();
     expect(screen.getByText("{{saudacao}}")).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe("TemplateEditor", () => {
 
     await waitFor(() =>
       expect(actions.saveEmailTemplateAction).toHaveBeenCalledWith(
-        "FEEDBACK_VIEWED",
+        "FEEDBACK_FIRST_USE",
         "Novo assunto",
         "{{saudacao}} O que achou?",
       ),
@@ -195,7 +195,7 @@ describe("TemplateEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restaurar padrão" }));
     await waitFor(() =>
       expect(actions.resetEmailTemplateAction).toHaveBeenCalledWith(
-        "FEEDBACK_VIEWED",
+        "FEEDBACK_FIRST_USE",
       ),
     );
     expect(
@@ -239,7 +239,7 @@ describe("TemplateEditor", () => {
 
     await waitFor(() =>
       expect(actions.sendTestEmailTemplateAction).toHaveBeenCalledWith(
-        "FEEDBACK_VIEWED",
+        "FEEDBACK_FIRST_USE",
         "paulo.alozen@gmail.com",
       ),
     );

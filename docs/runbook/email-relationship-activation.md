@@ -90,7 +90,7 @@ Limpeza (opcional): reinscrever relationship pelo SES (`aws sesv2 update-contact
 ## 7. Ativação gradual (pelo admin; um tipo por vez, ordem sugerida: compra → boas-vindas → feedback)
 Tudo em **Admin → Emails → Configurações** (`/admin/emails/configuracoes`), sem tocar no Railway:
 1. Defina o **cutoff** (horário de Brasília): só cadastros/compras criados a partir dele entram. Obrigatório para ligar qualquer tipo (o backend recusa sem ele).
-2. Por tipo: `Sombra` (cria e avalia tudo, nunca envia; confira volume/variantes em Relacionamento/Compras) → `Só allowlist` + allowlist com contas de teste que NÃO são as 2 bloqueadas → `Ao vivo` (exige marcar a confirmação).
+2. Por tipo: `Sombra` (cria e avalia tudo, nunca envia; confira volume em Relacionamento/Compras; o Feedback segunda chamada tem chave própria — ligue-a **antes ou junto** com o Feedback, porque ela só é criada quando o primeiro é enviado e não preenche retroativamente) → `Só allowlist` + allowlist com contas de teste que NÃO são as 2 bloqueadas → `Ao vivo` (exige marcar a confirmação).
 3. Revise o texto de cada e-mail em **Emails → Templates** (preview e "enviar teste" para um endereço). A edição vale para os próximos envios, inclusive os já agendados.
 Fora de produção o transporte é **fake em qualquer modo**; em produção `Só allowlist` envia só aos listados. Toda alteração (configuração e templates) é gravada no log de ações administrativas. A mudança vale em ~10s em todas as instâncias.
 

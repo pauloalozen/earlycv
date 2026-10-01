@@ -2649,6 +2649,9 @@ model ProductEmailSubscription {
 enum EmailDispatchKind {
   WELCOME
   FEEDBACK_FIRST_USE
+  // Segunda chamada: 14 dias depois do ENVIO do FEEDBACK_FIRST_USE (criada
+  // pelo worker quando o primeiro vira SENT), dedupe feedback2:{userId}.
+  FEEDBACK_SECOND_CALL
   // Transacional (categoria BILLING, Resend). Criado DENTRO da transação de
   // aprovação da compra (PlansService.applyApprovedPurchaseInsideTransaction),
   // dedupe purchase:{purchaseId}. Sem descadastro por tópico.
@@ -2814,6 +2817,7 @@ model EmailDispatchSettings {
 
   welcomeMode              EmailDispatchMode @default(OFF)
   feedbackMode             EmailDispatchMode @default(OFF)
+  feedbackSecondCallMode   EmailDispatchMode @default(OFF)
   purchaseConfirmationMode EmailDispatchMode @default(OFF)
 
   // Cutoff: só usuários/compras criados a partir daqui entram. null = nada
@@ -2831,8 +2835,8 @@ model EmailDispatchSettings {
 
 enum EmailTemplateKey {
   WELCOME
-  FEEDBACK_VIEWED
-  FEEDBACK_NEUTRAL
+  FEEDBACK_FIRST_USE
+  FEEDBACK_SECOND_CALL
   PURCHASE_PAID
   PURCHASE_COUPON
 }

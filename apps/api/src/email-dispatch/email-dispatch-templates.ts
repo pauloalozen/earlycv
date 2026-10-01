@@ -14,25 +14,19 @@
 
 export const SES_UNSUBSCRIBE_PLACEHOLDER = "{{amazonSESUnsubscribeUrl}}";
 
-// VIEWED só com evidência (evento analysis_result_viewed com userId
-// verificado). NEUTRAL é a pergunta que não presume nada sobre o uso — é o
-// padrão sempre que não há evidência confiável (ver
-// EmailDispatchService.resolveFeedbackVariant).
-export type FeedbackVariant = "VIEWED" | "NEUTRAL";
-
 export type RenderedEmail = { subject: string; text: string; html: string };
 
 export type EmailTemplateKeyValue =
   | "WELCOME"
-  | "FEEDBACK_VIEWED"
-  | "FEEDBACK_NEUTRAL"
+  | "FEEDBACK_FIRST_USE"
+  | "FEEDBACK_SECOND_CALL"
   | "PURCHASE_PAID"
   | "PURCHASE_COUPON";
 
 export const EMAIL_TEMPLATE_KEYS: EmailTemplateKeyValue[] = [
   "WELCOME",
-  "FEEDBACK_VIEWED",
-  "FEEDBACK_NEUTRAL",
+  "FEEDBACK_FIRST_USE",
+  "FEEDBACK_SECOND_CALL",
   "PURCHASE_PAID",
   "PURCHASE_COUPON",
 ];
@@ -93,10 +87,10 @@ Paulo
 EarlyCV`,
     },
   },
-  FEEDBACK_VIEWED: {
-    label: "Feedback — viu a análise",
+  FEEDBACK_FIRST_USE: {
+    label: "Feedback",
     description:
-      "Enviado 24h após o cadastro (janela 8h–20h de Brasília) SÓ quando há evidência de que a pessoa viu o resultado da análise. Exatamente uma pergunta, sem links.",
+      "Enviado 24h após o cadastro (janela 8h–20h de Brasília). O cadastro nasce da primeira análise, então o texto pode falar da análise. Exatamente uma pergunta, sem links.",
     unsubscribeFooter: true,
     variables: [GREETING_VAR, NAME_VAR],
     defaults: {
@@ -112,10 +106,10 @@ Paulo
 EarlyCV`,
     },
   },
-  FEEDBACK_NEUTRAL: {
-    label: "Feedback — neutro",
+  FEEDBACK_SECOND_CALL: {
+    label: "Feedback segunda chamada",
     description:
-      "Enviado 24h após o cadastro quando NÃO há evidência confiável de que a pessoa viu a análise. Não pode presumir que viu nem que não viu. Exatamente uma pergunta, sem links.",
+      "Enviado 14 dias depois do ENVIO do feedback (janela 8h–20h de Brasília), só se o primeiro foi realmente enviado. Exatamente uma pergunta, sem links.",
     unsubscribeFooter: true,
     variables: [GREETING_VAR, NAME_VAR],
     defaults: {
@@ -268,7 +262,7 @@ export function validateTemplate(
 
   const has = (name: string) => used.includes(name);
 
-  if (key === "FEEDBACK_VIEWED" || key === "FEEDBACK_NEUTRAL") {
+  if (key === "FEEDBACK_FIRST_USE" || key === "FEEDBACK_SECOND_CALL") {
     // Uma única pergunta por e-mail (e o assunto não é pergunta).
     const questions = countMatches(body, /\?/g);
     if (questions !== 1) {
@@ -281,11 +275,6 @@ export function validateTemplate(
     }
     if (countMatches(body, URL_PATTERN) > 0) {
       errors.push("O feedback não leva links.");
-    }
-    if (key === "FEEDBACK_NEUTRAL" && /an[aá]lise|resultado/i.test(body)) {
-      errors.push(
-        "O feedback neutro não pode mencionar análise/resultado: não presume que a pessoa viu.",
-      );
     }
   }
 
@@ -422,17 +411,15 @@ export function renderWelcomeEmail(
   });
 }
 
-export function feedbackKeyFor(
-  variant: FeedbackVariant,
-): EmailTemplateKeyValue {
-  return variant === "VIEWED" ? "FEEDBACK_VIEWED" : "FEEDBACK_NEUTRAL";
-}
+// Os dois feedbacks compartilham o nome do tipo (EmailDispatchKind) e da
+// chave de template.
+export type FeedbackKind = "FEEDBACK_FIRST_USE" | "FEEDBACK_SECOND_CALL";
 
 export function renderFeedbackEmail(
-  input: { name: string | null | undefined; variant: FeedbackVariant },
+  input: { name: string | null | undefined; kind: FeedbackKind },
   content?: TemplateContent,
 ): RenderedEmail {
-  const key = feedbackKeyFor(input.variant);
+  const key: EmailTemplateKeyValue = input.kind;
   return renderTemplate(
     key,
     content ?? TEMPLATE_DEFINITIONS[key].defaults,
@@ -554,10 +541,9 @@ export function renderSample(
   switch (key) {
     case "WELCOME":
       return renderWelcomeEmail({ name, appUrl }, content);
-    case "FEEDBACK_VIEWED":
-      return renderFeedbackEmail({ name, variant: "VIEWED" }, content);
-    case "FEEDBACK_NEUTRAL":
-      return renderFeedbackEmail({ name, variant: "NEUTRAL" }, content);
+    case "FEEDBACK_FIRST_USE":
+    case "FEEDBACK_SECOND_CALL":
+      return renderFeedbackEmail({ name, kind: key }, content);
     case "PURCHASE_PAID":
       return renderPurchaseConfirmationEmail(
         { name, appUrl, payload: SAMPLE_PURCHASE_PAYLOAD },

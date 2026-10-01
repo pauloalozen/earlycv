@@ -8,7 +8,9 @@ import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { EmailDispatchConfigService } from "./email-dispatch.config";
 import {
+  FEEDBACK_EXPIRY_MS,
   FEEDBACK_MIN_GAP_AFTER_WELCOME_MS,
+  FEEDBACK_SECOND_CALL_DELAY_MS,
   MAX_SEND_ATTEMPTS,
   RETRY_BACKOFF_MS,
   STALE_PROCESSING_THRESHOLD_MS,
@@ -68,7 +70,7 @@ export class EmailDispatchWorker implements OnModuleInit {
   async onModuleInit() {
     const startAt = await this.config.getStartAt();
     this.logger.log(
-      `email_dispatch_boot welcome=${await this.config.getEffectiveMode("WELCOME")} feedback=${await this.config.getEffectiveMode("FEEDBACK_FIRST_USE")} purchase=${await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")} startAt=${startAt ? startAt.toISOString() : "unset"} transport=${this.config.isRealTransportAllowed() ? "real" : "fake"}`,
+      `email_dispatch_boot welcome=${await this.config.getEffectiveMode("WELCOME")} feedback=${await this.config.getEffectiveMode("FEEDBACK_FIRST_USE")} feedback2=${await this.config.getEffectiveMode("FEEDBACK_SECOND_CALL")} purchase=${await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")} startAt=${startAt ? startAt.toISOString() : "unset"} transport=${this.config.isRealTransportAllowed() ? "real" : "fake"}`,
     );
 
     // Modo ligado + transporte real + infra incompleta = nada seria enviado.
@@ -274,7 +276,10 @@ export class EmailDispatchWorker implements OnModuleInit {
       return;
     }
 
-    if (row.kind === "FEEDBACK_FIRST_USE") {
+    if (
+      row.kind === "FEEDBACK_FIRST_USE" ||
+      row.kind === "FEEDBACK_SECOND_CALL"
+    ) {
       const deferral = await this.resolveFeedbackDeferral(row, now);
       if (deferral) {
         if (deferral.until >= row.expiresAt) {
@@ -298,23 +303,17 @@ export class EmailDispatchWorker implements OnModuleInit {
       }
     }
 
-    const variant =
-      row.kind === "FEEDBACK_FIRST_USE"
-        ? await this.dispatchService.resolveFeedbackVariant(verdict.user.id)
-        : null;
-
     if (mode === "SHADOW") {
-      // Renderiza para provar que o template funciona com estes dados,
-      // grava a variante que SERIA usada, e fecha sem enviar.
+      // Renderiza para provar que o template funciona com estes dados e
+      // fecha sem enviar.
       await this.dispatchService.render({
         kind: row.kind,
         name: verdict.user.name,
-        variant,
         payload: row.payloadJson as PurchaseConfirmationPayload | null,
       });
       await this.database.emailDispatch.update({
         where: { id: row.id },
-        data: { status: "SKIPPED", skippedReason: "shadow_mode", variant },
+        data: { status: "SKIPPED", skippedReason: "shadow_mode" },
       });
       return;
     }
@@ -334,18 +333,12 @@ export class EmailDispatchWorker implements OnModuleInit {
       return;
     }
 
-    await this.database.emailDispatch.update({
-      where: { id: row.id },
-      data: { variant },
-    });
-
     markSendStarted();
     const result = await this.dispatchService.deliver({
       dispatchId: row.id,
       kind: row.kind,
       to: verdict.user.email,
       name: verdict.user.name,
-      variant,
       payload: row.payloadJson as PurchaseConfirmationPayload | null,
       // Real só em produção. Fora dela (inclusive ALLOWLIST) o serviço usa
       // transporte fake e nada sai pela rede.
@@ -353,17 +346,21 @@ export class EmailDispatchWorker implements OnModuleInit {
     });
 
     if (result.outcome === "SENT") {
+      const sentAt = new Date();
       await this.database.emailDispatch.update({
         where: { id: row.id },
         data: {
           status: "SENT",
-          sentAt: new Date(),
+          sentAt,
           provider: result.provider,
           providerMessageId: result.providerMessageId,
           lastError: null,
           outcomeUnknownAt: null,
         },
       });
+      if (row.kind === "FEEDBACK_FIRST_USE") {
+        await this.enqueueSecondCall(row, sentAt);
+      }
       return;
     }
 
@@ -390,10 +387,48 @@ export class EmailDispatchWorker implements OnModuleInit {
     );
   }
 
+  // Segunda chamada: criada quando o primeiro feedback é REALMENTE enviado
+  // (status SENT). Só nasce se o modo da segunda chamada não está OFF nesse
+  // instante — ligar depois NÃO preenche retroativamente quem já recebeu o
+  // primeiro. Idempotente (dedupe feedback2:{userId}) e nunca lança: um erro
+  // aqui não pode afetar o envio já concluído.
+  private async enqueueSecondCall(row: DispatchRow, sentAt: Date) {
+    if (!row.userId) return;
+    try {
+      if (
+        (await this.config.getEffectiveMode("FEEDBACK_SECOND_CALL")) === "OFF"
+      ) {
+        return;
+      }
+      const scheduledFor = adjustToFeedbackWindow(
+        new Date(sentAt.getTime() + FEEDBACK_SECOND_CALL_DELAY_MS),
+      );
+      await this.database.emailDispatch.createMany({
+        data: [
+          {
+            kind: "FEEDBACK_SECOND_CALL",
+            userId: row.userId,
+            recipientEmail: row.recipientEmail,
+            dedupeKey: `feedback2:${row.userId}`,
+            scheduledFor,
+            expiresAt: new Date(scheduledFor.getTime() + FEEDBACK_EXPIRY_MS),
+          },
+        ],
+        skipDuplicates: true,
+      });
+    } catch (error) {
+      this.logger.error(
+        `email_dispatch_enqueue_failed kind=FEEDBACK_SECOND_CALL userId=${row.userId} reason=${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      );
+    }
+  }
+
   // Adiamentos do feedback (não são inelegibilidade):
-  //  - fora de 08:00–20:00 (Brasília) -> próximo 08:00;
-  //  - boas-vindas ainda não terminou (PENDING/PROCESSING), ou foi enviada
-  //    há menos de 12h -> espera, nunca dois e-mails juntos.
+  //  - fora de 08:00–20:00 (Brasília) -> próximo 08:00 (os dois feedbacks);
+  //  - só no primeiro: boas-vindas ainda não terminou (PENDING/PROCESSING),
+  //    ou foi enviada há menos de 12h -> espera, nunca dois e-mails juntos.
   // Sempre limitado por expiresAt (o chamador descarta se passar).
   private async resolveFeedbackDeferral(
     row: DispatchRow,
@@ -404,7 +439,7 @@ export class EmailDispatchWorker implements OnModuleInit {
       return { until: windowed, reason: "outside_window" };
     }
 
-    if (!row.userId) return null;
+    if (row.kind !== "FEEDBACK_FIRST_USE" || !row.userId) return null;
     const welcome = await this.database.emailDispatch.findUnique({
       where: { dedupeKey: `welcome:${row.userId}` },
       select: { status: true, sentAt: true },

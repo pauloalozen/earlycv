@@ -1,7 +1,5 @@
 import { parseArgs } from "node:util";
 
-import type { FeedbackVariant } from "./email-dispatch-templates";
-
 // Argumentos do script de teste EXPLÍCITO (send-relationship-test.ts), em
 // função pura para ser testada. Princípios: um único destinatário informado,
 // nunca a base; transporte real só com --real-send; combinações ambíguas ou
@@ -9,10 +7,13 @@ import type { FeedbackVariant } from "./email-dispatch-templates";
 export type TestTransport = "dry-run" | "fake" | "real";
 
 export type ParsedTestArgs = {
-  kind: "WELCOME" | "FEEDBACK_FIRST_USE" | "PURCHASE_CONFIRMATION";
+  kind:
+    | "WELCOME"
+    | "FEEDBACK_FIRST_USE"
+    | "FEEDBACK_SECOND_CALL"
+    | "PURCHASE_CONFIRMATION";
   to: string;
   name: string | null;
-  variant: FeedbackVariant;
   transport: TestTransport;
   // Só com --real-send: envia sem abrir o banco nem gravar EmailDispatch.
   noDb: boolean;
@@ -53,7 +54,6 @@ export function parseTestArgs(argv: string[]): ParsedTestArgs {
         kind: { type: "string" },
         to: { type: "string", multiple: true },
         name: { type: "string" },
-        variant: { type: "string" },
         "fake-send": { type: "boolean", default: false },
         "real-send": { type: "boolean", default: false },
         "no-db": { type: "boolean", default: false },
@@ -77,11 +77,15 @@ export function parseTestArgs(argv: string[]): ParsedTestArgs {
       ? "WELCOME"
       : kindArg === "feedback"
         ? "FEEDBACK_FIRST_USE"
-        : kindArg === "purchase"
-          ? "PURCHASE_CONFIRMATION"
-          : null;
+        : kindArg === "feedback2"
+          ? "FEEDBACK_SECOND_CALL"
+          : kindArg === "purchase"
+            ? "PURCHASE_CONFIRMATION"
+            : null;
   if (!kind)
-    throw new TestArgsError("--kind precisa ser welcome, feedback ou purchase");
+    throw new TestArgsError(
+      "--kind precisa ser welcome, feedback, feedback2 ou purchase",
+    );
 
   const tos = (values.to as string[] | undefined) ?? [];
   if (tos.length !== 1) {
@@ -103,7 +107,9 @@ export function parseTestArgs(argv: string[]): ParsedTestArgs {
   if (noDb && !real)
     throw new TestArgsError("--no-db só faz sentido com --real-send");
   if (noDb && kind === "PURCHASE_CONFIRMATION") {
-    throw new TestArgsError("--no-db só existe para welcome/feedback");
+    throw new TestArgsError(
+      "--no-db só existe para welcome/feedback/feedback2",
+    );
   }
 
   const coupon = values.coupon === true;
@@ -138,10 +144,6 @@ export function parseTestArgs(argv: string[]): ParsedTestArgs {
     kind,
     to,
     name: (values.name as string | undefined) ?? null,
-    variant:
-      (values.variant as string | undefined)?.toLowerCase() === "viewed"
-        ? "VIEWED"
-        : "NEUTRAL",
     transport: real ? "real" : fake ? "fake" : "dry-run",
     noDb,
     payload,

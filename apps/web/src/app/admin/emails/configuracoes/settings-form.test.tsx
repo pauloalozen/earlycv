@@ -23,6 +23,7 @@ import { EmailSettingsForm } from "./settings-form";
 const initial = {
   welcomeMode: "OFF" as const,
   feedbackMode: "OFF" as const,
+  feedbackSecondCallMode: "OFF" as const,
   purchaseConfirmationMode: "OFF" as const,
   startAtInput: "",
   allowlist: "",
@@ -39,14 +40,17 @@ describe("EmailSettingsForm", () => {
     render(<EmailSettingsForm initial={initial} />);
 
     expect(screen.getByLabelText(/^Boas-vindas/)).toHaveValue("OFF");
-    expect(screen.getByLabelText(/Feedback do primeiro uso/)).toHaveValue(
+    expect(
+      screen.getByLabelText(/Feedback \(24h após o cadastro\)/),
+    ).toHaveValue("OFF");
+    expect(screen.getByLabelText(/Feedback segunda chamada/)).toHaveValue(
       "OFF",
     );
     expect(screen.getByLabelText(/Confirmação de compra/)).toHaveValue("OFF");
     expect(
       screen.queryByLabelText(/Confirmo que "Ao vivo"/),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("Nada é criado nem enviado.")).toHaveLength(3);
+    expect(screen.getAllByText("Nada é criado nem enviado.")).toHaveLength(4);
   });
 
   it("selecting LIVE for any type reveals the explicit confirmation (and the per-mode help text)", () => {

@@ -101,7 +101,7 @@ export function DispatchesSection({
             <AdminTh>Tipo</AdminTh>
             <AdminTh>Destinatário</AdminTh>
             <AdminTh>Status</AdminTh>
-            <AdminTh>Motivo / variante</AdminTh>
+            <AdminTh>Motivo</AdminTh>
             <AdminTh>Agendado</AdminTh>
             <AdminTh>Enviado</AdminTh>
             <AdminTh align="right">Tent.</AdminTh>
@@ -131,7 +131,7 @@ export function DispatchesSection({
                 <AdminTd>
                   {item.skippedReason
                     ? reasonLabel(item.skippedReason)
-                    : (item.variant ?? item.lastError ?? "—")}
+                    : (item.lastError ?? "—")}
                 </AdminTd>
                 <AdminTd>{fmtDate(item.scheduledFor)}</AdminTd>
                 <AdminTd>{fmtDate(item.sentAt)}</AdminTd>

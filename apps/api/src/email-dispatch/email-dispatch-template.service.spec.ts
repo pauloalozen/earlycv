@@ -67,47 +67,49 @@ test("common rules: subject/body required and bounded, subject is plain text, un
   );
 });
 
-test("feedback: exactly ONE question, subject is not a question, no links; neutral never mentions the analysis", () => {
-  const v = TEMPLATE_DEFINITIONS.FEEDBACK_VIEWED.defaults;
+test("feedback (first and second call): exactly ONE question, subject is not a question, no links", () => {
+  const v = TEMPLATE_DEFINITIONS.FEEDBACK_FIRST_USE.defaults;
   assert.deepEqual(
-    ok("FEEDBACK_VIEWED", v.subject, "{{saudacao}} O que achou?"),
+    ok("FEEDBACK_FIRST_USE", v.subject, "{{saudacao}} O que achou?"),
     [],
   );
   assert.ok(
-    ok("FEEDBACK_VIEWED", v.subject, "{{saudacao}} Gostou? Útil?").some((e) =>
-      /exatamente uma pergunta.*tem 2/.test(e),
+    ok("FEEDBACK_FIRST_USE", v.subject, "{{saudacao}} Gostou? Útil?").some(
+      (e) => /exatamente uma pergunta.*tem 2/.test(e),
     ),
   );
   assert.ok(
-    ok("FEEDBACK_VIEWED", v.subject, "{{saudacao}} Sem pergunta.").some((e) =>
-      /exatamente uma pergunta.*tem 0/.test(e),
+    ok("FEEDBACK_FIRST_USE", v.subject, "{{saudacao}} Sem pergunta.").some(
+      (e) => /exatamente uma pergunta.*tem 0/.test(e),
     ),
   );
   assert.ok(
-    ok("FEEDBACK_VIEWED", "Gostou?", "{{saudacao}} O que achou?").some((e) =>
+    ok("FEEDBACK_FIRST_USE", "Gostou?", "{{saudacao}} O que achou?").some((e) =>
       /assunto do feedback não pode ser uma pergunta/.test(e),
     ),
   );
   assert.ok(
-    ok("FEEDBACK_VIEWED", v.subject, "O que achou? https://x.com").some((e) =>
-      /não leva links/.test(e),
+    ok("FEEDBACK_FIRST_USE", v.subject, "O que achou? https://x.com").some(
+      (e) => /não leva links/.test(e),
     ),
   );
 
-  const n = TEMPLATE_DEFINITIONS.FEEDBACK_NEUTRAL.defaults;
-  assert.ok(
-    ok("FEEDBACK_NEUTRAL", n.subject, "Como foi a análise do seu CV?").some(
-      (e) => /não presume/.test(e),
-    ),
-  );
-  assert.ok(
-    ok("FEEDBACK_NEUTRAL", n.subject, "Viu o resultado?").some((e) =>
-      /não presume/.test(e),
-    ),
-  );
+  // A segunda chamada tem as mesmas regras (uma pergunta, sem links) e pode
+  // falar da análise: já não presume nada sobre ter visto o resultado.
+  const second = TEMPLATE_DEFINITIONS.FEEDBACK_SECOND_CALL.defaults;
   assert.deepEqual(
-    ok("FEEDBACK_NEUTRAL", n.subject, "Como foi sua experiência?"),
+    ok("FEEDBACK_SECOND_CALL", second.subject, "Como foi sua experiência?"),
     [],
+  );
+  assert.ok(
+    ok("FEEDBACK_SECOND_CALL", second.subject, "Gostou? Útil?").some((e) =>
+      /exatamente uma pergunta.*tem 2/.test(e),
+    ),
+  );
+  assert.ok(
+    ok("FEEDBACK_SECOND_CALL", second.subject, "Oi? https://x.com").some((e) =>
+      /não leva links/.test(e),
+    ),
   );
 });
 
@@ -276,7 +278,7 @@ test("an invalid template is rejected with all the reasons and nothing is saved"
 
   await assert.rejects(
     () =>
-      service.update("a", "FEEDBACK_VIEWED", {
+      service.update("a", "FEEDBACK_FIRST_USE", {
         subject: "Gostou?",
         body: "Útil? Mesmo?",
       }),
@@ -354,7 +356,7 @@ test("a template read error falls back to the code defaults (it must never block
   // biome-ignore lint/suspicious/noExplicitAny: logger privado no teste
   (service as any).logger = { error: (m: string) => lines.push(m) };
 
-  const effective = await service.getEffective("FEEDBACK_NEUTRAL");
+  const effective = await service.getEffective("FEEDBACK_SECOND_CALL");
 
   assert.equal(effective.isCustom, false);
   assert.equal(effective.subject, "Sua primeira experiência no EarlyCV");
@@ -385,7 +387,6 @@ test("the SAVED template is what gets sent (subject + body), through the real di
     kind: "WELCOME",
     to: "maria@example.com",
     name: "Maria Souza",
-    variant: null,
     realTransport: true,
   });
 

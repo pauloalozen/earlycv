@@ -45,6 +45,7 @@ export default async function AdminEmailsSettingsPage() {
             initial={{
               welcomeMode: settings.welcomeMode,
               feedbackMode: settings.feedbackMode,
+              feedbackSecondCallMode: settings.feedbackSecondCallMode,
               purchaseConfirmationMode: settings.purchaseConfirmationMode,
               startAtInput: isoToBrtInput(settings.startAt),
               allowlist: settings.allowlist.join("\n"),

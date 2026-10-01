@@ -48,6 +48,7 @@ export async function updateEmailSettingsAction(
     await updateEmailSettings({
       welcomeMode: asMode(formData.get("welcomeMode")),
       feedbackMode: asMode(formData.get("feedbackMode")),
+      feedbackSecondCallMode: asMode(formData.get("feedbackSecondCallMode")),
       purchaseConfirmationMode: asMode(
         formData.get("purchaseConfirmationMode"),
       ),

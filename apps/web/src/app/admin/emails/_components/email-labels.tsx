@@ -10,6 +10,7 @@ type Tone = "ok" | "danger" | "warn" | "info" | "neutral" | "dark";
 export const KIND_LABEL: Record<EmailDispatchKind, string> = {
   WELCOME: "Boas-vindas",
   FEEDBACK_FIRST_USE: "Feedback",
+  FEEDBACK_SECOND_CALL: "Feedback segunda chamada",
   PURCHASE_CONFIRMATION: "Confirmação de compra",
 };
 
@@ -50,7 +51,7 @@ const MODE_TONE: Record<EmailDispatchMode, Tone> = {
 export const MODE_HELP: Record<EmailDispatchMode, string> = {
   OFF: "Nada é criado nem enviado.",
   SHADOW:
-    "Cria e avalia tudo (elegibilidade, variante, template), mas NUNCA envia — serve para medir volume.",
+    "Cria e avalia tudo (elegibilidade, template), mas NUNCA envia — serve para medir volume.",
   ALLOWLIST: "Envia só para os endereços da allowlist.",
   LIVE: "Envia para todo elegível a partir do cutoff.",
 };
