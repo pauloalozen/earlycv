@@ -31,6 +31,7 @@ import {
 } from "@/lib/journey-session";
 import type { ProductOrigin } from "@/lib/product-origin";
 import { getOrCreateVisitorId } from "@/lib/visitor-id";
+import { ScrollableToolbar, TOOLBAR_ARROW_WIDTH } from "./scrollable-toolbar";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const SIDEBAR_W = 354;
@@ -2249,30 +2250,6 @@ export function AdaptacaoCvClient({
             overflow: "hidden",
           }}
         >
-          {/* Mobile close button */}
-          <button
-            type="button"
-            className="adaptcv-sidebar-close"
-            onClick={() => setMobileSidebarOpen(false)}
-            style={{
-              display: "none",
-              alignItems: "center",
-              gap: 6,
-              padding: "12px 16px",
-              background: "transparent",
-              color: "#888",
-              border: "none",
-              borderBottom: `1px solid ${SIDEBAR_BORDER}`,
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 500,
-              width: "100%",
-              textAlign: "left",
-            }}
-          >
-            ← Fechar
-          </button>
-
           {/* Job info + back link */}
           <div
             style={{
@@ -2281,20 +2258,55 @@ export function AdaptacaoCvClient({
               flexShrink: 0,
             }}
           >
-            <Link
-              href={`/adaptar/resultado?adaptationId=${adaptationId}`}
+            <div
               style={{
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
-                gap: 5,
-                fontSize: 14,
-                color: "#888",
-                textDecoration: "none",
+                justifyContent: "space-between",
+                gap: 8,
                 marginBottom: 6,
               }}
             >
-              ← análise completa
-            </Link>
+              <Link
+                href={`/adaptar/resultado?adaptationId=${adaptationId}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 14,
+                  color: "#888",
+                  textDecoration: "none",
+                }}
+              >
+                ← análise completa
+              </Link>
+              {/* Mobile: fecha o drawer (a classe só mostra no mobile). */}
+              <button
+                type="button"
+                className="adaptcv-sidebar-close"
+                aria-label="Fechar ajustes"
+                onClick={() => setMobileSidebarOpen(false)}
+                style={{
+                  display: "none",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  margin: "-4px -6px -4px 0",
+                  padding: 0,
+                  background: "transparent",
+                  color: "#888",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontSize: 20,
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
             {(jobTitle || companyName) && (
               <div>
                 {jobTitle && (
@@ -2399,12 +2411,12 @@ export function AdaptacaoCvClient({
             .adaptcv-backdrop.mobile-open { opacity: 1 !important; pointer-events: auto !important; }
             .adaptcv-sidebar {
               position: fixed !important;
-              top: 0 !important;
+              top: ${HEADER_H}px !important;
               left: 0 !important;
               bottom: 0 !important;
               width: 86vw !important;
               max-width: 300px !important;
-              height: 100dvh !important;
+              height: calc(100dvh - ${HEADER_H}px) !important;
               z-index: 150 !important;
               transform: translateX(-110%) !important;
               transition: transform 0.25s ease !important;
@@ -2422,6 +2434,21 @@ export function AdaptacaoCvClient({
             .adaptcv-cv-card { padding: 20px 14px !important; max-width: 100% !important; box-shadow: 0 1px 8px rgba(0,0,0,0.3) !important; }
             .adaptcv-mobile-toggle { display: inline-flex !important; }
           }
+          /* A barra de ações é sempre UMA linha. O painel (main) é o container:
+             abaixo de ~620px de largura os rótulos longos dão lugar aos curtos;
+             se ainda assim não couber, a barra rola na horizontal (nunca quebra
+             linha nem sobrepõe botões). */
+          .adaptcv-main { container-type: inline-size; container-name: adaptcv; }
+          .adaptcv-lbl-short { display: none; }
+          @container adaptcv (max-width: 620px) {
+            .adaptcv-lbl-full { display: none; }
+            .adaptcv-lbl-short { display: inline; }
+          }
+          .adaptcv-toolbar { overflow-x: auto; scrollbar-width: none; }
+          /* Rolagem encaixa nos botões: nunca sobra um pedaço de botão atrás
+             da seta (o scroll-padding é a largura da seta, ver ScrollableToolbar). */
+          .adaptcv-toolbar :is(button, a) { scroll-snap-align: start; }
+          .adaptcv-toolbar::-webkit-scrollbar { display: none; }
           @media (min-width: 768px) {
             .adaptcv-mobile-toggle { display: none !important; }
             .adaptcv-backdrop { display: none !important; }
@@ -2439,15 +2466,20 @@ export function AdaptacaoCvClient({
         >
           {/* Action toolbar — outside scroll so it stays fixed */}
           {!isGenerating && (
-            <div
+            <ScrollableToolbar
               className="adaptcv-toolbar"
+              wrapperStyle={{
+                background: "#cac8c2",
+                borderBottom: "1px solid rgba(10,10,10,0.07)",
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
+                flexWrap: "nowrap",
+                scrollSnapType: "x mandatory",
+                scrollPaddingInline: TOOLBAR_ARROW_WIDTH,
                 padding: "7px 20px",
-                background: "#cac8c2",
-                borderBottom: "1px solid rgba(10,10,10,0.07)",
                 flexShrink: 0,
                 minHeight: 44,
                 position: "relative",
@@ -2617,25 +2649,29 @@ export function AdaptacaoCvClient({
               {/* SPACER */}
               <div className="adaptcv-spacer" style={{ flex: 1 }} />
 
-              {/* CENTER: candidatura hyperlink — absolutely centered in bar */}
+              {/* Ver candidatura: botão secundário no fluxo da barra (nunca
+                  posicionado de forma absoluta — sobrepunha os botões em
+                  telas estreitas e de tablet). */}
               {jobApplicationId && (
                 <Link
                   href={`/candidaturas/${jobApplicationId}`}
                   style={{
-                    position: "absolute",
-                    left: "50%",
-                    transform: "translateX(-50%)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 13px",
+                    background: "#f0ede8",
+                    color: "#333",
+                    border: "1px solid rgba(10,10,10,0.2)",
+                    borderRadius: 6,
                     fontSize: 11,
                     fontWeight: 500,
-                    color: "#333",
-                    textDecoration: "underline",
-                    textUnderlineOffset: 3,
-                    textDecorationColor: "rgba(10,10,10,0.3)",
+                    textDecoration: "none",
                     whiteSpace: "nowrap",
-                    pointerEvents: "auto",
+                    flexShrink: 0,
                   }}
                 >
-                  Ver candidatura ↗
+                  <span className="adaptcv-lbl-full">Ver candidatura ↗</span>
+                  <span className="adaptcv-lbl-short">Candidatura ↗</span>
                 </Link>
               )}
 
@@ -2744,7 +2780,10 @@ export function AdaptacaoCvClient({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    ✉ Carta de apresentação
+                    <span className="adaptcv-lbl-full">
+                      ✉ Carta de apresentação
+                    </span>
+                    <span className="adaptcv-lbl-short">✉ Carta</span>
                   </button>
                 )}
                 <button
@@ -2782,7 +2821,7 @@ export function AdaptacaoCvClient({
                   ↓ PDF
                 </button>
               </div>
-            </div>
+            </ScrollableToolbar>
           )}
 
           {/* Scrollable content */}
