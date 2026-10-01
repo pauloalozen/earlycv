@@ -1,6 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import {
+  formatMockInterviewAmount,
+  formatMockInterviewPrice,
+  toSchemaPrice,
+} from "@/lib/mock-interview-offer";
 import {
   type MockInterviewPurchaseView,
   resolveCheckoutOrigin,
@@ -104,5 +108,15 @@ describe("resolveCheckoutOrigin", () => {
     expect(resolveCheckoutOrigin("vitrine", false)).toBe("showcase");
     expect(resolveCheckoutOrigin(null, true)).toBe("application_offer");
     expect(resolveCheckoutOrigin(undefined, false)).toBe("landing");
+  });
+});
+
+describe("formatMockInterviewPrice", () => {
+  it("formats cents from PRICE_INTERVIEW_SIM as BRL", () => {
+    expect(formatMockInterviewPrice(7990)).toBe("R$ 79,90");
+    expect(formatMockInterviewPrice(28000)).toBe("R$ 280,00");
+    expect(formatMockInterviewPrice(123456)).toBe("R$ 1.234,56");
+    expect(formatMockInterviewAmount(7990)).toBe("79,90");
+    expect(toSchemaPrice(7990)).toBe("79.90");
   });
 });

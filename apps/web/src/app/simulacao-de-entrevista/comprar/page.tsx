@@ -6,6 +6,8 @@ import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
+import { formatMockInterviewPrice } from "@/lib/mock-interview-offer";
+import { fetchMockInterviewOffer } from "@/lib/mock-interview-offer.server";
 import { resolveCheckoutOrigin } from "@/lib/mock-interviews-types";
 import { getMyPlan } from "@/lib/plans-api";
 import { SANS } from "../_components/flow-styles";
@@ -35,9 +37,12 @@ export default async function ComprarEntrevistaSimuladaPage({
     redirect(`/entrar?tab=cadastro&next=${encodeURIComponent(next)}`);
   }
 
-  const [planResult, applicationResult] = await Promise.allSettled([
-    getMyPlan(),
-    candidatura ? getJobApplication(candidatura) : Promise.resolve(null),
+  const [planResult, applicationResult, offer] = await Promise.all([
+    Promise.allSettled([getMyPlan()]).then(([result]) => result),
+    Promise.allSettled([
+      candidatura ? getJobApplication(candidatura) : Promise.resolve(null),
+    ]).then(([result]) => result),
+    fetchMockInterviewOffer(),
   ]);
   const application =
     applicationResult.status === "fulfilled" && applicationResult.value
@@ -77,6 +82,9 @@ export default async function ComprarEntrevistaSimuladaPage({
             application={application}
             jobApplicationId={application ? candidatura : null}
             origin={resolveCheckoutOrigin(sp.origem, Boolean(application))}
+            priceLabel={
+              offer ? formatMockInterviewPrice(offer.amountInCents) : null
+            }
           />
         </div>
       </PageShell>

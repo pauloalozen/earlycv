@@ -23,17 +23,21 @@ export function CheckoutPanel({
   origin,
   jobApplicationId,
   application,
+  priceLabel,
 }: {
   origin: MockInterviewCheckoutOrigin;
   jobApplicationId: string | null;
   application: { jobTitle: string; companyName: string } | null;
+  // null = preço não configurado na API: venda fechada.
+  priceLabel: string | null;
 }) {
+  const unavailable = priceLabel === null;
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function goToPayment() {
-    if (!accepted || loading) return;
+    if (!accepted || loading || unavailable) return;
     setLoading(true);
     setError(null);
     try {
@@ -156,7 +160,7 @@ export function CheckoutPanel({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {OFFER.priceLabel}
+            {priceLabel ?? "Indisponível"}
           </span>
         </div>
         <span style={{ fontSize: 13, color: "#6a6a66" }}>
@@ -215,6 +219,23 @@ export function CheckoutPanel({
         </label>
       </div>
 
+      {unavailable && (
+        <p
+          role="status"
+          style={{
+            margin: 0,
+            fontSize: 14,
+            color: "#7a5200",
+            background: "#fff7e6",
+            border: "1px solid #f0d9a8",
+            borderRadius: 10,
+            padding: "10px 14px",
+          }}
+        >
+          A venda está indisponível no momento. Tente de novo mais tarde.
+        </p>
+      )}
+
       {error && (
         <p
           role="alert"
@@ -233,13 +254,14 @@ export function CheckoutPanel({
 
       <div style={{ display: "grid", gap: 10 }}>
         <button
-          disabled={!accepted || loading}
+          disabled={!accepted || loading || unavailable}
           onClick={goToPayment}
           style={{
             ...primaryButton,
             width: "100%",
-            opacity: !accepted || loading ? 0.45 : 1,
-            cursor: !accepted || loading ? "not-allowed" : "pointer",
+            opacity: !accepted || loading || unavailable ? 0.45 : 1,
+            cursor:
+              !accepted || loading || unavailable ? "not-allowed" : "pointer",
           }}
           type="button"
         >

@@ -5,7 +5,7 @@ Branch: `feature/simulado-entrevista` (a partir de `develop`). Status: implement
 ## O produto
 
 - Sessão ao vivo de 45 min com o Paulo, pelo Google Meet, com feedback na hora e **relatório formal** depois.
-- Venda avulsa, sem limite de compras por usuário. **R$ 79,90, "oferta de lançamento"** (sem preço riscado).
+- Venda avulsa, sem limite de compras por usuário. **Preço via `PRICE_INTERVIEW_SIM` (centavos; hoje 7990 = R$ 79,90)**, "oferta de lançamento" (sem preço riscado). A API é a fonte única: cobra esse valor e o expõe em `GET /api/mock-interviews/offer`; o web lê de lá (cache de 5 min). Sem a variável (ou inválida) a venda fecha: checkout recusa, o preço some das páginas e a oferta por e-mail não é enfileirada.
 - Exige login. Pagou → a página do pedido libera o botão do WhatsApp do Paulo (número nunca exposto antes do pagamento). Agenda combinada à mão; o Paulo registra no admin.
 - Política (aceite obrigatório no checkout, versão `2026-10-01`): reembolso integral até 24h antes do horário agendado (ou a qualquer momento antes de agendar); remarcação com 24h de antecedência; no-show perde o valor.
 - Nome: o serviço é apresentado como "Entrevista simulada"; "Ensaio Geral" é marca secundária.
@@ -45,7 +45,7 @@ A origem da venda fica gravada na compra (`landing`, `showcase` via `?origem=vit
 
 ## Ativação (produção)
 
-1. Variáveis na API (Railway): `MOCK_INTERVIEW_WHATSAPP_NUMBER` (com DDI+DDD) e `MOCK_INTERVIEW_ADMIN_EMAIL=paulo.alozen@gmail.com`. Sem o número, a página do pedido avisa que o contato será por e-mail.
+1. Variáveis na API (Railway): `PRICE_INTERVIEW_SIM=7990`, `MOCK_INTERVIEW_WHATSAPP_NUMBER` (com DDI+DDD) e `MOCK_INTERVIEW_ADMIN_EMAIL=paulo.alozen@gmail.com`. Mudar o preço = mudar a variável e reiniciar a API; pedidos já criados mantêm o valor gravado. Sem o número, a página do pedido avisa que o contato será por e-mail.
 2. Deploy aplica a migration (`.railway-redeploy` já tocado).
 3. E-mail de oferta: Admin → Emails → Configurações → modo da oferta (SHADOW/ALLOWLIST antes de LIVE). Atenção: as contas do Paulo estão na blocklist fixa de relacionamento, então ele nunca recebe a oferta.
 4. Teste real: uma compra de R$ 79,90 em produção e estorno pelo painel do MP, conferindo webhook, e-mails e a mudança para "Estornado" no admin.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
 import { MOCK_INTERVIEW_OFFER } from "@/lib/mock-interview-offer";
+import { useMockInterviewPrice } from "@/lib/use-mock-interview-price";
 import { InterviewCallMock } from "./_interview-call-mock";
 import {
   BrowserChrome,
@@ -2787,6 +2788,7 @@ const FEATURES: {
 /** Entrevista simulada (serviço ao vivo com Paulo): a mesma videochamada do
  * hero de /simulacao-de-entrevista, com o resumo da oferta ao lado. */
 function SimuladaShowcase() {
+  const priceLabel = useMockInterviewPrice();
   return (
     <div
       className="sm-wrap"
@@ -2833,7 +2835,7 @@ function SimuladaShowcase() {
             marginBottom: 4,
           }}
         >
-          {MOCK_INTERVIEW_OFFER.priceLabel}
+          {priceLabel ?? "\u00a0"}
         </div>
         <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>
           {MOCK_INTERVIEW_OFFER.offerLabel}

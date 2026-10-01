@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
-import { MOCK_INTERVIEW_OFFER as OFFER } from "@/lib/mock-interview-offer";
+import {
+  formatMockInterviewAmount,
+  formatMockInterviewPrice,
+  MOCK_INTERVIEW_OFFER as OFFER,
+  toSchemaPrice,
+} from "@/lib/mock-interview-offer";
+import { fetchMockInterviewOffer } from "@/lib/mock-interview-offer.server";
 import { getAbsoluteUrl } from "@/lib/site";
 import { InterviewCallMock } from "../_landing/_interview-call-mock";
 import { LandingNavV2 } from "../_landing/_nav-v2";
@@ -11,12 +17,30 @@ import { CheckoutLink } from "./_components/checkout-link";
 const url = getAbsoluteUrl(OFFER.path);
 
 const TITLE = "Entrevista Simulada ao Vivo com Feedback e Relatório | EarlyCV";
-const DESCRIPTION =
-  "Simulação de entrevista de emprego ao vivo pelo Google Meet: 45 minutos com um profissional com 20 anos de TI, perguntas baseadas na sua vaga e relatório formal com recomendações. R$ 79,90 na oferta de lançamento.";
+const BASE_DESCRIPTION =
+  "Simulação de entrevista de emprego ao vivo pelo Google Meet: 45 minutos com um profissional com 20 anos de TI, perguntas baseadas na sua vaga e relatório formal com recomendações.";
 
-export const metadata: Metadata = {
+function buildDescription(priceLabel: string | null) {
+  return priceLabel
+    ? `${BASE_DESCRIPTION} ${priceLabel} na oferta de lançamento.`
+    : BASE_DESCRIPTION;
+}
+
+// Preço vem da API (PRICE_INTERVIEW_SIM); a página é regerada a cada 5 min.
+export const revalidate = 300;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const offer = await fetchMockInterviewOffer();
+  return {
+    ...STATIC_METADATA,
+    description: buildDescription(
+      offer ? formatMockInterviewPrice(offer.amountInCents) : null,
+    ),
+  };
+}
+
+const STATIC_METADATA: Metadata = {
   title: TITLE,
-  description: DESCRIPTION,
   keywords: [
     "entrevista simulada",
     "simulação de entrevista",
@@ -140,44 +164,50 @@ const INCLUDED = [
   "Horário combinado com você pelo WhatsApp",
 ] as const;
 
-const FAQ = [
-  {
-    q: "O que é uma entrevista simulada?",
-    a: "É uma entrevista de treino que reproduz a entrevista real. Você responde perguntas técnicas e comportamentais baseadas na vaga que está disputando e recebe feedback sobre o que melhorar.",
-  },
-  {
-    q: "Quanto custa a entrevista simulada?",
-    a: `${OFFER.priceLabel} por sessão de ${OFFER.durationMinutes} minutos, na oferta de lançamento.`,
-  },
-  {
-    q: "Como a entrevista acontece?",
-    a: "Pelo Google Meet, por vídeo. Depois que o horário é combinado no WhatsApp, você recebe o link da chamada.",
-  },
-  {
-    q: "O que eu recebo depois da sessão?",
-    a: "Um relatório formal com seus pontos fortes, o que ajustar nas respostas e as minhas recomendações para a entrevista real.",
-  },
-  {
-    q: "Como eu agendo depois de pagar?",
-    a: "Assim que o pagamento é confirmado, aparece um botão para falar comigo no WhatsApp, já com o número do seu pedido. Por lá combinamos dia e horário.",
-  },
-  {
-    q: "Serve para entrevista técnica?",
-    a: "Sim. A sessão tem um bloco técnico montado a partir da vaga e do seu nível.",
-  },
-  {
-    q: "Posso pedir reembolso ou remarcar?",
-    a: `O reembolso é integral até ${OFFER.refundHoursBefore} horas antes do horário agendado. A remarcação vale no mesmo prazo, com pelo menos ${OFFER.rescheduleHoursBefore} horas de antecedência. Se você não comparecer, o valor não é devolvido.`,
-  },
-  {
-    q: "Preciso ter conta no EarlyCV?",
-    a: "Sim. A compra fica registrada na sua conta, junto com o botão do WhatsApp. Criar a conta é grátis.",
-  },
-  {
-    q: "Posso comprar mais de uma sessão?",
-    a: "Pode. Você pode fazer uma sessão para cada etapa do processo ou para cada vaga importante.",
-  },
-] as const;
+function buildFaq(priceLabel: string | null) {
+  return [
+    {
+      q: "O que é uma entrevista simulada?",
+      a: "É uma entrevista de treino que reproduz a entrevista real. Você responde perguntas técnicas e comportamentais baseadas na vaga que está disputando e recebe feedback sobre o que melhorar.",
+    },
+    ...(priceLabel
+      ? [
+          {
+            q: "Quanto custa a entrevista simulada?",
+            a: `${priceLabel} por sessão de ${OFFER.durationMinutes} minutos, na oferta de lançamento.`,
+          },
+        ]
+      : []),
+    {
+      q: "Como a entrevista acontece?",
+      a: "Pelo Google Meet, por vídeo. Depois que o horário é combinado no WhatsApp, você recebe o link da chamada.",
+    },
+    {
+      q: "O que eu recebo depois da sessão?",
+      a: "Um relatório formal com seus pontos fortes, o que ajustar nas respostas e as minhas recomendações para a entrevista real.",
+    },
+    {
+      q: "Como eu agendo depois de pagar?",
+      a: "Assim que o pagamento é confirmado, aparece um botão para falar comigo no WhatsApp, já com o número do seu pedido. Por lá combinamos dia e horário.",
+    },
+    {
+      q: "Serve para entrevista técnica?",
+      a: "Sim. A sessão tem um bloco técnico montado a partir da vaga e do seu nível.",
+    },
+    {
+      q: "Posso pedir reembolso ou remarcar?",
+      a: `O reembolso é integral até ${OFFER.refundHoursBefore} horas antes do horário agendado. A remarcação vale no mesmo prazo, com pelo menos ${OFFER.rescheduleHoursBefore} horas de antecedência. Se você não comparecer, o valor não é devolvido.`,
+    },
+    {
+      q: "Preciso ter conta no EarlyCV?",
+      a: "Sim. A compra fica registrada na sua conta, junto com o botão do WhatsApp. Criar a conta é grátis.",
+    },
+    {
+      q: "Posso comprar mais de uma sessão?",
+      a: "Pode. Você pode fazer uma sessão para cada etapa do processo ou para cada vaga importante.",
+    },
+  ];
+}
 
 function Check() {
   return (
@@ -195,7 +225,17 @@ function Arrow() {
   );
 }
 
-export default function SimulacaoDeEntrevistaPage() {
+export default async function SimulacaoDeEntrevistaPage() {
+  const offer = await fetchMockInterviewOffer();
+  const priceLabel = offer
+    ? formatMockInterviewPrice(offer.amountInCents)
+    : null;
+  const priceAmount = offer
+    ? formatMockInterviewAmount(offer.amountInCents)
+    : null;
+  const description = buildDescription(priceLabel);
+  const FAQ = buildFaq(priceLabel);
+
   return (
     <main style={{ fontFamily: SANS, color: "#0a0a0a", background: "#ffffff" }}>
       <LandingScrollAnimations />
@@ -221,12 +261,15 @@ export default function SimulacaoDeEntrevistaPage() {
               baseadas na sua vaga, recebe feedback na hora e, depois, um
               relatório formal com as minhas recomendações.
             </p>
-            <div className="si-price">
-              <span className="si-badge">{OFFER.offerLabel}</span>
-              <span className="si-price-now">
-                <small>R$</small>79,90
-              </span>
-            </div>
+            {priceAmount && (
+              <div className="si-price">
+                <span className="si-badge">{OFFER.offerLabel}</span>
+                <span className="si-price-now">
+                  <small>R$</small>
+                  {priceAmount}
+                </span>
+              </div>
+            )}
             <div className="si-cta-row">
               <CheckoutLink className="si-btn">
                 Quero minha entrevista simulada <Arrow />
@@ -462,7 +505,9 @@ export default function SimulacaoDeEntrevistaPage() {
                     <span className="si-visually-hidden">Critério</span>
                   </th>
                   <th scope="col" className="si-hl">
-                    <span className="si-tag">ao vivo · {OFFER.priceLabel}</span>
+                    <span className="si-tag">
+                      ao vivo{priceLabel ? ` · ${priceLabel}` : ""}
+                    </span>
                     Entrevista simulada
                   </th>
                   <th scope="col">
@@ -503,10 +548,17 @@ export default function SimulacaoDeEntrevistaPage() {
               <h2>
                 Uma sessão de 45 minutos, <em className="si-serif">ao vivo.</em>
               </h2>
-              <span className="si-badge si-badge-lime">{OFFER.offerLabel}</span>
-              <div className="si-offer-price">
-                <small>R$</small>79,90
-              </div>
+              {priceAmount && (
+                <>
+                  <span className="si-badge si-badge-lime">
+                    {OFFER.offerLabel}
+                  </span>
+                  <div className="si-offer-price">
+                    <small>R$</small>
+                    {priceAmount}
+                  </div>
+                </>
+              )}
               <ul>
                 {INCLUDED.map((item) => (
                   <li key={item}>
@@ -598,7 +650,8 @@ export default function SimulacaoDeEntrevistaPage() {
           </h2>
           <p>
             {OFFER.durationMinutes} minutos ao vivo pelo Google Meet e relatório
-            formal, por {OFFER.priceLabel} na oferta de lançamento.
+            formal
+            {priceLabel ? `, por ${priceLabel} na oferta de lançamento` : ""}.
           </p>
           <div className="si-cta-row">
             <CheckoutLink className="si-btn">
@@ -613,7 +666,7 @@ export default function SimulacaoDeEntrevistaPage() {
       <div className="si-mbar">
         <div>
           <span>{OFFER.offerLabel}</span>
-          <b>{OFFER.priceLabel}</b>
+          <b>{priceLabel ?? "Entrevista simulada"}</b>
         </div>
         <CheckoutLink className="si-btn">Agendar</CheckoutLink>
       </div>
@@ -633,7 +686,7 @@ export default function SimulacaoDeEntrevistaPage() {
                 name: "Entrevista simulada ao vivo",
                 alternateName: "Ensaio Geral",
                 serviceType: "Simulação de entrevista de emprego",
-                description: DESCRIPTION,
+                description,
                 url,
                 areaServed: { "@type": "Country", name: "Brasil" },
                 availableLanguage: "pt-BR",
@@ -642,13 +695,17 @@ export default function SimulacaoDeEntrevistaPage() {
                   name: "EarlyCV",
                   url: getAbsoluteUrl("/"),
                 },
-                offers: {
-                  "@type": "Offer",
-                  price: OFFER.priceDecimal,
-                  priceCurrency: "BRL",
-                  availability: "https://schema.org/InStock",
-                  url,
-                },
+                ...(offer
+                  ? {
+                      offers: {
+                        "@type": "Offer",
+                        price: toSchemaPrice(offer.amountInCents),
+                        priceCurrency: offer.currency,
+                        availability: "https://schema.org/InStock",
+                        url,
+                      },
+                    }
+                  : {}),
               },
               {
                 "@type": "FAQPage",

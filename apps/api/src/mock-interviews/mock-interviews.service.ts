@@ -18,6 +18,7 @@ import { DatabaseService } from "../database/database.service";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import {
   buildWhatsappUrl,
+  getMockInterviewAmountInCents,
   getWhatsappNumber,
   MOCK_INTERVIEW_PRODUCT,
   purchaseCode,
@@ -149,10 +150,11 @@ export class MockInterviewsService {
     >,
   ) {}
 
+  // amountInCents null = preço não configurado (venda fechada).
   getOffer() {
     return {
       title: MOCK_INTERVIEW_PRODUCT.title,
-      amountInCents: MOCK_INTERVIEW_PRODUCT.amountInCents,
+      amountInCents: getMockInterviewAmountInCents(),
       currency: MOCK_INTERVIEW_PRODUCT.currency,
       durationMinutes: MOCK_INTERVIEW_PRODUCT.durationMinutes,
       offerLabel: MOCK_INTERVIEW_PRODUCT.offerLabel,
@@ -174,6 +176,16 @@ export class MockInterviewsService {
     if (input.acceptPolicy !== true) {
       throw new BadRequestException(
         "É preciso aceitar as regras de reembolso e remarcação.",
+      );
+    }
+
+    const amountInCents = getMockInterviewAmountInCents();
+    if (amountInCents === null) {
+      this.logger.error(
+        "[mock-interview] checkout refused: PRICE_INTERVIEW_SIM not configured",
+      );
+      throw new ServiceUnavailableException(
+        "A venda está indisponível no momento. Tente de novo mais tarde.",
       );
     }
 
@@ -201,7 +213,7 @@ export class MockInterviewsService {
         userId,
         paymentStatus: { in: ["none", "pending"] },
         mpPaymentId: null,
-        amountInCents: MOCK_INTERVIEW_PRODUCT.amountInCents,
+        amountInCents,
         currency: MOCK_INTERVIEW_PRODUCT.currency,
         policyVersion: MOCK_INTERVIEW_PRODUCT.policyVersion,
         origin,
@@ -216,7 +228,7 @@ export class MockInterviewsService {
       (await this.database.mockInterviewPurchase.create({
         data: {
           userId,
-          amountInCents: MOCK_INTERVIEW_PRODUCT.amountInCents,
+          amountInCents,
           currency: MOCK_INTERVIEW_PRODUCT.currency,
           paymentStatus: "pending",
           origin,

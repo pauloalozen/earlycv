@@ -5172,6 +5172,7 @@ type Props = {
   initialHasCredits: boolean;
   // Entrevista simulada já paga e ainda não realizada (oferta não aparece).
   activeMockInterview?: ActiveMockInterview;
+  mockInterviewPriceLabel?: string | null;
 };
 
 const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
@@ -5187,6 +5188,7 @@ export function DetailClient({
   header,
   initialHasCredits,
   activeMockInterview = null,
+  mockInterviewPriceLabel = null,
 }: Props) {
   const router = useRouter();
   const [showMockInterviewOffer, setShowMockInterviewOffer] = useState(false);
@@ -5968,6 +5970,7 @@ export function DetailClient({
               <MockInterviewOfferCard
                 active={activeMockInterview}
                 applicationId={application.id}
+                priceLabel={mockInterviewPriceLabel}
               />
             </div>
           )}
@@ -6165,6 +6168,7 @@ export function DetailClient({
           <MockInterviewOfferModal
             applicationId={application.id}
             onClose={() => setShowMockInterviewOffer(false)}
+            priceLabel={mockInterviewPriceLabel}
           />
         )}
 

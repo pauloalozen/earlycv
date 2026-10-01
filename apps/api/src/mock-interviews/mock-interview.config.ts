@@ -1,10 +1,9 @@
-// Oferta e regras da Entrevista Simulada. O valor cobrado é decidido AQUI
-// (nunca pelo front): o checkout grava este snapshot na compra e o webhook
-// confere o valor pago contra ele.
+// Oferta e regras da Entrevista Simulada. O valor cobrado é decidido pela
+// API (nunca pelo front), a partir de PRICE_INTERVIEW_SIM: o checkout grava o
+// valor na compra e o webhook confere o valor pago contra esse snapshot.
 
 export const MOCK_INTERVIEW_PRODUCT = {
   title: "Entrevista simulada ao vivo (45 min)",
-  amountInCents: 7990,
   currency: "BRL",
   durationMinutes: 45,
   offerLabel: "Oferta de lançamento",
@@ -13,6 +12,18 @@ export const MOCK_INTERVIEW_PRODUCT = {
   // Versão da política aceita no checkout. Mudou a regra → nova versão.
   policyVersion: "2026-10-01",
 } as const;
+
+// Preço em centavos (PRICE_INTERVIEW_SIM=7990 -> R$ 79,90). Só aceita inteiro
+// positivo; ausente ou inválido = null, e aí a venda fica fechada (o checkout
+// recusa) em vez de cobrar um valor que ninguém configurou.
+const MAX_PRICE_IN_CENTS = 1_000_000;
+
+export function getMockInterviewAmountInCents(): number | null {
+  const raw = process.env.PRICE_INTERVIEW_SIM?.trim();
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  const value = Number.parseInt(raw, 10);
+  return value > 0 && value <= MAX_PRICE_IN_CENTS ? value : null;
+}
 
 // Prefixo do external_reference no Mercado Pago. Distingue a compra de uma
 // PlanPurchase em qualquer log/painel e garante que o webhook de planos

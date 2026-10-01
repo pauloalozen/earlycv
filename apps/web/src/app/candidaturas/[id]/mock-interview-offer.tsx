@@ -28,9 +28,12 @@ const BULLETS = [
 export function MockInterviewOfferCard({
   applicationId,
   active,
+  priceLabel = null,
 }: {
   applicationId: string;
   active: ActiveMockInterview;
+  // Preço vigente (API). null = não exibe o valor.
+  priceLabel?: string | null;
 }) {
   if (active) {
     return (
@@ -107,9 +110,11 @@ export function MockInterviewOfferCard({
         </span>
       </div>
       <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
-        <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.6 }}>
-          {OFFER.priceLabel}
-        </span>
+        {priceLabel && (
+          <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.6 }}>
+            {priceLabel}
+          </span>
+        )}
         <Link
           href={mockInterviewCheckoutHref(applicationId)}
           style={{
@@ -167,9 +172,11 @@ function markSeen(applicationId: string) {
 export function MockInterviewOfferModal({
   applicationId,
   onClose,
+  priceLabel = null,
 }: {
   applicationId: string;
   onClose: () => void;
+  priceLabel?: string | null;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -280,22 +287,26 @@ export function MockInterviewOfferModal({
             </li>
           ))}
         </ul>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            gap: 10,
-            borderTop: "1px solid rgba(10,10,10,0.08)",
-            paddingTop: 14,
-          }}
-        >
-          <span style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.8 }}>
-            {OFFER.priceLabel}
-          </span>
-          <span style={{ fontSize: 12.5, color: "#6a6560" }}>
-            {OFFER.offerLabel}
-          </span>
-        </div>
+        {priceLabel && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 10,
+              borderTop: "1px solid rgba(10,10,10,0.08)",
+              paddingTop: 14,
+            }}
+          >
+            <span
+              style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.8 }}
+            >
+              {priceLabel}
+            </span>
+            <span style={{ fontSize: 12.5, color: "#6a6560" }}>
+              {OFFER.offerLabel}
+            </span>
+          </div>
+        )}
         <Link
           href={mockInterviewCheckoutHref(applicationId)}
           style={{

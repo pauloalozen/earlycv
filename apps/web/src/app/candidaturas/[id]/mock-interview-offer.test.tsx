@@ -11,7 +11,13 @@ describe("MockInterviewOfferCard", () => {
   afterEach(cleanup);
 
   it("offers the mock interview with checkout carrying the application as origin", () => {
-    render(<MockInterviewOfferCard active={null} applicationId="app-1" />);
+    render(
+      <MockInterviewOfferCard
+        active={null}
+        applicationId="app-1"
+        priceLabel="R$ 79,90"
+      />,
+    );
     expect(
       screen.getByText("Quero treinar →").closest("a")?.getAttribute("href"),
     ).toBe(
@@ -61,5 +67,15 @@ describe("MockInterviewOfferModal", () => {
     vi.advanceTimersByTime(250);
     expect(onClose).toHaveBeenCalled();
     vi.useRealTimers();
+  });
+});
+
+describe("MockInterviewOfferCard without a configured price", () => {
+  afterEach(cleanup);
+
+  it("still offers the session but shows no price", () => {
+    render(<MockInterviewOfferCard active={null} applicationId="app-1" />);
+    expect(screen.getByText("Quero treinar →")).toBeTruthy();
+    expect(screen.queryByText(/R\$/)).toBeNull();
   });
 });

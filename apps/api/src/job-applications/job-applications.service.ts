@@ -17,7 +17,10 @@ import {
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
 import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
-import { MOCK_INTERVIEW_PRODUCT } from "../mock-interviews/mock-interview.config";
+import {
+  getMockInterviewAmountInCents,
+  MOCK_INTERVIEW_PRODUCT,
+} from "../mock-interviews/mock-interview.config";
 import type { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 
 type UpsertFromAdaptationInput = {
@@ -232,13 +235,15 @@ export class JobApplicationsService {
     jobTitle: string;
     companyName: string;
   }) {
-    if (!this.emailDispatch) return;
+    const amountInCents = getMockInterviewAmountInCents();
+    // Sem preço configurado a venda está fechada: não oferece.
+    if (!this.emailDispatch || amountInCents === null) return;
     void this.emailDispatch.enqueueMockInterviewOffer({
       userId: application.userId,
       jobApplicationId: application.id,
       jobTitle: application.jobTitle,
       companyName: application.companyName,
-      amountInCents: MOCK_INTERVIEW_PRODUCT.amountInCents,
+      amountInCents,
       currency: MOCK_INTERVIEW_PRODUCT.currency,
     });
   }

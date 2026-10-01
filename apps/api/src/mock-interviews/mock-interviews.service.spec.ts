@@ -4,7 +4,11 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, test } from "node:test";
 
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from "@nestjs/common";
 
 import {
   buildWhatsappUrl,
@@ -189,6 +193,7 @@ beforeEach(() => {
   delete process.env.MERCADOPAGO_BRICK_WEBHOOK_SECRET;
   delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
   process.env.MOCK_INTERVIEW_WHATSAPP_NUMBER = "+55 (11) 99999-0000";
+  process.env.PRICE_INTERVIEW_SIM = "7990";
 });
 afterEach(() => {
   process.env = { ...savedEnv };
@@ -482,4 +487,37 @@ test("helpers: external reference round trip, MP status normalization and WhatsA
   const text = decodeURIComponent(url.split("text=")[1] ?? "");
   assert.ok(text.includes("Aqui é Maria."));
   assert.ok(text.includes("Pedido #123ABC"));
+});
+
+test("price comes from PRICE_INTERVIEW_SIM; missing or invalid price closes the sale", async () => {
+  const db = createFakeDb([]);
+  db.mockInterviewPurchase.findFirst = async () => null;
+  const { service } = createService(db);
+
+  process.env.PRICE_INTERVIEW_SIM = "12345";
+  assert.equal(service.getOffer().amountInCents, 12345);
+  const { purchaseId } = await service.createCheckout("user-1", {
+    acceptPolicy: true,
+  });
+  assert.equal(db.purchases.get(purchaseId)?.amountInCents, 12345);
+
+  for (const value of [
+    undefined,
+    "",
+    "79,90",
+    "79.90",
+    "0",
+    "-10",
+    "abc",
+    "99999999",
+  ]) {
+    if (value === undefined) delete process.env.PRICE_INTERVIEW_SIM;
+    else process.env.PRICE_INTERVIEW_SIM = value;
+    assert.equal(service.getOffer().amountInCents, null, String(value));
+    await assert.rejects(
+      service.createCheckout("user-1", { acceptPolicy: true }),
+      ServiceUnavailableException,
+      String(value),
+    );
+  }
 });
