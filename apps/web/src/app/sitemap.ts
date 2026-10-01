@@ -7,6 +7,7 @@ import { getAbsoluteUrl } from "@/lib/site";
 
 const PRIMARY_PAGES_LAST_MODIFIED = new Date("2026-05-02");
 const LEGAL_PAGES_LAST_MODIFIED = new Date("2026-04-14");
+const MOCK_INTERVIEW_PAGE_LAST_MODIFIED = new Date("2026-10-01");
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const jobs = await getSitemapJobs();
@@ -28,6 +29,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: getAbsoluteUrl("/adaptar"),
       lastModified: PRIMARY_PAGES_LAST_MODIFIED,
       changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
+      url: getAbsoluteUrl("/simulacao-de-entrevista"),
+      lastModified: MOCK_INTERVIEW_PAGE_LAST_MODIFIED,
+      changeFrequency: "monthly",
       priority: 0.8,
     },
     {

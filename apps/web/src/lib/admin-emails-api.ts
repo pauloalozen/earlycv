@@ -7,7 +7,8 @@ export type EmailDispatchKind =
   | "WELCOME"
   | "FEEDBACK_FIRST_USE"
   | "FEEDBACK_SECOND_CALL"
-  | "PURCHASE_CONFIRMATION";
+  | "PURCHASE_CONFIRMATION"
+  | "MOCK_INTERVIEW_OFFER";
 export type EmailDispatchStatus =
   | "PENDING"
   | "PROCESSING"
@@ -27,13 +28,15 @@ export type EmailTemplateKey =
   | "FEEDBACK_FIRST_USE"
   | "FEEDBACK_SECOND_CALL"
   | "PURCHASE_PAID"
-  | "PURCHASE_COUPON";
+  | "PURCHASE_COUPON"
+  | "MOCK_INTERVIEW_OFFER";
 
 export type EmailSettings = {
   welcomeMode: EmailDispatchMode;
   feedbackMode: EmailDispatchMode;
   feedbackSecondCallMode: EmailDispatchMode;
   purchaseConfirmationMode: EmailDispatchMode;
+  mockInterviewOfferMode: EmailDispatchMode;
   startAt: string | null;
   allowlist: string[];
   extraBlocklist: string[];
@@ -46,6 +49,7 @@ export type UpdateEmailSettingsInput = {
   feedbackMode: EmailDispatchMode;
   feedbackSecondCallMode: EmailDispatchMode;
   purchaseConfirmationMode: EmailDispatchMode;
+  mockInterviewOfferMode: EmailDispatchMode;
   startAt: string | null;
   allowlist: string[];
   extraBlocklist: string[];

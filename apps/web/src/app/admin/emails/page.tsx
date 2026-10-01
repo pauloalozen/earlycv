@@ -44,6 +44,7 @@ const KINDS: EmailDispatchKind[] = [
   "FEEDBACK_FIRST_USE",
   "FEEDBACK_SECOND_CALL",
   "PURCHASE_CONFIRMATION",
+  "MOCK_INTERVIEW_OFFER",
 ];
 type TableRow = {
   key: string;
@@ -171,6 +172,11 @@ export default async function AdminEmailsOverviewPage({
       label: KIND_LABEL.PURCHASE_CONFIRMATION,
       count: (status) => countOf("PURCHASE_CONFIRMATION", status),
     },
+    {
+      key: "mock-interview-offer",
+      label: KIND_LABEL.MOCK_INTERVIEW_OFFER,
+      count: (status) => countOf("MOCK_INTERVIEW_OFFER", status),
+    },
   ];
   const eventCount = (type: string) =>
     counts.events.find((e) => e.type === type)?.count ?? 0;
@@ -183,6 +189,7 @@ export default async function AdminEmailsOverviewPage({
     FEEDBACK_FIRST_USE: settings.feedbackMode,
     FEEDBACK_SECOND_CALL: settings.feedbackSecondCallMode,
     PURCHASE_CONFIRMATION: settings.purchaseConfirmationMode,
+    MOCK_INTERVIEW_OFFER: settings.mockInterviewOfferMode,
   } as const;
 
   return (

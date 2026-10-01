@@ -51,6 +51,12 @@ import {
 } from "@/lib/job-description-validation";
 import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
+import {
+  type ActiveMockInterview,
+  MockInterviewOfferCard,
+  MockInterviewOfferModal,
+  shouldShowMockInterviewOfferModal,
+} from "./mock-interview-offer";
 
 const USER_VISIBLE_STATUS_OPTIONS: Array<{
   value: JobApplicationStatus;
@@ -5164,6 +5170,8 @@ type Props = {
   application: JobApplicationDetailDto;
   header: ReactNode;
   initialHasCredits: boolean;
+  // Entrevista simulada já paga e ainda não realizada (oferta não aparece).
+  activeMockInterview?: ActiveMockInterview;
 };
 
 const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
@@ -5178,8 +5186,10 @@ export function DetailClient({
   application,
   header,
   initialHasCredits,
+  activeMockInterview = null,
 }: Props) {
   const router = useRouter();
+  const [showMockInterviewOffer, setShowMockInterviewOffer] = useState(false);
   const [showPrep, setShowPrep] = useState(false);
   const [showCoverLetter, setShowCoverLetter] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
@@ -5952,6 +5962,16 @@ export function DetailClient({
             </div>
           )}
 
+          {/* Oferta da entrevista simulada (só em "Entrevista") */}
+          {!isArchivedManually && isInterview && (
+            <div style={{ marginBottom: 28 }}>
+              <MockInterviewOfferCard
+                active={activeMockInterview}
+                applicationId={application.id}
+              />
+            </div>
+          )}
+
           {/* Main grid */}
           <div
             className="candidatura-grid"
@@ -6129,7 +6149,22 @@ export function DetailClient({
           <InterviewScheduleModal
             applicationId={application.id}
             onClose={() => setShowInterviewModal(false)}
-            onUpdated={handleUpdated}
+            onUpdated={() => {
+              handleUpdated();
+              if (
+                !activeMockInterview &&
+                shouldShowMockInterviewOfferModal(application.id)
+              ) {
+                setShowMockInterviewOffer(true);
+              }
+            }}
+          />
+        )}
+
+        {showMockInterviewOffer && (
+          <MockInterviewOfferModal
+            applicationId={application.id}
+            onClose={() => setShowMockInterviewOffer(false)}
           />
         )}
 

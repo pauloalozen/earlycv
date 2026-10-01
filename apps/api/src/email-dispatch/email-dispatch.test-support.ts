@@ -182,6 +182,7 @@ export type TestSettingsOverrides = {
   EMAIL_FEEDBACK_MODE?: string;
   EMAIL_FEEDBACK_SECOND_CALL_MODE?: string;
   EMAIL_PURCHASE_CONFIRMATION_MODE?: string;
+  EMAIL_MOCK_INTERVIEW_OFFER_MODE?: string;
   EMAIL_RELATIONSHIP_START_AT?: string;
   EMAIL_RELATIONSHIP_ALLOWLIST?: string;
   EMAIL_RELATIONSHIP_BLOCKLIST?: string;
@@ -192,6 +193,7 @@ const TEST_SETTING_KEYS = [
   "EMAIL_FEEDBACK_MODE",
   "EMAIL_FEEDBACK_SECOND_CALL_MODE",
   "EMAIL_PURCHASE_CONFIRMATION_MODE",
+  "EMAIL_MOCK_INTERVIEW_OFFER_MODE",
   "EMAIL_RELATIONSHIP_START_AT",
   "EMAIL_RELATIONSHIP_ALLOWLIST",
   "EMAIL_RELATIONSHIP_BLOCKLIST",
@@ -226,6 +228,7 @@ export function buildSettingsSnapshot(
     purchaseConfirmationMode: asMode(
       overrides.EMAIL_PURCHASE_CONFIRMATION_MODE,
     ),
+    mockInterviewOfferMode: asMode(overrides.EMAIL_MOCK_INTERVIEW_OFFER_MODE),
     startAt: startAt && !Number.isNaN(startAt.getTime()) ? startAt : null,
     allowlist: asList(overrides.EMAIL_RELATIONSHIP_ALLOWLIST),
     extraBlocklist: asList(overrides.EMAIL_RELATIONSHIP_BLOCKLIST),

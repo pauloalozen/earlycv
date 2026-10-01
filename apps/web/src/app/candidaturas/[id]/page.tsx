@@ -13,8 +13,9 @@ import {
 } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
+import { listMyMockInterviews } from "@/lib/mock-interviews-api";
+import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { DetailClient } from "./detail-client";
 
@@ -121,8 +122,29 @@ export default async function CandidaturaDetailPage({ params }: Props) {
     })),
   };
 
+  // Sessão paga e ainda não realizada: a oferta vira "você já tem uma".
+  const activeMockInterview =
+    application.status === "INTERVIEW"
+      ? await listMyMockInterviews()
+          .then(
+            (items) =>
+              items.find(
+                (item) =>
+                  item.paymentStatus === "paid" &&
+                  (item.sessionStatus === "AWAITING_SCHEDULING" ||
+                    item.sessionStatus === "SCHEDULED"),
+              ) ?? null,
+          )
+          .catch(() => null)
+      : null;
+
   return (
     <DetailClient
+      activeMockInterview={
+        activeMockInterview
+          ? { id: activeMockInterview.id, code: activeMockInterview.code }
+          : null
+      }
       application={applicationWithScores}
       initialHasCredits={initialHasCredits}
       header={

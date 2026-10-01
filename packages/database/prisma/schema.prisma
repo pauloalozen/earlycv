@@ -481,6 +481,7 @@ model User {
   productEmailSubscription     ProductEmailSubscription?
   relationshipEmailPreference  RelationshipEmailPreference?
   emailDispatches              EmailDispatch[]
+  mockInterviewPurchases       MockInterviewPurchase[]
 
   // Pipeline de perfil canônico de CV (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
   // Fase 1: só schema aditivo, nenhum código lê/escreve nestas relações ainda.
@@ -2656,6 +2657,11 @@ enum EmailDispatchKind {
   // aprovação da compra (PlansService.applyApprovedPurchaseInsideTransaction),
   // dedupe purchase:{purchaseId}. Sem descadastro por tópico.
   PURCHASE_CONFIRMATION
+  // Oferta da Entrevista Simulada (relacionamento, SES). Criada quando uma
+  // candidatura vai para INTERVIEW, agendada para 2h depois; no envio é
+  // pulada se o usuário já comprou depois da oferta ou recebeu outra oferta
+  // nos últimos 7 dias. dedupe mockoffer:{jobApplicationId}.
+  MOCK_INTERVIEW_OFFER
 }
 
 enum EmailDispatchStatus {
@@ -2819,6 +2825,7 @@ model EmailDispatchSettings {
   feedbackMode             EmailDispatchMode @default(OFF)
   feedbackSecondCallMode   EmailDispatchMode @default(OFF)
   purchaseConfirmationMode EmailDispatchMode @default(OFF)
+  mockInterviewOfferMode   EmailDispatchMode @default(OFF)
 
   // Cutoff: só usuários/compras criados a partir daqui entram. null = nada
   // roda, mesmo com modo ligado.
@@ -2839,6 +2846,7 @@ enum EmailTemplateKey {
   FEEDBACK_SECOND_CALL
   PURCHASE_PAID
   PURCHASE_COUPON
+  MOCK_INTERVIEW_OFFER
 }
 
 // Assunto e corpo editáveis de cada e-mail do dispatch. Ausência de linha =
@@ -3906,4 +3914,103 @@ model MonitorProjectionJob {
 
   @@index([userId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Entrevista Simulada (venda avulsa, sessão ao vivo de 45 min com o Paulo).
+// Separada de PlanPurchase de propósito: a aprovação de PlanPurchase
+// sobrescreve User.planType e concede créditos; aqui nada disso acontece.
+// 1 compra = 1 sessão. Webhook próprio (/api/mock-interviews/webhook/mercadopago).
+// ---------------------------------------------------------------------------
+
+enum MockInterviewSessionStatus {
+  AWAITING_SCHEDULING
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  REFUNDED
+}
+
+enum MockInterviewOrigin {
+  landing
+  application_offer
+  offer_email
+  showcase
+  other
+}
+
+model MockInterviewPurchase {
+  id     String @id @default(cuid())
+  userId String
+
+  // Pagamento — valor/moeda são o snapshot cobrado (conferidos no webhook).
+  amountInCents     Int
+  currency          String          @default("BRL")
+  paymentProvider   PaymentProvider @default(mercadopago)
+  paymentStatus     PaymentStatus   @default(pending)
+  paymentMethod     String?
+  paidAt            DateTime?
+  refundedAt        DateTime?
+  mpPaymentId       String?
+  mpPreferenceId    String?
+  mpMerchantOrderId String?
+
+  origin                 MockInterviewOrigin @default(landing)
+  originJobApplicationId String?
+
+  // Política aceita no checkout (reembolso até 24h antes, remarcação com
+  // 24h, no-show perde o valor).
+  policyVersion    String
+  policyAcceptedAt DateTime
+
+  // Operação (mantida pelo admin).
+  sessionStatus   MockInterviewSessionStatus @default(AWAITING_SCHEDULING)
+  scheduledAt     DateTime?
+  meetingUrl      String?
+  completedAt     DateTime?
+  reportSentAt    DateTime?
+  rescheduleCount Int                        @default(0)
+  adminNotes      String?
+
+  // E-mails transacionais disparados na aprovação (aviso de venda para o
+  // admin e confirmação para o comprador). Claim atômico pelo *ClaimedAt
+  // evita envio duplicado; *SentAt marca o sucesso.
+  adminNotifyClaimedAt DateTime?
+  adminNotifiedAt      DateTime?
+  adminNotifyError     String?
+  buyerNotifyClaimedAt DateTime?
+  buyerNotifiedAt      DateTime?
+  buyerNotifyError     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events MockInterviewEvent[]
+
+  @@index([userId, createdAt])
+  @@index([paymentStatus, createdAt])
+  @@index([sessionStatus, scheduledAt])
+  @@index([mpPaymentId])
+  @@index([originJobApplicationId])
+}
+
+// Histórico de tudo que muda numa compra: pagamento (webhook), agenda,
+// status da sessão e anotações (admin).
+model MockInterviewEvent {
+  id         String  @id @default(cuid())
+  purchaseId String
+  type       String
+  actor      String
+  fromValue  String?
+  toValue    String?
+  note       String?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  purchase MockInterviewPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId, createdAt])
 }

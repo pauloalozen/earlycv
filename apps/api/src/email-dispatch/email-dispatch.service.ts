@@ -13,6 +13,9 @@ import { EmailDispatchConfigService } from "./email-dispatch.config";
 import {
   FEEDBACK_EXPIRY_MS,
   HOUR_MS,
+  MOCK_INTERVIEW_OFFER_COOLDOWN_MS,
+  MOCK_INTERVIEW_OFFER_DELAY_MS,
+  MOCK_INTERVIEW_OFFER_EXPIRY_MS,
   WELCOME_DELAY_MS,
   WELCOME_EXPIRY_MS,
 } from "./email-dispatch.constants";
@@ -24,10 +27,13 @@ import { computeFeedbackScheduledFor } from "./email-dispatch-schedule.util";
 import { EmailDispatchTemplateService } from "./email-dispatch-template.service";
 import {
   type EmailTemplateKeyValue,
+  isMockInterviewOfferPayload,
+  type MockInterviewOfferPayload,
   type PurchaseConfirmationPayload,
   purchaseKeyFor,
   type RenderedEmail,
   renderFeedbackEmail,
+  renderMockInterviewOfferEmail,
   renderPurchaseConfirmationEmail,
   renderWelcomeEmail,
   type TemplateContent,
@@ -39,20 +45,39 @@ function resolveAppUrl(): string {
   );
 }
 
+export type DispatchPayload =
+  | PurchaseConfirmationPayload
+  | MockInterviewOfferPayload;
+
 type RenderInput = {
   kind: EmailDispatchKind;
   name: string | null | undefined;
-  payload?: PurchaseConfirmationPayload | null;
+  payload?: DispatchPayload | null;
 };
+
+function requirePurchasePayload(
+  payload: DispatchPayload | null | undefined,
+): PurchaseConfirmationPayload {
+  if (!payload || isMockInterviewOfferPayload(payload)) {
+    throw new Error("PURCHASE_CONFIRMATION requires a payload snapshot");
+  }
+  return payload;
+}
+
+function requireOfferPayload(
+  payload: DispatchPayload | null | undefined,
+): MockInterviewOfferPayload {
+  if (!isMockInterviewOfferPayload(payload)) {
+    throw new Error("MOCK_INTERVIEW_OFFER requires a payload snapshot");
+  }
+  return payload;
+}
 
 // Qual template editável vale para este envio.
 export function templateKeyFor(input: RenderInput): EmailTemplateKeyValue {
   if (input.kind === "WELCOME") return "WELCOME";
   if (input.kind === "PURCHASE_CONFIRMATION") {
-    if (!input.payload) {
-      throw new Error("PURCHASE_CONFIRMATION requires a payload snapshot");
-    }
-    return purchaseKeyFor(input.payload);
+    return purchaseKeyFor(requirePurchasePayload(input.payload));
   }
   return input.kind;
 }
@@ -71,11 +96,22 @@ export function renderDispatchEmail(
     );
   }
   if (input.kind === "PURCHASE_CONFIRMATION") {
-    if (!input.payload) {
-      throw new Error("PURCHASE_CONFIRMATION requires a payload snapshot");
-    }
     return renderPurchaseConfirmationEmail(
-      { name: input.name, appUrl: resolveAppUrl(), payload: input.payload },
+      {
+        name: input.name,
+        appUrl: resolveAppUrl(),
+        payload: requirePurchasePayload(input.payload),
+      },
+      content,
+    );
+  }
+  if (input.kind === "MOCK_INTERVIEW_OFFER") {
+    return renderMockInterviewOfferEmail(
+      {
+        name: input.name,
+        appUrl: resolveAppUrl(),
+        payload: requireOfferPayload(input.payload),
+      },
       content,
     );
   }
@@ -86,8 +122,9 @@ export type SendTestInput = {
   kind: EmailDispatchKind;
   to: string;
   name?: string | null;
-  // Obrigatório para PURCHASE_CONFIRMATION (valores de exemplo informados).
-  payload?: PurchaseConfirmationPayload;
+  // Obrigatório para PURCHASE_CONFIRMATION e MOCK_INTERVIEW_OFFER (valores de
+  // exemplo informados).
+  payload?: DispatchPayload;
   // Transporte REAL só com esta opção explícita (padrão: fake, em qualquer
   // ambiente). Nunca é inferido do ambiente nem de modo/allowlist.
   realTransport?: boolean;
@@ -345,6 +382,91 @@ export class EmailDispatchService {
     }
   }
 
+  // Oferta da entrevista simulada — chamada quando uma candidatura vai para
+  // INTERVIEW. Agenda para 2h depois; a decisão final (comprou depois da
+  // oferta? recebeu outra nos últimos 7 dias?) é refeita no envio
+  // (EmailDispatchEligibilityService.evaluateMockInterviewOffer). Aqui só
+  // evita criar linhas inúteis. Idempotente por candidatura e NUNCA lança:
+  // mudar o status da candidatura não pode falhar por causa disto.
+  async enqueueMockInterviewOffer(
+    input: {
+      userId: string;
+      jobApplicationId: string;
+      jobTitle: string;
+      companyName: string;
+      amountInCents: number;
+      currency: string;
+    },
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    try {
+      if (
+        (await this.config.getEffectiveMode("MOCK_INTERVIEW_OFFER")) === "OFF"
+      ) {
+        return false;
+      }
+
+      const cooldownStart = new Date(
+        now.getTime() - MOCK_INTERVIEW_OFFER_COOLDOWN_MS,
+      );
+      const [user, recentOffer] = await Promise.all([
+        this.database.user.findUnique({
+          where: { id: input.userId },
+          select: { email: true },
+        }),
+        this.database.emailDispatch.findFirst({
+          where: {
+            userId: input.userId,
+            kind: "MOCK_INTERVIEW_OFFER",
+            isTest: false,
+            OR: [
+              { status: { in: ["PENDING", "PROCESSING"] } },
+              { status: "SENT", sentAt: { gte: cooldownStart } },
+            ],
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (!user || recentOffer) return false;
+
+      const scheduledFor = new Date(
+        now.getTime() + MOCK_INTERVIEW_OFFER_DELAY_MS,
+      );
+      const payload: MockInterviewOfferPayload = {
+        jobApplicationId: input.jobApplicationId,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        amountInCents: input.amountInCents,
+        currency: input.currency,
+      };
+      const created = await this.database.emailDispatch.createMany({
+        data: [
+          {
+            kind: "MOCK_INTERVIEW_OFFER",
+            userId: input.userId,
+            recipientEmail: user.email,
+            referenceId: input.jobApplicationId,
+            payloadJson: payload as unknown as Prisma.InputJsonValue,
+            dedupeKey: `mockoffer:${input.jobApplicationId}`,
+            scheduledFor,
+            expiresAt: new Date(
+              scheduledFor.getTime() + MOCK_INTERVIEW_OFFER_EXPIRY_MS,
+            ),
+          },
+        ],
+        skipDuplicates: true,
+      });
+      return created.count > 0;
+    } catch (error) {
+      this.logger.error(
+        `email_dispatch_enqueue_failed kind=MOCK_INTERVIEW_OFFER jobApplicationId=${input.jobApplicationId} reason=${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      );
+      return false;
+    }
+  }
+
   // Envio efetivo de UMA linha já claimada. Sem decisão de negócio aqui
   // (elegibilidade/modo/janela são do worker).
   //
@@ -358,7 +480,7 @@ export class EmailDispatchService {
     kind: EmailDispatchKind;
     to: string;
     name: string | null | undefined;
-    payload?: PurchaseConfirmationPayload | null;
+    payload?: DispatchPayload | null;
     realTransport: boolean;
   }): Promise<EmailSendResult> {
     const isPurchase = input.kind === "PURCHASE_CONFIRMATION";
@@ -422,7 +544,10 @@ export class EmailDispatchService {
     const realTransport = input.realTransport === true;
     const isPurchase = input.kind === "PURCHASE_CONFIRMATION";
 
-    if (isPurchase && !input.payload) {
+    if (
+      (isPurchase || input.kind === "MOCK_INTERVIEW_OFFER") &&
+      !input.payload
+    ) {
       return { sent: false, reason: "payload_required" };
     }
 
@@ -451,7 +576,7 @@ export class EmailDispatchService {
         scheduledFor: now,
         expiresAt: new Date(now.getTime() + HOUR_MS),
         isTest: true,
-        payloadJson: isPurchase
+        payloadJson: input.payload
           ? (input.payload as unknown as Prisma.InputJsonValue)
           : undefined,
       },

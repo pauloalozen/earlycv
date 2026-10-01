@@ -16,10 +16,10 @@ import {
   STALE_PROCESSING_THRESHOLD_MS,
   WORKER_BATCH_SIZE,
 } from "./email-dispatch.constants";
+import type { DispatchPayload } from "./email-dispatch.service";
 import { EmailDispatchService } from "./email-dispatch.service";
 import { EmailDispatchEligibilityService } from "./email-dispatch-eligibility.service";
 import { adjustToFeedbackWindow } from "./email-dispatch-schedule.util";
-import type { PurchaseConfirmationPayload } from "./email-dispatch-templates";
 
 const LOCK_ID = "email-dispatch-worker";
 const LOCK_TTL_MS = 5 * 60_000;
@@ -70,7 +70,7 @@ export class EmailDispatchWorker implements OnModuleInit {
   async onModuleInit() {
     const startAt = await this.config.getStartAt();
     this.logger.log(
-      `email_dispatch_boot welcome=${await this.config.getEffectiveMode("WELCOME")} feedback=${await this.config.getEffectiveMode("FEEDBACK_FIRST_USE")} feedback2=${await this.config.getEffectiveMode("FEEDBACK_SECOND_CALL")} purchase=${await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")} startAt=${startAt ? startAt.toISOString() : "unset"} transport=${this.config.isRealTransportAllowed() ? "real" : "fake"}`,
+      `email_dispatch_boot welcome=${await this.config.getEffectiveMode("WELCOME")} feedback=${await this.config.getEffectiveMode("FEEDBACK_FIRST_USE")} feedback2=${await this.config.getEffectiveMode("FEEDBACK_SECOND_CALL")} purchase=${await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")} mockOffer=${await this.config.getEffectiveMode("MOCK_INTERVIEW_OFFER")} startAt=${startAt ? startAt.toISOString() : "unset"} transport=${this.config.isRealTransportAllowed() ? "real" : "fake"}`,
     );
 
     // Modo ligado + transporte real + infra incompleta = nada seria enviado.
@@ -270,7 +270,9 @@ export class EmailDispatchWorker implements OnModuleInit {
     const verdict =
       row.kind === "PURCHASE_CONFIRMATION"
         ? await this.eligibility.evaluatePurchaseConfirmation(row)
-        : await this.eligibility.evaluate({ userId: row.userId });
+        : row.kind === "MOCK_INTERVIEW_OFFER"
+          ? await this.eligibility.evaluateMockInterviewOffer(row, now)
+          : await this.eligibility.evaluate({ userId: row.userId });
     if (!verdict.eligible) {
       await this.close(row.id, "SKIPPED", verdict.reason);
       return;
@@ -309,7 +311,7 @@ export class EmailDispatchWorker implements OnModuleInit {
       await this.dispatchService.render({
         kind: row.kind,
         name: verdict.user.name,
-        payload: row.payloadJson as PurchaseConfirmationPayload | null,
+        payload: row.payloadJson as DispatchPayload | null,
       });
       await this.database.emailDispatch.update({
         where: { id: row.id },
@@ -339,7 +341,7 @@ export class EmailDispatchWorker implements OnModuleInit {
       kind: row.kind,
       to: verdict.user.email,
       name: verdict.user.name,
-      payload: row.payloadJson as PurchaseConfirmationPayload | null,
+      payload: row.payloadJson as DispatchPayload | null,
       // Real só em produção. Fora dela (inclusive ALLOWLIST) o serviço usa
       // transporte fake e nada sai pela rede.
       realTransport: this.config.isRealTransportAllowed(),

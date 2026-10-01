@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   type JobApplicationOrigin,
@@ -15,6 +16,8 @@ import {
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
+import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
+import { MOCK_INTERVIEW_PRODUCT } from "../mock-interviews/mock-interview.config";
 import type { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 
 type UpsertFromAdaptationInput = {
@@ -212,7 +215,33 @@ export class JobApplicationsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelEventService)
     private readonly funnelEvents: BusinessFunnelEventService,
+    @Optional()
+    @Inject(EmailDispatchService)
+    private readonly emailDispatch?: Pick<
+      EmailDispatchService,
+      "enqueueMockInterviewOffer"
+    >,
   ) {}
+
+  // Candidatura entrou em INTERVIEW: agenda a oferta da entrevista simulada
+  // por e-mail (2h depois). Fire-and-forget: nunca atrasa nem falha a
+  // mudança de status (o enqueue não lança).
+  private offerMockInterview(application: {
+    id: string;
+    userId: string;
+    jobTitle: string;
+    companyName: string;
+  }) {
+    if (!this.emailDispatch) return;
+    void this.emailDispatch.enqueueMockInterviewOffer({
+      userId: application.userId,
+      jobApplicationId: application.id,
+      jobTitle: application.jobTitle,
+      companyName: application.companyName,
+      amountInCents: MOCK_INTERVIEW_PRODUCT.amountInCents,
+      currency: MOCK_INTERVIEW_PRODUCT.currency,
+    });
+  }
 
   private buildBackendContext(userId: string, key: string) {
     return {
@@ -762,6 +791,10 @@ export class JobApplicationsService {
       { sessionInternalId },
     );
 
+    if (previousStatus !== "INTERVIEW") {
+      this.offerMockInterview(result);
+    }
+
     return result;
   }
 
@@ -885,6 +918,10 @@ export class JobApplicationsService {
       { from_status: previousStatus, to_status: newStatus },
       { sessionInternalId },
     );
+
+    if (newStatus === "INTERVIEW" && previousStatus !== "INTERVIEW") {
+      this.offerMockInterview(updated);
+    }
 
     if (newStatus === "APPLIED") {
       await this.recordEvent(

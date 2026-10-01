@@ -79,6 +79,7 @@ export class EmailDispatchConfigService {
     if (kind === "WELCOME") return settings.welcomeMode;
     if (kind === "FEEDBACK_FIRST_USE") return settings.feedbackMode;
     if (kind === "FEEDBACK_SECOND_CALL") return settings.feedbackSecondCallMode;
+    if (kind === "MOCK_INTERVIEW_OFFER") return settings.mockInterviewOfferMode;
     return settings.purchaseConfirmationMode;
   }
 
@@ -103,6 +104,7 @@ export class EmailDispatchConfigService {
       "FEEDBACK_FIRST_USE",
       "FEEDBACK_SECOND_CALL",
       "PURCHASE_CONFIRMATION",
+      "MOCK_INTERVIEW_OFFER",
     ] as const) {
       if ((await this.getEffectiveMode(kind)) !== "OFF") enabled.push(kind);
     }

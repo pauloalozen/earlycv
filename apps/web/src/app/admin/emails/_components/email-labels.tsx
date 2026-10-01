@@ -12,6 +12,7 @@ export const KIND_LABEL: Record<EmailDispatchKind, string> = {
   FEEDBACK_FIRST_USE: "Feedback",
   FEEDBACK_SECOND_CALL: "Feedback segunda chamada",
   PURCHASE_CONFIRMATION: "Confirmação de compra",
+  MOCK_INTERVIEW_OFFER: "Oferta da entrevista simulada",
 };
 
 export const STATUS_LABEL: Record<EmailDispatchStatus, string> = {

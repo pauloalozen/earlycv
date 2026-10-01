@@ -168,7 +168,7 @@ test("boot log states the activation state: modes, cutoff and transport (real/fa
   assert.equal(lines.length, 1);
   assert.match(
     lines[0],
-    /^email_dispatch_boot welcome=SHADOW feedback=OFF feedback2=OFF purchase=OFF startAt=2026-10-01T00:00:00.000Z transport=fake$/,
+    /^email_dispatch_boot welcome=SHADOW feedback=OFF feedback2=OFF purchase=OFF mockOffer=OFF startAt=2026-10-01T00:00:00.000Z transport=fake$/,
   );
   assert.doesNotMatch(lines[0], /secret|key|@/i);
 });

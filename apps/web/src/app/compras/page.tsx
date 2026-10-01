@@ -9,7 +9,9 @@ import {
 } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { listMyMockInterviews } from "@/lib/mock-interviews-api";
 import { getMyPlan, listMyPurchases, type PurchaseItem } from "@/lib/plans-api";
+import { MockInterviewPurchases } from "./mock-interview-purchases";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -118,10 +120,16 @@ export default async function ComprasPage() {
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
-  const [purchasesResult, planResult] = await Promise.allSettled([
-    listMyPurchases(),
-    getMyPlan(),
-  ]);
+  const [purchasesResult, planResult, mockInterviewsResult] =
+    await Promise.allSettled([
+      listMyPurchases(),
+      getMyPlan(),
+      listMyMockInterviews(),
+    ]);
+  const mockInterviews =
+    mockInterviewsResult.status === "fulfilled"
+      ? mockInterviewsResult.value
+      : [];
 
   const purchases: PurchaseItem[] =
     purchasesResult.status === "fulfilled" ? purchasesResult.value : [];
@@ -304,6 +312,10 @@ export default async function ComprasPage() {
                 </p>
               </article>
             </div>
+          )}
+
+          {mockInterviews.length > 0 && (
+            <MockInterviewPurchases items={mockInterviews} />
           )}
 
           {/* List */}

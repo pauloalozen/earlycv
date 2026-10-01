@@ -16,6 +16,7 @@ const footerColumns = [
       { href: "/adaptar-curriculo-para-vaga", label: "Adaptar currículo" },
       { href: "/curriculo-ats", label: "Currículo ATS" },
       { href: "/palavras-chave-curriculo", label: "Palavras-chave" },
+      { href: "/simulacao-de-entrevista", label: "Entrevista simulada" },
     ],
   },
   {
