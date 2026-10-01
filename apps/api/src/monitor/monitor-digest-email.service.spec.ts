@@ -52,6 +52,9 @@ function createFixture(options: {
   // testes de modo, no fim do arquivo, sobrescrevem isso explicitamente.
   sesMode?: "LEGACY_RESEND" | "SES_ROLLOUT" | "SES_LIVE" | "PAUSED";
   sesEnabled?: boolean;
+  // Hard bounce/complaint registrado em EmailSuppression por QUALQUER
+  // categoria (ex.: pelo fluxo de relacionamento).
+  suppressed?: "HARD_BOUNCE" | "COMPLAINT";
 }) {
   const digest = {
     id: "digest-1",
@@ -133,6 +136,10 @@ function createFixture(options: {
     resendAdapter as never,
     emailConfig as never,
     entitlementService as never,
+    {
+      findByEmail: async () =>
+        options.suppressed ? { reason: options.suppressed } : null,
+    },
   );
 
   return {
@@ -425,4 +432,40 @@ test("sem a linha singleton de MonitorDigestScheduleConfig: cai pro default segu
   assert.equal((result as { provider: string }).provider, "RESEND");
   assert.equal(sendCalls.length, 0);
   assert.equal(resendCalls.length, 1);
+});
+
+test("does not send (email_suppressed) when the address has a hard bounce/complaint registered by ANY category — in every send mode", async () => {
+  for (const sesMode of ["LEGACY_RESEND", "SES_ROLLOUT", "SES_LIVE"] as const) {
+    for (const suppressed of ["HARD_BOUNCE", "COMPLAINT"] as const) {
+      const { sendCalls, resendCalls, service } = createFixture({
+        recommendationCount: 2,
+        sesMode,
+        suppressed,
+      });
+
+      const result = await service.sendDigest("digest-1");
+
+      assert.deepEqual(result, {
+        sent: false,
+        skippedReason: "email_suppressed",
+      });
+      assert.equal(sendCalls.length, 0, `${sesMode}/${suppressed}`);
+      assert.equal(resendCalls.length, 0, `${sesMode}/${suppressed}`);
+    }
+  }
+});
+
+test("the Monitor's own opt-out stays independent: with no shared suppression the digest is sent, and email_disabled is still decided by the Monitor preference alone", async () => {
+  const sent = createFixture({ recommendationCount: 1 });
+  assert.equal((await sent.service.sendDigest("digest-1")).sent, true);
+
+  const disabled = createFixture({
+    recommendationCount: 1,
+    emailEnabled: false,
+    suppressed: undefined,
+  });
+  assert.deepEqual(await disabled.service.sendDigest("digest-1"), {
+    sent: false,
+    skippedReason: "email_disabled",
+  });
 });

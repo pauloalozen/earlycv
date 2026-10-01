@@ -49,8 +49,8 @@ export class EmailConfigService {
     return required as SesClientConfig;
   }
 
-  // Perfil de remetente por categoria — implementado para JOB_ALERT e
-  // PRODUCT_ANNOUNCEMENT nesta entrega, de propósito: nenhuma outra
+  // Perfil de remetente por categoria — implementado para JOB_ALERT,
+  // PRODUCT_ANNOUNCEMENT e RELATIONSHIP, de propósito: nenhuma outra
   // categoria (MARKETING/ADMIN_COMMUNICATION) tem seleção de
   // destinatários/consentimento implementados ainda, então nenhuma delas
   // deve conseguir enviar (mesmo que EmailRoutingPolicy resolva SES pra
@@ -58,19 +58,44 @@ export class EmailConfigService {
   // `case` aqui — SesEmailProviderService nunca muda.
   getSesSenderProfile(category: EmailCategory): EmailSenderProfile {
     if (category === "JOB_ALERT") {
-      return this.resolveSenderProfile("JOB_ALERT", {
-        fromEmail: this.env.AWS_SES_JOB_ALERT_FROM_EMAIL,
-        fromName: this.env.AWS_SES_JOB_ALERT_FROM_NAME,
-        replyTo: this.env.AWS_SES_JOB_ALERT_REPLY_TO,
-      });
+      return this.resolveSenderProfile(
+        "JOB_ALERT",
+        {
+          fromEmail: this.env.AWS_SES_JOB_ALERT_FROM_EMAIL,
+          fromName: this.env.AWS_SES_JOB_ALERT_FROM_NAME,
+          replyTo: this.env.AWS_SES_JOB_ALERT_REPLY_TO,
+        },
+        this.env.AWS_SES_CONFIGURATION_SET,
+      );
     }
 
     if (category === "PRODUCT_ANNOUNCEMENT") {
-      return this.resolveSenderProfile("PRODUCT_ANNOUNCEMENT", {
-        fromEmail: this.env.AWS_SES_PRODUCT_UPDATE_FROM_EMAIL,
-        fromName: this.env.AWS_SES_PRODUCT_UPDATE_FROM_NAME,
-        replyTo: this.env.AWS_SES_PRODUCT_UPDATE_REPLY_TO,
-      });
+      return this.resolveSenderProfile(
+        "PRODUCT_ANNOUNCEMENT",
+        {
+          fromEmail: this.env.AWS_SES_PRODUCT_UPDATE_FROM_EMAIL,
+          fromName: this.env.AWS_SES_PRODUCT_UPDATE_FROM_NAME,
+          replyTo: this.env.AWS_SES_PRODUCT_UPDATE_REPLY_TO,
+        },
+        this.env.AWS_SES_CONFIGURATION_SET,
+      );
+    }
+
+    if (category === "RELATIONSHIP") {
+      // Configuration Set PRÓPRIO, nunca o AWS_SES_CONFIGURATION_SET
+      // compartilhado: o compartilhado faz tracking de abertura/clique, e
+      // e-mail de relacionamento (pessoal, de Paulo) não deve ter. Sem
+      // fallback — se o próprio não estiver configurado, o perfil fica
+      // incompleto e nada é enviado.
+      return this.resolveSenderProfile(
+        "RELATIONSHIP",
+        {
+          fromEmail: this.env.AWS_SES_RELATIONSHIP_FROM_EMAIL,
+          fromName: this.env.AWS_SES_RELATIONSHIP_FROM_NAME,
+          replyTo: this.env.AWS_SES_RELATIONSHIP_REPLY_TO,
+        },
+        this.env.AWS_SES_RELATIONSHIP_CONFIGURATION_SET,
+      );
     }
 
     throw new Error(
@@ -85,11 +110,15 @@ export class EmailConfigService {
       fromName?: string;
       replyTo?: string;
     },
+    // Posicional e obrigatório (nunca default): um default cairia no
+    // Configuration Set compartilhado quando o da categoria estivesse
+    // ausente, exatamente o fallback que RELATIONSHIP proíbe.
+    configurationSet: string | undefined,
   ): EmailSenderProfile {
     const required: Partial<EmailSenderProfile> = {
       fromEmail: fields.fromEmail,
       fromName: fields.fromName,
-      configurationSet: this.env.AWS_SES_CONFIGURATION_SET,
+      configurationSet,
     };
 
     const missingKeys = (

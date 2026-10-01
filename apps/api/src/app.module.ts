@@ -20,6 +20,7 @@ import { CvBenchmarkAdminModule } from "./cv-benchmark-admin/cv-benchmark-admin.
 import { CvProcessingModule } from "./cv-processing/cv-processing.module";
 import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
+import { EmailDispatchModule } from "./email-dispatch/email-dispatch.module";
 import { Ga4Module } from "./ga4/ga4.module";
 import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
@@ -60,6 +61,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AdminAffiliatesModule,
     AdminMonitorModule,
     ProductUpdatesModule,
+    EmailDispatchModule,
     AdminProductUpdatesModule,
     AdminProfilesModule,
     AdminResumesModule,

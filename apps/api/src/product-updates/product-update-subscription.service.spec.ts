@@ -41,10 +41,15 @@ function createFixture(users: FakeUser[]) {
       if (!hasMatch) return false;
     }
     const and = (where.AND ?? []) as Array<{
-      OR: Array<Record<string, unknown>>;
+      OR?: Array<Record<string, unknown>>;
+      email?: { notIn: string[] };
     }>;
     for (const clause of and) {
-      const ok = clause.OR.some((option) => {
+      if (clause.email) {
+        if (clause.email.notIn.includes(user.email)) return false;
+        continue;
+      }
+      const ok = (clause.OR ?? []).some((option) => {
         if (option.productEmailSubscription === null) {
           return !subscriptions.has(user.id);
         }
@@ -342,4 +347,42 @@ test("countEligibleRecipients(PAID) usa a mesma resolução de resolveEligibleRe
   const recipients = await service.resolveEligibleRecipients("PAID");
   assert.equal(count, recipients.length);
   assert.equal(count, 2);
+});
+
+test("shared suppression (hard bounce/complaint from ANY category) excludes the address from every audience", async () => {
+  const { database } = createFixture([FREE_USER, PAID_USER]);
+  const suppression = {
+    listSuppressedEmails: async () => [PAID_USER.email],
+  };
+  const service = new ProductUpdateSubscriptionService(database, suppression);
+
+  const all = await service.resolveEligibleRecipients("ALL_ELIGIBLE_USERS");
+  const paid = await service.resolveEligibleRecipients("PAID");
+
+  assert.deepEqual(
+    all.map((r) => r.userId),
+    ["free-1"],
+  );
+  assert.deepEqual(paid, []);
+  // contagem e resolução continuam a mesma fonte de verdade
+  assert.equal(await service.countEligibleRecipients("ALL_ELIGIBLE_USERS"), 1);
+});
+
+test("shared suppression never touches topic opt-out state: a topic opt-out stays independent and an empty suppression list changes nothing", async () => {
+  const { database, subscriptions } = createFixture([FREE_USER, PAID_USER]);
+  const service = new ProductUpdateSubscriptionService(database, {
+    listSuppressedEmails: async () => [],
+  });
+
+  // opt-out de comunicados continua funcionando por si só
+  await service.markSuppressed(FREE_USER.id, "SES_OPT_OUT", new Date());
+  const recipients =
+    await service.resolveEligibleRecipients("ALL_ELIGIBLE_USERS");
+
+  assert.deepEqual(
+    recipients.map((r) => r.userId),
+    ["paid-1"],
+  );
+  // e a supressão compartilhada nunca grava nada em ProductEmailSubscription
+  assert.equal(subscriptions.size, 1);
 });

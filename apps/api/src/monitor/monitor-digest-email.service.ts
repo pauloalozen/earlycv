@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../email/email.types";
 import { EmailConfigService } from "../email/email-config.service";
 import { EmailDeliveryProviderAdapter } from "../email/email-delivery-provider.adapter";
+import { EmailSuppressionService } from "../email/email-suppression.service";
 import { MAX_RECOMMENDATIONS_PER_DIGEST } from "./monitor-digest-content.service";
 import {
   buildMonitorDigestLink,
@@ -90,6 +91,13 @@ export class MonitorDigestEmailService {
     private readonly emailConfig: Pick<EmailConfigService, "isSesEnabled">,
     @Inject(MonitorEntitlementService)
     private readonly entitlementService: MonitorEntitlementService,
+    // Supressão por ENDEREÇO compartilhada (bounce duro/complaint de
+    // qualquer categoria, inclusive do fluxo de relacionamento). Só barra o
+    // envio; não mexe em MonitorAlertPreference — o descadastro do Monitor
+    // continua independente dos demais tópicos.
+    @Optional()
+    @Inject(EmailSuppressionService)
+    private readonly suppression?: Pick<EmailSuppressionService, "findByEmail">,
   ) {}
 
   async sendDigest(digestId: string): Promise<SendDigestResult> {
@@ -134,6 +142,12 @@ export class MonitorDigestEmailService {
     });
     if (!preference?.emailEnabled) {
       return { sent: false, skippedReason: "email_disabled" };
+    }
+
+    // Hard bounce/complaint registrado por QUALQUER categoria vale para o
+    // endereço. Checado a cada envio (não só na descoberta).
+    if (await this.suppression?.findByEmail(digest.user.email)) {
+      return { sent: false, skippedReason: "email_suppressed" };
     }
 
     // Mesma lógica: entitlement também pode ter mudado entre a descoberta

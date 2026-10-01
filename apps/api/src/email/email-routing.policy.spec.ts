@@ -109,3 +109,36 @@ test("DefaultEmailRoutingPolicy REFUSES MARKETING/ADMIN_COMMUNICATION even with 
     assert.throws(() => policy.resolve(category), /não configurado/);
   }
 });
+
+test("DefaultEmailRoutingPolicy routes RELATIONSHIP to SES with its own sender profile (own configuration set), and FAILS when SES is off — never falls back to Resend", () => {
+  const RELATIONSHIP_PROFILE: EmailSenderProfile = {
+    fromEmail: "contato@earlycv.com.br",
+    fromName: "Paulo do EarlyCV",
+    replyTo: "contato@earlycv.com.br",
+    configurationSet: "earlycv-relationship-email",
+  };
+  const resend = fakeProvider("RESEND");
+  const ses = fakeProvider("SES");
+
+  const enabled = new DefaultEmailRoutingPolicy(resend, ses, {
+    isSesEnabled: () => true,
+    getSesSenderProfile: (category) => {
+      assert.equal(category, "RELATIONSHIP");
+      return RELATIONSHIP_PROFILE;
+    },
+  });
+  const route = enabled.resolve("RELATIONSHIP");
+  assert.equal(route.provider, ses);
+  assert.deepEqual(route.senderProfile, RELATIONSHIP_PROFILE);
+  assert.deepEqual(route.tags, { category: "RELATIONSHIP" });
+
+  const disabled = new DefaultEmailRoutingPolicy(
+    resend,
+    ses,
+    buildConfig(false),
+  );
+  assert.throws(
+    () => disabled.resolve("RELATIONSHIP"),
+    /RELATIONSHIP requer SES_EMAIL_ENABLED=true/,
+  );
+});

@@ -283,3 +283,88 @@ test("processSubscriptionEvent without a matching user never logs the raw e-mail
     "expected the log to include the providerEventId for correlation",
   );
 });
+
+// Evento no formato OFICIAL da AWS (docs "Examples of event data that Amazon
+// SES publishes to Amazon SNS" → Subscription record): subscription.source
+// é o MECANISMO ("UnsubscribeHeader"), o contato está em mail.destination e
+// o status vem como "OptOut"/"OptIn".
+function officialSubscriptionEvent(input: {
+  destination: string;
+  newStatus: "OptIn" | "OptOut";
+  oldStatus: "OptIn" | "OptOut";
+  topicName?: string;
+}) {
+  const topicName = input.topicName ?? "product-updates";
+  return {
+    eventType: "Subscription" as const,
+    mail: {
+      destination: [input.destination],
+      tags: { correlationType: ["PRODUCT_UPDATE"] },
+    },
+    subscription: {
+      contactList: "ContactListName",
+      timestamp: "2022-01-12T01:00:17.910Z",
+      source: "UnsubscribeHeader",
+      newTopicPreferences: {
+        unsubscribeAll: false,
+        topicSubscriptionStatus: [
+          { topicName, subscriptionStatus: input.newStatus },
+        ],
+      },
+      oldTopicPreferences: {
+        unsubscribeAll: false,
+        topicSubscriptionStatus: [
+          { topicName, subscriptionStatus: input.oldStatus },
+        ],
+      },
+    },
+  };
+}
+
+test("official AWS Subscription format: the contact comes from mail.destination (source is the mechanism) and OptOut suppresses the user", async () => {
+  const { service, suppressed } = createFixture();
+
+  const result = await service.processSubscriptionEvent(
+    "sns-official-1",
+    officialSubscriptionEvent({
+      destination: "user1@example.com",
+      newStatus: "OptOut",
+      oldStatus: "OptIn",
+    }),
+  );
+
+  assert.equal(result.processed, true);
+  assert.deepEqual(suppressed, [{ userId: "user-1", reason: "SES_OPT_OUT" }]);
+});
+
+test("official AWS Subscription format: OptIn after OptOut re-subscribes", async () => {
+  const { service, resubscribed } = createFixture();
+
+  await service.processSubscriptionEvent(
+    "sns-official-2",
+    officialSubscriptionEvent({
+      destination: "user1@example.com",
+      newStatus: "OptIn",
+      oldStatus: "OptOut",
+    }),
+  );
+
+  assert.deepEqual(resubscribed, ["user-1"]);
+});
+
+test("official AWS Subscription format: an opt-out of the RELATIONSHIP topic does NOT touch the Product Updates preference", async () => {
+  const { service, suppressed } = createFixture();
+
+  const result = await service.processSubscriptionEvent(
+    "sns-official-3",
+    officialSubscriptionEvent({
+      destination: "user1@example.com",
+      newStatus: "OptOut",
+      oldStatus: "OptIn",
+      topicName: "relationship",
+    }),
+  );
+
+  assert.equal(result.processed, false);
+  assert.deepEqual(suppressed, []);
+});

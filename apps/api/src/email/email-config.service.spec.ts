@@ -193,3 +193,58 @@ test("EmailConfigService never fails when SES is disabled, even with zero config
   assert.equal(service.getCustomMailFromDomain(), undefined);
   assert.equal(service.getExpectedSnsTopicArn(), undefined);
 });
+
+test("RELATIONSHIP sender profile uses its OWN configuration set (never the shared tracking one) and Reply-To", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
+      AWS_SES_RELATIONSHIP_FROM_EMAIL: "contato@earlycv.com.br",
+      AWS_SES_RELATIONSHIP_FROM_NAME: "Paulo do EarlyCV",
+      AWS_SES_RELATIONSHIP_REPLY_TO: "contato@earlycv.com.br",
+      AWS_SES_RELATIONSHIP_CONFIGURATION_SET: "earlycv-relationship-email",
+    }),
+  );
+
+  assert.deepEqual(service.getSesSenderProfile("RELATIONSHIP"), {
+    fromEmail: "contato@earlycv.com.br",
+    fromName: "Paulo do EarlyCV",
+    replyTo: "contato@earlycv.com.br",
+    configurationSet: "earlycv-relationship-email",
+  });
+});
+
+test("RELATIONSHIP has NO fallback to the shared configuration set when its own is missing", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
+      AWS_SES_RELATIONSHIP_FROM_EMAIL: "contato@earlycv.com.br",
+      AWS_SES_RELATIONSHIP_FROM_NAME: "Paulo do EarlyCV",
+    }),
+  );
+
+  assert.throws(
+    () => service.getSesSenderProfile("RELATIONSHIP"),
+    /RELATIONSHIP incompleto: configurationSet/,
+  );
+});
+
+test("JOB_ALERT and PRODUCT_ANNOUNCEMENT still use the shared configuration set", () => {
+  const service = new EmailConfigService(
+    buildEnv({
+      AWS_SES_CONFIGURATION_SET: "earlycv-bulk-email",
+      AWS_SES_JOB_ALERT_FROM_EMAIL: "vagas@alertas.earlycv.com.br",
+      AWS_SES_JOB_ALERT_FROM_NAME: "EarlyCV — Alerta de Vagas",
+      AWS_SES_PRODUCT_UPDATE_FROM_EMAIL: "contato@earlycv.com.br",
+      AWS_SES_PRODUCT_UPDATE_FROM_NAME: "EarlyCV",
+    }),
+  );
+
+  assert.equal(
+    service.getSesSenderProfile("JOB_ALERT").configurationSet,
+    "earlycv-bulk-email",
+  );
+  assert.equal(
+    service.getSesSenderProfile("PRODUCT_ANNOUNCEMENT").configurationSet,
+    "earlycv-bulk-email",
+  );
+});

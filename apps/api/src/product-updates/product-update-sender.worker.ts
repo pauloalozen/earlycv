@@ -177,6 +177,15 @@ export class ProductUpdateSenderWorker {
     try {
       const result = await this.emailService.sendToDelivery(delivery.id);
 
+      if (!result.sent && result.skippedReason === "email_suppressed") {
+        // Endereço com hard bounce/complaint: terminal, nunca reenviado.
+        await this.database.productUpdateDelivery.update({
+          where: { id: delivery.id },
+          data: { status: "CANCELLED", lastError: result.skippedReason },
+        });
+        return;
+      }
+
       if (!result.sent) {
         // Falha CONFIRMADA antes de qualquer tentativa de rede (delivery/
         // snapshot ausente, list management não configurado) — nunca

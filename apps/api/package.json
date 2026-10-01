@@ -20,6 +20,8 @@
     "talent:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-talent-profiles.ts",
     "radar:backfill-profiles": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-radar-profiles.ts",
     "mastercv:backfill": "NODE_OPTIONS='--conditions=development' tsx src/scripts/backfill-mastercv-profiles.ts",
+    "email:test-relationship": "NODE_OPTIONS='--conditions=development' tsx src/scripts/send-relationship-test.ts",
+    "email:recover-purchase-confirmations": "NODE_OPTIONS='--conditions=development' tsx src/scripts/recover-purchase-confirmations.ts",
     "radar:repair": "NODE_OPTIONS='--conditions=development' tsx src/scripts/repair-radar-profiles.ts",
     "talent:enrich-ai": "NODE_OPTIONS='--conditions=development' tsx src/scripts/enrich-talent-profiles-ai.ts",
     "talent:reconstruct-history": "NODE_OPTIONS='--conditions=development' tsx src/scripts/reconstruct-talent-interaction-history.ts",
