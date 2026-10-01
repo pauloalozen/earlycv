@@ -59,6 +59,34 @@ export type AppEnv = {
   // Nunca usado pelo Monitor (que não passa ListManagementOptions).
   AWS_SES_CONTACT_LIST_NAME?: string;
   AWS_SES_PRODUCT_UPDATE_TOPIC_NAME?: string;
+  // E-mails de RELACIONAMENTO (boas-vindas/feedback) — ver
+  // apps/api/src/email-dispatch/. Identidade e Configuration Set PRÓPRIOS
+  // (sem tracking de abertura/clique) e tópico próprio na MESMA contact
+  // list de AWS_SES_CONTACT_LIST_NAME — descadastro de comunicados não
+  // descadastra relacionamento. Todos opcionais: o worker só envia quando
+  // tudo estiver completo (EmailDispatchConfigService.checkSendReadiness).
+  AWS_SES_RELATIONSHIP_FROM_EMAIL?: string;
+  AWS_SES_RELATIONSHIP_FROM_NAME?: string;
+  AWS_SES_RELATIONSHIP_REPLY_TO?: string;
+  AWS_SES_RELATIONSHIP_CONFIGURATION_SET?: string;
+  AWS_SES_RELATIONSHIP_TOPIC_NAME?: string;
+  // Modo por tipo: OFF | SHADOW | ALLOWLIST | LIVE (ausente/inválido =
+  // OFF, falha fechada). Strings cruas aqui; parse em
+  // email-dispatch.config.ts. Fora de produção LIVE é rebaixado a
+  // ALLOWLIST.
+  EMAIL_WELCOME_MODE?: string;
+  EMAIL_FEEDBACK_MODE?: string;
+  // Confirmação de compra (transacional, BILLING/Resend): mesmos modos e o
+  // mesmo cutoff (vale para a data de criação da compra).
+  EMAIL_PURCHASE_CONFIRMATION_MODE?: string;
+  // Cutoff (ISO 8601): só usuários criados a partir daqui entram nos
+  // fluxos de relacionamento — a base antiga nunca recebe. Ausente/inválido
+  // = tudo OFF.
+  EMAIL_RELATIONSHIP_START_AT?: string;
+  // CSV de e-mails permitidos no modo ALLOWLIST / bloqueados SEMPRE (somem
+  // da base automática além das contas fixas de email-dispatch.constants.ts).
+  EMAIL_RELATIONSHIP_ALLOWLIST?: string;
+  EMAIL_RELATIONSHIP_BLOCKLIST?: string;
   // Gate mestre do domínio Product Updates — nasce false: nenhum deploy,
   // migration ou criação de rascunho pode disparar envio de teste/real
   // enquanto esta flag não for ligada manualmente (ver
@@ -141,6 +169,17 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     },
     AWS_SES_CONTACT_LIST_NAME: { optional: true },
     AWS_SES_PRODUCT_UPDATE_TOPIC_NAME: { optional: true },
+    AWS_SES_RELATIONSHIP_FROM_EMAIL: { optional: true },
+    AWS_SES_RELATIONSHIP_FROM_NAME: { optional: true },
+    AWS_SES_RELATIONSHIP_REPLY_TO: { optional: true },
+    AWS_SES_RELATIONSHIP_CONFIGURATION_SET: { optional: true },
+    AWS_SES_RELATIONSHIP_TOPIC_NAME: { optional: true },
+    EMAIL_WELCOME_MODE: { optional: true },
+    EMAIL_FEEDBACK_MODE: { optional: true },
+    EMAIL_PURCHASE_CONFIRMATION_MODE: { optional: true },
+    EMAIL_RELATIONSHIP_START_AT: { optional: true },
+    EMAIL_RELATIONSHIP_ALLOWLIST: { optional: true },
+    EMAIL_RELATIONSHIP_BLOCKLIST: { optional: true },
     PRODUCT_UPDATES_ENABLED: {
       default: "false",
       parse: (value: string) => envToBoolean(value),
@@ -205,8 +244,37 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_PRODUCT_UPDATE_TOPIC_NAME: env.AWS_SES_PRODUCT_UPDATE_TOPIC_NAME as
       | string
       | undefined,
+    AWS_SES_RELATIONSHIP_FROM_EMAIL: env.AWS_SES_RELATIONSHIP_FROM_EMAIL as
+      | string
+      | undefined,
+    AWS_SES_RELATIONSHIP_FROM_NAME: env.AWS_SES_RELATIONSHIP_FROM_NAME as
+      | string
+      | undefined,
+    AWS_SES_RELATIONSHIP_REPLY_TO: env.AWS_SES_RELATIONSHIP_REPLY_TO as
+      | string
+      | undefined,
+    AWS_SES_RELATIONSHIP_CONFIGURATION_SET:
+      env.AWS_SES_RELATIONSHIP_CONFIGURATION_SET as string | undefined,
+    AWS_SES_RELATIONSHIP_TOPIC_NAME: env.AWS_SES_RELATIONSHIP_TOPIC_NAME as
+      | string
+      | undefined,
+    EMAIL_WELCOME_MODE: env.EMAIL_WELCOME_MODE as string | undefined,
+    EMAIL_FEEDBACK_MODE: env.EMAIL_FEEDBACK_MODE as string | undefined,
+    EMAIL_PURCHASE_CONFIRMATION_MODE: env.EMAIL_PURCHASE_CONFIRMATION_MODE as
+      | string
+      | undefined,
+    EMAIL_RELATIONSHIP_START_AT: env.EMAIL_RELATIONSHIP_START_AT as
+      | string
+      | undefined,
+    EMAIL_RELATIONSHIP_ALLOWLIST: env.EMAIL_RELATIONSHIP_ALLOWLIST as
+      | string
+      | undefined,
+    EMAIL_RELATIONSHIP_BLOCKLIST: env.EMAIL_RELATIONSHIP_BLOCKLIST as
+      | string
+      | undefined,
     PRODUCT_UPDATES_ENABLED: env.PRODUCT_UPDATES_ENABLED,
-    PRODUCT_UPDATE_SEND_RATE_PER_SECOND: env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND,
+    PRODUCT_UPDATE_SEND_RATE_PER_SECOND:
+      env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND,
   };
 }
 

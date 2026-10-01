@@ -7,6 +7,7 @@ import {
   Headers,
   Inject,
   Logger,
+  type OnModuleInit,
   Post,
   Query,
   Req,
@@ -16,6 +17,8 @@ import {
 import type { Request, Response } from "express";
 
 import { EmailConfigService } from "../email/email-config.service";
+import { EmailSuppressionService } from "../email/email-suppression.service";
+import { EmailDispatchWebhookService } from "../email-dispatch/email-dispatch-webhook.service";
 import { ProductUpdateWebhookService } from "../product-updates/product-update-webhook.service";
 import { MonitorAlertPreferenceService } from "./monitor-alert-preference.service";
 import { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
@@ -33,7 +36,7 @@ import {
 // entitlement (perder acesso ao Monitor não pode impedir alguém de parar
 // de receber e-mail).
 @Controller("monitor")
-export class MonitorPublicController {
+export class MonitorPublicController implements OnModuleInit {
   private readonly logger = new Logger(MonitorPublicController.name);
 
   constructor(
@@ -45,7 +48,21 @@ export class MonitorPublicController {
     private readonly alertPreferenceService: MonitorAlertPreferenceService,
     @Inject(EmailConfigService)
     private readonly emailConfig: EmailConfigService,
+    @Inject(EmailDispatchWebhookService)
+    private readonly emailDispatchWebhookService?: EmailDispatchWebhookService,
+    @Inject(EmailSuppressionService)
+    private readonly suppressionService?: EmailSuppressionService,
   ) {}
+
+  // Observável: sem estes handlers os eventos EMAIL_DISPATCH (entrega, bounce,
+  // descadastro de relacionamento) seriam ignorados com um log INFO discreto.
+  onModuleInit() {
+    if (!this.emailDispatchWebhookService || !this.suppressionService) {
+      this.logger.warn(
+        "email_dispatch_dependency_missing consumer=MonitorPublicController effect=email_dispatch_events_and_shared_suppression_ignored",
+      );
+    }
+  }
 
   @Post("webhooks/resend")
   async resendWebhook(
@@ -180,6 +197,8 @@ export class MonitorPublicController {
     return dispatchSesEvent(message.MessageId, sesEvent, {
       productUpdateWebhookService: this.productUpdateWebhookService,
       webhookService: this.webhookService,
+      emailDispatchWebhookService: this.emailDispatchWebhookService,
+      suppressionService: this.suppressionService,
       logger: this.logger,
     });
   }

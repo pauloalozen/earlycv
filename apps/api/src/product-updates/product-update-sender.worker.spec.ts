@@ -402,3 +402,19 @@ test("PRODUCT_UPDATES_ENABLED=false: processPendingBatch não consulta PENDING n
   assert.equal(sendToDeliveryCalls.length, 0);
   assert.equal(deliveries.get("d1")?.status, "PENDING");
 });
+
+test("a delivery whose address got a hard bounce/complaint elsewhere is CANCELLED (terminal) — never retried, never FAILED", async () => {
+  const { worker, deliveries } = createFixture({
+    deliveries: [{ id: "d1", productUpdateId: "pu1" }],
+    sendResults: { d1: { sent: false, skippedReason: "email_suppressed" } },
+    productUpdates: { pu1: { status: "SENDING" } },
+  });
+
+  await worker.processPendingBatch();
+  await worker.processPendingBatch();
+
+  const delivery = deliveries.get("d1");
+  assert.equal(delivery?.status, "CANCELLED");
+  assert.equal(delivery?.lastError, "email_suppressed");
+  assert.equal(delivery?.attempts, 0);
+});

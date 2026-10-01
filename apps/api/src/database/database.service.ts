@@ -289,6 +289,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.productEmailSubscription;
   }
 
+  get emailDispatch() {
+    return this.prisma.emailDispatch;
+  }
+
+  get emailDispatchEvent() {
+    return this.prisma.emailDispatchEvent;
+  }
+
+  get relationshipEmailPreference() {
+    return this.prisma.relationshipEmailPreference;
+  }
+
+  get emailSuppression() {
+    return this.prisma.emailSuppression;
+  }
+
   get googleIndexingLog() {
     return this.prisma.googleIndexingLog;
   }

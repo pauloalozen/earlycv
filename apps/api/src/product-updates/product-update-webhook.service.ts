@@ -9,6 +9,11 @@ import {
   resolveSesEventOccurredAt,
   type SesEventPayload,
 } from "../email/ses-event.util";
+import {
+  resolveSubscriptionContactEmail,
+  resolveTopicSubscriptionChange,
+  type SesSubscriptionEventPayload,
+} from "../email/ses-subscription.util";
 import { ProductUpdateSubscriptionService } from "./product-update-subscription.service";
 
 // Mesma técnica já usada pra hashear dado sensível antes de logar (ver
@@ -49,28 +54,6 @@ export type ProcessProductUpdateWebhookResult = {
     | "unsupported_type"
     | "missing_email_id"
     | "malformed_subscription_payload";
-};
-
-// Formato do evento "Subscription" (SES List Management) — PENDENTE DE
-// VALIDAÇÃO contra um evento real da AWS (registrado como risco aberto no
-// plano; confirmar antes do go-live, ver passo de configuração SNS). Campos
-// aqui refletem a documentação pública da AWS para SESv2 Contact List
-// subscription events; parsing é inteiramente defensivo — qualquer formato
-// inesperado é ignorado com segurança (retorna processed:false), nunca
-// lança.
-type SesSubscriptionEventPayload = {
-  eventType: "Subscription";
-  subscription?: {
-    contactList?: string;
-    source?: string;
-    newTopicPreferences?: {
-      unsubscribeAll?: boolean;
-      topicSubscriptionStatus?: Array<{
-        topicName?: string;
-        subscriptionStatus?: "OPT_IN" | "OPT_OUT";
-      }>;
-    };
-  };
 };
 
 @Injectable()
@@ -175,28 +158,30 @@ export class ProductUpdateWebhookService {
     snsMessageId: string,
     payload: SesSubscriptionEventPayload,
   ): Promise<ProcessProductUpdateWebhookResult> {
-    const source = payload.subscription?.source;
-    if (!source) {
+    // Contato = mail.destination[0] (subscription.source é o mecanismo, ex.:
+    // "UnsubscribeHeader", ver ses-subscription.util.ts).
+    const contactEmail = resolveSubscriptionContactEmail(payload);
+    if (!contactEmail) {
       this.logger.warn(
-        "product update subscription webhook: payload sem subscription.source — ignorado com segurança (ver risco de formato não validado)",
+        "product update subscription webhook: payload sem e-mail do contato (mail.destination) — ignorado com segurança",
       );
       return { processed: false, reason: "malformed_subscription_payload" };
     }
 
-    const topicName = this.env.AWS_SES_PRODUCT_UPDATE_TOPIC_NAME;
-    const preferences = payload.subscription?.newTopicPreferences;
-    const unsubscribedAll = preferences?.unsubscribeAll === true;
-    const topicStatus = preferences?.topicSubscriptionStatus?.find(
-      (entry) => entry.topicName === topicName,
-    )?.subscriptionStatus;
-
-    const optedOut = unsubscribedAll || topicStatus === "OPT_OUT";
-    const optedIn = !unsubscribedAll && topicStatus === "OPT_IN";
-    if (!optedOut && !optedIn) {
+    // Só reage à mudança do tópico de Product Updates — o tópico de
+    // relacionamento vive na mesma contact list e dispara o mesmo evento
+    // (ver ses-subscription.util.ts). Descadastrar de relacionamento nunca
+    // deve ser lido aqui como mudança de comunicados.
+    const change = resolveTopicSubscriptionChange(
+      payload,
+      this.env.AWS_SES_PRODUCT_UPDATE_TOPIC_NAME,
+    );
+    if (!change) {
       // Evento de um tópico diferente do nosso, ou preferências sem
       // mudança relevante — ignorado com segurança.
       return { processed: false, reason: "unsupported_type" };
     }
+    const optedOut = change === "OPT_OUT";
 
     try {
       await this.database.productUpdateEvent.create({
@@ -222,14 +207,15 @@ export class ProductUpdateWebhookService {
       throw error;
     }
 
-    const userId = await this.subscriptionService.findUserIdByEmail(source);
+    const userId =
+      await this.subscriptionService.findUserIdByEmail(contactEmail);
     if (!userId) {
       // Nunca logar o e-mail em claro — só providerEventId (snsMessageId),
       // o reason code e um hash irreversível do endereço (só pra
       // correlacionar duas ocorrências do MESMO e-mail entre logs, nunca
       // pra descobrir qual é).
       this.logger.warn(
-        `product update subscription webhook: no matching User (providerEventId=${snsMessageId}, reason=no_user_for_source, sourceHash=${hashEmailForLogging(source)})`,
+        `product update subscription webhook: no matching User (providerEventId=${snsMessageId}, reason=no_user_for_source, sourceHash=${hashEmailForLogging(contactEmail)})`,
       );
       return { processed: true };
     }

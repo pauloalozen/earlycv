@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { AnalysisObservabilityModule } from "../analysis-observability/analysis-observability.module";
 import { DatabaseModule } from "../database/database.module";
 import { EmailModule } from "../email/email.module";
+import { EmailDispatchModule } from "../email-dispatch/email-dispatch.module";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { JobApplicationsModule } from "../job-applications/job-applications.module";
 import { ProductUpdatesModule } from "../product-updates/product-updates.module";
@@ -43,6 +44,9 @@ import { MonitorRecommendationsService } from "./monitor-recommendations.service
     // nesta entrega; nenhuma outra parte do Monitor conhece Product
     // Updates.
     ProductUpdatesModule,
+    // Mesma exceção: só pra MonitorPublicController rotear os eventos SES
+    // de relacionamento (EMAIL_DISPATCH) e o tópico de relacionamento.
+    EmailDispatchModule,
   ],
   controllers: [
     MonitorController,

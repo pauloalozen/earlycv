@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
   Optional,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -18,6 +19,7 @@ import type { ProductOrigin } from "../analysis-observability/product-origin";
 import type { AnalysisRequestContext } from "../analysis-protection/types";
 import { CvAdaptationService } from "../cv-adaptation/cv-adaptation.service";
 import { DatabaseService } from "../database/database.service";
+import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
 import { Ga4MeasurementService } from "../ga4/ga4-measurement.service";
 import {
   buildMercadoPagoItemMetadata,
@@ -173,8 +175,25 @@ export function getPlanConfig(): Record<PlanId, PlanConfigEntry> {
   };
 }
 
+// Quantas análises uma compra aprovada adiciona (mesma regra da ativação, usada
+// também pela recuperação de confirmações de compra — uma única fonte).
+export function resolveAnalysisCreditsForPlan(
+  planType: UserPlanType,
+  analysisCreditsGranted: number,
+): number {
+  if (analysisCreditsGranted > 0) {
+    return analysisCreditsGranted;
+  }
+
+  if (planType === "starter" || planType === "pro" || planType === "turbo") {
+    return getPlanConfig()[planType].analysisCreditsGranted;
+  }
+
+  return 0;
+}
+
 @Injectable()
-export class PlansService {
+export class PlansService implements OnModuleInit {
   private readonly logger = new Logger(PlansService.name);
 
   constructor(
@@ -190,7 +209,27 @@ export class PlansService {
     @Optional()
     @Inject(CvAdaptationService)
     private readonly cvAdaptationService?: CvAdaptationService,
+    // Confirmação de compra por e-mail — só enfileira (dentro da transação
+    // de aprovação, protegido por SAVEPOINT); nunca envia nem bloqueia os
+    // créditos. Opcional: ausente em construções antigas/testes.
+    @Optional()
+    @Inject(EmailDispatchService)
+    private readonly emailDispatch?: Pick<
+      EmailDispatchService,
+      "enqueuePurchaseConfirmationInTransaction"
+    >,
   ) {}
+
+  // Observável: sem esta dependência (fiação quebrada) a confirmação de compra
+  // ficaria desligada em SILÊNCIO. O token abaixo é o que se procura no log
+  // do deploy. (Specs que constroem o serviço à mão não passam por aqui.)
+  onModuleInit() {
+    if (!this.emailDispatch) {
+      this.logger.warn(
+        "email_dispatch_dependency_missing consumer=PlansService effect=purchase_confirmations_disabled",
+      );
+    }
+  }
 
   // Fire-and-forget, fora da transação — mesmo padrão já usado pelo
   // resgate por crédito (CvAdaptationService.redeemWithCredit): a
@@ -1658,6 +1697,19 @@ export class PlansService {
       },
     });
 
+    // Único ponto por onde TODO caminho de aprovação passa (webhook do
+    // Mercado Pago, applyApprovedPurchase/reconciliação e resgate de cupom
+    // 100%), logo depois de os créditos serem aplicados e dentro da mesma
+    // transação — a trava atômica acima garante 1 execução por compra. Falha
+    // do enqueue é absorvida por SAVEPOINT e nunca desfaz os créditos.
+    await this.emailDispatch?.enqueuePurchaseConfirmationInTransaction(tx, {
+      purchaseId: purchase.id,
+      userId: purchase.userId,
+      creditsApplied: purchase.creditsGranted,
+      analysisCreditsApplied: analysisCredits,
+      isUnlimited,
+    });
+
     if (
       purchase.originAction !== "unlock_cv" ||
       !purchase.originAdaptationId ||
@@ -1857,15 +1909,7 @@ export class PlansService {
     planType: UserPlanType,
     analysisCreditsGranted: number,
   ): number {
-    if (analysisCreditsGranted > 0) {
-      return analysisCreditsGranted;
-    }
-
-    if (planType === "starter" || planType === "pro" || planType === "turbo") {
-      return getPlanConfig()[planType].analysisCreditsGranted;
-    }
-
-    return 0;
+    return resolveAnalysisCreditsForPlan(planType, analysisCreditsGranted);
   }
 
   private async resolveMercadoPagoPayer(
