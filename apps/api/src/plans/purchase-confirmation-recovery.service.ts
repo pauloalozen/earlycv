@@ -55,7 +55,7 @@ export class PurchaseConfirmationRecoveryService {
     sinceHours = DEFAULT_SINCE_HOURS,
     now: Date = new Date(),
   ): Promise<MissingPurchaseConfirmation[]> {
-    const startAt = this.config.getStartAt();
+    const startAt = await this.config.getStartAt();
     if (!startAt) return [];
 
     const since = new Date(now.getTime() - sinceHours * HOUR_MS);
@@ -106,7 +106,7 @@ export class PurchaseConfirmationRecoveryService {
       MAX_SINCE_HOURS,
     );
     const now = input.now ?? new Date();
-    const mode = this.config.getEffectiveMode("PURCHASE_CONFIRMATION");
+    const mode = await this.config.getEffectiveMode("PURCHASE_CONFIRMATION");
     const missing = await this.findMissing(sinceHours, now);
 
     // Modo OFF: nada é criado (o enqueue é no-op) — relata e para.
@@ -158,7 +158,8 @@ export class PurchaseConfirmationRecoveryService {
   @Cron("0 */10 * * * *")
   async auditTick() {
     if (process.env.NODE_ENV === "test") return;
-    if (this.config.getEffectiveMode("PURCHASE_CONFIRMATION") === "OFF") return;
+    if ((await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")) === "OFF")
+      return;
 
     try {
       const missing = await this.findMissing();

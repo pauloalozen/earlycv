@@ -9,6 +9,7 @@ import {
 } from "./email-dispatch.test-support";
 import { EmailDispatchWorker } from "./email-dispatch.worker";
 import { EmailDispatchEligibilityService } from "./email-dispatch-eligibility.service";
+import { EmailDispatchTemplateService } from "./email-dispatch-template.service";
 
 export const NOW = new Date("2026-10-05T15:00:00.000Z"); // 12:00 BRT, dentro da janela
 export const AFTER_CUTOFF = new Date("2026-10-04T10:00:00.000Z");
@@ -42,6 +43,7 @@ export function createFixture(
 ) {
   const emailDispatch = createTable({ uniqueKeys: ["dedupeKey"] });
   const emailSuppression = createTable({ uniqueKeys: ["email"] });
+  const emailDispatchTemplate = createTable({ uniqueKeys: ["key"] });
   const users = options.users ?? [baseUser()];
   const sent: Array<{ category: string; message: Row }> = [];
   const sendResults = [...(options.sendResults ?? [])];
@@ -50,6 +52,7 @@ export function createFixture(
   const database = {
     emailDispatch,
     emailSuppression,
+    emailDispatchTemplate,
     user: {
       findUnique: async ({ where }: { where: Row }) =>
         users.find((u) =>
@@ -97,11 +100,13 @@ export function createFixture(
     },
   };
 
+  const templates = new EmailDispatchTemplateService(database);
   const service = new EmailDispatchService(
     database,
     config,
     emailService,
     suppression,
+    templates,
   );
   const eligibility = new EmailDispatchEligibilityService(
     database,
@@ -147,6 +152,8 @@ export function createFixture(
     worker,
     emailDispatch,
     emailSuppression,
+    emailDispatchTemplate,
+    templates,
     users,
     sent,
     addDispatch,

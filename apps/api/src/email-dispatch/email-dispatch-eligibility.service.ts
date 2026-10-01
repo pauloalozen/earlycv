@@ -64,11 +64,11 @@ export class EmailDispatchEligibilityService {
     if (user.isStaff || user.internalRole !== "none") {
       return { eligible: false, reason: "staff_user" };
     }
-    if (this.config.isBlocked(user.email)) {
+    if (await this.config.isBlocked(user.email)) {
       return { eligible: false, reason: "blocklisted" };
     }
 
-    const startAt = this.config.getStartAt();
+    const startAt = await this.config.getStartAt();
     if (!startAt || user.createdAt < startAt) {
       return { eligible: false, reason: "before_cutoff" };
     }
@@ -130,7 +130,7 @@ export class EmailDispatchEligibilityService {
       return { eligible: false, reason: "purchase_not_completed" };
     }
 
-    const startAt = this.config.getStartAt();
+    const startAt = await this.config.getStartAt();
     if (!startAt || purchase.createdAt < startAt) {
       return { eligible: false, reason: "before_cutoff" };
     }

@@ -4,33 +4,21 @@ import type { EmailDispatchKind } from "@prisma/client";
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { EmailConfigService } from "../email/email-config.service";
 import { RELATIONSHIP_BLOCKED_EMAILS } from "./email-dispatch.constants";
+import {
+  type EmailDispatchModeValue,
+  EmailDispatchSettingsService,
+  type SettingsSnapshot,
+} from "./email-dispatch-settings.service";
 
 // OFF       nada é criado nem enviado.
 // SHADOW    cria a linha e avalia tudo (elegibilidade, variante, template),
 //           mas NUNCA envia — fecha em SKIPPED "shadow_mode". Serve para
 //           medir volume/elegibilidade em produção sem disparar.
-// ALLOWLIST só envia para EMAIL_RELATIONSHIP_ALLOWLIST (resto: SKIPPED).
+// ALLOWLIST só envia para a allowlist configurada no admin (resto: SKIPPED).
 // LIVE      envia para todo elegível criado a partir do cutoff.
-export type RelationshipMode = "OFF" | "SHADOW" | "ALLOWLIST" | "LIVE";
-
-// Falha fechada: ausente ou valor desconhecido = OFF.
-export function parseRelationshipMode(
-  raw: string | undefined,
-): RelationshipMode {
-  const value = raw?.trim().toUpperCase();
-  return value === "SHADOW" || value === "ALLOWLIST" || value === "LIVE"
-    ? value
-    : "OFF";
-}
-
-export function parseEmailList(raw: string | undefined): Set<string> {
-  return new Set(
-    (raw ?? "")
-      .split(",")
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0),
-  );
-}
+// Modos, cutoff e listas vêm do BANCO (EmailDispatchSettings, aba Emails →
+// Configurações), não de variável de ambiente.
+export type RelationshipMode = EmailDispatchModeValue;
 
 export type SendReadiness =
   | { ready: true; contactListName: string; topicName: string }
@@ -43,12 +31,6 @@ type EmailDispatchEnv = Pick<
   | "AWS_SES_PRODUCT_UPDATE_TOPIC_NAME"
   | "AWS_SES_RELATIONSHIP_CONFIGURATION_SET"
   | "AWS_SES_RELATIONSHIP_TOPIC_NAME"
-  | "EMAIL_WELCOME_MODE"
-  | "EMAIL_FEEDBACK_MODE"
-  | "EMAIL_PURCHASE_CONFIRMATION_MODE"
-  | "EMAIL_RELATIONSHIP_START_AT"
-  | "EMAIL_RELATIONSHIP_ALLOWLIST"
-  | "EMAIL_RELATIONSHIP_BLOCKLIST"
 >;
 
 @Injectable()
@@ -60,14 +42,21 @@ export class EmailDispatchConfigService {
       EmailConfigService,
       "isSesEnabled" | "getSesSenderProfile" | "getSesClientConfig"
     >,
+    @Inject(EmailDispatchSettingsService)
+    private readonly settings: Pick<
+      EmailDispatchSettingsService,
+      "getSnapshot"
+    >,
   ) {}
 
-  // Cutoff de novos cadastros. Ausente ou inválido = nenhum fluxo roda.
-  getStartAt(): Date | null {
-    const raw = this.env.EMAIL_RELATIONSHIP_START_AT?.trim();
-    if (!raw) return null;
-    const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  private snapshot(): Promise<SettingsSnapshot> {
+    return this.settings.getSnapshot();
+  }
+
+  // Cutoff de novos cadastros/compras (admin → Configurações). Ausente = nenhum
+  // fluxo roda.
+  async getStartAt(): Promise<Date | null> {
+    return (await this.snapshot()).startAt;
   }
 
   // protected: testes sobrescrevem sem mexer em process.env global.
@@ -83,42 +72,51 @@ export class EmailDispatchConfigService {
     return this.isProduction();
   }
 
-  private modeFor(kind: EmailDispatchKind): string | undefined {
-    if (kind === "WELCOME") return this.env.EMAIL_WELCOME_MODE;
-    if (kind === "FEEDBACK_FIRST_USE") return this.env.EMAIL_FEEDBACK_MODE;
-    return this.env.EMAIL_PURCHASE_CONFIRMATION_MODE;
+  private modeOf(
+    settings: SettingsSnapshot,
+    kind: EmailDispatchKind,
+  ): EmailDispatchModeValue {
+    if (kind === "WELCOME") return settings.welcomeMode;
+    if (kind === "FEEDBACK_FIRST_USE") return settings.feedbackMode;
+    return settings.purchaseConfirmationMode;
   }
 
-  // Modo efetivo. Sem cutoff válido = OFF. Fora de produção LIVE vira
-  // ALLOWLIST: dev/homolog/teste nunca disparam para a base, no máximo
-  // para endereços explicitamente listados.
-  getEffectiveMode(kind: EmailDispatchKind): RelationshipMode {
-    if (!this.getStartAt()) return "OFF";
+  // Modo EFETIVO. Sem cutoff = OFF. Fora de produção LIVE vira ALLOWLIST:
+  // dev/homolog/teste nunca disparam para a base, no máximo para endereços
+  // explicitamente listados (e, mesmo assim, com transporte fake).
+  async getEffectiveMode(kind: EmailDispatchKind): Promise<RelationshipMode> {
+    const settings = await this.snapshot();
+    if (!settings.startAt) return "OFF";
 
-    const configured = parseRelationshipMode(this.modeFor(kind));
-
+    const configured = this.modeOf(settings, kind);
     if (configured === "LIVE" && !this.isProduction()) {
       return "ALLOWLIST";
     }
     return configured;
   }
 
-  getEnabledKinds(): EmailDispatchKind[] {
-    return (
-      ["WELCOME", "FEEDBACK_FIRST_USE", "PURCHASE_CONFIRMATION"] as const
-    ).filter((kind) => this.getEffectiveMode(kind) !== "OFF");
+  async getEnabledKinds(): Promise<EmailDispatchKind[]> {
+    const enabled: EmailDispatchKind[] = [];
+    for (const kind of [
+      "WELCOME",
+      "FEEDBACK_FIRST_USE",
+      "PURCHASE_CONFIRMATION",
+    ] as const) {
+      if ((await this.getEffectiveMode(kind)) !== "OFF") enabled.push(kind);
+    }
+    return enabled;
   }
 
-  isBlocked(email: string): boolean {
+  async isBlocked(email: string): Promise<boolean> {
     const normalized = email.trim().toLowerCase();
     return (
       RELATIONSHIP_BLOCKED_EMAILS.includes(normalized) ||
-      parseEmailList(this.env.EMAIL_RELATIONSHIP_BLOCKLIST).has(normalized)
+      (await this.snapshot()).extraBlocklist.includes(normalized)
     );
   }
 
-  isAllowlisted(email: string): boolean {
-    return parseEmailList(this.env.EMAIL_RELATIONSHIP_ALLOWLIST).has(
+  async isAllowlisted(email: string): Promise<boolean> {
+    return (await this.snapshot()).allowlist.includes(
       email.trim().toLowerCase(),
     );
   }

@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 
 import type { AppEnv } from "../config/env.module";
 import { EmailDispatchConfigService } from "./email-dispatch.config";
+import type { SettingsSnapshot } from "./email-dispatch-settings.service";
 
 // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
 export type Row = Record<string, any>;
@@ -166,22 +167,78 @@ export function buildEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     AWS_SES_RELATIONSHIP_REPLY_TO: "contato@earlycv.com.br",
     AWS_SES_RELATIONSHIP_CONFIGURATION_SET: "earlycv-relationship-email",
     AWS_SES_RELATIONSHIP_TOPIC_NAME: "relationship",
-    EMAIL_RELATIONSHIP_START_AT: "2026-10-01T00:00:00.000Z",
     ...overrides,
   };
 }
 
 // EmailConfigService falso com a mesma regra do real para RELATIONSHIP —
 // o real é testado em email-config.service.spec.ts.
+// Modos/cutoff/listas agora vêm do BANCO (EmailDispatchSettings). Os testes
+// continuam descrevendo-os com as MESMAS chaves de antes (EMAIL_*), traduzidas
+// para um snapshot estático — assim a configuração de cada teste segue
+// legível, sem um banco falso de configurações em todo lugar.
+export type TestSettingsOverrides = {
+  EMAIL_WELCOME_MODE?: string;
+  EMAIL_FEEDBACK_MODE?: string;
+  EMAIL_PURCHASE_CONFIRMATION_MODE?: string;
+  EMAIL_RELATIONSHIP_START_AT?: string;
+  EMAIL_RELATIONSHIP_ALLOWLIST?: string;
+  EMAIL_RELATIONSHIP_BLOCKLIST?: string;
+};
+
+const TEST_SETTING_KEYS = [
+  "EMAIL_WELCOME_MODE",
+  "EMAIL_FEEDBACK_MODE",
+  "EMAIL_PURCHASE_CONFIRMATION_MODE",
+  "EMAIL_RELATIONSHIP_START_AT",
+  "EMAIL_RELATIONSHIP_ALLOWLIST",
+  "EMAIL_RELATIONSHIP_BLOCKLIST",
+] as const;
+
+const asMode = (value: string | undefined): SettingsSnapshot["welcomeMode"] => {
+  const upper = value?.trim().toUpperCase();
+  return upper === "SHADOW" || upper === "ALLOWLIST" || upper === "LIVE"
+    ? upper
+    : "OFF";
+};
+
+const asList = (value: string | undefined) =>
+  (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+
+export function buildSettingsSnapshot(
+  overrides: TestSettingsOverrides = {},
+): SettingsSnapshot {
+  // Padrão dos testes: cutoff definido (como o .env antigo), modos OFF.
+  const startAtRaw =
+    "EMAIL_RELATIONSHIP_START_AT" in overrides
+      ? overrides.EMAIL_RELATIONSHIP_START_AT
+      : "2026-10-01T00:00:00.000Z";
+  const startAt = startAtRaw ? new Date(startAtRaw) : null;
+  return {
+    welcomeMode: asMode(overrides.EMAIL_WELCOME_MODE),
+    feedbackMode: asMode(overrides.EMAIL_FEEDBACK_MODE),
+    purchaseConfirmationMode: asMode(
+      overrides.EMAIL_PURCHASE_CONFIRMATION_MODE,
+    ),
+    startAt: startAt && !Number.isNaN(startAt.getTime()) ? startAt : null,
+    allowlist: asList(overrides.EMAIL_RELATIONSHIP_ALLOWLIST),
+    extraBlocklist: asList(overrides.EMAIL_RELATIONSHIP_BLOCKLIST),
+  };
+}
+
 // Classe nomeada (não anônima) — TS não aceita retornar de uma função
 // exportada uma subclasse anônima de classe com membros privados.
 export class TestEmailDispatchConfig extends EmailDispatchConfigService {
   constructor(
     env: ConstructorParameters<typeof EmailDispatchConfigService>[0],
     emailConfig: ConstructorParameters<typeof EmailDispatchConfigService>[1],
+    settings: ConstructorParameters<typeof EmailDispatchConfigService>[2],
     private readonly production: boolean,
   ) {
-    super(env, emailConfig);
+    super(env, emailConfig, settings);
   }
 
   protected override isProduction() {
@@ -190,10 +247,18 @@ export class TestEmailDispatchConfig extends EmailDispatchConfigService {
 }
 
 export function createConfig(
-  overrides: Partial<AppEnv> = {},
+  overrides: Partial<AppEnv> & TestSettingsOverrides = {},
   options: { production?: boolean } = {},
 ) {
-  const env = buildEnv(overrides);
+  const envOverrides: Record<string, unknown> = { ...overrides };
+  const settingOverrides: Record<string, unknown> = {};
+  for (const key of TEST_SETTING_KEYS) {
+    if (key in envOverrides) {
+      settingOverrides[key] = envOverrides[key];
+      delete envOverrides[key];
+    }
+  }
+  const env = buildEnv(envOverrides as Partial<AppEnv>);
   const emailConfig = {
     isSesEnabled: () => env.SES_EMAIL_ENABLED,
     getSesClientConfig: () => {
@@ -222,9 +287,11 @@ export function createConfig(
     },
   };
 
+  const snapshot = buildSettingsSnapshot(settingOverrides);
   return new TestEmailDispatchConfig(
     env,
     emailConfig,
+    { getSnapshot: async () => snapshot },
     options.production === true,
   );
 }

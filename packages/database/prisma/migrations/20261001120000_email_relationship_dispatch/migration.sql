@@ -10,6 +10,12 @@ CREATE TYPE "EmailDispatchEventType" AS ENUM ('SENT', 'DELIVERED', 'BOUNCED', 'C
 -- CreateEnum
 CREATE TYPE "EmailSuppressionReason" AS ENUM ('HARD_BOUNCE', 'COMPLAINT');
 
+-- CreateEnum
+CREATE TYPE "EmailDispatchMode" AS ENUM ('OFF', 'SHADOW', 'ALLOWLIST', 'LIVE');
+
+-- CreateEnum
+CREATE TYPE "EmailTemplateKey" AS ENUM ('WELCOME', 'FEEDBACK_VIEWED', 'FEEDBACK_NEUTRAL', 'PURCHASE_PAID', 'PURCHASE_COUPON');
+
 -- CreateTable
 CREATE TABLE "EmailDispatch" (
     "id" TEXT NOT NULL,
@@ -77,6 +83,33 @@ CREATE TABLE "EmailSuppression" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "EmailSuppression_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "EmailDispatchSettings" (
+    "id" TEXT NOT NULL DEFAULT 'default',
+    "welcomeMode" "EmailDispatchMode" NOT NULL DEFAULT 'OFF',
+    "feedbackMode" "EmailDispatchMode" NOT NULL DEFAULT 'OFF',
+    "purchaseConfirmationMode" "EmailDispatchMode" NOT NULL DEFAULT 'OFF',
+    "startAt" TIMESTAMP(3),
+    "allowlist" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "extraBlocklist" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "updatedByAdminId" TEXT,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "EmailDispatchSettings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "EmailDispatchTemplate" (
+    "key" "EmailTemplateKey" NOT NULL,
+    "subject" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "updatedByAdminId" TEXT,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "EmailDispatchTemplate_pkey" PRIMARY KEY ("key")
 );
 
 -- CreateIndex

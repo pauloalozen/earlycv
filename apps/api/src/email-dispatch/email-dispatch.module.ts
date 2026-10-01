@@ -7,11 +7,15 @@ import { EmailDispatchConfigService } from "./email-dispatch.config";
 import { EmailDispatchService } from "./email-dispatch.service";
 import { EmailDispatchWorker } from "./email-dispatch.worker";
 import { EmailDispatchEligibilityService } from "./email-dispatch-eligibility.service";
+import { EmailDispatchSettingsService } from "./email-dispatch-settings.service";
+import { EmailDispatchTemplateService } from "./email-dispatch-template.service";
 import { EmailDispatchWebhookService } from "./email-dispatch-webhook.service";
 
 @Module({
   imports: [DatabaseModule, EmailModule],
   providers: [
+    EmailDispatchSettingsService,
+    EmailDispatchTemplateService,
     EmailDispatchConfigService,
     EmailDispatchEligibilityService,
     EmailDispatchService,
@@ -21,6 +25,9 @@ import { EmailDispatchWebhookService } from "./email-dispatch-webhook.service";
     EmailDispatchWorker,
   ],
   exports: [
+    // Admin (aba Emails): configurações e templates editáveis.
+    EmailDispatchSettingsService,
+    EmailDispatchTemplateService,
     // Modo/cutoff atuais — lidos pela recuperação de confirmações de compra.
     EmailDispatchConfigService,
     // AuthModule: ganchos pós-verificação.
