@@ -70,23 +70,9 @@ export type AppEnv = {
   AWS_SES_RELATIONSHIP_REPLY_TO?: string;
   AWS_SES_RELATIONSHIP_CONFIGURATION_SET?: string;
   AWS_SES_RELATIONSHIP_TOPIC_NAME?: string;
-  // Modo por tipo: OFF | SHADOW | ALLOWLIST | LIVE (ausente/inválido =
-  // OFF, falha fechada). Strings cruas aqui; parse em
-  // email-dispatch.config.ts. Fora de produção LIVE é rebaixado a
-  // ALLOWLIST.
-  EMAIL_WELCOME_MODE?: string;
-  EMAIL_FEEDBACK_MODE?: string;
-  // Confirmação de compra (transacional, BILLING/Resend): mesmos modos e o
-  // mesmo cutoff (vale para a data de criação da compra).
-  EMAIL_PURCHASE_CONFIRMATION_MODE?: string;
-  // Cutoff (ISO 8601): só usuários criados a partir daqui entram nos
-  // fluxos de relacionamento — a base antiga nunca recebe. Ausente/inválido
-  // = tudo OFF.
-  EMAIL_RELATIONSHIP_START_AT?: string;
-  // CSV de e-mails permitidos no modo ALLOWLIST / bloqueados SEMPRE (somem
-  // da base automática além das contas fixas de email-dispatch.constants.ts).
-  EMAIL_RELATIONSHIP_ALLOWLIST?: string;
-  EMAIL_RELATIONSHIP_BLOCKLIST?: string;
+  // Modos de ativação, cutoff, allowlist e bloqueios do dispatch NÃO são
+  // variáveis de ambiente: ficam no banco (EmailDispatchSettings) e são
+  // editados em /admin/emails/configuracoes.
   // Gate mestre do domínio Product Updates — nasce false: nenhum deploy,
   // migration ou criação de rascunho pode disparar envio de teste/real
   // enquanto esta flag não for ligada manualmente (ver
@@ -174,12 +160,6 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_RELATIONSHIP_REPLY_TO: { optional: true },
     AWS_SES_RELATIONSHIP_CONFIGURATION_SET: { optional: true },
     AWS_SES_RELATIONSHIP_TOPIC_NAME: { optional: true },
-    EMAIL_WELCOME_MODE: { optional: true },
-    EMAIL_FEEDBACK_MODE: { optional: true },
-    EMAIL_PURCHASE_CONFIRMATION_MODE: { optional: true },
-    EMAIL_RELATIONSHIP_START_AT: { optional: true },
-    EMAIL_RELATIONSHIP_ALLOWLIST: { optional: true },
-    EMAIL_RELATIONSHIP_BLOCKLIST: { optional: true },
     PRODUCT_UPDATES_ENABLED: {
       default: "false",
       parse: (value: string) => envToBoolean(value),
@@ -256,20 +236,6 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_RELATIONSHIP_CONFIGURATION_SET:
       env.AWS_SES_RELATIONSHIP_CONFIGURATION_SET as string | undefined,
     AWS_SES_RELATIONSHIP_TOPIC_NAME: env.AWS_SES_RELATIONSHIP_TOPIC_NAME as
-      | string
-      | undefined,
-    EMAIL_WELCOME_MODE: env.EMAIL_WELCOME_MODE as string | undefined,
-    EMAIL_FEEDBACK_MODE: env.EMAIL_FEEDBACK_MODE as string | undefined,
-    EMAIL_PURCHASE_CONFIRMATION_MODE: env.EMAIL_PURCHASE_CONFIRMATION_MODE as
-      | string
-      | undefined,
-    EMAIL_RELATIONSHIP_START_AT: env.EMAIL_RELATIONSHIP_START_AT as
-      | string
-      | undefined,
-    EMAIL_RELATIONSHIP_ALLOWLIST: env.EMAIL_RELATIONSHIP_ALLOWLIST as
-      | string
-      | undefined,
-    EMAIL_RELATIONSHIP_BLOCKLIST: env.EMAIL_RELATIONSHIP_BLOCKLIST as
       | string
       | undefined,
     PRODUCT_UPDATES_ENABLED: env.PRODUCT_UPDATES_ENABLED,

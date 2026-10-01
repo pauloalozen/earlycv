@@ -5,6 +5,8 @@ import { test } from "node:test";
 
 import { Test } from "@nestjs/testing";
 
+import { AdminEmailsModule } from "../admin-emails/admin-emails.module";
+import { AdminEmailsService } from "../admin-emails/admin-emails.service";
 import { AuthModule } from "../auth/auth.module";
 import { AuthService } from "../auth/auth.service";
 import { APP_ENV, EnvModule } from "../config/env.module";
@@ -43,7 +45,7 @@ test("EmailDispatchModule resolves its whole DI graph and exports what Auth/Moni
 
   // Padrão seguro: sem env de modo, tudo OFF e o worker nem acorda.
   const config = moduleRef.get(EmailDispatchConfigService, { strict: false });
-  assert.deepEqual(config.getEnabledKinds(), []);
+  assert.deepEqual(await config.getEnabledKinds(), []);
 
   await moduleRef.close();
 });
@@ -114,6 +116,23 @@ test("PlansService, Monitor digest and Product Updates receive the purchase-conf
     // biome-ignore lint/suspicious/noExplicitAny: inspeção de campo privado no teste
     (productEmail as any).suppression instanceof EmailSuppressionService,
   );
+
+  await moduleRef.close();
+});
+
+// O admin de e-mails junta 5 serviços de 3 módulos: se a fiação quebrar, a aba
+// inteira falha no boot. Este teste prova que o grafo resolve.
+test("AdminEmailsModule resolves its whole DI graph (dispatch settings/templates/config + purchase recovery)", async () => {
+  const moduleRef = await Test.createTestingModule({
+    imports: [EnvModule, AdminEmailsModule],
+  })
+    .overrideProvider(APP_ENV)
+    .useValue(buildEnv())
+    .overrideProvider(DatabaseService)
+    .useValue({})
+    .compile();
+
+  assert.ok(moduleRef.get(AdminEmailsService, { strict: false }));
 
   await moduleRef.close();
 });

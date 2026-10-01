@@ -22,6 +22,11 @@ import { PurchaseConfirmationRecoveryService } from "./purchase-confirmation-rec
     CouponResolutionService,
     PurchaseConfirmationRecoveryService,
   ],
-  exports: [PlansService, CouponResolutionService],
+  exports: [
+    PlansService,
+    CouponResolutionService,
+    // Detecção/recuperação de confirmações de compra perdidas (aba admin Emails).
+    PurchaseConfirmationRecoveryService,
+  ],
 })
 export class PlansModule {}

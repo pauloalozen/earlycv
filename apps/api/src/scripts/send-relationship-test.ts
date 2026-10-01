@@ -41,6 +41,7 @@ import {
   EmailDispatchService,
   renderDispatchEmail,
 } from "../email-dispatch/email-dispatch.service";
+import { OFF_SNAPSHOT } from "../email-dispatch/email-dispatch-settings.service";
 import { sendRelationshipTestWithoutDb } from "../email-dispatch/email-dispatch-standalone";
 import {
   parseTestArgs,
@@ -99,7 +100,11 @@ async function main() {
     // Sem Nest e sem banco: só a configuração do SES + a fachada de e-mail.
     const env = await loadAppEnv();
     const emailConfig = new EmailConfigService(env);
-    const config = new EmailDispatchConfigService(env, emailConfig);
+    // Só a prontidão do SES é consultada aqui; modos/cutoff (banco) não importam
+    // para um teste explícito.
+    const config = new EmailDispatchConfigService(env, emailConfig, {
+      getSnapshot: async () => OFF_SNAPSHOT,
+    });
     const emailService = new DefaultEmailService(
       new DefaultEmailRoutingPolicy(
         new EmailDeliveryProviderAdapter(new FakeEmailDeliveryService()),

@@ -19,18 +19,15 @@ aws sns get-subscription-attributes --subscription-arn <arn> --region us-east-2 
 
 ## 2. Variáveis Railway (serviço API, ambiente production)
 
-**Adicionar (novas):**
+**Só identidade e infra do SES** (a ativação NÃO é variável de ambiente; ver §7):
 ```
 AWS_SES_RELATIONSHIP_FROM_EMAIL=contato@earlycv.com.br
 AWS_SES_RELATIONSHIP_FROM_NAME=Paulo do EarlyCV
-AWS_SES_RELATIONSHIP_REPLY_TO=contato@earlycv.com.br
+AWS_SES_RELATIONSHIP_REPLY_TO=contato@earlycv.com.br     # opcional (sem ela o e-mail sai sem Reply-To)
 AWS_SES_RELATIONSHIP_CONFIGURATION_SET=earlycv-relationship-email
 AWS_SES_RELATIONSHIP_TOPIC_NAME=relationship
-EMAIL_WELCOME_MODE=OFF
-EMAIL_FEEDBACK_MODE=OFF
-EMAIL_PURCHASE_CONFIRMATION_MODE=OFF
 ```
-**NÃO definir agora** (ausência = fail-closed): `EMAIL_RELATIONSHIP_START_AT`, `EMAIL_RELATIONSHIP_ALLOWLIST`, `EMAIL_RELATIONSHIP_BLOCKLIST`. Sem `START_AT` válido, **nenhum** modo funciona mesmo que alguém ligue um por engano; o teste explícito não depende dele.
+**Modos, cutoff, allowlist e bloqueios não são variáveis**: ficam no banco (`EmailDispatchSettings`) e são editados em `/admin/emails/configuracoes`. Sem configuração salva (estado após o deploy) **tudo é OFF e sem cutoff**; o teste explícito do §4 não depende disso. (Se você já definiu `EMAIL_*_MODE`/`EMAIL_RELATIONSHIP_*` no Railway, são ignoradas: pode remover.)
 
 **Conferir que já existem com estes valores (não alterar):**
 ```
@@ -45,7 +42,7 @@ AWS_SES_SNS_TOPIC_ARN=arn:aws:sns:us-east-2:163408842110:earlycv-email-events   
 RESEND_API_KEY                                       # exigida pela confirmação de compra (transporte real)
 FRONTEND_URL=https://earlycv.com.br                  # link da boas-vindas
 ```
-Conferência (nomes, sem valores): `railway variables --kv | cut -d= -f1 | sort` (ou o painel). Definir as novas variáveis **antes** do deploy (versão antiga ignora o que não conhece); agrupe tudo num único deploy para evitar redeploys intermediários.
+Conferência (nomes, sem valores): `railway variables --kv | cut -d= -f1 | sort` (ou o painel). Definir as novas variáveis **antes** do deploy (versão antiga ignora o que não conhece); agrupe tudo num único deploy.
 
 ## 3. Sequência de migration e deploy (todos os automáticos OFF)
 1. **Branch**: `git checkout develop && git checkout -b feature/email-relationship-dispatch` (a partir do `develop` atual; nada commitado ainda). `npm run railway:touch-api` imediatamente antes do commit (convenção: grava `apps/api/.railway-redeploy`). Commit com os 62+ arquivos (revisados; ver spec §10.5). **Não commitar `.env` reais.**
@@ -58,7 +55,7 @@ Conferência (nomes, sem valores): `railway variables --kv | cut -d= -f1 | sort`
    - o gancho de compra e os ganchos de auth existem mas, com modo OFF, não fazem **nenhuma** consulta.
 5. **Pós-deploy (obrigatório antes do teste real)**, nos logs do deploy (Railway MCP `get-logs`, filtro `email_dispatch`, ou painel):
    - `All migrations have been successfully applied`;
-   - `email_dispatch_boot welcome=OFF feedback=OFF purchase=OFF startAt=unset transport=real` (**transport=real** é o esperado em produção; modos OFF);
+   - `email_dispatch_boot welcome=OFF feedback=OFF purchase=OFF startAt=unset transport=real` (**transport=real** é o esperado em produção; modos OFF porque ainda não há configuração salva);
    - **ausência** de `email_dispatch_dependency_missing` (se aparecer, a fiação falhou: **não** prossiga; reverta);
    - `GET /api/health` ok; Monitor/Product Updates inalterados (sem erro novo).
    Só com isso o handler novo está publicado e o webhook de produção consegue processar `EMAIL_DISPATCH`.
@@ -88,16 +85,23 @@ Limpeza (opcional): reinscrever relationship pelo SES (`aws sesv2 update-contact
 
 ## 6. Reverter
 - Sem efeito em runtime a desfazer: modos já OFF. Para voltar o **código**: reverter o merge do PR (a migration é aditiva; as tabelas ficam, sem uso).
-- Para parar qualquer envio depois de ativado: modo `OFF` (ou remover `EMAIL_RELATIONSHIP_START_AT`); pendências expiram sozinhas.
+- Para parar qualquer envio depois de ativado: **Configurações → modo `Desligado`** (ou limpar o cutoff); pendências expiram sozinhas. Se o banco de configurações ficar ilegível o dispatch falha FECHADO (tudo OFF) e loga `email_dispatch_settings_unreadable`.
 
-## 7. Ativação gradual (depois de validar §5; um tipo por vez, ordem sugerida: compra → boas-vindas → feedback)
-Definir `EMAIL_RELATIONSHIP_START_AT=<ISO do dia da ativação>` e então, por tipo: `SHADOW` (nunca envia; conferir volume/variantes) → `ALLOWLIST` + `EMAIL_RELATIONSHIP_ALLOWLIST=<contas de teste que NÃO são as 2 bloqueadas>` → `LIVE`. Fora de produção o transporte é **fake em qualquer modo**; em produção `ALLOWLIST` envia só aos listados.
+## 7. Ativação gradual (pelo admin; um tipo por vez, ordem sugerida: compra → boas-vindas → feedback)
+Tudo em **Admin → Emails → Configurações** (`/admin/emails/configuracoes`), sem tocar no Railway:
+1. Defina o **cutoff** (horário de Brasília): só cadastros/compras criados a partir dele entram. Obrigatório para ligar qualquer tipo (o backend recusa sem ele).
+2. Por tipo: `Sombra` (cria e avalia tudo, nunca envia; confira volume/variantes em Relacionamento/Compras) → `Só allowlist` + allowlist com contas de teste que NÃO são as 2 bloqueadas → `Ao vivo` (exige marcar a confirmação).
+3. Revise o texto de cada e-mail em **Emails → Templates** (preview e "enviar teste" para um endereço). A edição vale para os próximos envios, inclusive os já agendados.
+Fora de produção o transporte é **fake em qualquer modo**; em produção `Só allowlist` envia só aos listados. Toda alteração (configuração e templates) é gravada no log de ações administrativas. A mudança vale em ~10s em todas as instâncias.
 
 ## 8. Observabilidade e recuperação (tokens estáveis nos logs do deploy)
 | Token | Nível | Significa | Ação |
 |---|---|---|---|
 | `email_dispatch_boot ...` | log | modos, cutoff, transporte (real/fake) a cada boot | conferir "tudo OFF" após deploy |
 | `email_dispatch_not_ready kind=X reason=Y` | warn | modo ligado + transporte real + infra incompleta (nada será enviado) | corrigir variável/IAM |
+| `email_dispatch_settings_unreadable action=fail_closed_all_off` | error | não foi possível ler as configurações: tudo OFF | investigar o banco; nada é enviado enquanto isso |
+| `email_dispatch_templates_unreadable action=use_defaults` | error | não foi possível ler os templates editados: usa o texto padrão | investigar o banco |
+| `email_dispatch_settings_updated adminId=…` | log | alguém alterou modos/cutoff no admin | auditoria (também em `MonitorAdminActionLog`) |
 | `email_dispatch_dependency_missing consumer=Z` | warn | fiação quebrada: Plans/Auth/webhook sem a dependência (recurso desligado em silêncio) | reverter; é bug de DI |
 | `email_dispatch_enqueue_failed kind=PURCHASE_CONFIRMATION purchaseId=<id> credits_unaffected=true reason=...` | error | o enqueue da confirmação falhou; **créditos e compra estão corretos** | `purchase_confirmation_missing` aparece ≤10 min depois; recuperar (abaixo) |
 | `email_dispatch_enqueue_failed kind=RELATIONSHIP userId=<id>` | error | boas-vindas/feedback não criados para esse usuário | investigar `reason` |

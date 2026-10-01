@@ -3,6 +3,8 @@
 Status: implementado em `develop` (local, não commitado). **Todos os envios reais desligados** (modo `OFF`). Atualizado na 2ª rodada: confirmação de compra, supressão compartilhada lida por Monitor/Product Updates, transporte fake fora de produção, correção do formato do evento `Subscription`, feedback com uma única pergunta.
 Ativação: `docs/runbook/email-relationship-activation.md`.
 
+> **Atualização (§11):** modos, cutoff, allowlist e bloqueios **não são mais variáveis de ambiente** (`EMAIL_*_MODE`, `EMAIL_RELATIONSHIP_*`): ficam no banco e são editados em **Admin → Emails → Configurações**. Onde as seções antigas citam essas variáveis, vale o §11. Assunto/corpo dos e-mails também são editáveis (Admin → Emails → Templates).
+
 ## 1. Diagnóstico (antes)
 
 - Já existe fachada única `EmailService.send({category, message})` (`apps/api/src/email/`): `DefaultEmailRoutingPolicy` → provider (Resend para `AUTHENTICATION`/`BILLING`; SES para o resto) → `senderProfile` por categoria. A fachada **não persiste nada**.
@@ -176,3 +178,32 @@ Migration aditiva; `EmailSuppression` gravada/lida por Monitor e Product Updates
 - **Alterações em fluxos existentes (intencionais, descritas em §9):** `monitor-digest-email.service.ts` (checa supressão), `product-update-*` (supressão + correção do descadastro), specs correspondentes.
 - **Suporte:** `.env.example`, `AGENTS.md` (1 linha), `apps/api/package.json` (2 scripts), `apps/api/.railway-redeploy` (convenção; refazer antes do commit).
 - Nada fora do escopo: dois arquivos reformatados por engano pelo `biome` foram revertidos.
+
+## 11. Quarta rodada: aba única "Emails" no admin, configurações e conteúdo no banco
+
+### 11.1 Navegação
+Uma única aba **Emails** no topo substitui "Alerta de Vagas", "Product Updates" e "Recuperação". Dentro dela uma sub-navegação: **Visão geral · Alerta de Vagas · Product Updates · Recuperação de pagamento · Relacionamento · Compras · Templates · Supressões · Configurações**. As 3 telas antigas **mantêm suas rotas** (`/admin/alerta-vagas`, `/admin/product-updates`, `/admin/payment-recovery`): ganham a sub-navegação por um `layout.tsx` por rota, sem tocar nas páginas (links e testes existentes intactos). As novas ficam em `/admin/emails/*`.
+
+### 11.2 Configurações no banco (padrão Alerta de Vagas / Product Updates)
+- `EmailDispatchSettings` (singleton `default`): `welcomeMode`, `feedbackMode`, `purchaseConfirmationMode` (`OFF|SHADOW|ALLOWLIST|LIVE`), `startAt` (cutoff), `allowlist`, `extraBlocklist`, `updatedByAdminId`. **Sem linha = tudo OFF e sem cutoff.**
+- **Falha fechada:** erro ao ler as configurações → tudo OFF (nunca "último valor conhecido") + log `email_dispatch_settings_unreadable`. Cache de 10s (invalida na hora na instância que gravou).
+- **Regras no backend** (`EmailDispatchSettingsService.validate`): qualquer modo ligado exige cutoff; `ALLOWLIST` exige allowlist não vazia; **`LIVE` exige confirmação explícita** quando um tipo passa a `LIVE`; e-mails válidos, normalizados, sem duplicados (máx. 200).
+- **Auditoria:** cada alteração grava `MonitorAdminActionLog` (`email_dispatch_settings_updated`, modos antes/depois, **contagens** — nunca os endereços) + log `email_dispatch_settings_updated`.
+- Continuam em env, de propósito: remetente/Reply-To/Configuration Set/tópico do SES e credenciais (infra, não decisão de produto). `APP_ENV=production` continua sendo o que libera transporte real, e fora de produção `LIVE` continua rebaixado a `ALLOWLIST` com transporte fake.
+- Variáveis removidas: `EMAIL_WELCOME_MODE`, `EMAIL_FEEDBACK_MODE`, `EMAIL_PURCHASE_CONFIRMATION_MODE`, `EMAIL_RELATIONSHIP_START_AT`, `EMAIL_RELATIONSHIP_ALLOWLIST`, `EMAIL_RELATIONSHIP_BLOCKLIST` (se definidas no ambiente, são ignoradas). `EmailDispatchConfigService.getEffectiveMode/getStartAt/isBlocked/isAllowlisted` passaram a ser assíncronos.
+
+### 11.3 Conteúdo editável (assunto + corpo)
+- `EmailDispatchTemplate` (uma linha por chave, ausência = texto padrão do código): `WELCOME`, `FEEDBACK_VIEWED`, `FEEDBACK_NEUTRAL`, `PURCHASE_PAID`, `PURCHASE_COUPON`. Corpo em texto com variáveis (`{{saudacao}}`, `{{nome}}`, `{{link}}`, `{{resumo}}`, `{{plano}}`, `{{valor}}`, `{{creditos}}` conforme o tipo); parágrafos separados por linha em branco. O texto padrão renderiza **idêntico** ao anterior (testes de templates inalterados passam).
+- **Não editáveis, de propósito:** o rodapé de descadastro dos e-mails de relacionamento (sempre acrescentado pelo sistema, com `{{amazonSESUnsubscribeUrl}}`) e o bloco `{{resumo}}` da compra (montado do snapshot da compra aprovada, nunca de texto digitado).
+- **Regras aplicadas no salvar E no preview** (`validateTemplate`): assunto 1–150 caracteres, sem quebra de linha nem variáveis; corpo ≤ 5.000; variável desconhecida recusada (typos não vão para o e-mail); `{{amazonSESUnsubscribeUrl}}` proibido; **feedback: exatamente uma pergunta, assunto sem `?`, sem links, e o neutro nunca menciona análise/resultado**; boas-vindas: no máximo um link; compra paga: precisa de `{{resumo}}` (ou plano+valor+créditos); **cupom: sem valor/`R$`/"valor pago"/"recebemos o pagamento"/"pagamento confirmado" e assunto sem "compra"**.
+- Edição vale para os próximos envios (inclusive os já agendados). Erro de leitura dos templates → usa o texto padrão (nunca bloqueia um envio) + log `email_dispatch_templates_unreadable`. Salvar/restaurar são auditados (`email_dispatch_template_updated|reset`).
+- Preview (dados de exemplo) e **"enviar teste"** a UM endereço, com o texto **salvo**; o transporte é real só em produção (a tela diz quando é fake).
+
+### 11.4 API admin (`/api/admin/emails`, admin/superadmin)
+`GET overview` (modos efetivos, transporte, prontidão — só motivos, nunca nomes de recursos —, contagens 30d/7d, supressões, compras sem recibo) · `GET/POST settings` · `GET templates` · `POST templates/:key[/preview|/send-test|/reset]` · `GET dispatches[?group|kind|status|includeTest]` · `GET dispatches/:id` (com eventos) · `GET suppressions` · `GET purchase-confirmations/missing` · `POST purchase-confirmations/recover`. Alerta de Vagas e Product Updates seguem nos seus módulos.
+
+### 11.5 Telas novas
+Visão geral (ativação por tipo, cutoff, prontidão, saúde, contagens) · Relacionamento e Compras (listas filtráveis; Compras tem o bloco "compras sem recibo" com botão de recuperar) · detalhe de um envio com timeline de entrega · Templates (editor com variáveis, preview em iframe sandbox, restaurar, testar) · Supressões · Configurações (formulário que **não** apaga o digitado quando o backend recusa: usa `onSubmit`, porque no React 19 `<form action>` reseta os campos).
+
+### 11.6 Evidências
+API (Postgres real): `admin-emails.service.spec.ts` (10), `email-dispatch-settings.service.spec.ts`, `email-dispatch-template.service.spec.ts`, DI do `AdminEmailsModule`. Web: nav (resolução de rotas, topbar com uma única aba "Emails", layouts), helpers de formulário (cutoff em horário de Brasília, validação de formato), actions, 7 páginas, formulário de configurações e editor de templates (**achados pelos testes:** `Date` aceita lixo como "ontem"; `<form action>` apagava o formulário). Falhas já existentes e alheias: `admin/ingestion/actions.test.ts` e `admin/payment-recovery/page.test.tsx`.

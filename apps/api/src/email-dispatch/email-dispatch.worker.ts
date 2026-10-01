@@ -14,10 +14,7 @@ import {
   STALE_PROCESSING_THRESHOLD_MS,
   WORKER_BATCH_SIZE,
 } from "./email-dispatch.constants";
-import {
-  EmailDispatchService,
-  renderDispatchEmail,
-} from "./email-dispatch.service";
+import { EmailDispatchService } from "./email-dispatch.service";
 import { EmailDispatchEligibilityService } from "./email-dispatch-eligibility.service";
 import { adjustToFeedbackWindow } from "./email-dispatch-schedule.util";
 import type { PurchaseConfirmationPayload } from "./email-dispatch-templates";
@@ -68,15 +65,15 @@ export class EmailDispatchWorker implements OnModuleInit {
   // Estado de ativação visível no log de CADA deploy (sem segredos): modos,
   // cutoff e se o transporte é real ou fake. É o primeiro lugar a olhar para
   // confirmar "tudo OFF" depois de publicar.
-  onModuleInit() {
-    const startAt = this.config.getStartAt();
+  async onModuleInit() {
+    const startAt = await this.config.getStartAt();
     this.logger.log(
-      `email_dispatch_boot welcome=${this.config.getEffectiveMode("WELCOME")} feedback=${this.config.getEffectiveMode("FEEDBACK_FIRST_USE")} purchase=${this.config.getEffectiveMode("PURCHASE_CONFIRMATION")} startAt=${startAt ? startAt.toISOString() : "unset"} transport=${this.config.isRealTransportAllowed() ? "real" : "fake"}`,
+      `email_dispatch_boot welcome=${await this.config.getEffectiveMode("WELCOME")} feedback=${await this.config.getEffectiveMode("FEEDBACK_FIRST_USE")} purchase=${await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")} startAt=${startAt ? startAt.toISOString() : "unset"} transport=${this.config.isRealTransportAllowed() ? "real" : "fake"}`,
     );
 
     // Modo ligado + transporte real + infra incompleta = nada seria enviado.
     if (this.config.isRealTransportAllowed()) {
-      for (const kind of this.config.getEnabledKinds()) {
+      for (const kind of await this.config.getEnabledKinds()) {
         const readiness =
           kind === "PURCHASE_CONFIRMATION"
             ? this.config.checkPurchaseSendReadiness()
@@ -101,7 +98,7 @@ export class EmailDispatchWorker implements OnModuleInit {
   // Gate em profundidade: com os dois tipos OFF (padrão) este método não
   // toca no banco nem no lock — chamado direto ou via tick().
   async processBatch(now: Date = new Date()): Promise<number> {
-    if (this.config.getEnabledKinds().length === 0) {
+    if ((await this.config.getEnabledKinds()).length === 0) {
       return 0;
     }
 
@@ -122,13 +119,15 @@ export class EmailDispatchWorker implements OnModuleInit {
       // Tipos em ALLOWLIST/LIVE só rodam com a infra de envio completa
       // QUANDO o transporte é real; SHADOW nunca envia e o transporte fake
       // (fora de produção) não precisa de infra — rodam sempre.
-      const kinds = this.config
-        .getEnabledKinds()
-        .filter(
-          (kind) =>
-            this.config.getEffectiveMode(kind) === "SHADOW" ||
-            this.isKindReady(kind),
-        );
+      const kinds: EmailDispatchKind[] = [];
+      for (const kind of await this.config.getEnabledKinds()) {
+        if (
+          (await this.config.getEffectiveMode(kind)) === "SHADOW" ||
+          this.isKindReady(kind)
+        ) {
+          kinds.push(kind);
+        }
+      }
       if (kinds.length === 0) {
         return 0;
       }
@@ -259,7 +258,7 @@ export class EmailDispatchWorker implements OnModuleInit {
       return;
     }
 
-    const mode = this.config.getEffectiveMode(row.kind);
+    const mode = await this.config.getEffectiveMode(row.kind);
     if (mode === "OFF") {
       // Modo desligado entre a consulta e o claim — devolve intacto.
       await this.release(row.id);
@@ -307,7 +306,7 @@ export class EmailDispatchWorker implements OnModuleInit {
     if (mode === "SHADOW") {
       // Renderiza para provar que o template funciona com estes dados,
       // grava a variante que SERIA usada, e fecha sem enviar.
-      renderDispatchEmail({
+      await this.dispatchService.render({
         kind: row.kind,
         name: verdict.user.name,
         variant,
@@ -322,7 +321,7 @@ export class EmailDispatchWorker implements OnModuleInit {
 
     if (
       mode === "ALLOWLIST" &&
-      !this.config.isAllowlisted(verdict.user.email)
+      !(await this.config.isAllowlisted(verdict.user.email))
     ) {
       await this.close(row.id, "SKIPPED", "not_allowlisted");
       return;

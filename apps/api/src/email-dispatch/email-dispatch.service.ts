@@ -21,13 +21,18 @@ import {
   buildRelationshipMessage,
 } from "./email-dispatch-message";
 import { computeFeedbackScheduledFor } from "./email-dispatch-schedule.util";
+import { EmailDispatchTemplateService } from "./email-dispatch-template.service";
 import {
+  type EmailTemplateKeyValue,
   type FeedbackVariant,
+  feedbackKeyFor,
   type PurchaseConfirmationPayload,
+  purchaseKeyFor,
   type RenderedEmail,
   renderFeedbackEmail,
   renderPurchaseConfirmationEmail,
   renderWelcomeEmail,
+  type TemplateContent,
 } from "./email-dispatch-templates";
 
 function resolveAppUrl(): string {
@@ -36,29 +41,51 @@ function resolveAppUrl(): string {
   );
 }
 
-export function renderDispatchEmail(input: {
+type RenderInput = {
   kind: EmailDispatchKind;
   name: string | null | undefined;
   variant: FeedbackVariant | null;
   payload?: PurchaseConfirmationPayload | null;
-}): RenderedEmail {
+};
+
+// Qual template editável vale para este envio.
+export function templateKeyFor(input: RenderInput): EmailTemplateKeyValue {
+  if (input.kind === "WELCOME") return "WELCOME";
+  if (input.kind === "PURCHASE_CONFIRMATION") {
+    if (!input.payload) {
+      throw new Error("PURCHASE_CONFIRMATION requires a payload snapshot");
+    }
+    return purchaseKeyFor(input.payload);
+  }
+  return feedbackKeyFor(input.variant ?? "NEUTRAL");
+}
+
+// Render SÍNCRONO com o texto padrão (ou o `content` informado). Usado pelo
+// dry-run do script e pelos testes; o envio real passa pelo conteúdo salvo no
+// admin (EmailDispatchService.render).
+export function renderDispatchEmail(
+  input: RenderInput,
+  content?: TemplateContent,
+): RenderedEmail {
   if (input.kind === "WELCOME") {
-    return renderWelcomeEmail({ name: input.name, appUrl: resolveAppUrl() });
+    return renderWelcomeEmail(
+      { name: input.name, appUrl: resolveAppUrl() },
+      content,
+    );
   }
   if (input.kind === "PURCHASE_CONFIRMATION") {
     if (!input.payload) {
       throw new Error("PURCHASE_CONFIRMATION requires a payload snapshot");
     }
-    return renderPurchaseConfirmationEmail({
-      name: input.name,
-      appUrl: resolveAppUrl(),
-      payload: input.payload,
-    });
+    return renderPurchaseConfirmationEmail(
+      { name: input.name, appUrl: resolveAppUrl(), payload: input.payload },
+      content,
+    );
   }
-  return renderFeedbackEmail({
-    name: input.name,
-    variant: input.variant ?? "NEUTRAL",
-  });
+  return renderFeedbackEmail(
+    { name: input.name, variant: input.variant ?? "NEUTRAL" },
+    content,
+  );
 }
 
 export type SendTestInput = {
@@ -97,7 +124,21 @@ export class EmailDispatchService {
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
     @Inject(EmailSuppressionService)
     private readonly suppression: Pick<EmailSuppressionService, "findByEmail">,
+    @Inject(EmailDispatchTemplateService)
+    private readonly templates: Pick<
+      EmailDispatchTemplateService,
+      "getEffective"
+    >,
   ) {}
+
+  // Render com o assunto/corpo SALVOS no admin (ou o padrão do código).
+  async render(input: RenderInput): Promise<RenderedEmail> {
+    const template = await this.templates.getEffective(templateKeyFor(input));
+    return renderDispatchEmail(input, {
+      subject: template.subject,
+      body: template.body,
+    });
+  }
 
   // Chamado pelos ganchos de auth DEPOIS que o e-mail foi de fato
   // verificado (verifyEmail, ou cadastro social de usuário realmente novo).
@@ -111,11 +152,12 @@ export class EmailDispatchService {
     const none = { welcome: false, feedback: false };
 
     try {
-      const startAt = this.config.getStartAt();
+      const startAt = await this.config.getStartAt();
       if (!startAt) return none;
 
-      const welcomeMode = this.config.getEffectiveMode("WELCOME");
-      const feedbackMode = this.config.getEffectiveMode("FEEDBACK_FIRST_USE");
+      const welcomeMode = await this.config.getEffectiveMode("WELCOME");
+      const feedbackMode =
+        await this.config.getEffectiveMode("FEEDBACK_FIRST_USE");
       if (welcomeMode === "OFF" && feedbackMode === "OFF") return none;
 
       const user = await this.database.user.findUnique({
@@ -235,10 +277,12 @@ export class EmailDispatchService {
     now: Date = new Date(),
   ): Promise<boolean> {
     // Modo OFF (padrão) = zero pegada: nem savepoint, nem consulta.
-    if (this.config.getEffectiveMode("PURCHASE_CONFIRMATION") === "OFF") {
+    if (
+      (await this.config.getEffectiveMode("PURCHASE_CONFIRMATION")) === "OFF"
+    ) {
       return false;
     }
-    const startAt = this.config.getStartAt();
+    const startAt = await this.config.getStartAt();
     if (!startAt) return false;
 
     let savepointOpen = false;
@@ -345,7 +389,7 @@ export class EmailDispatchService {
 
     if (!input.realTransport) {
       // Renderiza mesmo assim: um template quebrado precisa falhar aqui.
-      renderDispatchEmail(input);
+      await this.render(input);
       this.logger.log(
         `email dispatch fake transport (nothing sent): kind=${input.kind} dispatchId=${input.dispatchId}`,
       );
@@ -356,7 +400,7 @@ export class EmailDispatchService {
       };
     }
 
-    const rendered = renderDispatchEmail(input);
+    const rendered = await this.render(input);
 
     if (isPurchase) {
       const readiness = this.config.checkPurchaseSendReadiness();

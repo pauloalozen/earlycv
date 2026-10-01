@@ -2795,6 +2795,62 @@ model EmailSuppression {
   updatedAt DateTime @updatedAt
 }
 
+// Modo de ativação de cada tipo de e-mail do dispatch (EmailDispatchSettings).
+// OFF nada é criado nem enviado; SHADOW avalia e renderiza mas NUNCA envia;
+// ALLOWLIST só para a allowlist; LIVE para todo elegível a partir do cutoff.
+enum EmailDispatchMode {
+  OFF
+  SHADOW
+  ALLOWLIST
+  LIVE
+}
+
+// Configuração do dispatch gerenciada pelo admin (aba Emails → Configurações),
+// no padrão de MonitorDigestScheduleConfig/Product Updates — NÃO por variável
+// de ambiente. Singleton id="default". Ausência de linha = tudo OFF e sem
+// cutoff (falha fechada). Identidade/credenciais do SES continuam em env.
+model EmailDispatchSettings {
+  id String @id @default("default")
+
+  welcomeMode              EmailDispatchMode @default(OFF)
+  feedbackMode             EmailDispatchMode @default(OFF)
+  purchaseConfirmationMode EmailDispatchMode @default(OFF)
+
+  // Cutoff: só usuários/compras criados a partir daqui entram. null = nada
+  // roda, mesmo com modo ligado.
+  startAt DateTime?
+
+  // E-mails normalizados (minúsculos). allowlist vale no modo ALLOWLIST;
+  // extraBlocklist ACRESCENTA às contas fixas do código.
+  allowlist      String[] @default([])
+  extraBlocklist String[] @default([])
+
+  updatedByAdminId String?
+  updatedAt        DateTime @updatedAt
+}
+
+enum EmailTemplateKey {
+  WELCOME
+  FEEDBACK_VIEWED
+  FEEDBACK_NEUTRAL
+  PURCHASE_PAID
+  PURCHASE_COUPON
+}
+
+// Assunto e corpo editáveis de cada e-mail do dispatch. Ausência de linha =
+// texto padrão do código. O rodapé de descadastro (relacionamento) é sempre
+// acrescentado pelo sistema e não é editável.
+model EmailDispatchTemplate {
+  key EmailTemplateKey @id
+
+  subject String
+  body    String
+
+  version          Int      @default(1)
+  updatedByAdminId String?
+  updatedAt        DateTime @updatedAt
+}
+
 model JobEnrichment {
   id    String @id @default(cuid())
   jobId String @unique

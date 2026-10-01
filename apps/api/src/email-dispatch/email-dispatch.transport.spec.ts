@@ -4,6 +4,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import { EmailDispatchConfigService } from "./email-dispatch.config";
 import { baseUser, createFixture, NOW } from "./email-dispatch.fixtures";
 import type { Row } from "./email-dispatch.test-support";
+import type { SettingsSnapshot } from "./email-dispatch-settings.service";
 
 // Transporte fake fora de produção: configuração + comportamento por tipo.
 
@@ -16,15 +17,20 @@ afterEach(() => {
   else process.env.APP_ENV = originalAppEnv;
 });
 
-function realConfig(env: Record<string, string | undefined> = {}) {
+// EmailDispatchConfigService REAL (não a subclasse de teste): lê APP_ENV do
+// processo, para provar a regra "só production" de ponta a ponta.
+function realConfig(settings: Partial<SettingsSnapshot> = {}) {
+  const snapshot: SettingsSnapshot = {
+    welcomeMode: "LIVE",
+    feedbackMode: "LIVE",
+    purchaseConfirmationMode: "LIVE",
+    startAt: new Date("2026-10-01T00:00:00.000Z"),
+    allowlist: [],
+    extraBlocklist: [],
+    ...settings,
+  };
   return new EmailDispatchConfigService(
-    {
-      EMAIL_RELATIONSHIP_START_AT: "2026-10-01T00:00:00.000Z",
-      EMAIL_WELCOME_MODE: "LIVE",
-      EMAIL_FEEDBACK_MODE: "LIVE",
-      EMAIL_PURCHASE_CONFIRMATION_MODE: "LIVE",
-      ...env,
-    },
+    {},
     {
       isSesEnabled: () => true,
       getSesClientConfig: () => ({
@@ -38,6 +44,7 @@ function realConfig(env: Record<string, string | undefined> = {}) {
         configurationSet: "earlycv-relationship-email",
       }),
     },
+    { getSnapshot: async () => snapshot },
   );
 }
 
@@ -64,7 +71,7 @@ test("real transport is allowed ONLY when APP_ENV is exactly 'production' — un
   assert.equal(realConfig().isRealTransportAllowed(), true);
 });
 
-test("outside production every configured LIVE is downgraded to ALLOWLIST for ALL THREE kinds", () => {
+test("outside production every configured LIVE is downgraded to ALLOWLIST for ALL THREE kinds", async () => {
   process.env.APP_ENV = "staging";
   const config = realConfig();
   for (const kind of [
@@ -72,7 +79,7 @@ test("outside production every configured LIVE is downgraded to ALLOWLIST for AL
     "FEEDBACK_FIRST_USE",
     "PURCHASE_CONFIRMATION",
   ] as const) {
-    assert.equal(config.getEffectiveMode(kind), "ALLOWLIST", kind);
+    assert.equal(await config.getEffectiveMode(kind), "ALLOWLIST", kind);
   }
   process.env.APP_ENV = "production";
   for (const kind of [
@@ -80,7 +87,7 @@ test("outside production every configured LIVE is downgraded to ALLOWLIST for AL
     "FEEDBACK_FIRST_USE",
     "PURCHASE_CONFIRMATION",
   ] as const) {
-    assert.equal(config.getEffectiveMode(kind), "LIVE", kind);
+    assert.equal(await config.getEffectiveMode(kind), "LIVE", kind);
   }
 });
 
@@ -146,7 +153,7 @@ test("outside production, due rows of ALL THREE kinds in ALLOWLIST/LIVE become S
   ]);
 });
 
-test("boot log states the activation state: modes, cutoff and transport (real/fake) — no secrets", () => {
+test("boot log states the activation state: modes, cutoff and transport (real/fake) — no secrets", async () => {
   process.env.APP_ENV = "staging";
   const f = createFixture({ env: { EMAIL_WELCOME_MODE: "SHADOW" } });
   const lines: string[] = [];
@@ -156,7 +163,7 @@ test("boot log states the activation state: modes, cutoff and transport (real/fa
     warn: (m: string) => lines.push(m),
   };
 
-  f.worker.onModuleInit();
+  await f.worker.onModuleInit();
 
   assert.equal(lines.length, 1);
   assert.match(
@@ -166,7 +173,7 @@ test("boot log states the activation state: modes, cutoff and transport (real/fa
   assert.doesNotMatch(lines[0], /secret|key|@/i);
 });
 
-test("boot log (production) warns when a ligado kind cannot send because the infra is incomplete", () => {
+test("boot log (production) warns when a ligado kind cannot send because the infra is incomplete", async () => {
   const f = createFixture({
     env: {
       EMAIL_FEEDBACK_MODE: "LIVE",
@@ -183,7 +190,7 @@ test("boot log (production) warns when a ligado kind cannot send because the inf
   const original = process.env.RESEND_API_KEY;
   delete process.env.RESEND_API_KEY;
 
-  f.worker.onModuleInit();
+  await f.worker.onModuleInit();
 
   if (original !== undefined) process.env.RESEND_API_KEY = original;
   assert.match(lines[0], /transport=real/);

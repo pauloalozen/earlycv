@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AdminAffiliatesModule } from "./admin-affiliates/admin-affiliates.module";
+import { AdminEmailsModule } from "./admin-emails/admin-emails.module";
 import { AdminMonitorModule } from "./admin-monitor/admin-monitor.module";
 import { AdminPendingModule } from "./admin-pending/admin-pending.module";
 import { AdminProductUpdatesModule } from "./admin-product-updates/admin-product-updates.module";
@@ -60,6 +61,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AdminUsersModule,
     AdminAffiliatesModule,
     AdminMonitorModule,
+    AdminEmailsModule,
     ProductUpdatesModule,
     EmailDispatchModule,
     AdminProductUpdatesModule,
