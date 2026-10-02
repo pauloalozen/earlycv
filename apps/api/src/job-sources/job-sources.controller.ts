@@ -158,8 +158,15 @@ export class JobSourcesController {
   }
 
   @Get(":id/runs")
-  listRuns(@Param("id") id: string) {
-    return this.ingestionService.listRuns(id);
+  listRuns(
+    @Param("id") id: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.ingestionService.listRuns(id, {
+      limit: limit ? Number.parseInt(limit, 10) : undefined,
+      page: page ? Number.parseInt(page, 10) : undefined,
+    });
   }
 
   @Get(":id/runs/:runId")

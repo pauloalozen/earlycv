@@ -1444,3 +1444,71 @@ test("IngestionService.listAllRuns paginates, filters, and omits previewJson fro
   await database.company.delete({ where: { id: company.id } });
   await moduleRef.close();
 });
+
+test("IngestionService.listRuns pagina no banco e nunca carrega previewJson", async () => {
+  const fixture = createIngestionServiceFixture();
+  const database = fixture.service.database as unknown as {
+    ingestionRun: Record<string, unknown>;
+    jobSource: Record<string, unknown>;
+  };
+  database.jobSource.findUnique = async () => ({ id: "source-1" });
+  let findManyArgs: Record<string, unknown> | undefined;
+  let countArgs: Record<string, unknown> | undefined;
+  database.ingestionRun.findMany = async (args: Record<string, unknown>) => {
+    findManyArgs = args;
+    return [
+      {
+        errorSummary: null,
+        failedCount: 0,
+        finishedAt: new Date("2026-10-01T10:05:00.000Z"),
+        id: "run-9",
+        jobSourceId: "source-1",
+        newCount: 2,
+        skippedCount: 0,
+        startedAt: new Date("2026-10-01T10:00:00.000Z"),
+        status: "completed",
+        updatedCount: 1,
+      },
+    ];
+  };
+  database.ingestionRun.count = async (args: Record<string, unknown>) => {
+    countArgs = args;
+    return 61;
+  };
+
+  const result = await fixture.service.listRuns("source-1", {
+    limit: 25,
+    page: 3,
+  });
+
+  assert.deepEqual(findManyArgs?.omit, { previewJson: true });
+  assert.equal(findManyArgs?.skip, 50);
+  assert.equal(findManyArgs?.take, 25);
+  assert.deepEqual(findManyArgs?.where, { jobSourceId: "source-1" });
+  assert.deepEqual(countArgs, { where: { jobSourceId: "source-1" } });
+  assert.equal(result.total, 61);
+  assert.equal(result.page, 3);
+  assert.equal(result.limit, 25);
+  assert.equal(result.runs[0].id, "run-9");
+  assert.deepEqual(result.runs[0].previewItems, []);
+});
+
+test("IngestionService.listRuns limita o tamanho da pagina a 100", async () => {
+  const fixture = createIngestionServiceFixture();
+  const database = fixture.service.database as unknown as {
+    ingestionRun: Record<string, unknown>;
+    jobSource: Record<string, unknown>;
+  };
+  database.jobSource.findUnique = async () => ({ id: "source-1" });
+  let take: unknown;
+  database.ingestionRun.findMany = async (args: { take: number }) => {
+    take = args.take;
+    return [];
+  };
+  database.ingestionRun.count = async () => 0;
+
+  const result = await fixture.service.listRuns("source-1", { limit: 5000 });
+
+  assert.equal(take, 100);
+  assert.equal(result.page, 1);
+});

@@ -23,7 +23,12 @@ export const metadata = buildAdminMetadata("Detalhe da ingestion");
 
 type JobSourcePageProps = {
   params: Promise<{ jobSourceId: string }>;
-  searchParams: Promise<{ message?: string; status?: string; token?: string }>;
+  searchParams: Promise<{
+    message?: string;
+    runsPage?: string;
+    status?: string;
+    token?: string;
+  }>;
 };
 
 export default async function JobSourceAdminPage({
@@ -31,7 +36,11 @@ export default async function JobSourceAdminPage({
   searchParams,
 }: JobSourcePageProps) {
   const { jobSourceId } = await params;
-  const { message, status } = await searchParams;
+  const { message, runsPage, status } = await searchParams;
+  const requestedRunsPage = Math.max(
+    1,
+    Number.parseInt(runsPage ?? "1", 10) || 1,
+  );
   const token = await getBackofficeSessionToken();
 
   if (!token) {
@@ -59,10 +68,17 @@ export default async function JobSourceAdminPage({
   }
 
   try {
-    const [source, runs] = await Promise.all([
+    const [source, runsResult] = await Promise.all([
       getJobSource(jobSourceId),
-      listIngestionRuns(jobSourceId),
+      listIngestionRuns(jobSourceId, { page: requestedRunsPage }),
     ]);
+    const runs = runsResult.runs;
+    const runsTotalPages = Math.max(
+      1,
+      Math.ceil(runsResult.total / runsResult.limit),
+    );
+    const runsPageHref = (page: number) =>
+      `/admin/ingestion/${jobSourceId}?runsPage=${page}`;
     const redirectPath = `/admin/ingestion/${jobSourceId}`;
     const isScheduled = Boolean(source.scheduleEnabled && source.scheduleCron);
 
@@ -273,11 +289,7 @@ export default async function JobSourceAdminPage({
               action={renameCompanyAction}
               className="flex flex-wrap items-end gap-3"
             >
-              <input
-                name="companyId"
-                type="hidden"
-                value={source.company.id}
-              />
+              <input name="companyId" type="hidden" value={source.company.id} />
               <input name="redirectPath" type="hidden" value={redirectPath} />
 
               <label
@@ -297,10 +309,7 @@ export default async function JobSourceAdminPage({
                 />
               </label>
 
-              <button
-                className={buttonVariants({ size: "sm" })}
-                type="submit"
-              >
+              <button className={buttonVariants({ size: "sm" })} type="submit">
                 Salvar nome
               </button>
             </form>
@@ -314,10 +323,10 @@ export default async function JobSourceAdminPage({
               Use isto quando a fonte (URL <code>{source.sourceUrl}</code>) foi
               atribuída à empresa errada na origem — nada que dá pra corrigir
               editando só o nome da fonte acima. Ao confirmar, a URL é
-              preservada e o histórico de vagas dessa fonte é movido junto
-              para a empresa informada abaixo (nova ou já existente); a
-              empresa atual (<strong>{source.company.name}</strong>) continua
-              existindo, só fica sem esta fonte e sem essas vagas.
+              preservada e o histórico de vagas dessa fonte é movido junto para
+              a empresa informada abaixo (nova ou já existente); a empresa atual
+              (<strong>{source.company.name}</strong>) continua existindo, só
+              fica sem esta fonte e sem essas vagas.
             </p>
 
             <form
@@ -420,6 +429,12 @@ export default async function JobSourceAdminPage({
               <h2 className="text-lg font-bold tracking-tight">
                 Historico de runs
               </h2>
+              {runsResult.total > 0 ? (
+                <p className="text-xs text-stone-500">
+                  {runsResult.total} runs - pagina {runsResult.page} de{" "}
+                  {runsTotalPages}
+                </p>
+              ) : null}
             </div>
             <div className="divide-y divide-stone-200">
               {runs.length === 0 ? (
@@ -455,6 +470,34 @@ export default async function JobSourceAdminPage({
                 ))
               )}
             </div>
+            {runsTotalPages > 1 ? (
+              <div className="flex items-center justify-between border-t border-stone-200 px-6 py-4">
+                {runsResult.page > 1 ? (
+                  <Link
+                    className={buttonVariants({
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                    href={runsPageHref(runsResult.page - 1)}
+                  >
+                    Mais recentes
+                  </Link>
+                ) : (
+                  <span />
+                )}
+                {runsResult.page < runsTotalPages ? (
+                  <Link
+                    className={buttonVariants({
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                    href={runsPageHref(runsResult.page + 1)}
+                  >
+                    Mais antigos
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
           </Card>
         </div>
       </main>

@@ -359,17 +359,40 @@ export class IngestionService {
     };
   }
 
-  async listRuns(jobSourceId: string) {
+  // Historico de runs de UMA fonte, paginado no banco e sem previewJson —
+  // antes trazia todas as runs da fonte com o blob de preview, o que fazia o
+  // engine do Prisma alocar centenas de MB nativos que o glibc nao devolvia.
+  // O preview so e lido no detalhe de um run (getRun).
+  async listRuns(
+    jobSourceId: string,
+    filters: { page?: number; limit?: number } = {},
+  ) {
     await this.assertJobSourceExists(jobSourceId);
 
-    const runs = await this.database.ingestionRun.findMany({
-      where: { jobSourceId },
-      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-    });
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit =
+      filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 25;
+    const where = { jobSourceId };
 
-    return runs.map((run: IngestionRun) =>
-      toRunSummary(run as IngestionRunRecord),
-    );
+    const [runs, total] = await Promise.all([
+      this.database.ingestionRun.findMany({
+        orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+        omit: { previewJson: true },
+        skip: (page - 1) * limit,
+        take: limit,
+        where,
+      }),
+      this.database.ingestionRun.count({ where }),
+    ]);
+
+    return {
+      limit,
+      page,
+      runs: runs.map((run) =>
+        toRunSummary({ ...run, previewJson: null } as IngestionRunRecord),
+      ),
+      total,
+    };
   }
 
   async listAllRuns(filters: {
