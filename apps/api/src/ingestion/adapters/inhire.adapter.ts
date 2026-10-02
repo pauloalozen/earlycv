@@ -77,7 +77,9 @@ function normalizeWorkModel(workplaceType?: string | null) {
 
 function extractSlug(sourceUrl: string) {
   const parsed = new URL(sourceUrl);
-  const match = parsed.hostname.toLowerCase().match(/^([a-z0-9-]+)\.inhire\.app$/);
+  const match = parsed.hostname
+    .toLowerCase()
+    .match(/^([a-z0-9-]+)\.inhire\.app$/);
   if (!match?.[1]) {
     throw new Error(
       `Invalid InHire sourceUrl: ${sourceUrl} (expected {subdomain}.inhire.app)`,
@@ -91,6 +93,32 @@ function normalizeDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return new Date().toISOString();
   return date.toISOString();
+}
+
+// A página pública da vaga no InHire é uma SPA cuja rota exige o segmento de
+// slug: `/vagas/:jobId/:jobSlug`. Sem ele (`/vagas/:jobId`) a página não
+// renderiza nada. O conteúdo do slug não é validado (qualquer valor abre a
+// vaga), mas reproduzimos o que o próprio InHire gera —
+// slugify(displayName, { remove: /[^a-zA-Z0-9 ]/g, lower: true }) — pra
+// manter o link idêntico ao compartilhado pela empresa.
+export function buildInHireJobSlug(displayName?: string | null) {
+  const slug = (displayName ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/-/g, " ")
+    .replace(/[^a-zA-Z0-9 ]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+  return slug || "vaga";
+}
+
+export function buildInHireJobUrl(
+  slug: string,
+  jobId: string,
+  displayName?: string | null,
+) {
+  return `https://${slug}.inhire.app/vagas/${jobId}/${buildInHireJobSlug(displayName)}`;
 }
 
 const API_BASE_URL = "https://api.inhire.app/job-posts/public/pages";
@@ -113,7 +141,10 @@ export class InHireAdapter implements IngestionSourceAdapter {
     context?: IngestionCollectContext,
   ): Promise<NormalizedJobObservation[]> {
     const slug = extractSlug(jobSource.sourceUrl);
-    const listingResponse = await this.fetchWithRetry(new URL(API_BASE_URL), slug);
+    const listingResponse = await this.fetchWithRetry(
+      new URL(API_BASE_URL),
+      slug,
+    );
 
     if (listingResponse.status === 403) {
       throw new IngestionFetchError({
@@ -160,7 +191,8 @@ export class InHireAdapter implements IngestionSourceAdapter {
 
       if (!existing) {
         const normalizedTitle = normalizeAdapterTitle(job.displayName);
-        const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
+        const filterDecision =
+          await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
           context?.onSemanticFilterSkip?.();
@@ -293,7 +325,7 @@ export class InHireAdapter implements IngestionSourceAdapter {
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: now,
-      sourceJobUrl: `https://${slug}.inhire.app/vagas/${job.jobId}`,
+      sourceJobUrl: buildInHireJobUrl(slug, job.jobId, job.displayName),
       state,
       status: "active",
       title,
@@ -340,7 +372,7 @@ export class InHireAdapter implements IngestionSourceAdapter {
       locationText: locationText || "Remote",
       normalizedTitle: normalizeAdapterTitle(title),
       publishedAtSource: publishedAt,
-      sourceJobUrl: `https://${slug}.inhire.app/vagas/${detail.jobId}`,
+      sourceJobUrl: buildInHireJobUrl(slug, detail.jobId, detail.displayName),
       state,
       status: "active",
       title,
