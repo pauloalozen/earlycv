@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MOCK_INTERVIEW_OFFER as OFFER } from "@/lib/mock-interview-offer";
 import type { MockInterviewCheckoutOrigin } from "@/lib/mock-interviews-types";
@@ -32,6 +33,7 @@ export function CheckoutPanel({
   priceLabel: string | null;
 }) {
   const unavailable = priceLabel === null;
+  const router = useRouter();
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,16 +53,16 @@ export function CheckoutPanel({
         }),
       });
       const data = (await response.json().catch(() => ({}))) as {
-        checkoutUrl?: string;
+        checkoutPath?: string;
         message?: string;
       };
-      if (!response.ok || !data.checkoutUrl) {
+      if (!response.ok || !data.checkoutPath) {
         throw new Error(
           data.message ??
             "Não foi possível abrir o pagamento agora. Tente de novo em instantes.",
         );
       }
-      window.location.href = data.checkoutUrl;
+      router.push(data.checkoutPath);
     } catch (err) {
       setError(
         err instanceof Error

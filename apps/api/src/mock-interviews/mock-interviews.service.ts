@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -15,6 +18,11 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import {
+  BrickPayloadValidationError,
+  type ParsedBrickPayload,
+  parseBrickPaymentPayload,
+} from "../payments/brick-payload";
 import { sanitizePaymentAuditPayload } from "../payments/payment-audit-sanitization";
 import {
   buildWhatsappUrl,
@@ -31,6 +39,7 @@ import {
   getMercadoPagoWebhookSecrets,
   MockInterviewMercadoPagoGateway,
   type NormalizedMpPayment,
+  resolveMockInterviewNotificationUrl,
 } from "./mock-interview-mercadopago";
 import { MockInterviewNotificationsService } from "./mock-interview-notifications.service";
 
@@ -51,6 +60,21 @@ const OPEN_STATUSES: PaymentStatus[] = [
   "pending_payment",
 ];
 const CHECKOUT_REUSE_WINDOW_MS = 60 * 60_000;
+// Pedido que ainda aceita um pagamento pelo Brick ("failed" = tentativa
+// anterior recusada; pode tentar de novo).
+const BRICK_PAYABLE_STATUSES: PaymentStatus[] = ["none", "pending", "failed"];
+
+export function checkoutPathFor(purchaseId: string): string {
+  return `/simulacao-de-entrevista/pagamento/${purchaseId}`;
+}
+
+export function orderPathFor(purchaseId: string): string {
+  return `/simulacao-de-entrevista/pedido/${purchaseId}`;
+}
+
+function isValidEmail(value: string | null | undefined): value is string {
+  return Boolean(value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()));
+}
 const RECONCILE_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 
 export type PublicPaymentStatus = "pending" | "paid" | "failed" | "refunded";
@@ -141,7 +165,7 @@ export class MockInterviewsService {
     @Inject(MockInterviewMercadoPagoGateway)
     private readonly gateway: Pick<
       MockInterviewMercadoPagoGateway,
-      "createPreference" | "getPayment" | "findLatestByExternalReference"
+      "createBrickPayment" | "getPayment" | "findLatestByExternalReference"
     >,
     @Inject(MockInterviewNotificationsService)
     private readonly notifications: Pick<
@@ -172,7 +196,7 @@ export class MockInterviewsService {
       jobApplicationId?: string;
     },
     now: Date = new Date(),
-  ): Promise<{ purchaseId: string; checkoutUrl: string }> {
+  ): Promise<{ purchaseId: string; checkoutPath: string }> {
     if (input.acceptPolicy !== true) {
       throw new BadRequestException(
         "É preciso aceitar as regras de reembolso e remarcação.",
@@ -246,44 +270,238 @@ export class MockInterviewsService {
         },
       }));
 
-    try {
-      const { checkoutUrl, preferenceId } = await this.gateway.createPreference(
-        {
-          purchaseId: purchase.id,
-          amountInCents: purchase.amountInCents,
-          payer: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)
-            ? { email: user.email, ...(user.name ? { name: user.name } : {}) }
-            : undefined,
-        },
-      );
+    this.audit({
+      eventType: "checkout_created",
+      actionTaken: reusable ? "reused" : "created",
+      purchaseId: purchase.id,
+    });
+    return {
+      purchaseId: purchase.id,
+      checkoutPath: checkoutPathFor(purchase.id),
+    };
+  }
 
-      if (preferenceId) {
-        await this.database.mockInterviewPurchase.update({
-          where: { id: purchase.id },
-          data: { mpPreferenceId: preferenceId },
-        });
-      }
-      this.audit({
-        eventType: "checkout_created",
-        actionTaken: "preference_created",
-        purchaseId: purchase.id,
-        mpPreferenceId: preferenceId,
+  // ---- Checkout Brick (pagamento dentro do EarlyCV) -----------------------
+
+  // Dados para montar o Payment Brick. Só pedido do próprio usuário, ainda
+  // sem pagamento em andamento.
+  async getBrickCheckout(userId: string, purchaseId: string) {
+    const purchase = await this.database.mockInterviewPurchase.findFirst({
+      where: { id: purchaseId, userId },
+      include: { user: { select: { email: true } } },
+    });
+    if (!purchase) {
+      throw new NotFoundException({
+        errorCode: "purchase_not_found",
+        message: "Pedido não encontrado.",
       });
-      return { purchaseId: purchase.id, checkoutUrl };
+    }
+    if (!BRICK_PAYABLE_STATUSES.includes(purchase.paymentStatus)) {
+      throw new ConflictException({
+        errorCode: "purchase_status_invalid",
+        message: "Este pedido já tem um pagamento em andamento ou concluído.",
+        paymentStatus: toPublicPaymentStatus(purchase.paymentStatus),
+        orderPath: orderPathFor(purchase.id),
+      });
+    }
+    return {
+      purchaseId: purchase.id,
+      code: purchaseCode(purchase.id),
+      amount: purchase.amountInCents / 100,
+      amountInCents: purchase.amountInCents,
+      currency: purchase.currency,
+      description: MOCK_INTERVIEW_PRODUCT.title,
+      payerEmail: isValidEmail(purchase.user.email)
+        ? purchase.user.email
+        : null,
+    };
+  }
+
+  // Envio do formulário do Brick. Trava atômica no pedido (um pagamento por
+  // vez), valor sempre do pedido, chave de idempotência por tentativa.
+  async payWithBrick(
+    userId: string,
+    purchaseId: string,
+    rawPayload: unknown,
+  ): Promise<{
+    purchaseId: string;
+    status: "approved" | "pending";
+    redirectTo: string;
+    qrCodeBase64: string | null;
+    qrCodeText: string | null;
+  }> {
+    const purchase = await this.database.mockInterviewPurchase.findFirst({
+      where: { id: purchaseId, userId },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    if (!purchase) throw new NotFoundException("Pedido não encontrado.");
+
+    let payload: ParsedBrickPayload;
+    try {
+      payload = parseBrickPaymentPayload(rawPayload);
     } catch (error) {
-      this.logger.error(
-        `[mock-interview] preference failed purchaseId=${purchase.id} reason=${error instanceof Error ? error.message : String(error)}`,
-      );
-      this.audit({
-        eventType: "checkout_error",
-        actionTaken: "error",
-        purchaseId: purchase.id,
-        errorMessage: error instanceof Error ? error.message : String(error),
+      throw new BadRequestException({
+        errorCode:
+          error instanceof BrickPayloadValidationError
+            ? error.code
+            : "brick_payload_invalid",
+        message: "Dados de pagamento inválidos.",
       });
+    }
+
+    const payerEmail =
+      payload.payerEmail?.trim() ||
+      (isValidEmail(purchase.user.email) ? purchase.user.email : null);
+    if (!payerEmail) {
+      throw new BadRequestException({
+        errorCode: "brick_payment_missing_payer_email",
+        message: "Informe um e-mail para o pagamento.",
+      });
+    }
+
+    const notificationUrl = resolveMockInterviewNotificationUrl();
+    if (!notificationUrl) {
+      this.logger.error(
+        "[mock-interview] brick pay refused: invalid API_URL for notification_url",
+      );
       throw new ServiceUnavailableException(
         "Pagamento indisponível no momento. Tente de novo em instantes.",
       );
     }
+
+    // Trava: só um pagamento por vez neste pedido.
+    const lock = await this.database.mockInterviewPurchase.updateMany({
+      where: {
+        id: purchase.id,
+        userId,
+        paymentStatus: { in: BRICK_PAYABLE_STATUSES },
+        mpPaymentId: null,
+      },
+      data: { paymentStatus: "processing_payment" },
+    });
+    if (lock.count !== 1) {
+      throw new ConflictException({
+        errorCode: "brick_payment_in_progress",
+        message: "Este pedido já tem um pagamento em andamento.",
+      });
+    }
+
+    const releaseLock = () =>
+      this.database.mockInterviewPurchase.updateMany({
+        where: { id: purchase.id, paymentStatus: "processing_payment" },
+        data: { paymentStatus: "pending" },
+      });
+
+    let result: Awaited<ReturnType<typeof this.gateway.createBrickPayment>>;
+    try {
+      result = await this.gateway.createBrickPayment({
+        purchaseId: purchase.id,
+        userId,
+        amountInCents: purchase.amountInCents,
+        payload,
+        payerEmail,
+        payerName: purchase.user.name,
+        notificationUrl,
+        idempotencyKey: `mock-interview-brick:${purchase.id}:${randomUUID()}`,
+      });
+    } catch (error) {
+      // Erro ambíguo do provider: não dá para saber se o pagamento nasceu.
+      // Fica pending_payment; webhook/reconciliação resolvem.
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[mock-interview] brick provider_error purchaseId=${purchase.id} method=${payload.paymentMethodId} reason=${reason}`,
+      );
+      await this.database.mockInterviewPurchase.updateMany({
+        where: { id: purchase.id, paymentStatus: "processing_payment" },
+        data: { paymentStatus: "pending_payment" },
+      });
+      this.audit({
+        eventType: "brick_payment_create_failed",
+        actionTaken: "error",
+        purchaseId: purchase.id,
+        errorMessage: reason,
+      });
+      throw new BadRequestException({
+        errorCode: "brick_payment_provider_error",
+        message:
+          "Não foi possível processar o pagamento agora. Tente novamente em instantes.",
+      });
+    }
+
+    const payment = result.payment;
+    if (!payment) {
+      await releaseLock();
+      throw new BadRequestException({
+        errorCode: "brick_payment_provider_error",
+        message:
+          "Não foi possível processar o pagamento agora. Tente novamente em instantes.",
+      });
+    }
+
+    this.audit({
+      eventType: "brick_payment_created",
+      actionTaken: payment.status,
+      purchaseId: purchase.id,
+      mpPaymentId: payment.paymentId,
+      mpStatus: payment.rawStatus,
+    });
+
+    if (payment.status === "approved") {
+      const applied = await this.applyPayment(purchase.id, payment, "brick");
+      if (applied === "approved" || applied === "already_approved") {
+        return {
+          purchaseId: purchase.id,
+          status: "approved",
+          redirectTo: orderPathFor(purchase.id),
+          qrCodeBase64: null,
+          qrCodeText: null,
+        };
+      }
+      // Valor divergente (não deve acontecer: o valor é do próprio pedido).
+      await releaseLock();
+      throw new BadRequestException({
+        errorCode: "brick_payment_amount_mismatch",
+        message: "Não foi possível confirmar o pagamento. Fale com o suporte.",
+      });
+    }
+
+    if (payment.status === "failed" || payment.status === "refunded") {
+      // Recusado: libera o pedido para nova tentativa (outro cartão ou Pix).
+      await releaseLock();
+      await this.recordEvent(purchase.id, {
+        type: "payment_attempt_rejected",
+        actor: `user:${userId}`,
+        note: payment.statusDetail,
+        metadata: {
+          mpPaymentId: payment.paymentId,
+          method: payment.paymentMethod,
+        },
+      });
+      throw new BadRequestException({
+        errorCode: "brick_payment_rejected",
+        message:
+          payment.statusDetail === "cc_rejected_high_risk"
+            ? "Pagamento recusado por análise de risco. Tente outro cartão ou Pix."
+            : "Pagamento recusado. Verifique os dados ou tente outro meio de pagamento.",
+      });
+    }
+
+    // Pendente (Pix gerado / cartão em análise): aguarda o webhook.
+    await this.database.mockInterviewPurchase.updateMany({
+      where: { id: purchase.id, paymentStatus: "processing_payment" },
+      data: {
+        paymentStatus: "pending_payment",
+        mpPaymentId: payment.paymentId,
+        paymentMethod: payment.paymentMethod,
+      },
+    });
+    return {
+      purchaseId: purchase.id,
+      status: "pending",
+      redirectTo: orderPathFor(purchase.id),
+      qrCodeBase64: result.qrCodeBase64,
+      qrCodeText: result.qrCodeText,
+    };
   }
 
   async listMine(userId: string): Promise<MockInterviewPurchaseView[]> {
@@ -408,7 +626,7 @@ export class MockInterviewsService {
   async applyPayment(
     purchaseId: string,
     payment: NormalizedMpPayment,
-    actor: "webhook" | "reconcile",
+    actor: "webhook" | "reconcile" | "brick",
   ): Promise<ApplyResult> {
     const purchase = await this.database.mockInterviewPurchase.findUnique({
       where: { id: purchaseId },
@@ -529,6 +747,11 @@ export class MockInterviewsService {
     }
 
     if (payment.status === "failed") {
+      // Recusa de uma tentativa ANTERIOR não derruba o pagamento atual (ex.:
+      // cartão recusado e, depois, Pix gerado e ainda aguardando).
+      if (purchase.mpPaymentId && purchase.mpPaymentId !== payment.paymentId) {
+        return "ignored";
+      }
       const transition = await this.database.mockInterviewPurchase.updateMany({
         where: { id: purchaseId, paymentStatus: { in: OPEN_STATUSES } },
         data: { paymentStatus: "failed" },

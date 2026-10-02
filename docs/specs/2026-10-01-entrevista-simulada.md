@@ -27,8 +27,10 @@ A origem da venda fica gravada na compra (`landing`, `showcase` via `?origem=vit
 - **Separado de `PlanPurchase` de propósito**: a aprovação de `PlanPurchase` sobrescreve `User.planType` e concede créditos. Nada do fluxo de créditos foi alterado.
 - Tabelas novas: `MockInterviewPurchase` (pagamento + operação da sessão) e `MockInterviewEvent` (histórico). Migration `20261002120000_mock_interview` (só aditiva; também adiciona o kind/template `MOCK_INTERVIEW_OFFER` e a coluna `EmailDispatchSettings.mockInterviewOfferMode`).
 - API: `apps/api/src/mock-interviews/`.
-  - Checkout Pro do Mercado Pago com as mesmas credenciais, `external_reference = mock_interview:{id}` e **webhook próprio** `POST /api/mock-interviews/webhook/mercadopago` (vai na preferência). Assinatura conferida com os mesmos segredos do fluxo de créditos.
-  - Toda transição de pagamento é `updateMany` condicional ao status atual (dois webhooks concorrentes aprovam uma vez só). Valor e moeda pagos são conferidos contra o pedido. `refunded`/`charged_back` → `refunded` (e sessão aberta → `REFUNDED`). Recusado → `failed`, e um pagamento aprovado depois na mesma preferência ainda aprova.
+  - **Mesmo checkout dos planos: Payment Brick**, o pagamento acontece dentro do EarlyCV (cartão ou Pix), sem redirecionar para o Mercado Pago. Mesmas credenciais do Brick (`MERCADOPAGO_BRICK_ACCESS_TOKEN*` / `NEXT_PUBLIC_MERCADOPAGO_BRICK_PUBLIC_KEY`), `external_reference = mock_interview:{id}` e **webhook próprio** `POST /api/mock-interviews/webhook/mercadopago` (vai no `notification_url` do pagamento). Assinatura conferida com os mesmos segredos do fluxo de créditos.
+  - Endpoints do Brick: `GET /api/mock-interviews/purchases/:id/brick` (dados do pedido) e `POST /api/mock-interviews/purchases/:id/brick/pay` (cria o pagamento com o valor do PEDIDO, trava atômica `processing_payment`, idempotency key por tentativa). Cartão aprovado na hora → pago; recusado → pedido volta a `pending` para nova tentativa; Pix/análise → `pending_payment` com QR code até o webhook; erro ambíguo do provider → `pending_payment` (reconciliação resolve). Com Pix em aberto, uma segunda tentativa é barrada (nunca dois pagamentos), e a recusa atrasada de uma tentativa anterior não derruba o Pix atual.
+  - Helpers do Brick no web (`lib/mercadopago-brick.ts`) passaram a ser compartilhados com o checkout dos planos (só extraídos, sem mudança de comportamento).
+  - Toda transição de pagamento é `updateMany` condicional ao status atual (dois webhooks concorrentes aprovam uma vez só). Valor e moeda pagos são conferidos contra o pedido. `refunded`/`charged_back` → `refunded` (e sessão aberta → `REFUNDED`). Recusado → `failed`, e um pagamento aprovado depois no mesmo pedido ainda aprova.
   - A página do pedido reconcilia direto no MP (`?refresh=true`) se o webhook atrasar.
   - Trilha em `PaymentAuditLog` com `internalCheckoutType = "mock_interview"`.
   - E-mails transacionais (categoria BILLING, Resend em produção, fake fora dela), **independentes dos modos do dispatch**: aviso de venda para `MOCK_INTERVIEW_ADMIN_EMAIL` e confirmação para o comprador. Claim atômico + Idempotency-Key; cron a cada 5 min reenvia o que falhou (até 3 dias).
@@ -37,7 +39,8 @@ A origem da venda fica gravada na compra (`landing`, `showcase` via `?origem=vit
 
 ## Telas
 
-- `/simulacao-de-entrevista/comprar` — resumo, regras com checkbox obrigatório, vai para o Mercado Pago. Sem login → cadastro com `next` de volta.
+- `/simulacao-de-entrevista/comprar` — resumo, regras com checkbox obrigatório; cria o pedido e segue para o pagamento. Sem login → cadastro com `next` de volta.
+- `/simulacao-de-entrevista/pagamento/[id]` — checkout Brick no mesmo layout do checkout dos planos (resumo à esquerda, cartão/Pix à direita, QR code do Pix, acompanhamento automático até a confirmação). Pedido já pago/em andamento vai direto para a página do pedido.
 - `/simulacao-de-entrevista/pedido/[id]` — retorno do MP; consulta sozinha enquanto pendente; pago → botão do WhatsApp com mensagem pronta e código do pedido; agendado → data/hora e link do Meet.
 - `/compras` — seção "Entrevistas simuladas".
 - Admin → **Entrevistas simuladas** (`/admin/simulados`): resumo (aguardando agenda, agendadas, realizadas, receita), filtros, paginação no banco; detalhe com agenda, link do Meet, status (Aguardando agenda / Agendada / Realizada / Não compareceu / Cancelada), relatório enviado, anotações, direito a reembolso calculado e histórico.

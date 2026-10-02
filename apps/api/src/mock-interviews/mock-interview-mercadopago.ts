@@ -1,19 +1,19 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { Injectable, Logger } from "@nestjs/common";
-import MercadoPagoConfig, { Payment, Preference } from "mercadopago";
+import MercadoPagoConfig, { Payment } from "mercadopago";
 
-import { buildMercadoPagoReturnConfig } from "../payments/mercado-pago-return-config";
+import type { ParsedBrickPayload } from "../payments/brick-payload";
 import {
   MOCK_INTERVIEW_PRODUCT,
   resolveApiUrl,
-  resolveFrontendUrl,
   toExternalReference,
 } from "./mock-interview.config";
 
-// Integração com o Mercado Pago da Entrevista Simulada. Usa as MESMAS
-// credenciais do fluxo de créditos (mesma conta), mas com Checkout Pro
-// próprio e notification_url própria — nada aqui altera PlansService.
+// Integração com o Mercado Pago da Entrevista Simulada. Mesmo checkout dos
+// planos (Payment Brick: o pagamento acontece dentro do EarlyCV), com as
+// MESMAS credenciais, mas external_reference e notification_url próprios —
+// nada aqui altera PaymentsService/PlansService.
 
 export type NormalizedMpPayment = {
   paymentId: string;
@@ -151,19 +151,79 @@ function isMpProduction(): boolean {
   );
 }
 
-// Mesma resolução de token do Checkout Pro de PlansService.getProAccessToken.
+// Mesma resolução de token do Brick de PaymentsService.getBrickAccessToken.
 function getAccessToken(): string | null {
-  const explicit = process.env.MERCADOPAGO_PRO_ACCESS_TOKEN?.trim();
+  const explicit = process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN?.trim();
   if (explicit) return explicit;
   if (isMpProduction()) {
     return process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || null;
   }
   return (
-    process.env.MERCADOPAGO_PRO_ACCESS_TOKEN_TEST?.trim() ||
+    process.env.MERCADOPAGO_BRICK_ACCESS_TOKEN_TEST?.trim() ||
     process.env.MERCADOPAGO_ACCESS_TOKEN_TEST?.trim() ||
     process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() ||
     null
   );
+}
+
+// URL absoluta do webhook próprio. Em produção exige https (o MP recusa
+// notification_url inválida e o pagamento nunca seria confirmado).
+export function resolveMockInterviewNotificationUrl(): string | null {
+  const raw = resolveApiUrl().trim();
+  let base: URL;
+  try {
+    base = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (base.protocol !== "https:" && base.protocol !== "http:") return null;
+  if (process.env.NODE_ENV === "production" && base.protocol !== "https:") {
+    return null;
+  }
+  const basePath = base.pathname.replace(/\/$/, "");
+  base.pathname = basePath.endsWith("/api")
+    ? `${basePath}/mock-interviews/webhook/mercadopago`
+    : `${basePath}/api/mock-interviews/webhook/mercadopago`;
+  base.search = "";
+  base.hash = "";
+  return base.toString();
+}
+
+export function splitPayerName(fullName: string | null): {
+  firstName: string;
+  lastName: string;
+} {
+  const parts = (fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "Cliente", lastName: "EarlyCV" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "EarlyCV" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+export type BrickPaymentResult = {
+  payment: NormalizedMpPayment | null;
+  qrCodeBase64: string | null;
+  qrCodeText: string | null;
+};
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function extractPixData(response: unknown): {
+  qrCodeBase64: string | null;
+  qrCodeText: string | null;
+} {
+  const data = (
+    response as {
+      point_of_interaction?: {
+        transaction_data?: { qr_code_base64?: unknown; qr_code?: unknown };
+      };
+    } | null
+  )?.point_of_interaction?.transaction_data;
+  return {
+    qrCodeBase64: optionalString(data?.qr_code_base64),
+    qrCodeText: optionalString(data?.qr_code),
+  };
 }
 
 export function getMercadoPagoWebhookSecrets(): string[] {
@@ -196,54 +256,69 @@ export class MockInterviewMercadoPagoGateway {
     return new MercadoPagoConfig({ accessToken: token });
   }
 
-  async createPreference(input: {
+  // Cria o pagamento a partir do formulário do Payment Brick (cartão com
+  // token ou Pix). O valor vem SEMPRE do pedido (nunca do front).
+  async createBrickPayment(input: {
     purchaseId: string;
+    userId: string;
     amountInCents: number;
-    payer?: { email: string; name?: string };
-  }): Promise<{ checkoutUrl: string; preferenceId: string | null }> {
-    const preference = new Preference(this.client());
-    const orderPath = `/simulacao-de-entrevista/pedido/${input.purchaseId}`;
-    const returnConfig = buildMercadoPagoReturnConfig({
-      frontendUrl: resolveFrontendUrl(),
-      successPath: orderPath,
-      failurePath: `${orderPath}?retorno=falhou`,
-      pendingPath: `${orderPath}?retorno=pendente`,
-    });
-
-    const result = await preference.create({
+    payload: ParsedBrickPayload;
+    payerEmail: string;
+    payerName: string | null;
+    notificationUrl: string;
+    idempotencyKey: string;
+  }): Promise<BrickPaymentResult> {
+    const { payload } = input;
+    const name = splitPayerName(input.payerName);
+    const response = await new Payment(this.client()).create({
       body: {
-        items: [
-          {
-            id: input.purchaseId,
-            title: MOCK_INTERVIEW_PRODUCT.title,
-            quantity: 1,
-            unit_price: input.amountInCents / 100,
-            currency_id: MOCK_INTERVIEW_PRODUCT.currency,
-            category_id: "services",
-            description: "Entrevista simulada ao vivo no EarlyCV",
-          },
-        ],
-        external_reference: toExternalReference(input.purchaseId),
-        ...(input.payer ? { payer: input.payer } : {}),
-        notification_url: `${resolveApiUrl()}/api/mock-interviews/webhook/mercadopago`,
-        back_urls: returnConfig.backUrls,
-        payment_methods: { excluded_payment_types: [{ id: "ticket" }] },
-        ...(returnConfig.autoReturn
-          ? { auto_return: returnConfig.autoReturn }
+        transaction_amount: input.amountInCents / 100,
+        payment_method_id: payload.paymentMethodId,
+        ...(payload.kind === "card"
+          ? {
+              token: payload.token,
+              installments: payload.installments,
+              ...(payload.issuerId ? { issuer_id: payload.issuerId } : {}),
+            }
           : {}),
-        metadata: { purchaseId: input.purchaseId, flow: "mock_interview" },
+        payer: {
+          email: input.payerEmail,
+          first_name: name.firstName,
+          last_name: name.lastName,
+          ...(payload.payerIdentification
+            ? { identification: payload.payerIdentification }
+            : {}),
+        },
+        external_reference: toExternalReference(input.purchaseId),
+        description: "EarlyCV - entrevista simulada ao vivo",
+        metadata: {
+          purchaseId: input.purchaseId,
+          userId: input.userId,
+          flow: "mock_interview",
+          source: "payment_brick",
+        },
+        notification_url: input.notificationUrl,
+        statement_descriptor: "EARLYCV",
+        additional_info: {
+          items: [
+            {
+              id: "mock-interview",
+              title: MOCK_INTERVIEW_PRODUCT.title,
+              description: "Entrevista simulada ao vivo no EarlyCV",
+              category_id: "services",
+              quantity: 1,
+              unit_price: input.amountInCents / 100,
+            },
+          ],
+          payer: { first_name: name.firstName, last_name: name.lastName },
+        },
       },
+      requestOptions: { idempotencyKey: input.idempotencyKey },
     });
 
-    const checkoutUrl = isMpProduction()
-      ? (result.init_point ?? result.sandbox_init_point)
-      : (result.sandbox_init_point ?? result.init_point);
-    if (!checkoutUrl) {
-      throw new Error("Mercado Pago did not return a checkout URL.");
-    }
     return {
-      checkoutUrl,
-      preferenceId: result.id ? String(result.id) : null,
+      payment: normalizeMpPayment(response as unknown as RawMpPayment),
+      ...extractPixData(response),
     };
   }
 

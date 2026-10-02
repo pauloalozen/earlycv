@@ -63,7 +63,29 @@ export class MockInterviewsController {
     return this.service.getMine(user.id, id, { refresh: query.refresh });
   }
 
-  // Notificação do Mercado Pago (notification_url da preferência).
+  // Dados para montar o Payment Brick (checkout dentro do EarlyCV).
+  @UseGuards(JwtAuthGuard)
+  @Get("purchases/:id/brick")
+  brickCheckout(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+    @Param("id") id: string,
+  ) {
+    return this.service.getBrickCheckout(user.id, id);
+  }
+
+  // Envio do formulário do Brick (cartão com token ou Pix).
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Post("purchases/:id/brick/pay")
+  brickPay(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.payWithBrick(user.id, id, body);
+  }
+
+  // Notificação do Mercado Pago (notification_url do pagamento).
   @SkipThrottle()
   @HttpCode(200)
   @Post("webhook/mercadopago")

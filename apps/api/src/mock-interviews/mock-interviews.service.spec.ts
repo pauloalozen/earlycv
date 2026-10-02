@@ -6,6 +6,7 @@ import { afterEach, beforeEach, test } from "node:test";
 
 import {
   BadRequestException,
+  ConflictException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -17,6 +18,7 @@ import {
   toExternalReference,
 } from "./mock-interview.config";
 import {
+  type BrickPaymentResult,
   checkMercadoPagoSignature,
   type NormalizedMpPayment,
   normalizeMpPayment,
@@ -65,7 +67,12 @@ function createFakeDb(initial: Row[]) {
         const row = [...purchases.values()].find((r) =>
           matches(r, { id: where.id, userId: where.userId }),
         );
-        return row ? { ...row, user: { name: "Maria Souza" } } : null;
+        return row
+          ? {
+              ...row,
+              user: { name: "Maria Souza", email: "maria@example.com" },
+            }
+          : null;
       },
       updateMany: async ({
         where,
@@ -127,6 +134,7 @@ function basePurchase(overrides: Partial<Row> = {}): Row {
     scheduledAt: null,
     meetingUrl: null,
     mpPreferenceId: "pref-1",
+    mpPaymentId: null,
     paidAt: null,
     createdAt: new Date("2026-10-01T12:00:00.000Z"),
     ...overrides,
@@ -158,10 +166,11 @@ function createService(
     findLatestByExternalReference: (
       ref: string,
     ) => Promise<NormalizedMpPayment | null>;
-    createPreference: () => Promise<{
-      checkoutUrl: string;
-      preferenceId: string | null;
-    }>;
+    createBrickPayment: (input: {
+      idempotencyKey: string;
+      amountInCents: number;
+      notificationUrl: string;
+    }) => Promise<BrickPaymentResult>;
   }> = {},
 ) {
   const notified: string[] = [];
@@ -171,11 +180,12 @@ function createService(
       getPayment: gateway.getPayment ?? (async () => approvedPayment()),
       findLatestByExternalReference:
         gateway.findLatestByExternalReference ?? (async () => null),
-      createPreference:
-        gateway.createPreference ??
+      createBrickPayment:
+        gateway.createBrickPayment ??
         (async () => ({
-          checkoutUrl: "https://mp.test/checkout",
-          preferenceId: "pref-2",
+          payment: approvedPayment(),
+          qrCodeBase64: null,
+          qrCodeText: null,
         })),
     },
     {
@@ -192,6 +202,7 @@ beforeEach(() => {
   delete process.env.MERCADOPAGO_PRO_WEBHOOK_SECRET;
   delete process.env.MERCADOPAGO_BRICK_WEBHOOK_SECRET;
   delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
+  process.env.API_URL = "https://api.earlycv.test";
   process.env.MOCK_INTERVIEW_WHATSAPP_NUMBER = "+55 (11) 99999-0000";
   process.env.PRICE_INTERVIEW_SIM = "7990";
 });
@@ -428,7 +439,10 @@ test("checkout requires accepting the policy and returns the Mercado Pago URL", 
   );
 
   const result = await service.createCheckout("user-1", { acceptPolicy: true });
-  assert.equal(result.checkoutUrl, "https://mp.test/checkout");
+  assert.equal(
+    result.checkoutPath,
+    `/simulacao-de-entrevista/pagamento/${result.purchaseId}`,
+  );
   const created = db.purchases.get(result.purchaseId);
   assert.equal(created?.amountInCents, 7990);
   assert.equal(created?.currency, "BRL");
@@ -520,4 +534,243 @@ test("price comes from PRICE_INTERVIEW_SIM; missing or invalid price closes the 
       String(value),
     );
   }
+});
+
+const pixPayload = {
+  payment_method_id: "pix",
+  payer: { email: "maria@example.com" },
+};
+const cardPayload = {
+  payment_method_id: "visa",
+  token: "card-token",
+  installments: 1,
+  payer: { email: "maria@example.com" },
+};
+
+test("brick: card approved on submit completes the order with the amount from the ORDER", async () => {
+  const db = createFakeDb([basePurchase()]);
+  const calls: {
+    amountInCents: number;
+    notificationUrl: string;
+    idempotencyKey: string;
+  }[] = [];
+  const { service, notified } = createService(db, {
+    createBrickPayment: async (input) => {
+      calls.push(input);
+      return {
+        payment: approvedPayment(),
+        qrCodeBase64: null,
+        qrCodeText: null,
+      };
+    },
+  });
+
+  const result = await service.payWithBrick(
+    "user-1",
+    "cmpurchase000abc123",
+    cardPayload,
+  );
+  assert.equal(result.status, "approved");
+  assert.equal(
+    result.redirectTo,
+    "/simulacao-de-entrevista/pedido/cmpurchase000abc123",
+  );
+  assert.equal(calls[0]?.amountInCents, 7990);
+  assert.equal(
+    calls[0]?.notificationUrl,
+    "https://api.earlycv.test/api/mock-interviews/webhook/mercadopago",
+  );
+  assert.match(
+    calls[0]?.idempotencyKey ?? "",
+    /^mock-interview-brick:cmpurchase000abc123:/,
+  );
+  assert.equal(
+    db.purchases.get("cmpurchase000abc123")?.paymentStatus,
+    "completed",
+  );
+  assert.deepEqual(notified, ["cmpurchase000abc123"]);
+});
+
+test("brick: Pix returns the QR code and leaves the order waiting for the webhook", async () => {
+  const db = createFakeDb([basePurchase()]);
+  const { service, notified } = createService(db, {
+    createBrickPayment: async () => ({
+      payment: approvedPayment({
+        status: "pending",
+        rawStatus: "pending",
+        paymentId: "pix-1",
+      }),
+      qrCodeBase64: "BASE64",
+      qrCodeText: "00020126...",
+    }),
+  });
+  const result = await service.payWithBrick(
+    "user-1",
+    "cmpurchase000abc123",
+    pixPayload,
+  );
+  assert.equal(result.status, "pending");
+  assert.equal(result.qrCodeText, "00020126...");
+  const row = db.purchases.get("cmpurchase000abc123");
+  assert.equal(row?.paymentStatus, "pending_payment");
+  assert.equal(row?.mpPaymentId, "pix-1");
+  assert.equal(notified.length, 0);
+
+  // Com Pix em aberto, uma segunda tentativa é barrada (nunca dois pagamentos).
+  await assert.rejects(
+    service.payWithBrick("user-1", "cmpurchase000abc123", cardPayload),
+    ConflictException,
+  );
+  // E a recusa atrasada de uma tentativa anterior não derruba o Pix atual.
+  const stale = await service.applyPayment(
+    "cmpurchase000abc123",
+    approvedPayment({
+      status: "failed",
+      rawStatus: "rejected",
+      paymentId: "old-card",
+    }),
+    "webhook",
+  );
+  assert.equal(stale, "ignored");
+  assert.equal(
+    db.purchases.get("cmpurchase000abc123")?.paymentStatus,
+    "pending_payment",
+  );
+});
+
+test("brick: rejected card frees the order for another attempt", async () => {
+  const db = createFakeDb([basePurchase()]);
+  let attempt = 0;
+  const { service } = createService(db, {
+    createBrickPayment: async () => {
+      attempt += 1;
+      return attempt === 1
+        ? {
+            payment: approvedPayment({
+              status: "failed",
+              rawStatus: "rejected",
+              statusDetail: "cc_rejected_high_risk",
+              paymentId: "card-1",
+            }),
+            qrCodeBase64: null,
+            qrCodeText: null,
+          }
+        : {
+            payment: approvedPayment({ paymentId: "card-2" }),
+            qrCodeBase64: null,
+            qrCodeText: null,
+          };
+    },
+  });
+
+  await assert.rejects(
+    service.payWithBrick("user-1", "cmpurchase000abc123", cardPayload),
+    (error: unknown) =>
+      error instanceof BadRequestException &&
+      JSON.stringify(error.getResponse()).includes("análise de risco"),
+  );
+  assert.equal(
+    db.purchases.get("cmpurchase000abc123")?.paymentStatus,
+    "pending",
+  );
+
+  const second = await service.payWithBrick(
+    "user-1",
+    "cmpurchase000abc123",
+    cardPayload,
+  );
+  assert.equal(second.status, "approved");
+});
+
+test("brick: two simultaneous submits create only one payment", async () => {
+  const db = createFakeDb([basePurchase()]);
+  let created = 0;
+  const { service } = createService(db, {
+    createBrickPayment: async () => {
+      created += 1;
+      return {
+        payment: approvedPayment({
+          status: "pending",
+          rawStatus: "in_process",
+        }),
+        qrCodeBase64: null,
+        qrCodeText: null,
+      };
+    },
+  });
+  const results = await Promise.allSettled([
+    service.payWithBrick("user-1", "cmpurchase000abc123", cardPayload),
+    service.payWithBrick("user-1", "cmpurchase000abc123", cardPayload),
+  ]);
+  assert.equal(created, 1);
+  assert.equal(results.filter((r) => r.status === "rejected").length, 1);
+});
+
+test("brick: provider error leaves the order ambiguous (pending_payment) for reconciliation", async () => {
+  const db = createFakeDb([basePurchase()]);
+  const { service } = createService(db, {
+    createBrickPayment: async () => {
+      throw new Error("timeout");
+    },
+  });
+  await assert.rejects(
+    service.payWithBrick("user-1", "cmpurchase000abc123", cardPayload),
+    BadRequestException,
+  );
+  assert.equal(
+    db.purchases.get("cmpurchase000abc123")?.paymentStatus,
+    "pending_payment",
+  );
+});
+
+test("brick: invalid payload and paid orders are refused before touching Mercado Pago", async () => {
+  const db = createFakeDb([basePurchase()]);
+  let created = 0;
+  const { service } = createService(db, {
+    createBrickPayment: async () => {
+      created += 1;
+      return {
+        payment: approvedPayment(),
+        qrCodeBase64: null,
+        qrCodeText: null,
+      };
+    },
+  });
+  await assert.rejects(
+    service.payWithBrick("user-1", "cmpurchase000abc123", {
+      payment_method_id: "visa",
+    }),
+    BadRequestException,
+  );
+
+  const paidDb = createFakeDb([basePurchase({ paymentStatus: "completed" })]);
+  const paid = createService(paidDb, {
+    createBrickPayment: async () => {
+      created += 1;
+      return {
+        payment: approvedPayment(),
+        qrCodeBase64: null,
+        qrCodeText: null,
+      };
+    },
+  });
+  await assert.rejects(
+    paid.service.getBrickCheckout("user-1", "cmpurchase000abc123"),
+    ConflictException,
+  );
+  await assert.rejects(
+    paid.service.payWithBrick("user-1", "cmpurchase000abc123", cardPayload),
+    ConflictException,
+  );
+  assert.equal(created, 0);
+});
+
+test("brick: checkout data comes from the order", async () => {
+  const db = createFakeDb([basePurchase()]);
+  const { service } = createService(db);
+  const data = await service.getBrickCheckout("user-1", "cmpurchase000abc123");
+  assert.equal(data.amount, 79.9);
+  assert.equal(data.currency, "BRL");
+  assert.equal(data.payerEmail, "maria@example.com");
+  assert.equal(data.code, "ABC123");
 });
