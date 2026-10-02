@@ -15,7 +15,7 @@ import {
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Criar conta | EarlyCV",
+  title: "Criar conta",
 };
 
 type EntrarPageProps = {

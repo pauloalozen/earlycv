@@ -19,7 +19,7 @@ import { MonitorView } from "./monitor-view";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Alerta de Vaga Certa | EarlyCV",
+  title: "Alerta de Vaga Certa",
 };
 
 const GROUP_PAGE_SIZE = 10;

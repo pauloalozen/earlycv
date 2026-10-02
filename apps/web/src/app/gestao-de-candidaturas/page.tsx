@@ -24,8 +24,7 @@ import { LandingScrollAnimations } from "../_landing-scroll-animations";
 const url = getAbsoluteUrl("/gestao-de-candidaturas");
 
 export const metadata: Metadata = {
-  title:
-    "Gestão de Candidaturas — Pare de Perder o Controle das Suas Vagas | EarlyCV",
+  title: "Gestão de Candidaturas — Pare de Perder o Controle das Suas Vagas",
   description:
     "Suas candidaturas não precisam viver numa planilha. Acompanhe vaga salva, CV usado, status, entrevista e preparação — tudo num só lugar, conectado.",
   alternates: { canonical: url },

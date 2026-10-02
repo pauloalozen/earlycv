@@ -19,7 +19,7 @@ import { CheckoutPanel } from "./checkout-panel";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Comprar entrevista simulada | EarlyCV",
+  title: "Comprar entrevista simulada",
 };
 
 type SearchParams = { origem?: string; candidatura?: string };

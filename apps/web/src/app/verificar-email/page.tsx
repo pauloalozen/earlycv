@@ -17,7 +17,7 @@ function sanitizeNext(next: string): string | null {
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Verificar Email | EarlyCV",
+  title: "Verificar Email",
 };
 
 type VerifyEmailPageProps = {

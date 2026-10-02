@@ -12,7 +12,7 @@ export function generateMetadata(): Metadata {
   const url = getAbsoluteUrl("/radar/remotas");
 
   return {
-    title: "Vagas remotas de tecnologia no Brasil | EarlyCV",
+    title: "Vagas remotas de tecnologia no Brasil",
     description:
       "Vagas 100% remotas de tecnologia com score de compatibilidade personalizado.",
     alternates: { canonical: url },

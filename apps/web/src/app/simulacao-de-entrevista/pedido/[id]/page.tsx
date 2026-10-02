@@ -13,7 +13,7 @@ import { OrderStatus } from "./order-status";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Pedido da entrevista simulada | EarlyCV",
+  title: "Pedido da entrevista simulada",
 };
 
 export default async function PedidoEntrevistaSimuladaPage({

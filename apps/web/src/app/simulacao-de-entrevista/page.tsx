@@ -51,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const STATIC_METADATA: Metadata = {
-  title: TITLE,
+  title: { absolute: TITLE },
   keywords: [
     "entrevista simulada",
     "simulação de entrevista",

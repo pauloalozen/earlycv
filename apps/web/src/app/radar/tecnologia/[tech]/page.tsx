@@ -38,7 +38,7 @@ export async function generateMetadata({
   const url = getAbsoluteUrl(`/radar/tecnologia/${tech}`);
 
   return {
-    title: `Vagas de ${tech} no Brasil | EarlyCV`,
+    title: `Vagas de ${tech} no Brasil`,
     description: `Encontre vagas que exigem ${tech} e analise seu CV gratuitamente.`,
     alternates: { canonical: url },
   };

@@ -24,7 +24,7 @@ import { DetailClient } from "./detail-client";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Candidatura | EarlyCV",
+  title: "Candidatura",
 };
 
 type Props = {

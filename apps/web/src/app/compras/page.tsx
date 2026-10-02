@@ -15,7 +15,7 @@ import { MockInterviewPurchases } from "./mock-interview-purchases";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Minhas compras | EarlyCV",
+  title: "Minhas compras",
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";

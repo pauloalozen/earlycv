@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Pagamento da entrevista simulada | EarlyCV",
+  title: "Pagamento da entrevista simulada",
 };
 
 export default async function PagamentoEntrevistaSimuladaPage({

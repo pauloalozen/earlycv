@@ -12,7 +12,7 @@ export function generateMetadata(): Metadata {
   const url = getAbsoluteUrl("/radar/senior");
 
   return {
-    title: "Vagas sênior de tecnologia no Brasil | EarlyCV",
+    title: "Vagas sênior de tecnologia no Brasil",
     description:
       "Vagas sênior de tecnologia com score de compatibilidade personalizado. Analise seu CV gratuitamente.",
     alternates: { canonical: url },

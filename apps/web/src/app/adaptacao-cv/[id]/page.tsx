@@ -10,7 +10,7 @@ import { AdaptacaoCvClient } from "./adaptacao-cv-client";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "CV Adaptado | EarlyCV",
+  title: "CV Adaptado",
 };
 
 export default async function AdaptacaoCvPage({

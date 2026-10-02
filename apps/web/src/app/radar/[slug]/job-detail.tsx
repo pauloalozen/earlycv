@@ -519,7 +519,9 @@ export function buildJobMetadata(job: PublicJob | null): Metadata {
   const url = getAbsoluteUrl(`/radar/${job.slug}`);
 
   return {
-    title,
+    // absolute: o sufixo "| EarlyCV" já está em `title` (reaproveitado no
+    // openGraph/twitter, que não passam pelo template do layout raiz).
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
     openGraph: { type: "article", url, title, description },
