@@ -6,6 +6,7 @@ const KINDS = [
   "FEEDBACK_FIRST_USE",
   "FEEDBACK_SECOND_CALL",
   "PURCHASE_CONFIRMATION",
+  "MOCK_INTERVIEW_OFFER",
 ] as const;
 const STATUSES = [
   "PENDING",
@@ -31,7 +32,7 @@ export class ListEmailDispatchesQueryDto {
   @Max(100)
   limit?: number;
 
-  // "relationship" = WELCOME + FEEDBACK_FIRST_USE + FEEDBACK_SECOND_CALL; "purchase" = PURCHASE_CONFIRMATION.
+  // "relationship" = WELCOME + FEEDBACK_FIRST_USE + FEEDBACK_SECOND_CALL + MOCK_INTERVIEW_OFFER; "purchase" = PURCHASE_CONFIRMATION.
   @IsOptional()
   @IsIn(["relationship", "purchase"])
   group?: "relationship" | "purchase";

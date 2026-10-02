@@ -37,8 +37,7 @@ const COMPANIES = [
 ] as const;
 
 export const metadata: Metadata = {
-  title:
-    "Radar de Vagas — Oportunidades com Maior Aderência ao Seu Perfil | EarlyCV",
+  title: "Radar de Vagas — Oportunidades com Maior Aderência ao Seu Perfil",
   description:
     "O Radar EarlyCV encontra vagas de tecnologia em centenas de empresas e mostra primeiro as oportunidades com maior aderência ao seu perfil.",
   alternates: { canonical: url },

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     follow: false,
     index: false,
   },
-  title: "Superadmin | EarlyCV",
+  title: "Superadmin",
 };
 
 type SuperadminLayoutProps = {

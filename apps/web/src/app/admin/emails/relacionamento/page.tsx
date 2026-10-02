@@ -20,6 +20,7 @@ const KINDS: EmailDispatchKind[] = [
   "WELCOME",
   "FEEDBACK_FIRST_USE",
   "FEEDBACK_SECOND_CALL",
+  "MOCK_INTERVIEW_OFFER",
 ];
 const STATUSES = [
   "PENDING",

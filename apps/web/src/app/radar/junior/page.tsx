@@ -12,7 +12,7 @@ export function generateMetadata(): Metadata {
   const url = getAbsoluteUrl("/radar/junior");
 
   return {
-    title: "Vagas júnior de tecnologia no Brasil | EarlyCV",
+    title: "Vagas júnior de tecnologia no Brasil",
     description:
       "Vagas júnior de tecnologia com score de compatibilidade personalizado. Analise seu CV gratuitamente.",
     alternates: { canonical: url },

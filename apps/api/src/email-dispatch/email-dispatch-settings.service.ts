@@ -24,6 +24,7 @@ export type SettingsSnapshot = {
   feedbackMode: EmailDispatchModeValue;
   feedbackSecondCallMode: EmailDispatchModeValue;
   purchaseConfirmationMode: EmailDispatchModeValue;
+  mockInterviewOfferMode: EmailDispatchModeValue;
   startAt: Date | null;
   allowlist: string[];
   extraBlocklist: string[];
@@ -34,6 +35,7 @@ export const OFF_SNAPSHOT: SettingsSnapshot = {
   feedbackMode: "OFF",
   feedbackSecondCallMode: "OFF",
   purchaseConfirmationMode: "OFF",
+  mockInterviewOfferMode: "OFF",
   startAt: null,
   allowlist: [],
   extraBlocklist: [],
@@ -50,6 +52,8 @@ export type UpdateSettingsInput = {
   // Opcional por compatibilidade com clientes antigos: ausente = mantém o atual.
   feedbackSecondCallMode?: EmailDispatchModeValue;
   purchaseConfirmationMode: EmailDispatchModeValue;
+  // Opcional por compatibilidade com clientes antigos: ausente = mantém o atual.
+  mockInterviewOfferMode?: EmailDispatchModeValue;
   startAt: string | null;
   allowlist: string[];
   extraBlocklist: string[];
@@ -77,6 +81,7 @@ function fromRow(row: {
   feedbackMode: EmailDispatchModeValue;
   feedbackSecondCallMode: EmailDispatchModeValue;
   purchaseConfirmationMode: EmailDispatchModeValue;
+  mockInterviewOfferMode: EmailDispatchModeValue;
   startAt: Date | null;
   allowlist: string[];
   extraBlocklist: string[];
@@ -86,6 +91,7 @@ function fromRow(row: {
     feedbackMode: row.feedbackMode,
     feedbackSecondCallMode: row.feedbackSecondCallMode,
     purchaseConfirmationMode: row.purchaseConfirmationMode,
+    mockInterviewOfferMode: row.mockInterviewOfferMode,
     startAt: row.startAt,
     allowlist: row.allowlist,
     extraBlocklist: row.extraBlocklist,
@@ -179,6 +185,11 @@ export class EmailDispatchSettingsService {
         input.purchaseConfirmationMode,
         previous.purchaseConfirmationMode,
       ],
+      [
+        "oferta da entrevista simulada",
+        input.mockInterviewOfferMode ?? previous.mockInterviewOfferMode,
+        previous.mockInterviewOfferMode,
+      ],
     ] as const;
 
     for (const [label, mode] of modes) {
@@ -254,6 +265,8 @@ export class EmailDispatchSettingsService {
       feedbackSecondCallMode:
         input.feedbackSecondCallMode ?? before.feedbackSecondCallMode,
       purchaseConfirmationMode: input.purchaseConfirmationMode,
+      mockInterviewOfferMode:
+        input.mockInterviewOfferMode ?? before.mockInterviewOfferMode,
       startAt,
       allowlist,
       extraBlocklist,
@@ -281,6 +294,7 @@ export class EmailDispatchSettingsService {
             feedbackMode: before.feedbackMode,
             feedbackSecondCallMode: before.feedbackSecondCallMode,
             purchaseConfirmationMode: before.purchaseConfirmationMode,
+            mockInterviewOfferMode: before.mockInterviewOfferMode,
             startAt: before.startAt?.toISOString() ?? null,
           },
           after: {
@@ -288,6 +302,7 @@ export class EmailDispatchSettingsService {
             feedbackMode: row.feedbackMode,
             feedbackSecondCallMode: row.feedbackSecondCallMode,
             purchaseConfirmationMode: row.purchaseConfirmationMode,
+            mockInterviewOfferMode: row.mockInterviewOfferMode,
             startAt: row.startAt?.toISOString() ?? null,
             allowlistCount: row.allowlist.length,
             extraBlocklistCount: row.extraBlocklist.length,
@@ -297,7 +312,7 @@ export class EmailDispatchSettingsService {
     });
 
     this.logger.log(
-      `email_dispatch_settings_updated adminId=${adminId} welcome=${row.welcomeMode} feedback=${row.feedbackMode} feedback2=${row.feedbackSecondCallMode} purchase=${row.purchaseConfirmationMode} startAt=${row.startAt?.toISOString() ?? "unset"}`,
+      `email_dispatch_settings_updated adminId=${adminId} welcome=${row.welcomeMode} feedback=${row.feedbackMode} feedback2=${row.feedbackSecondCallMode} purchase=${row.purchaseConfirmationMode} mockOffer=${row.mockInterviewOfferMode} startAt=${row.startAt?.toISOString() ?? "unset"}`,
     );
 
     return {

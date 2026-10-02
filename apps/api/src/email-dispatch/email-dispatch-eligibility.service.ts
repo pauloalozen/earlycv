@@ -2,7 +2,12 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import { EmailSuppressionService } from "../email/email-suppression.service";
+import { getMockInterviewMode } from "../mock-interviews/mock-interview.config";
 import { EmailDispatchConfigService } from "./email-dispatch.config";
+import {
+  MOCK_INTERVIEW_OFFER_COOLDOWN_MS,
+  MOCK_INTERVIEW_OFFER_DELAY_MS,
+} from "./email-dispatch.constants";
 
 export type EligibleUser = { id: string; email: string; name: string };
 
@@ -32,9 +37,17 @@ export class EmailDispatchEligibilityService {
     if (!dispatch.userId) {
       return { eligible: false, reason: "no_user" };
     }
+    return this.evaluateRelationshipUser(dispatch.userId, {
+      requireSignupAfterCutoff: true,
+    });
+  }
 
+  private async evaluateRelationshipUser(
+    userId: string,
+    options: { requireSignupAfterCutoff?: boolean } = {},
+  ): Promise<EligibilityResult> {
     const user = await this.database.user.findUnique({
-      where: { id: dispatch.userId },
+      where: { id: userId },
       select: {
         id: true,
         email: true,
@@ -68,9 +81,11 @@ export class EmailDispatchEligibilityService {
       return { eligible: false, reason: "blocklisted" };
     }
 
-    const startAt = await this.config.getStartAt();
-    if (!startAt || user.createdAt < startAt) {
-      return { eligible: false, reason: "before_cutoff" };
+    if (options.requireSignupAfterCutoff) {
+      const startAt = await this.config.getStartAt();
+      if (!startAt || user.createdAt < startAt) {
+        return { eligible: false, reason: "before_cutoff" };
+      }
     }
 
     if (user.relationshipEmailPreference?.subscribed === false) {
@@ -99,6 +114,75 @@ export class EmailDispatchEligibilityService {
       eligible: true,
       user: { id: user.id, email: user.email, name: user.name },
     };
+  }
+
+  // Oferta da entrevista simulada (relacionamento, SES). Mesmas regras de
+  // relacionamento (verificado, ativo, não staff, não descadastrado, sem
+  // supressão, fora da blocklist), EXCETO o cutoff por data de cadastro: a
+  // oferta vale para a base inteira, e o cutoff aqui é o da própria oferta
+  // (criada depois da ativação). Mais:
+  //  - comprou a entrevista simulada depois que a oferta nasceu -> não envia;
+  //  - recebeu outra oferta nos últimos 7 dias -> não envia;
+  //  - a candidatura foi apagada -> não envia.
+  async evaluateMockInterviewOffer(
+    dispatch: {
+      id: string;
+      userId: string | null;
+      referenceId: string | null;
+      scheduledFor: Date;
+    },
+    now: Date = new Date(),
+  ): Promise<EligibilityResult> {
+    if (!dispatch.userId) return { eligible: false, reason: "no_user" };
+    // Flag desligada (ou só para admin) depois do enqueue: a venda fechou.
+    if (getMockInterviewMode() !== "on") {
+      return { eligible: false, reason: "mock_interview_disabled" };
+    }
+
+    const offerCreatedAt = new Date(
+      dispatch.scheduledFor.getTime() - MOCK_INTERVIEW_OFFER_DELAY_MS,
+    );
+    const startAt = await this.config.getStartAt();
+    if (!startAt || offerCreatedAt < startAt) {
+      return { eligible: false, reason: "before_cutoff" };
+    }
+
+    const [purchased, recentOffer, application] = await Promise.all([
+      this.database.mockInterviewPurchase.findFirst({
+        where: {
+          userId: dispatch.userId,
+          paymentStatus: "completed",
+          paidAt: { gte: offerCreatedAt },
+        },
+        select: { id: true },
+      }),
+      this.database.emailDispatch.findFirst({
+        where: {
+          id: { not: dispatch.id },
+          userId: dispatch.userId,
+          kind: "MOCK_INTERVIEW_OFFER",
+          isTest: false,
+          status: "SENT",
+          sentAt: {
+            gte: new Date(now.getTime() - MOCK_INTERVIEW_OFFER_COOLDOWN_MS),
+          },
+        },
+        select: { id: true },
+      }),
+      dispatch.referenceId
+        ? this.database.jobApplication.findFirst({
+            where: { id: dispatch.referenceId, deletedAt: null },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    if (purchased) return { eligible: false, reason: "already_purchased" };
+    if (recentOffer) return { eligible: false, reason: "offer_cooldown" };
+    if (!application) {
+      return { eligible: false, reason: "application_not_found" };
+    }
+
+    return this.evaluateRelationshipUser(dispatch.userId);
   }
 
   // Confirmação de compra (transacional, BILLING). Regras DIFERENTES das de

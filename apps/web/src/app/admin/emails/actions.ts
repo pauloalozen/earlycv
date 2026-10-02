@@ -52,6 +52,7 @@ export async function updateEmailSettingsAction(
       purchaseConfirmationMode: asMode(
         formData.get("purchaseConfirmationMode"),
       ),
+      mockInterviewOfferMode: asMode(formData.get("mockInterviewOfferMode")),
       startAt: brtInputToIso(String(formData.get("startAt") ?? "")),
       allowlist: parseEmailLines(String(formData.get("allowlist") ?? "")),
       extraBlocklist: parseEmailLines(

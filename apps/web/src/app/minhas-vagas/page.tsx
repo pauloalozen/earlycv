@@ -28,7 +28,7 @@ const SORT_LABELS: Record<SortValue, string> = {
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Minhas Vagas Salvas | EarlyCV",
+  title: "Minhas Vagas Salvas",
 };
 
 type Props = {

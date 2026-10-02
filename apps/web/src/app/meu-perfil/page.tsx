@@ -43,7 +43,7 @@ import { SeuCvProgress } from "./seu-cv-progress";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Meu Perfil | EarlyCV",
+  title: "Meu Perfil",
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";

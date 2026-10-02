@@ -34,6 +34,7 @@ type Initial = {
   feedbackMode: EmailDispatchMode;
   feedbackSecondCallMode: EmailDispatchMode;
   purchaseConfirmationMode: EmailDispatchMode;
+  mockInterviewOfferMode: EmailDispatchMode;
   startAtInput: string;
   allowlist: string;
   extraBlocklist: string;
@@ -86,9 +87,14 @@ export function EmailSettingsForm({ initial }: { initial: Initial }) {
     initial.feedbackSecondCallMode,
   );
   const [purchase, setPurchase] = useState(initial.purchaseConfirmationMode);
-  const anyLive = [welcome, feedback, feedbackSecondCall, purchase].includes(
-    "LIVE",
-  );
+  const [mockOffer, setMockOffer] = useState(initial.mockInterviewOfferMode);
+  const anyLive = [
+    welcome,
+    feedback,
+    feedbackSecondCall,
+    purchase,
+    mockOffer,
+  ].includes("LIVE");
 
   return (
     <>
@@ -143,6 +149,12 @@ export function EmailSettingsForm({ initial }: { initial: Initial }) {
           label="Confirmação de compra"
           value={purchase}
           onChange={setPurchase}
+        />
+        <ModeSelect
+          name="mockInterviewOfferMode"
+          label="Oferta da entrevista simulada (2h após a candidatura ir para Entrevista; vale para toda a base)"
+          value={mockOffer}
+          onChange={setMockOffer}
         />
 
         <label style={labelStyle}>

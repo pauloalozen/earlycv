@@ -105,3 +105,42 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     workModel: job.workModel,
   };
 }
+
+// Vaga fora do radar (inactive/removed): só o necessário pra página "vaga
+// encerrada" — sem descrição, link de origem nem nada que convide a se
+// candidatar.
+export type ClosedPublicJobView = {
+  company: string;
+  companyLogoUrl: string | null;
+  companyWebsiteUrl: string | null;
+  dominantArea: string | null;
+  lastSeenAt: string;
+  location: string;
+  slug: string;
+  status: "closed";
+  title: string;
+  workModel: string | null;
+};
+
+export function toClosedPublicJobView(job: {
+  company: { name: string; websiteUrl: string | null; logoUrl: string | null };
+  enrichment: { dominantArea: string | null } | null;
+  lastSeenAt: Date;
+  locationText: string;
+  slug: string | null;
+  title: string;
+  workModel: string | null;
+}): ClosedPublicJobView {
+  return {
+    company: job.company.name,
+    companyLogoUrl: job.company.logoUrl,
+    companyWebsiteUrl: job.company.websiteUrl,
+    dominantArea: job.enrichment?.dominantArea ?? null,
+    lastSeenAt: job.lastSeenAt.toISOString(),
+    location: job.locationText,
+    slug: job.slug ?? "",
+    status: "closed",
+    title: job.title,
+    workModel: job.workModel,
+  };
+}

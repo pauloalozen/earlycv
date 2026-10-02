@@ -8,7 +8,7 @@ const MONO = "var(--font-geist-mono), monospace";
 const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
 export const metadata: Metadata = {
-  title: "Contato | EarlyCV",
+  title: "Contato",
   description:
     "Entre em contato com a equipe EarlyCV para dúvidas, problemas ou sugestões.",
   robots: { index: false, follow: false },

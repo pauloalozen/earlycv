@@ -25,6 +25,9 @@ function createIngestionServiceFixture(options?: {
     status?: "active" | "inactive" | "removed";
     title?: string;
   }>;
+  // startedAt da execução concluída anterior (regra de 2 execuções em
+  // stale-policy.ts); null = fonte sem execução concluída anterior.
+  previousCompletedRunStartedAt?: Date | null;
   sourceType?: JobSourceType;
   webRevalidationThrows?: boolean;
 }) {
@@ -48,6 +51,11 @@ function createIngestionServiceFixture(options?: {
     data: Record<string, unknown>;
   }> = [];
   let staleUpdateManyCount = 0;
+  const staleCutoffs: Date[] = [];
+  const previousCompletedRunStartedAt =
+    options?.previousCompletedRunStartedAt === undefined
+      ? new Date("2026-05-31T12:00:00.000Z")
+      : options.previousCompletedRunStartedAt;
   let collectContext: IngestionCollectContext | undefined;
 
   const database = {
@@ -63,7 +71,10 @@ function createIngestionServiceFixture(options?: {
         startedAt: new Date("2026-06-01T12:00:00.000Z"),
         createdAt: new Date("2026-06-01T12:00:00.000Z"),
       }),
-      findFirst: async () => null,
+      findFirst: async ({ where }: { where: { status?: string } }) =>
+        where.status === "completed" && previousCompletedRunStartedAt
+          ? { startedAt: previousCompletedRunStartedAt }
+          : null,
       findMany: async () => [],
       update: async ({ data }: { data: Record<string, unknown> }) => ({
         id: "run-1",
@@ -163,6 +174,7 @@ function createIngestionServiceFixture(options?: {
         const status = where.status;
         const lastSeenAt = where.lastSeenAt as { lt?: Date } | undefined;
         if (status === "active" && lastSeenAt?.lt) {
+          staleCutoffs.push(lastSeenAt.lt);
           return Array.from({ length: staleUpdateManyCount }, (_, i) => ({
             slug: `stale-job-${i}`,
           }));
@@ -251,6 +263,7 @@ function createIngestionServiceFixture(options?: {
     rawJobUpdates,
     revalidationCalls,
     service,
+    staleCutoffs,
     setStaleCount(count: number) {
       staleUpdateManyCount = count;
     },
@@ -713,6 +726,52 @@ test("IngestionService works without any web revalidation service configured", a
   const result = await service.runJobSource("source-1");
 
   assert.equal(result.status, "completed");
+});
+
+test("IngestionService inactivates jobs missing from the current and the previous completed run", async () => {
+  const previousRun = new Date("2026-05-31T12:00:00.000Z");
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+    previousCompletedRunStartedAt: previousRun,
+  });
+  fixture.setStaleCount(1);
+
+  const result = await fixture.service.runJobSource("source-1");
+
+  assert.equal(result.staleMarkedCount, 1);
+  assert.deepEqual(fixture.staleCutoffs, [previousRun]);
+});
+
+test("IngestionService falls back to the 7-day rule when the source has no previous completed run", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+    previousCompletedRunStartedAt: null,
+  });
+  fixture.setStaleCount(1);
+
+  const before = Date.now();
+  await fixture.service.runJobSource("source-1");
+
+  const cutoff = fixture.staleCutoffs[0]?.getTime() ?? 0;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  assert.ok(cutoff <= before - sevenDays + 60_000);
+  assert.ok(cutoff >= before - sevenDays - 60_000);
+});
+
+test("IngestionService falls back to the 7-day rule when the run returns no observations", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [],
+    previousCompletedRunStartedAt: new Date("2026-05-31T12:00:00.000Z"),
+  });
+  fixture.setStaleCount(1);
+
+  const before = Date.now();
+  await fixture.service.runJobSource("source-1");
+
+  const cutoff = fixture.staleCutoffs[0]?.getTime() ?? 0;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  assert.ok(cutoff <= before - sevenDays + 60_000);
+  assert.ok(cutoff >= before - sevenDays - 60_000);
 });
 
 test("IngestionService keeps staleMarkedCount zero when no old jobs are found", async () => {
@@ -1443,4 +1502,72 @@ test("IngestionService.listAllRuns paginates, filters, and omits previewJson fro
   await database.jobSource.delete({ where: { id: jobSource.id } });
   await database.company.delete({ where: { id: company.id } });
   await moduleRef.close();
+});
+
+test("IngestionService.listRuns pagina no banco e nunca carrega previewJson", async () => {
+  const fixture = createIngestionServiceFixture();
+  const database = fixture.service.database as unknown as {
+    ingestionRun: Record<string, unknown>;
+    jobSource: Record<string, unknown>;
+  };
+  database.jobSource.findUnique = async () => ({ id: "source-1" });
+  let findManyArgs: Record<string, unknown> | undefined;
+  let countArgs: Record<string, unknown> | undefined;
+  database.ingestionRun.findMany = async (args: Record<string, unknown>) => {
+    findManyArgs = args;
+    return [
+      {
+        errorSummary: null,
+        failedCount: 0,
+        finishedAt: new Date("2026-10-01T10:05:00.000Z"),
+        id: "run-9",
+        jobSourceId: "source-1",
+        newCount: 2,
+        skippedCount: 0,
+        startedAt: new Date("2026-10-01T10:00:00.000Z"),
+        status: "completed",
+        updatedCount: 1,
+      },
+    ];
+  };
+  database.ingestionRun.count = async (args: Record<string, unknown>) => {
+    countArgs = args;
+    return 61;
+  };
+
+  const result = await fixture.service.listRuns("source-1", {
+    limit: 25,
+    page: 3,
+  });
+
+  assert.deepEqual(findManyArgs?.omit, { previewJson: true });
+  assert.equal(findManyArgs?.skip, 50);
+  assert.equal(findManyArgs?.take, 25);
+  assert.deepEqual(findManyArgs?.where, { jobSourceId: "source-1" });
+  assert.deepEqual(countArgs, { where: { jobSourceId: "source-1" } });
+  assert.equal(result.total, 61);
+  assert.equal(result.page, 3);
+  assert.equal(result.limit, 25);
+  assert.equal(result.runs[0].id, "run-9");
+  assert.deepEqual(result.runs[0].previewItems, []);
+});
+
+test("IngestionService.listRuns limita o tamanho da pagina a 100", async () => {
+  const fixture = createIngestionServiceFixture();
+  const database = fixture.service.database as unknown as {
+    ingestionRun: Record<string, unknown>;
+    jobSource: Record<string, unknown>;
+  };
+  database.jobSource.findUnique = async () => ({ id: "source-1" });
+  let take: unknown;
+  database.ingestionRun.findMany = async (args: { take: number }) => {
+    take = args.take;
+    return [];
+  };
+  database.ingestionRun.count = async () => 0;
+
+  const result = await fixture.service.listRuns("source-1", { limit: 5000 });
+
+  assert.equal(take, 100);
+  assert.equal(result.page, 1);
 });

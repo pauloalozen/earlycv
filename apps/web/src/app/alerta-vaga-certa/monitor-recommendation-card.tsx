@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ClosedJobBadge, isJobClosed } from "@/app/radar/closed-job-badge";
 import { CompanyLogo } from "@/app/radar/company-logo";
 import { formatRelativeTime } from "@/app/radar/job-card";
 import { OPPORTUNITY_LEVELS } from "@/app/radar/radar-ui";
@@ -312,6 +313,12 @@ export function MonitorRecommendationCard({
             }}
           />
           {badge.label}
+        </span>
+      ) : null}
+
+      {isJobClosed(item.job.status) ? (
+        <span style={{ alignSelf: "flex-start" }}>
+          <ClosedJobBadge />
         </span>
       ) : null}
 

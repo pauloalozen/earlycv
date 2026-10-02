@@ -12,6 +12,11 @@ const NAV_ITEMS = [
   { id: "talentos", label: "Talentos", href: "/admin/talentos" },
   { id: "pagamentos", label: "Pagamentos", href: "/admin/pagamentos" },
   {
+    id: "simulados",
+    label: "Entrevistas simuladas",
+    href: "/admin/simulados",
+  },
+  {
     id: "campanhas-cupom",
     label: "Campanhas de Cupom",
     href: "/admin/campanhas-cupom",

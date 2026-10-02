@@ -11,7 +11,7 @@ import { RadarViewTracker } from "./radar-view-tracker";
 export function generateMetadata(): Metadata {
   const url = getAbsoluteUrl("/radar");
   return {
-    title: "Vagas em Tech | Radar de Oportunidades — EarlyCV",
+    title: { absolute: "Vagas em Tech | Radar de Oportunidades — EarlyCV" },
     description:
       "Encontre vagas de tecnologia, dados e produto com score de compatibilidade personalizado. Adapte seu CV em segundos.",
     alternates: { canonical: url },

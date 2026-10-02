@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
 import { getAbsoluteUrl } from "@/lib/site";
 import {
   MockMobileStyles,
@@ -26,8 +27,7 @@ import { LandingScrollAnimations } from "../_landing-scroll-animations";
 const url = getAbsoluteUrl("/preparacao-para-entrevista");
 
 export const metadata: Metadata = {
-  title:
-    "Como se Preparar para Entrevista de Emprego — Roteiro Personalizado | EarlyCV",
+  title: "Como se Preparar para Entrevista de Emprego — Roteiro Personalizado",
   description:
     "Prepare-se para a entrevista daquela vaga, não para uma entrevista genérica. Perguntas técnicas, comportamentais e um roteiro personalizado a partir do seu currículo e da vaga.",
   alternates: { canonical: url },
@@ -539,6 +539,23 @@ export default function PreparacaoParaEntrevistaPage() {
           >
             Preparar minha entrevista →
           </Link>
+          {isMockInterviewPublic() && (
+            <p style={{ fontSize: 14, color: "#a0a098", margin: "28px 0 0" }}>
+              Entrevista já marcada? Treine ao vivo com a{" "}
+              <Link
+                href="/simulacao-de-entrevista"
+                style={{
+                  color: "#fafaf6",
+                  textDecoration: "underline",
+                  textDecorationColor: "rgba(250,250,246,0.3)",
+                  textUnderlineOffset: 4,
+                }}
+              >
+                entrevista simulada
+              </Link>
+              .
+            </p>
+          )}
         </div>
       </section>
 

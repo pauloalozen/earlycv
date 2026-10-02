@@ -16,7 +16,7 @@ import { CandidaturasClient } from "./candidaturas-client";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Minhas Candidaturas | EarlyCV",
+  title: "Minhas Candidaturas",
 };
 
 type Props = {

@@ -30,6 +30,7 @@ import { JobCurationModule } from "./job-curation/job-curation.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { MasterCvCanonicalExtractionModule } from "./master-cv-canonical-extraction/master-cv-canonical-extraction.module";
+import { MockInterviewsModule } from "./mock-interviews/mock-interviews.module";
 import { MonitorModule } from "./monitor/monitor.module";
 import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.module";
 import { PaymentsModule } from "./payments/payments.module";
@@ -64,6 +65,7 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AdminEmailsModule,
     ProductUpdatesModule,
     EmailDispatchModule,
+    MockInterviewsModule,
     AdminProductUpdatesModule,
     AdminProfilesModule,
     AdminResumesModule,

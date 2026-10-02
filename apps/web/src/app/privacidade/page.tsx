@@ -5,7 +5,7 @@ import { Logo } from "@/components/logo";
 import { getAbsoluteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Politica de Privacidade | EarlyCV",
+  title: "Politica de Privacidade",
   description:
     "Entenda como o EarlyCV coleta, utiliza, compartilha e protege dados pessoais para operar o servico de analise e adaptacao de curriculo.",
   alternates: {

@@ -97,7 +97,10 @@ describe("/radar/[slug] generateMetadata", () => {
       params: Promise.resolve({ slug: "engenheiro-de-dados-earlycv-job1" }),
     });
 
-    expect(metadata.title).toBe("Engenheiro de Dados — EarlyCV | EarlyCV");
+    // absolute: o layout raiz não acrescenta outro "| EarlyCV".
+    expect(metadata.title).toEqual({
+      absolute: "Engenheiro de Dados — EarlyCV | EarlyCV",
+    });
   });
 
   it("returns a description with location, remote flag and tech tags, capped at 160 chars", async () => {

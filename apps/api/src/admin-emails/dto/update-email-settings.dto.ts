@@ -29,6 +29,11 @@ export class UpdateEmailSettingsDto {
   @IsIn(MODES)
   purchaseConfirmationMode!: Mode;
 
+  // Opcional: ausente = mantém o modo atual (clientes antigos).
+  @IsOptional()
+  @IsIn(MODES)
+  mockInterviewOfferMode?: Mode;
+
   // ISO 8601 ou null (sem cutoff).
   @ValidateIf((_, value) => value !== null)
   @IsString()

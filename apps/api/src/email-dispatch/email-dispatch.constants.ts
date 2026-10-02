@@ -38,3 +38,10 @@ export const MAX_SEND_ATTEMPTS = 3;
 export const RETRY_BACKOFF_MS = 15 * 60_000;
 export const STALE_PROCESSING_THRESHOLD_MS = 10 * 60_000;
 export const WORKER_BATCH_SIZE = 10;
+
+// Oferta da entrevista simulada: 2h depois da mudança da candidatura para
+// INTERVIEW, no máximo uma a cada 7 dias por usuário; oferta velha não vale
+// (expira 24h depois do horário agendado).
+export const MOCK_INTERVIEW_OFFER_DELAY_MS = 2 * HOUR_MS;
+export const MOCK_INTERVIEW_OFFER_EXPIRY_MS = 24 * HOUR_MS;
+export const MOCK_INTERVIEW_OFFER_COOLDOWN_MS = 7 * 24 * HOUR_MS;

@@ -313,6 +313,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.emailDispatchTemplate;
   }
 
+  get mockInterviewPurchase() {
+    return this.prisma.mockInterviewPurchase;
+  }
+
+  get mockInterviewEvent() {
+    return this.prisma.mockInterviewEvent;
+  }
+
   get googleIndexingLog() {
     return this.prisma.googleIndexingLog;
   }

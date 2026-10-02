@@ -5,7 +5,7 @@ import { Logo } from "@/components/logo";
 import { getAbsoluteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Termos de Uso | EarlyCV",
+  title: "Termos de Uso",
   description:
     "Condicoes de uso do EarlyCV, incluindo regras de acesso, responsabilidades do usuario, limitacao de responsabilidade e disposicoes legais.",
   alternates: {

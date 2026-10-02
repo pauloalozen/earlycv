@@ -24,7 +24,7 @@ import {
 import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { SavedJobsService } from "../saved-jobs/saved-jobs.service";
 import { JobsService } from "./jobs.service";
-import { toPublicJobView } from "./public-job-view";
+import { toClosedPublicJobView, toPublicJobView } from "./public-job-view";
 import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
 
 @Controller("public/jobs")
@@ -316,6 +316,20 @@ export class PublicJobsController {
     }
 
     return toPublicJobView(found);
+  }
+
+  // Vaga que saiu do radar. Rota separada de propósito: GET /:slug segue
+  // devolvendo 404 pra vaga fechada (score, adaptar e afins dependem disso).
+  @Get(":slug/closed")
+  @UseGuards(PublicJobsGhostModeGuard)
+  async getClosedBySlug(@Param("slug") slug: string) {
+    const found = await this.jobsService.getClosedPublicBySlug(slug);
+
+    if (!found) {
+      throw new NotFoundException("job not found");
+    }
+
+    return toClosedPublicJobView(found);
   }
 
   @Get(":slug/score")

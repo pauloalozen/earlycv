@@ -4,8 +4,8 @@ import Link from "next/link";
 import { BlogAnalysisCta } from "@/components/blog/blog-analysis-cta";
 import { BlogCard } from "@/components/blog/blog-card";
 import {
-  type BlogPostOrder,
   BlogCategoryFilter,
+  type BlogPostOrder,
 } from "@/components/blog/blog-category-filter";
 import { BlogIndexViewTracker } from "@/components/blog/blog-view-trackers";
 import { PublicFooter } from "@/components/public-footer";
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     url: getAbsoluteUrl("/blog"),
   },
   robots: { follow: true, index: true },
-  title: "Blog EarlyCV",
+  title: { absolute: "Blog EarlyCV" },
   twitter: {
     card: "summary_large_image",
     description:

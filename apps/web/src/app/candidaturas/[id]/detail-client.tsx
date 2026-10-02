@@ -12,6 +12,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { ClosedJobBadge } from "@/app/radar/closed-job-badge";
 import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import {
@@ -51,6 +52,12 @@ import {
 } from "@/lib/job-description-validation";
 import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
+import {
+  type ActiveMockInterview,
+  MockInterviewOfferCard,
+  MockInterviewOfferModal,
+  shouldShowMockInterviewOfferModal,
+} from "./mock-interview-offer";
 
 const USER_VISIBLE_STATUS_OPTIONS: Array<{
   value: JobApplicationStatus;
@@ -5164,6 +5171,12 @@ type Props = {
   application: JobApplicationDetailDto;
   header: ReactNode;
   initialHasCredits: boolean;
+  // Entrevista simulada já paga e ainda não realizada (oferta não aparece).
+  activeMockInterview?: ActiveMockInterview;
+  mockInterviewPriceLabel?: string | null;
+  // Flag MOCK_INTERVIEW_MODE: venda aberta para este usuário. Fechada, só
+  // aparece o card de uma sessão já paga (nunca a oferta).
+  mockInterviewEnabled?: boolean;
 };
 
 const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
@@ -5178,8 +5191,12 @@ export function DetailClient({
   application,
   header,
   initialHasCredits,
+  activeMockInterview = null,
+  mockInterviewPriceLabel = null,
+  mockInterviewEnabled = false,
 }: Props) {
   const router = useRouter();
+  const [showMockInterviewOffer, setShowMockInterviewOffer] = useState(false);
   const [showPrep, setShowPrep] = useState(false);
   const [showCoverLetter, setShowCoverLetter] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
@@ -5584,6 +5601,25 @@ export function DetailClient({
                 >
                   {application.jobTitle}
                 </h1>
+                {/* Vaga do Radar fechada na fonte — só sinaliza; a
+                    candidatura nunca é movida automaticamente. */}
+                {application.jobClosed ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      margin: "0 0 11px",
+                    }}
+                  >
+                    <ClosedJobBadge variant="pill" />
+                    <span style={{ fontSize: 12.5, color: "#6a6560" }}>
+                      A vaga saiu da página de carreiras da empresa. Sua
+                      candidatura continua aqui — arquive se não for seguir.
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -5952,6 +5988,19 @@ export function DetailClient({
             </div>
           )}
 
+          {/* Oferta da entrevista simulada (só em "Entrevista") */}
+          {!isArchivedManually &&
+            isInterview &&
+            (mockInterviewEnabled || activeMockInterview) && (
+              <div style={{ marginBottom: 28 }}>
+                <MockInterviewOfferCard
+                  active={activeMockInterview}
+                  applicationId={application.id}
+                  priceLabel={mockInterviewPriceLabel}
+                />
+              </div>
+            )}
+
           {/* Main grid */}
           <div
             className="candidatura-grid"
@@ -6129,7 +6178,24 @@ export function DetailClient({
           <InterviewScheduleModal
             applicationId={application.id}
             onClose={() => setShowInterviewModal(false)}
-            onUpdated={handleUpdated}
+            onUpdated={() => {
+              handleUpdated();
+              if (
+                mockInterviewEnabled &&
+                !activeMockInterview &&
+                shouldShowMockInterviewOfferModal(application.id)
+              ) {
+                setShowMockInterviewOffer(true);
+              }
+            }}
+          />
+        )}
+
+        {showMockInterviewOffer && (
+          <MockInterviewOfferModal
+            applicationId={application.id}
+            onClose={() => setShowMockInterviewOffer(false)}
+            priceLabel={mockInterviewPriceLabel}
           />
         )}
 

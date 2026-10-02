@@ -17,6 +17,7 @@ import {
   EMAIL_TEMPLATE_KEYS,
   type EmailTemplateKeyValue,
   type PurchaseConfirmationPayload,
+  SAMPLE_MOCK_INTERVIEW_OFFER_PAYLOAD,
   SAMPLE_PURCHASE_PAYLOAD,
   type TemplateContent,
 } from "../email-dispatch/email-dispatch-templates";
@@ -28,6 +29,7 @@ const RELATIONSHIP_KINDS: EmailDispatchKind[] = [
   "WELCOME",
   "FEEDBACK_FIRST_USE",
   "FEEDBACK_SECOND_CALL",
+  "MOCK_INTERVIEW_OFFER",
 ];
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -78,6 +80,7 @@ export class AdminEmailsService {
       feedbackMode,
       feedbackSecondCallMode,
       purchaseMode,
+      mockInterviewOfferMode,
       byKindStatus,
       alertDigests,
       events,
@@ -89,6 +92,7 @@ export class AdminEmailsService {
       this.config.getEffectiveMode("FEEDBACK_FIRST_USE"),
       this.config.getEffectiveMode("FEEDBACK_SECOND_CALL"),
       this.config.getEffectiveMode("PURCHASE_CONFIRMATION"),
+      this.config.getEffectiveMode("MOCK_INTERVIEW_OFFER"),
       this.database.emailDispatch.groupBy({
         by: ["kind", "status"],
         where: { isTest: false, createdAt: inWindow },
@@ -127,6 +131,7 @@ export class AdminEmailsService {
           FEEDBACK_FIRST_USE: feedbackMode,
           FEEDBACK_SECOND_CALL: feedbackSecondCallMode,
           PURCHASE_CONFIRMATION: purchaseMode,
+          MOCK_INTERVIEW_OFFER: mockInterviewOfferMode,
         },
         // Só pronto/não pronto e o motivo — nunca nomes de lista/tópico/segredos.
         relationshipReadiness: relationshipReady.ready
@@ -221,6 +226,12 @@ export class AdminEmailsService {
             ...common,
             kind: "PURCHASE_CONFIRMATION",
             payload: SAMPLE_PURCHASE_PAYLOAD,
+          });
+        case "MOCK_INTERVIEW_OFFER":
+          return this.dispatch.sendTest({
+            ...common,
+            kind: "MOCK_INTERVIEW_OFFER",
+            payload: SAMPLE_MOCK_INTERVIEW_OFFER_PAYLOAD,
           });
         case "PURCHASE_COUPON": {
           const payload: PurchaseConfirmationPayload = {

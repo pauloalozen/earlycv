@@ -47,6 +47,7 @@ export default async function AdminEmailsSettingsPage() {
               feedbackMode: settings.feedbackMode,
               feedbackSecondCallMode: settings.feedbackSecondCallMode,
               purchaseConfirmationMode: settings.purchaseConfirmationMode,
+              mockInterviewOfferMode: settings.mockInterviewOfferMode,
               startAtInput: isoToBrtInput(settings.startAt),
               allowlist: settings.allowlist.join("\n"),
               extraBlocklist: settings.extraBlocklist.join("\n"),

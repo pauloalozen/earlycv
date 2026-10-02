@@ -21,7 +21,8 @@ export type EmailTemplateKeyValue =
   | "FEEDBACK_FIRST_USE"
   | "FEEDBACK_SECOND_CALL"
   | "PURCHASE_PAID"
-  | "PURCHASE_COUPON";
+  | "PURCHASE_COUPON"
+  | "MOCK_INTERVIEW_OFFER";
 
 export const EMAIL_TEMPLATE_KEYS: EmailTemplateKeyValue[] = [
   "WELCOME",
@@ -29,6 +30,7 @@ export const EMAIL_TEMPLATE_KEYS: EmailTemplateKeyValue[] = [
   "FEEDBACK_SECOND_CALL",
   "PURCHASE_PAID",
   "PURCHASE_COUPON",
+  "MOCK_INTERVIEW_OFFER",
 ];
 
 export type TemplateContent = { subject: string; body: string };
@@ -198,6 +200,41 @@ Dúvidas? Escreva para contato@earlycv.com.br.
 Equipe EarlyCV`,
     },
   },
+  MOCK_INTERVIEW_OFFER: {
+    label: "Oferta da entrevista simulada",
+    description:
+      "Enviado 2h depois que uma candidatura vai para Entrevista, só se a pessoa ainda não comprou a entrevista simulada depois disso e não recebeu outra oferta nos últimos 7 dias. Precisa do {{link}}.",
+    unsubscribeFooter: true,
+    variables: [
+      GREETING_VAR,
+      NAME_VAR,
+      {
+        name: "vaga",
+        description:
+          'Cargo e empresa da candidatura (ex.: "Analista de Dados na Nubank")',
+      },
+      { name: "preco", description: "Preço atual (ex.: R$ 79,90)" },
+      {
+        name: "link",
+        description: "Link para a página da entrevista simulada",
+      },
+    ],
+    defaults: {
+      subject: "Sua entrevista foi marcada. Quer treinar antes?",
+      body: `{{saudacao}} Aqui é o Paulo, do EarlyCV.
+
+Vi que a sua candidatura para {{vaga}} chegou na etapa de entrevista. Parabéns, essa é a parte mais difícil de alcançar.
+
+Se quiser chegar mais preparado, faço uma entrevista simulada com você: 45 minutos ao vivo pelo Google Meet, com perguntas baseadas na vaga, feedback na hora e um relatório formal com as minhas recomendações depois da sessão.
+
+Está por {{preco}} na oferta de lançamento:
+{{link}}
+
+Boa sorte na entrevista,
+Paulo
+EarlyCV`,
+    },
+  },
 };
 
 // ---- Validação ----------------------------------------------------------
@@ -294,6 +331,12 @@ export function validateTemplate(
     }
   }
 
+  if (key === "MOCK_INTERVIEW_OFFER" && !has("link")) {
+    errors.push(
+      "A oferta precisa do {{link}} para a página da entrevista simulada.",
+    );
+  }
+
   if (key === "PURCHASE_COUPON") {
     const summaryOk = has("resumo") || (has("plano") && has("creditos"));
     if (!summaryOk) {
@@ -340,7 +383,7 @@ function greeting(name: string | null | undefined): string {
 }
 
 const FOOTER_PREFIX =
-  "Você recebeu este e-mail porque tem uma conta no EarlyCV. Para não receber mais mensagens pessoais como esta (boas-vindas e pedidos de feedback), cancele aqui:";
+  "Você recebeu este e-mail porque tem uma conta no EarlyCV. Para não receber mais mensagens pessoais como esta (boas-vindas, pedidos de feedback e ofertas), cancele aqui:";
 
 function footerText(): string {
   return `${FOOTER_PREFIX} ${SES_UNSUBSCRIBE_PLACEHOLDER}`;
@@ -520,6 +563,62 @@ export function renderPurchaseConfirmationEmail(
   });
 }
 
+// ---- Oferta da entrevista simulada (relacionamento) -----------------------
+
+// Snapshot gravado no enqueue (EmailDispatch.payloadJson), inclusive o
+// preço: o e-mail mostra o valor que valia quando a oferta nasceu.
+export type MockInterviewOfferPayload = {
+  jobApplicationId: string;
+  jobTitle: string;
+  companyName: string;
+  amountInCents: number;
+  currency: string;
+};
+
+export function isMockInterviewOfferPayload(
+  value: unknown,
+): value is MockInterviewOfferPayload {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.jobApplicationId === "string" &&
+    typeof v.jobTitle === "string" &&
+    typeof v.companyName === "string" &&
+    typeof v.amountInCents === "number" &&
+    typeof v.currency === "string"
+  );
+}
+
+export function renderMockInterviewOfferEmail(
+  input: {
+    name: string | null | undefined;
+    appUrl: string;
+    payload: MockInterviewOfferPayload;
+  },
+  content: TemplateContent = TEMPLATE_DEFINITIONS.MOCK_INTERVIEW_OFFER.defaults,
+): RenderedEmail {
+  const { payload } = input;
+  const company = payload.companyName.trim();
+  const vaga = company
+    ? `${payload.jobTitle.trim()} na ${company}`
+    : payload.jobTitle.trim();
+  const link = `${input.appUrl.replace(/\/$/, "")}/simulacao-de-entrevista?origem=email&candidatura=${encodeURIComponent(payload.jobApplicationId)}`;
+  return renderTemplate("MOCK_INTERVIEW_OFFER", content, {
+    ...baseVars(input.name),
+    vaga,
+    preco: formatMoney(payload.amountInCents, payload.currency),
+    link,
+  });
+}
+
+export const SAMPLE_MOCK_INTERVIEW_OFFER_PAYLOAD: MockInterviewOfferPayload = {
+  jobApplicationId: "exemplo",
+  jobTitle: "Analista de Dados Pleno",
+  companyName: "Nubank",
+  amountInCents: 7990,
+  currency: "BRL",
+};
+
 // Dados de exemplo para preview/teste no admin (nunca de uma compra real).
 export const SAMPLE_PURCHASE_PAYLOAD: PurchaseConfirmationPayload = {
   planType: "pro",
@@ -547,6 +646,11 @@ export function renderSample(
     case "PURCHASE_PAID":
       return renderPurchaseConfirmationEmail(
         { name, appUrl, payload: SAMPLE_PURCHASE_PAYLOAD },
+        content,
+      );
+    case "MOCK_INTERVIEW_OFFER":
+      return renderMockInterviewOfferEmail(
+        { name, appUrl, payload: SAMPLE_MOCK_INTERVIEW_OFFER_PAYLOAD },
         content,
       );
     case "PURCHASE_COUPON":

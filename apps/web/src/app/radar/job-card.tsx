@@ -1,5 +1,6 @@
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { AnalyzeCardBtn } from "./analyze-card-btn";
+import { ClosedJobBadge, isJobClosed } from "./closed-job-badge";
 import { CompanyLogo } from "./company-logo";
 import { RadarOpportunityLink } from "./radar-opportunity-link";
 import {
@@ -202,6 +203,7 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
             Vaga já analisada
           </span>
         ) : null}
+        {isJobClosed(job.status) ? <ClosedJobBadge /> : null}
       </div>
 
       <div style={{ fontSize: 12.5, color: "#6a6560", marginBottom: 10 }}>
@@ -637,7 +639,7 @@ export function JobCard({
                 score={bestAnalysisScore}
                 variant="view"
               />
-            ) : (
+            ) : isJobClosed(job.status) ? null : (
               <AnalyzeCardBtn
                 masterResumeId={masterResumeId}
                 radarJobId={job.id}

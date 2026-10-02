@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   type JobApplicationOrigin,
@@ -15,6 +16,12 @@ import {
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
+import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
+import {
+  getMockInterviewAmountInCents,
+  getMockInterviewMode,
+  MOCK_INTERVIEW_PRODUCT,
+} from "../mock-interviews/mock-interview.config";
 import type { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 
 type UpsertFromAdaptationInput = {
@@ -204,6 +211,14 @@ function deriveSummaryFromAdaptations(
   };
 }
 
+// Vaga do radar que saiu do ar (fechada na fonte ou retirada pela curadoria).
+// Calculado a cada leitura a partir do status atual da vaga — se ela voltar a
+// aparecer na fonte, o sinal some sozinho. Candidatura sem vaga do radar
+// (manual) nunca é marcada.
+function isRadarJobClosed(job: { status: string } | null | undefined) {
+  return !!job && job.status !== "active";
+}
+
 @Injectable()
 export class JobApplicationsService {
   private readonly logger = new Logger(JobApplicationsService.name);
@@ -212,7 +227,42 @@ export class JobApplicationsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelEventService)
     private readonly funnelEvents: BusinessFunnelEventService,
+    @Optional()
+    @Inject(EmailDispatchService)
+    private readonly emailDispatch?: Pick<
+      EmailDispatchService,
+      "enqueueMockInterviewOffer"
+    >,
   ) {}
+
+  // Candidatura entrou em INTERVIEW: agenda a oferta da entrevista simulada
+  // por e-mail (2h depois). Fire-and-forget: nunca atrasa nem falha a
+  // mudança de status (o enqueue não lança).
+  private offerMockInterview(application: {
+    id: string;
+    userId: string;
+    jobTitle: string;
+    companyName: string;
+  }) {
+    const amountInCents = getMockInterviewAmountInCents();
+    // Sem preço configurado ou com a flag fora de "on", a venda está fechada
+    // para o público: não oferece (staff nunca recebe oferta de relacionamento).
+    if (
+      !this.emailDispatch ||
+      amountInCents === null ||
+      getMockInterviewMode() !== "on"
+    ) {
+      return;
+    }
+    void this.emailDispatch.enqueueMockInterviewOffer({
+      userId: application.userId,
+      jobApplicationId: application.id,
+      jobTitle: application.jobTitle,
+      companyName: application.companyName,
+      amountInCents,
+      currency: MOCK_INTERVIEW_PRODUCT.currency,
+    });
+  }
 
   private buildBackendContext(userId: string, key: string) {
     return {
@@ -310,6 +360,7 @@ export class JobApplicationsService {
           job: {
             select: {
               company: { select: { logoUrl: true, websiteUrl: true } },
+              status: true,
             },
           },
         },
@@ -327,6 +378,7 @@ export class JobApplicationsService {
           ...rest,
           companyLogoUrl: job?.company.logoUrl ?? null,
           companyWebsiteUrl: job?.company.websiteUrl ?? null,
+          jobClosed: isRadarJobClosed(job),
           ...deriveSummaryFromAdaptations(
             item.cvAdaptations as AdaptationSummaryView[],
           ),
@@ -477,6 +529,7 @@ export class JobApplicationsService {
         job: {
           select: {
             slug: true,
+            status: true,
             company: { select: { logoUrl: true, websiteUrl: true } },
           },
         },
@@ -505,6 +558,7 @@ export class JobApplicationsService {
       companyLogoUrl: job?.company.logoUrl ?? null,
       companyWebsiteUrl: job?.company.websiteUrl ?? null,
       jobSlug: job?.slug ?? null,
+      jobClosed: isRadarJobClosed(job),
       ...deriveSummaryFromAdaptations(
         application.cvAdaptations as AdaptationSummaryView[],
       ),
@@ -762,6 +816,10 @@ export class JobApplicationsService {
       { sessionInternalId },
     );
 
+    if (previousStatus !== "INTERVIEW") {
+      this.offerMockInterview(result);
+    }
+
     return result;
   }
 
@@ -885,6 +943,10 @@ export class JobApplicationsService {
       { from_status: previousStatus, to_status: newStatus },
       { sessionInternalId },
     );
+
+    if (newStatus === "INTERVIEW" && previousStatus !== "INTERVIEW") {
+      this.offerMockInterview(updated);
+    }
 
     if (newStatus === "APPLIED") {
       await this.recordEvent(

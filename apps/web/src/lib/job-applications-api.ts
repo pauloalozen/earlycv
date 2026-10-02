@@ -118,6 +118,9 @@ export type JobApplicationDto = {
   // link /radar/{slug} (ver detail-client.tsx).
   jobId?: string | null;
   jobSlug?: string | null;
+  // Vaga do Radar que saiu do ar (fechada na fonte/retirada). Calculado pela
+  // API a partir do status atual da vaga; candidatura manual é sempre false.
+  jobClosed?: boolean;
   jobDescriptionText: string | null;
   status: JobApplicationStatus;
   origin: JobApplicationOrigin;

@@ -12,6 +12,7 @@ export const KIND_LABEL: Record<EmailDispatchKind, string> = {
   FEEDBACK_FIRST_USE: "Feedback",
   FEEDBACK_SECOND_CALL: "Feedback segunda chamada",
   PURCHASE_CONFIRMATION: "Confirmação de compra",
+  MOCK_INTERVIEW_OFFER: "Oferta da entrevista simulada",
 };
 
 export const STATUS_LABEL: Record<EmailDispatchStatus, string> = {
@@ -77,6 +78,11 @@ const REASON_LABEL: Record<string, string> = {
   outside_window_past_expiry: "Fora da janela de horário e já expirado",
   welcome_pending_past_expiry: "Boas-vindas pendente e já expirado",
   welcome_too_recent_past_expiry: "Boas-vindas recente e já expirado",
+  already_purchased: "Já comprou a entrevista simulada",
+  offer_cooldown: "Recebeu oferta nos últimos 7 dias",
+  application_not_found: "Candidatura apagada",
+  mock_interview_disabled:
+    "Entrevista simulada desligada (MOCK_INTERVIEW_MODE)",
 };
 
 export function reasonLabel(reason: string | null): string {

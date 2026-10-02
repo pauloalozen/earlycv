@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
+import { MOCK_INTERVIEW_OFFER } from "@/lib/mock-interview-offer";
+import { useMockInterviewPrice } from "@/lib/use-mock-interview-price";
+import { InterviewCallMock } from "./_interview-call-mock";
 import {
   BrowserChrome,
   browserFrame,
@@ -2704,9 +2708,10 @@ type FeatureKey =
   | "radar"
   | "monitor"
   | "gestao"
-  | "preparacao";
+  | "preparacao"
+  | "simulada";
 
-const FEATURES: {
+const ALL_FEATURES: {
   key: FeatureKey;
   label: string;
   icon: React.ReactNode;
@@ -2769,7 +2774,100 @@ const FEATURES: {
       </>
     ),
   },
+  {
+    key: "simulada",
+    label: "Entrevista Simulada",
+    icon: (
+      <>
+        <rect x="3" y="6" width="12" height="12" rx="2" />
+        <path d="M15 10l6-3v10l-6-3" />
+      </>
+    ),
+  },
 ];
+
+// Entrevista simulada só entra na vitrine com a venda aberta ao público
+// (NEXT_PUBLIC_MOCK_INTERVIEW_MODE=on).
+const FEATURES = isMockInterviewPublic()
+  ? ALL_FEATURES
+  : ALL_FEATURES.filter((f) => f.key !== "simulada");
+
+/** Entrevista simulada (serviço ao vivo com Paulo): a mesma videochamada do
+ * hero de /simulacao-de-entrevista, com o resumo da oferta ao lado. */
+function SimuladaShowcase() {
+  const priceLabel = useMockInterviewPrice();
+  return (
+    <div
+      className="sm-wrap"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 40,
+        padding: "36px 40px 40px",
+        textAlign: "left",
+      }}
+    >
+      <div className="sm-copy" style={{ flex: "1 1 0", minWidth: 0 }}>
+        <Tag>AO VIVO · GOOGLE MEET</Tag>
+        <h3
+          style={{
+            fontFamily: GEIST,
+            fontSize: 26,
+            fontWeight: 400,
+            letterSpacing: -0.8,
+            lineHeight: 1.15,
+            margin: "14px 0 12px",
+          }}
+        >
+          Treine a entrevista com quem está há 20 anos em TI.
+        </h3>
+        <p
+          style={{
+            fontSize: 14.5,
+            lineHeight: 1.55,
+            fontWeight: 300,
+            color: "#5c5a52",
+            margin: "0 0 18px",
+          }}
+        >
+          45 minutos ao vivo, perguntas baseadas na sua vaga, feedback na hora e
+          um relatório formal com recomendações depois da sessão.
+        </p>
+        <div
+          style={{
+            fontFamily: GEIST,
+            fontSize: 28,
+            fontWeight: 500,
+            letterSpacing: -1,
+            marginBottom: 4,
+          }}
+        >
+          {priceLabel ?? "\u00a0"}
+        </div>
+        <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>
+          {MOCK_INTERVIEW_OFFER.offerLabel}
+        </div>
+        <Link
+          href={`${MOCK_INTERVIEW_OFFER.path}?origem=vitrine`}
+          style={{
+            fontFamily: GEIST,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#0a0a0a",
+            textDecoration: "underline",
+            textDecorationColor: "rgba(10,10,10,0.25)",
+            textUnderlineOffset: 4,
+          }}
+        >
+          Conhecer a entrevista simulada →
+        </Link>
+      </div>
+      <div className="sm-call" style={{ flex: "0 0 52%", maxWidth: 520 }}>
+        <InterviewCallMock compact />
+      </div>
+    </div>
+  );
+}
 
 /** Interactive pill row + matching visual — clicking a pill swaps the frame content. */
 export function FeatureShowcase() {
@@ -2838,6 +2936,8 @@ export function FeatureShowcase() {
           <MonitorMock />
         ) : active === "gestao" ? (
           <GestaoMock />
+        ) : active === "simulada" ? (
+          <SimuladaShowcase />
         ) : (
           <PreparacaoMock />
         )}
@@ -2913,6 +3013,10 @@ export function MockMobileStyles() {
         .pm-header { flex-wrap: wrap !important; gap: 10px !important; }
         .pm-tags { flex-wrap: wrap !important; }
         .pm-cols { flex-direction: column !important; gap: 24px !important; }
+
+        /* SimuladaShowcase */
+        .sm-wrap { flex-direction: column !important; padding: 22px 16px 24px !important; gap: 24px !important; }
+        .sm-copy, .sm-call { width: 100% !important; max-width: none !important; }
 
         /* CartaMock */
         .cm-wrap { flex-direction: column !important; }

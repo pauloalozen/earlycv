@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Planos | EarlyCV",
+  title: "Planos",
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
