@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
 import { getAbsoluteUrl } from "@/lib/site";
 import {
   MockMobileStyles,
@@ -539,21 +540,23 @@ export default function PreparacaoParaEntrevistaPage() {
           >
             Preparar minha entrevista →
           </Link>
-          <p style={{ fontSize: 14, color: "#a0a098", margin: "28px 0 0" }}>
-            Entrevista já marcada? Treine ao vivo com a{" "}
-            <Link
-              href="/simulacao-de-entrevista"
-              style={{
-                color: "#fafaf6",
-                textDecoration: "underline",
-                textDecorationColor: "rgba(250,250,246,0.3)",
-                textUnderlineOffset: 4,
-              }}
-            >
-              entrevista simulada
-            </Link>
-            .
-          </p>
+          {isMockInterviewPublic() && (
+            <p style={{ fontSize: 14, color: "#a0a098", margin: "28px 0 0" }}>
+              Entrevista já marcada? Treine ao vivo com a{" "}
+              <Link
+                href="/simulacao-de-entrevista"
+                style={{
+                  color: "#fafaf6",
+                  textDecoration: "underline",
+                  textDecorationColor: "rgba(250,250,246,0.3)",
+                  textUnderlineOffset: 4,
+                }}
+              >
+                entrevista simulada
+              </Link>
+              .
+            </p>
+          )}
         </div>
       </section>
 

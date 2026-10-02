@@ -1,5 +1,8 @@
 import "server-only";
 
+import { getAppSessionTokens } from "./app-session.server";
+import { getMockInterviewMode } from "./mock-interview-mode";
+
 function getApiBaseUrl() {
   const base =
     process.env.API_URL ??
@@ -13,14 +16,30 @@ export type MockInterviewPublicOffer = {
   currency: string;
 };
 
-// Preço vigente, direto da API (público, sem sessão). Cache de 5 min: a
-// landing continua estática/ISR. null = preço não configurado ou API fora;
-// as páginas escondem o valor nesse caso (o checkout recusa sozinho).
+// Preço vigente, direto da API. Com a flag em "on" é público e cacheado por
+// 5 min (a landing continua estática/ISR). Em "admin" a API só responde para
+// staff, então vai com a sessão e sem cache. Em "off" nem consulta. null =
+// venda fechada, preço não configurado ou API fora; as páginas escondem o
+// valor nesse caso (o checkout recusa sozinho).
 export async function fetchMockInterviewOffer(): Promise<MockInterviewPublicOffer | null> {
+  const mode = getMockInterviewMode();
+  if (mode === "off") return null;
   try {
-    const response = await fetch(`${getApiBaseUrl()}/mock-interviews/offer`, {
+    let init: RequestInit & { next?: { revalidate: number } } = {
       next: { revalidate: 300 },
-    });
+    };
+    if (mode === "admin") {
+      const { accessToken } = await getAppSessionTokens();
+      if (!accessToken) return null;
+      init = {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      };
+    }
+    const response = await fetch(
+      `${getApiBaseUrl()}/mock-interviews/offer`,
+      init,
+    );
     if (!response.ok) return null;
     const data = (await response.json()) as {
       amountInCents?: unknown;

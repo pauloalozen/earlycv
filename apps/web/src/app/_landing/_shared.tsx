@@ -1,10 +1,12 @@
 import Link from "next/link";
 
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
+
 export const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 export const MONO = "var(--font-geist-mono), monospace";
 export const SERIF_ITALIC = "var(--font-instrument-serif), serif";
 
-export const FEATURE_PAGES = [
+const ALL_FEATURE_PAGES = [
   {
     href: "/analise-de-curriculo",
     label: "Análise de Currículo",
@@ -42,6 +44,13 @@ export const FEATURE_PAGES = [
     icon: "M3 6h12v12H3zM15 10l6-3v10l-6-3",
   },
 ] as const;
+
+// Entrevista simulada só aparece nos menus com a venda aberta ao público
+// (NEXT_PUBLIC_MOCK_INTERVIEW_MODE=on).
+export const FEATURE_PAGES: readonly (typeof ALL_FEATURE_PAGES)[number][] =
+  isMockInterviewPublic()
+    ? ALL_FEATURE_PAGES
+    : ALL_FEATURE_PAGES.filter((p) => p.href !== "/simulacao-de-entrevista");
 
 export const container: React.CSSProperties = {
   width: "100%",

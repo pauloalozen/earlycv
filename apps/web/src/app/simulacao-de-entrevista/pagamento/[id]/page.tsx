@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { canAccessMockInterview } from "@/lib/mock-interview-mode";
 import { MockInterviewBrickCheckout } from "./brick-checkout";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,11 @@ export default async function PagamentoEntrevistaSimuladaPage({
     redirect(
       `/entrar?tab=entrar&next=${encodeURIComponent(`/simulacao-de-entrevista/pagamento/${id}`)}`,
     );
+  }
+  // Venda fechada para este usuário (a API também recusa): o pedido continua
+  // visível na página dele, só não dá para pagar.
+  if (!canAccessMockInterview(user)) {
+    redirect(`/simulacao-de-entrevista/pedido/${id}`);
   }
   return <MockInterviewBrickCheckout purchaseId={id} />;
 }

@@ -37,7 +37,7 @@ describe("OrderStatus", () => {
       "fetch",
       vi.fn(() => new Promise(() => {})),
     );
-    render(<OrderStatus initial={base} returnHint={null} />);
+    render(<OrderStatus canBuy initial={base} returnHint={null} />);
     expect(
       screen.getByText("Aguardando a confirmação do pagamento."),
     ).toBeTruthy();
@@ -47,6 +47,7 @@ describe("OrderStatus", () => {
   it("paid order: shows the WhatsApp button with the order link", () => {
     render(
       <OrderStatus
+        canBuy
         initial={{
           ...base,
           paymentStatus: "paid",
@@ -66,6 +67,7 @@ describe("OrderStatus", () => {
   it("scheduled order: shows when and the Meet link", () => {
     render(
       <OrderStatus
+        canBuy
         initial={{
           ...base,
           paymentStatus: "paid",
@@ -88,6 +90,7 @@ describe("OrderStatus", () => {
   it("failed order: offers to try again", () => {
     render(
       <OrderStatus
+        canBuy
         initial={{ ...base, paymentStatus: "failed" }}
         returnHint={null}
       />,
@@ -96,6 +99,18 @@ describe("OrderStatus", () => {
     expect(
       screen.getByText("Tentar de novo").closest("a")?.getAttribute("href"),
     ).toBe("/simulacao-de-entrevista/comprar");
+  });
+
+  it("failed order with sales closed: no link to buy again", () => {
+    render(
+      <OrderStatus
+        canBuy={false}
+        initial={{ ...base, paymentStatus: "failed" }}
+        returnHint={null}
+      />,
+    );
+    expect(screen.getByText("O pagamento não foi aprovado.")).toBeTruthy();
+    expect(screen.queryByText("Tentar de novo")).toBeNull();
   });
 });
 

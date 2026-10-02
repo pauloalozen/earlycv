@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import { EmailSuppressionService } from "../email/email-suppression.service";
+import { getMockInterviewMode } from "../mock-interviews/mock-interview.config";
 import { EmailDispatchConfigService } from "./email-dispatch.config";
 import {
   MOCK_INTERVIEW_OFFER_COOLDOWN_MS,
@@ -133,6 +134,10 @@ export class EmailDispatchEligibilityService {
     now: Date = new Date(),
   ): Promise<EligibilityResult> {
     if (!dispatch.userId) return { eligible: false, reason: "no_user" };
+    // Flag desligada (ou só para admin) depois do enqueue: a venda fechou.
+    if (getMockInterviewMode() !== "on") {
+      return { eligible: false, reason: "mock_interview_disabled" };
+    }
 
     const offerCreatedAt = new Date(
       dispatch.scheduledFor.getTime() - MOCK_INTERVIEW_OFFER_DELAY_MS,

@@ -14,6 +14,7 @@ import {
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
+import { canAccessMockInterview } from "@/lib/mock-interview-mode";
 import { formatMockInterviewPrice } from "@/lib/mock-interview-offer";
 import { fetchMockInterviewOffer } from "@/lib/mock-interview-offer.server";
 import { listMyMockInterviews } from "@/lib/mock-interviews-api";
@@ -140,11 +141,15 @@ export default async function CandidaturaDetailPage({ params }: Props) {
           .catch(() => null)
       : null;
 
+  const mockInterviewEnabled = canAccessMockInterview(user);
   const mockInterviewOffer =
-    application.status === "INTERVIEW" ? await fetchMockInterviewOffer() : null;
+    mockInterviewEnabled && application.status === "INTERVIEW"
+      ? await fetchMockInterviewOffer()
+      : null;
 
   return (
     <DetailClient
+      mockInterviewEnabled={mockInterviewEnabled}
       mockInterviewPriceLabel={
         mockInterviewOffer
           ? formatMockInterviewPrice(mockInterviewOffer.amountInCents)

@@ -43,9 +43,13 @@ function WhatsappIcon() {
 export function OrderStatus({
   initial,
   returnHint,
+  canBuy,
 }: {
   initial: MockInterviewPurchaseView;
   returnHint: "falhou" | "pendente" | null;
+  // Flag MOCK_INTERVIEW_MODE: com a venda fechada para o usuário, o pedido
+  // continua visível, mas sem os atalhos para comprar de novo.
+  canBuy: boolean;
 }) {
   const [view, setView] = useState(initial);
   const [pollsLeft, setPollsLeft] = useState(MAX_POLLS);
@@ -244,15 +248,18 @@ export function OrderStatus({
         <p
           style={{ margin: 0, fontSize: 15, fontWeight: 300, color: "#5c5a52" }}
         >
-          Nada foi cobrado. Você pode tentar de novo com outro cartão ou com
-          Pix.
+          {canBuy
+            ? "Nada foi cobrado. Você pode tentar de novo com outro cartão ou com Pix."
+            : "Nada foi cobrado. As vendas estão pausadas no momento."}
         </p>
-        <Link
-          href="/simulacao-de-entrevista/comprar"
-          style={{ ...primaryButton, width: "100%", boxSizing: "border-box" }}
-        >
-          Tentar de novo
-        </Link>
+        {canBuy && (
+          <Link
+            href="/simulacao-de-entrevista/comprar"
+            style={{ ...primaryButton, width: "100%", boxSizing: "border-box" }}
+          >
+            Tentar de novo
+          </Link>
+        )}
       </div>
     );
   }
@@ -308,12 +315,14 @@ export function OrderStatus({
           Verificar de novo
         </button>
       )}
-      <Link
-        href="/simulacao-de-entrevista/comprar"
-        style={{ fontSize: 14, color: "#6a6a66" }}
-      >
-        Voltar e escolher outra forma de pagamento
-      </Link>
+      {canBuy && (
+        <Link
+          href="/simulacao-de-entrevista/comprar"
+          style={{ fontSize: 14, color: "#6a6a66" }}
+        >
+          Voltar e escolher outra forma de pagamento
+        </Link>
+      )}
     </div>
   );
 }

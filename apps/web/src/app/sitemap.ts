@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { getBlogSitemapEntries } from "@/lib/blog/posts";
 import { getSitemapJobs } from "@/lib/internal-jobs-api";
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
 import { getSeoSitemapEntries } from "@/lib/seo-pages/pages";
 import { getAbsoluteUrl } from "@/lib/site";
 
@@ -31,12 +32,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.8,
     },
-    {
-      url: getAbsoluteUrl("/simulacao-de-entrevista"),
-      lastModified: MOCK_INTERVIEW_PAGE_LAST_MODIFIED,
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
+    // Só entra no sitemap com a venda aberta ao público.
+    ...(isMockInterviewPublic()
+      ? [
+          {
+            url: getAbsoluteUrl("/simulacao-de-entrevista"),
+            lastModified: MOCK_INTERVIEW_PAGE_LAST_MODIFIED,
+            changeFrequency: "monthly" as const,
+            priority: 0.8,
+          },
+        ]
+      : []),
     {
       url: getAbsoluteUrl("/radar"),
       lastModified: new Date(),

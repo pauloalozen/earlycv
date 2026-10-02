@@ -19,6 +19,7 @@ import { DatabaseService } from "../database/database.service";
 import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
 import {
   getMockInterviewAmountInCents,
+  getMockInterviewMode,
   MOCK_INTERVIEW_PRODUCT,
 } from "../mock-interviews/mock-interview.config";
 import type { CreateJobApplicationDto } from "./dto/create-job-application.dto";
@@ -236,8 +237,15 @@ export class JobApplicationsService {
     companyName: string;
   }) {
     const amountInCents = getMockInterviewAmountInCents();
-    // Sem preço configurado a venda está fechada: não oferece.
-    if (!this.emailDispatch || amountInCents === null) return;
+    // Sem preço configurado ou com a flag fora de "on", a venda está fechada
+    // para o público: não oferece (staff nunca recebe oferta de relacionamento).
+    if (
+      !this.emailDispatch ||
+      amountInCents === null ||
+      getMockInterviewMode() !== "on"
+    ) {
+      return;
+    }
     void this.emailDispatch.enqueueMockInterviewOffer({
       userId: application.userId,
       jobApplicationId: application.id,

@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   Inject,
+  NotFoundException,
   Param,
   Post,
   Query,
@@ -17,13 +18,28 @@ import {
   AuthenticatedUser,
 } from "../common/authenticated-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
 // Imports de VALOR (não `import type`): o ValidationPipe global precisa do
 // metatype real dos DTOs de @Body/@Query.
 // biome-ignore-start lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype
 import { CreateMockInterviewCheckoutDto } from "./dto/create-checkout.dto";
 import { GetMockInterviewPurchaseQueryDto } from "./dto/get-purchase-query.dto";
 // biome-ignore-end lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype
+import { canAccessMockInterview } from "./mock-interview.config";
 import { MockInterviewsService } from "./mock-interviews.service";
+
+// Venda fechada para este usuário (MOCK_INTERVIEW_MODE): responde 404, como
+// se o produto não existisse. Só barra o que inicia uma compra/pagamento.
+function assertMockInterviewAvailable(
+  user: AuthenticatedRequestUser | null | undefined,
+) {
+  if (!canAccessMockInterview(user)) {
+    throw new NotFoundException({
+      errorCode: "mock_interview_unavailable",
+      message: "Entrevista simulada indisponível.",
+    });
+  }
+}
 
 @Controller("mock-interviews")
 export class MockInterviewsController {
@@ -32,9 +48,12 @@ export class MockInterviewsController {
     private readonly service: MockInterviewsService,
   ) {}
 
-  // Público: preço e regras exibidos na landing (sem nenhum contato).
+  // Público: preço e regras exibidos na landing (sem nenhum contato). Com a
+  // flag em "admin", só responde para staff autenticado.
+  @UseGuards(OptionalJwtAuthGuard)
   @Get("offer")
-  offer() {
+  offer(@AuthenticatedUser() user: AuthenticatedRequestUser | null) {
+    assertMockInterviewAvailable(user);
     return this.service.getOffer();
   }
 
@@ -44,9 +63,11 @@ export class MockInterviewsController {
     @AuthenticatedUser() user: AuthenticatedRequestUser,
     @Body() body: CreateMockInterviewCheckoutDto,
   ) {
+    assertMockInterviewAvailable(user);
     return this.service.createCheckout(user.id, body);
   }
 
+  // Pedidos já feitos ficam acessíveis em qualquer modo da flag.
   @UseGuards(JwtAuthGuard)
   @Get("purchases")
   listMine(@AuthenticatedUser() user: AuthenticatedRequestUser) {
@@ -70,6 +91,7 @@ export class MockInterviewsController {
     @AuthenticatedUser() user: AuthenticatedRequestUser,
     @Param("id") id: string,
   ) {
+    assertMockInterviewAvailable(user);
     return this.service.getBrickCheckout(user.id, id);
   }
 
@@ -82,10 +104,13 @@ export class MockInterviewsController {
     @Param("id") id: string,
     @Body() body: unknown,
   ) {
+    assertMockInterviewAvailable(user);
     return this.service.payWithBrick(user.id, id, body);
   }
 
-  // Notificação do Mercado Pago (notification_url do pagamento).
+  // Notificação do Mercado Pago (notification_url do pagamento). Nunca passa
+  // pela flag: um pagamento iniciado precisa ser processado mesmo com a venda
+  // desligada depois.
   @SkipThrottle()
   @HttpCode(200)
   @Post("webhook/mercadopago")

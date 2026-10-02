@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
+import { canAccessMockInterview } from "@/lib/mock-interview-mode";
 import { getMyMockInterview } from "@/lib/mock-interviews-api";
 import { getMyPlan } from "@/lib/plans-api";
 import { SANS } from "../../_components/flow-styles";
@@ -63,6 +64,7 @@ export default async function PedidoEntrevistaSimuladaPage({
           style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px 80px" }}
         >
           <OrderStatus
+            canBuy={canAccessMockInterview(user)}
             initial={purchase}
             returnHint={
               retorno === "falhou" || retorno === "pendente" ? retorno : null

@@ -32,6 +32,7 @@ export type AdminMockInterviewListItem = {
 };
 
 export type AdminMockInterviewList = {
+  mode: "off" | "admin" | "on";
   items: AdminMockInterviewListItem[];
   page: number;
   limit: number;

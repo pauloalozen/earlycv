@@ -5173,6 +5173,9 @@ type Props = {
   // Entrevista simulada já paga e ainda não realizada (oferta não aparece).
   activeMockInterview?: ActiveMockInterview;
   mockInterviewPriceLabel?: string | null;
+  // Flag MOCK_INTERVIEW_MODE: venda aberta para este usuário. Fechada, só
+  // aparece o card de uma sessão já paga (nunca a oferta).
+  mockInterviewEnabled?: boolean;
 };
 
 const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
@@ -5189,6 +5192,7 @@ export function DetailClient({
   initialHasCredits,
   activeMockInterview = null,
   mockInterviewPriceLabel = null,
+  mockInterviewEnabled = false,
 }: Props) {
   const router = useRouter();
   const [showMockInterviewOffer, setShowMockInterviewOffer] = useState(false);
@@ -5965,15 +5969,17 @@ export function DetailClient({
           )}
 
           {/* Oferta da entrevista simulada (só em "Entrevista") */}
-          {!isArchivedManually && isInterview && (
-            <div style={{ marginBottom: 28 }}>
-              <MockInterviewOfferCard
-                active={activeMockInterview}
-                applicationId={application.id}
-                priceLabel={mockInterviewPriceLabel}
-              />
-            </div>
-          )}
+          {!isArchivedManually &&
+            isInterview &&
+            (mockInterviewEnabled || activeMockInterview) && (
+              <div style={{ marginBottom: 28 }}>
+                <MockInterviewOfferCard
+                  active={activeMockInterview}
+                  applicationId={application.id}
+                  priceLabel={mockInterviewPriceLabel}
+                />
+              </div>
+            )}
 
           {/* Main grid */}
           <div
@@ -6155,6 +6161,7 @@ export function DetailClient({
             onUpdated={() => {
               handleUpdated();
               if (
+                mockInterviewEnabled &&
                 !activeMockInterview &&
                 shouldShowMockInterviewOfferModal(application.id)
               ) {

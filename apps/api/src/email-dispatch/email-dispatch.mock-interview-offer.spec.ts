@@ -1,7 +1,7 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 
 import {
   HOUR_MS,
@@ -14,6 +14,16 @@ import {
   TEMPLATE_DEFINITIONS,
   validateTemplate,
 } from "./email-dispatch-templates";
+
+// A oferta só existe com a venda aberta ao público (MOCK_INTERVIEW_MODE=on).
+const savedMode = process.env.MOCK_INTERVIEW_MODE;
+beforeEach(() => {
+  process.env.MOCK_INTERVIEW_MODE = "on";
+});
+afterEach(() => {
+  if (savedMode === undefined) delete process.env.MOCK_INTERVIEW_MODE;
+  else process.env.MOCK_INTERVIEW_MODE = savedMode;
+});
 
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const START_AT = new Date("2026-10-01T00:00:00.000Z");
@@ -79,6 +89,16 @@ test("offer is eligible for an existing user who signed up before the relationsh
     NOW,
   );
   assert.equal(verdict.eligible, true);
+});
+
+test("offer is skipped when the sale is off or admin-only (flag changed after enqueue)", async () => {
+  for (const mode of ["off", "admin", "", "garbage"]) {
+    process.env.MOCK_INTERVIEW_MODE = mode;
+    assert.deepEqual(
+      await eligibility({}).evaluateMockInterviewOffer(offerRow, NOW),
+      { eligible: false, reason: "mock_interview_disabled" },
+    );
+  }
 });
 
 test("offer is skipped when the user bought after the offer, got another offer in 7 days or the application is gone", async () => {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { isJobsGhostModeEnabled } from "@/lib/jobs-ghost-mode";
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
 import { MOCK_INTERVIEW_OFFER } from "@/lib/mock-interview-offer";
 import { useMockInterviewPrice } from "@/lib/use-mock-interview-price";
 import { InterviewCallMock } from "./_interview-call-mock";
@@ -2710,7 +2711,7 @@ type FeatureKey =
   | "preparacao"
   | "simulada";
 
-const FEATURES: {
+const ALL_FEATURES: {
   key: FeatureKey;
   label: string;
   icon: React.ReactNode;
@@ -2784,6 +2785,12 @@ const FEATURES: {
     ),
   },
 ];
+
+// Entrevista simulada só entra na vitrine com a venda aberta ao público
+// (NEXT_PUBLIC_MOCK_INTERVIEW_MODE=on).
+const FEATURES = isMockInterviewPublic()
+  ? ALL_FEATURES
+  : ALL_FEATURES.filter((f) => f.key !== "simulada");
 
 /** Entrevista simulada (serviço ao vivo com Paulo): a mesma videochamada do
  * hero de /simulacao-de-entrevista, com o resumo da oferta ao lado. */

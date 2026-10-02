@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
+import {
+  canAccessMockInterview,
+  getMockInterviewMode,
+} from "@/lib/mock-interview-mode";
 import { formatMockInterviewPrice } from "@/lib/mock-interview-offer";
 import { fetchMockInterviewOffer } from "@/lib/mock-interview-offer.server";
 import { resolveCheckoutOrigin } from "@/lib/mock-interviews-types";
@@ -28,7 +32,13 @@ export default async function ComprarEntrevistaSimuladaPage({
   const sp = await searchParams;
   const candidatura = sp.candidatura?.trim() || null;
 
+  // Venda desligada: 404 antes até de pedir login (em "admin", visitante
+  // anônimo também cai aqui; staff entra logado).
+  const mode = getMockInterviewMode();
+  if (mode === "off") notFound();
+
   const user = await getCurrentAppUserFromCookies();
+  if (mode === "admin" && !canAccessMockInterview(user, mode)) notFound();
   if (!user) {
     const params = new URLSearchParams();
     if (sp.origem) params.set("origem", sp.origem);

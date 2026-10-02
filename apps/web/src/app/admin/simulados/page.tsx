@@ -17,6 +17,10 @@ import {
   PAYMENT_STATUS_LABELS,
   SESSION_STATUS_LABELS,
 } from "@/lib/admin-mock-interviews-api";
+import {
+  getMockInterviewMode,
+  type MockInterviewMode,
+} from "@/lib/mock-interview-mode";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { sessionTone } from "./_components/session-tone";
@@ -45,6 +49,53 @@ function formatDate(iso: string | null) {
   });
 }
 
+const MODE_LABEL: Record<MockInterviewMode, string> = {
+  off: "off · venda desligada",
+  admin: "admin · só staff",
+  on: "on · aberta a todos",
+};
+const MODE_TONE = { off: "neutral", admin: "warn", on: "ok" } as const;
+
+// Flag MOCK_INTERVIEW_MODE: a API (gate real) e o web (exibição) têm cada um
+// a sua variável. Divergência = algo aparece e não funciona, ou vice-versa.
+function ModeNotice({
+  apiMode,
+  webMode,
+}: {
+  apiMode: MockInterviewMode;
+  webMode: MockInterviewMode;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 10,
+        margin: "0 0 20px",
+        fontSize: 13,
+        color: "#5c5a52",
+      }}
+    >
+      <span>Modo da venda:</span>
+      <span>API</span>
+      <AdminPill mono tone={MODE_TONE[apiMode]}>
+        {MODE_LABEL[apiMode]}
+      </AdminPill>
+      <span>Web</span>
+      <AdminPill mono tone={MODE_TONE[webMode]}>
+        {MODE_LABEL[webMode]}
+      </AdminPill>
+      {apiMode !== webMode && (
+        <AdminPill tone="danger">
+          Divergente: ajuste MOCK_INTERVIEW_MODE (API) e
+          NEXT_PUBLIC_MOCK_INTERVIEW_MODE (web)
+        </AdminPill>
+      )}
+    </div>
+  );
+}
+
 type SearchParams = {
   page?: string;
   payment?: string;
@@ -63,7 +114,12 @@ export default async function AdminSimuladosPage({
   const session = SESSION_FILTERS.find((s) => s === sp.session);
   const q = sp.q?.trim() || undefined;
 
-  const { items, total, summary } = await listAdminMockInterviews({
+  const {
+    items,
+    total,
+    summary,
+    mode: apiMode,
+  } = await listAdminMockInterviews({
     page,
     limit: PAGE_SIZE,
     payment,
@@ -99,6 +155,8 @@ export default async function AdminSimuladosPage({
         subtitle="Vendas avulsas da entrevista simulada. Registre aqui o horário combinado no WhatsApp, o link do Meet, se a sessão aconteceu e o envio do relatório."
         title="Entrevistas simuladas."
       />
+
+      <ModeNotice apiMode={apiMode} webMode={getMockInterviewMode()} />
 
       <AdminStatsRow cols={4}>
         <AdminStatCard

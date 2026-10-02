@@ -11,7 +11,11 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { MOCK_INTERVIEW_PRODUCT, purchaseCode } from "./mock-interview.config";
+import {
+  getMockInterviewMode,
+  MOCK_INTERVIEW_PRODUCT,
+  purchaseCode,
+} from "./mock-interview.config";
 import { toPublicPaymentStatus } from "./mock-interviews.service";
 
 const HOUR_MS = 60 * 60_000;
@@ -139,6 +143,9 @@ export class AdminMockInterviewsService {
     ]);
 
     return {
+      // Valor efetivo da flag na API (o web tem a sua cópia; o admin mostra
+      // as duas para acusar divergência).
+      mode: getMockInterviewMode(),
       items: rows.map((row) => ({
         id: row.id,
         code: purchaseCode(row.id),

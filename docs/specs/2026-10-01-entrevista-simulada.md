@@ -37,6 +37,22 @@ A origem da venda fica gravada na compra (`landing`, `showcase` via `?origem=vit
   - Admin: `GET/PATCH /api/admin/mock-interviews` (admin/superadmin). Estorno nunca é manual: é feito no painel do MP e o webhook marca.
 - Oferta por e-mail (relacionamento/SES, com descadastro): enfileirada por `JobApplicationsService` ao mudar para INTERVIEW (status ou agendamento). Regras: 2h de atraso; no máximo 1 a cada 7 dias por usuário; no envio é pulada se comprou depois da oferta, se a candidatura foi apagada ou pelas regras de relacionamento (verificado, não staff, não descadastrado, sem supressão, fora da blocklist). **Não** aplica o cutoff por data de cadastro (vale para a base inteira); o cutoff é o da própria oferta.
 
+## Feature flag (MOCK_INTERVIEW_MODE)
+
+Três estados: `off` (padrão; ausente ou inválido = off), `admin` (só staff admin/superadmin) e `on` (todos). Duas variáveis com o mesmo valor: `MOCK_INTERVIEW_MODE` na API (gate real) e `NEXT_PUBLIC_MOCK_INTERVIEW_MODE` no web (exibição; mudar exige novo deploy do web).
+
+| | off | admin | on |
+|---|---|---|---|
+| API: oferta, checkout, dados do Brick, pagamento | 404 | só staff | todos |
+| Landing `/simulacao-de-entrevista` e `/comprar` | 404 | só staff logado (noindex, dinâmica) | todos (estática/ISR) |
+| `/pagamento/[id]` | redireciona ao pedido | só staff | todos |
+| Vitrine da landing, menus, rodapé, sitemap, link em /preparacao-para-entrevista | some | some | aparece |
+| Oferta na candidatura em INTERVIEW (card + modal) | some* | só staff | todos |
+| E-mail de oferta (enfileirar e enviar) | não | não | sim (+ modo do dispatch) |
+| Pedido do usuário, /compras, webhook, e-mails de venda, admin | sempre | sempre | sempre |
+
+\* Uma sessão já paga e não realizada continua aparecendo no card da candidatura. Com a venda fechada, a página do pedido esconde os atalhos para comprar de novo. O admin (`/admin/simulados`) mostra o modo da API e do web e acusa divergência. Um e-mail de oferta enfileirado é descartado no envio (`mock_interview_disabled`) se a flag sair de `on`.
+
 ## Telas
 
 - `/simulacao-de-entrevista/comprar` — resumo, regras com checkbox obrigatório; cria o pedido e segue para o pagamento. Sem login → cadastro com `next` de volta.
@@ -48,6 +64,7 @@ A origem da venda fica gravada na compra (`landing`, `showcase` via `?origem=vit
 
 ## Ativação (produção)
 
+0. Flag: começar com `MOCK_INTERVIEW_MODE=admin` (Railway) e `NEXT_PUBLIC_MOCK_INTERVIEW_MODE=admin` (Vercel) para testar em produção; depois `on` nas duas.
 1. Variáveis na API (Railway): `PRICE_INTERVIEW_SIM=7990`, `MOCK_INTERVIEW_WHATSAPP_NUMBER` (com DDI+DDD) e `MOCK_INTERVIEW_ADMIN_EMAIL=paulo.alozen@gmail.com`. Mudar o preço = mudar a variável e reiniciar a API; pedidos já criados mantêm o valor gravado. Sem o número, a página do pedido avisa que o contato será por e-mail.
 2. Deploy aplica a migration (`.railway-redeploy` já tocado).
 3. E-mail de oferta: Admin → Emails → Configurações → modo da oferta (SHADOW/ALLOWLIST antes de LIVE). Atenção: as contas do Paulo estão na blocklist fixa de relacionamento, então ele nunca recebe a oferta.

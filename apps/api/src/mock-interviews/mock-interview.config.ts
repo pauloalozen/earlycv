@@ -13,6 +13,36 @@ export const MOCK_INTERVIEW_PRODUCT = {
   policyVersion: "2026-10-01",
 } as const;
 
+// Feature flag da venda (MOCK_INTERVIEW_MODE):
+//  - off   -> ninguém compra nem vê a oferta (padrão; ausente/inválido = off);
+//  - admin -> só staff admin/superadmin compra e vê (teste em produção);
+//  - on    -> aberta a todos.
+// Nunca bloqueia o que já foi vendido: pedidos do próprio usuário, webhook,
+// e-mails de venda e o admin funcionam em qualquer modo.
+export type MockInterviewMode = "off" | "admin" | "on";
+
+export function getMockInterviewMode(): MockInterviewMode {
+  const raw = process.env.MOCK_INTERVIEW_MODE?.trim().toLowerCase();
+  return raw === "on" || raw === "admin" ? raw : "off";
+}
+
+type MockInterviewViewer = {
+  isStaff: boolean;
+  internalRole: "none" | "admin" | "superadmin";
+} | null;
+
+export function canAccessMockInterview(
+  viewer: MockInterviewViewer | undefined,
+  mode: MockInterviewMode = getMockInterviewMode(),
+): boolean {
+  if (mode === "on") return true;
+  if (mode === "off" || !viewer) return false;
+  return (
+    viewer.isStaff &&
+    (viewer.internalRole === "admin" || viewer.internalRole === "superadmin")
+  );
+}
+
 // Preço em centavos (PRICE_INTERVIEW_SIM=7990 -> R$ 79,90). Só aceita inteiro
 // positivo; ausente ou inválido = null, e aí a venda fica fechada (o checkout
 // recusa) em vez de cobrar um valor que ninguém configurou.

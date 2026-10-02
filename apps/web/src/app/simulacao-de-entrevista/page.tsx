@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { PublicFooter } from "@/components/public-footer";
+import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import {
+  canAccessMockInterview,
+  getMockInterviewMode,
+  isMockInterviewPublic,
+} from "@/lib/mock-interview-mode";
 import {
   formatMockInterviewAmount,
   formatMockInterviewPrice,
@@ -33,6 +40,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const offer = await fetchMockInterviewOffer();
   return {
     ...STATIC_METADATA,
+    // Fora de "on" a página só abre para staff: nunca indexar.
+    ...(isMockInterviewPublic()
+      ? {}
+      : { robots: { follow: false, index: false } }),
     description: buildDescription(
       offer ? formatMockInterviewPrice(offer.amountInCents) : null,
     ),
@@ -225,7 +236,18 @@ function Arrow() {
   );
 }
 
+// Flag MOCK_INTERVIEW_MODE: "on" mantém a página estática; "admin" lê a
+// sessão (página vira dinâmica) e só abre para staff; "off" é 404.
+async function assertPageAvailable() {
+  const mode = getMockInterviewMode();
+  if (mode === "on") return;
+  if (mode === "off") notFound();
+  const user = await getCurrentAppUserFromCookies();
+  if (!canAccessMockInterview(user, mode)) notFound();
+}
+
 export default async function SimulacaoDeEntrevistaPage() {
+  await assertPageAvailable();
   const offer = await fetchMockInterviewOffer();
   const priceLabel = offer
     ? formatMockInterviewPrice(offer.amountInCents)
