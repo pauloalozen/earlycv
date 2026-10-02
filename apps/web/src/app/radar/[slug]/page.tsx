@@ -3,8 +3,13 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { listPublicJobs, type PublicJob } from "@/lib/public-jobs-api";
-import { fetchPublicJob } from "@/lib/public-jobs-client";
+import {
+  type ClosedPublicJob,
+  listPublicJobs,
+  type PublicJob,
+} from "@/lib/public-jobs-api";
+import { fetchClosedPublicJob, fetchPublicJob } from "@/lib/public-jobs-client";
+import { buildClosedJobMetadata, ClosedJobView } from "./closed-job-view";
 import { buildJobMetadata, JobDetailView, loadJobViewer } from "./job-detail";
 
 // Caminho DINÂMICO: visitantes com qualquer cookie de sessão (ver rewrite em
@@ -29,11 +34,28 @@ const loadJob = cache(async (slug: string): Promise<PublicJob | null> => {
   }
 });
 
+// Só consultada quando a vaga ativa não existe: vaga que saiu do radar
+// ganha a página "vaga encerrada" em vez do 404 genérico.
+const loadClosedJob = cache(
+  async (slug: string): Promise<ClosedPublicJob | null> => {
+    try {
+      const result = await fetchClosedPublicJob(slug, { kind: "no-store" });
+      return result.status === "ok" ? result.data : null;
+    } catch {
+      return null;
+    }
+  },
+);
+
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
   const { slug } = await params;
-  return buildJobMetadata(await loadJob(slug));
+  const job = await loadJob(slug);
+  if (job) return buildJobMetadata(job);
+
+  const closedJob = await loadClosedJob(slug);
+  return closedJob ? buildClosedJobMetadata(closedJob) : buildJobMetadata(null);
 }
 
 export default async function JobPage({ params }: JobPageProps) {
@@ -42,7 +64,18 @@ export default async function JobPage({ params }: JobPageProps) {
   const { slug } = await params;
   const job = await loadJob(slug);
 
-  if (!job) notFound();
+  if (!job) {
+    const closedJob = await loadClosedJob(slug);
+    if (!closedJob) notFound();
+
+    const similarJobs = await listPublicJobs({ limit: 3, page: 1 })
+      .then((r) => r.data.slice(0, 3))
+      .catch(() => [] as PublicJob[]);
+
+    return (
+      <ClosedJobView job={closedJob} similarJobs={similarJobs} user={user} />
+    );
+  }
 
   const viewer = user ? await loadJobViewer(user, job.slug) : null;
 

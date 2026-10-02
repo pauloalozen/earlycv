@@ -490,6 +490,58 @@ test("getBySlug throws NotFoundException when getPublicBySlug returns null", asy
   );
 });
 
+test("getClosedBySlug returns only the minimal closed view (no description, no source link)", async () => {
+  const jobsService = {
+    getClosedPublicBySlug: async (slug: string) => ({
+      company: { logoUrl: null, name: "Acme", websiteUrl: null },
+      enrichment: { dominantArea: "DATA_AI" },
+      lastSeenAt: new Date("2026-09-30T12:00:00.000Z"),
+      locationText: "Sao Paulo, SP",
+      slug,
+      title: "Engenheiro de Dados",
+      workModel: "remote",
+    }),
+  };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    undefined as never,
+    new MatchingEngine({} as never),
+    undefined as never,
+    undefined as never,
+  );
+
+  const result = await controller.getClosedBySlug("vaga-acme-job-1");
+
+  assert.deepEqual(result, {
+    company: "Acme",
+    companyLogoUrl: null,
+    companyWebsiteUrl: null,
+    dominantArea: "DATA_AI",
+    lastSeenAt: "2026-09-30T12:00:00.000Z",
+    location: "Sao Paulo, SP",
+    slug: "vaga-acme-job-1",
+    status: "closed",
+    title: "Engenheiro de Dados",
+    workModel: "remote",
+  });
+});
+
+test("getClosedBySlug throws NotFoundException when there is no closed job", async () => {
+  const jobsService = { getClosedPublicBySlug: async () => null };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    undefined as never,
+    new MatchingEngine({} as never),
+    undefined as never,
+    undefined as never,
+  );
+
+  await assert.rejects(
+    () => controller.getClosedBySlug("nao-existe"),
+    NotFoundException,
+  );
+});
+
 test("getScore throws NotFoundException when getPublicBySlug returns null (slug-based lookup, no listPublic scan)", async () => {
   const jobsService = {
     listPublic: async () => {

@@ -223,36 +223,35 @@ export class GupyAdapter implements IngestionSourceAdapter {
     const observations: NormalizedJobObservation[] = [];
 
     for (const boardJob of boardJobs) {
+      const canonicalKey = `gupy:${subdomain}:${String(boardJob.id)}`;
+      let existing: { lastSeenAt: Date | null } | null = null;
+      const listingObservation = () =>
+        this.toObservation(
+          subdomain,
+          {
+            addressCity: boardJob.workplace?.address?.city ?? undefined,
+            addressCountry: boardJob.workplace?.address?.country ?? undefined,
+            addressState:
+              boardJob.workplace?.address?.stateShortName ??
+              boardJob.workplace?.address?.state ??
+              undefined,
+            departmentName: boardJob.department ?? undefined,
+            id: boardJob.id,
+            name: boardJob.title ?? undefined,
+            type: boardJob.type ?? undefined,
+            workplaceType: boardJob.workplace?.workplaceType ?? undefined,
+          },
+          { detailFetchSkipped: true },
+        );
+
       try {
-        const canonicalKey = `gupy:${subdomain}:${String(boardJob.id)}`;
         const now = new Date();
-        let existing: { lastSeenAt: Date | null } | null = null;
 
         if (context) {
           try {
             existing = await context.getExistingJobByCanonicalKey(canonicalKey);
             if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
-              observations.push(
-                this.toObservation(
-                  subdomain,
-                  {
-                    addressCity: boardJob.workplace?.address?.city ?? undefined,
-                    addressCountry:
-                      boardJob.workplace?.address?.country ?? undefined,
-                    addressState:
-                      boardJob.workplace?.address?.stateShortName ??
-                      boardJob.workplace?.address?.state ??
-                      undefined,
-                    departmentName: boardJob.department ?? undefined,
-                    id: boardJob.id,
-                    name: boardJob.title ?? undefined,
-                    type: boardJob.type ?? undefined,
-                    workplaceType:
-                      boardJob.workplace?.workplaceType ?? undefined,
-                  },
-                  { detailFetchSkipped: true },
-                ),
-              );
+              observations.push(listingObservation());
               continue;
             }
           } catch (error) {
@@ -297,6 +296,9 @@ export class GupyAdapter implements IngestionSourceAdapter {
           this.logger.warn(
             `Skipping Gupy detail due to HTTP ${detailResponse.status} for job ${String(boardJob.id)}`,
           );
+          // Vaga já conhecida e presente na listagem: falha no detalhe não
+          // pode fazer ela parecer fechada (stale-policy.ts).
+          if (existing) observations.push(listingObservation());
           continue;
         }
 
@@ -311,6 +313,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
           this.logger.warn(
             `Skipping Gupy detail missing job payload for ${String(boardJob.id)}`,
           );
+          if (existing) observations.push(listingObservation());
           continue;
         }
 
@@ -347,6 +350,7 @@ export class GupyAdapter implements IngestionSourceAdapter {
         this.logger.warn(
           `Skipping Gupy detail for ${String(boardJob.id)} due to error: ${error instanceof Error ? error.message : "unknown"}`,
         );
+        if (existing) observations.push(listingObservation());
       }
     }
 

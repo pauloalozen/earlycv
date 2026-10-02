@@ -12,6 +12,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { ClosedJobBadge } from "@/app/radar/closed-job-badge";
 import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import {
@@ -5600,6 +5601,25 @@ export function DetailClient({
                 >
                   {application.jobTitle}
                 </h1>
+                {/* Vaga do Radar fechada na fonte — só sinaliza; a
+                    candidatura nunca é movida automaticamente. */}
+                {application.jobClosed ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      margin: "0 0 11px",
+                    }}
+                  >
+                    <ClosedJobBadge variant="pill" />
+                    <span style={{ fontSize: 12.5, color: "#6a6560" }}>
+                      A vaga saiu da página de carreiras da empresa. Sua
+                      candidatura continua aqui — arquive se não for seguir.
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
 

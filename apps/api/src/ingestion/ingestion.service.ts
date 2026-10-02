@@ -249,10 +249,13 @@ export class IngestionService {
         failedCount > 0 ? "failed" : "completed";
 
       if (failedCount === 0) {
-        staleMarkedCount = await this.markSourceJobsAsInactiveWhenStale(
-          jobSource.id,
-          new Date(),
-        );
+        staleMarkedCount = await this.markSourceJobsAsInactiveWhenStale({
+          jobSourceId: jobSource.id,
+          now: new Date(),
+          observationCount: observations.length,
+          runId: run.id,
+          runStartedAt: run.startedAt,
+        });
       }
 
       const circuitState = evaluate403CircuitBreaker({
@@ -1120,11 +1123,31 @@ export class IngestionService {
     }
   }
 
-  private async markSourceJobsAsInactiveWhenStale(
-    jobSourceId: string,
-    now: Date,
-  ) {
-    const cutoff = getStaleCutoff(now);
+  private async markSourceJobsAsInactiveWhenStale(input: {
+    jobSourceId: string;
+    now: Date;
+    observationCount: number;
+    runId: string;
+    runStartedAt: Date;
+  }) {
+    const { jobSourceId, now, observationCount, runId, runStartedAt } = input;
+    // Execução concluída imediatamente anterior a esta — regra de "2
+    // execuções seguidas sem ver a vaga" (ver stale-policy.ts).
+    const previousCompletedRun = await this.database.ingestionRun.findFirst({
+      where: {
+        id: { not: runId },
+        jobSourceId,
+        startedAt: { lt: runStartedAt },
+        status: "completed",
+      },
+      orderBy: { startedAt: "desc" },
+      select: { startedAt: true },
+    });
+    const cutoff = getStaleCutoff({
+      now,
+      observationCount,
+      previousCompletedRunStartedAt: previousCompletedRun?.startedAt ?? null,
+    });
     const where = {
       jobSourceId,
       status: "active" as const,

@@ -109,7 +109,8 @@ function parseCityState(location: string) {
 }
 
 function inferWorkModel(location: string, title: string, description: string) {
-  const text = `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
+  const text =
+    `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
 
   if (text.includes("remoto") || text.includes("home office")) return "remote";
   if (text.includes("hibrido") || text.includes("híbrido")) return "hybrid";
@@ -197,7 +198,9 @@ export class PandapeAdapter implements IngestionSourceAdapter {
         try {
           existing = await context.getExistingJobByCanonicalKey(canonicalKey);
           if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
-            observations.push(this.toListingObservation(origin, card, canonicalKey));
+            observations.push(
+              this.toListingObservation(origin, card, canonicalKey),
+            );
             continue;
           }
         } catch (error) {
@@ -209,7 +212,8 @@ export class PandapeAdapter implements IngestionSourceAdapter {
 
       if (!existing) {
         const normalizedTitle = normalizeAdapterTitle(card.title);
-        const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
+        const filterDecision =
+          await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
           context?.onSemanticFilterSkip?.();
@@ -243,25 +247,47 @@ export class PandapeAdapter implements IngestionSourceAdapter {
           this.logger.warn(
             `Skipping Pandape detail due to HTTP ${detailResponse.status} for job ${card.jobId}`,
           );
+          // Vaga já conhecida e presente na listagem: falha no detalhe não
+          // pode fazer ela parecer fechada (stale-policy.ts).
+          if (existing) {
+            observations.push(
+              this.toListingObservation(origin, card, canonicalKey),
+            );
+          }
           continue;
         }
 
         const detailHtml = await detailResponse.text();
-        const jobPosting = this.extractJobPosting(detailHtml, detailUrl.toString());
+        const jobPosting = this.extractJobPosting(
+          detailHtml,
+          detailUrl.toString(),
+        );
 
         if (!jobPosting) {
           this.logger.warn(
             `Skipping Pandape detail missing JSON-LD JobPosting for job ${card.jobId}`,
           );
+          if (existing) {
+            observations.push(
+              this.toListingObservation(origin, card, canonicalKey),
+            );
+          }
           continue;
         }
 
-        observations.push(this.toObservation(origin, card, jobPosting, canonicalKey));
+        observations.push(
+          this.toObservation(origin, card, jobPosting, canonicalKey),
+        );
       } catch (error) {
         if (error instanceof IngestionFetchError) throw error;
         this.logger.warn(
           `Skipping Pandape detail for ${card.jobId} due to error: ${error instanceof Error ? error.message : "unknown"}`,
         );
+        if (existing) {
+          observations.push(
+            this.toListingObservation(origin, card, canonicalKey),
+          );
+        }
       }
     }
 
@@ -387,7 +413,11 @@ export class PandapeAdapter implements IngestionSourceAdapter {
 
     const descriptionRaw = jobPosting.description ?? "";
     const descriptionClean = descriptionRaw || title;
-    const workModel = inferWorkModel(locationText || card.location, title, descriptionClean);
+    const workModel = inferWorkModel(
+      locationText || card.location,
+      title,
+      descriptionClean,
+    );
     const publishedAt = normalizeDate(jobPosting.datePosted);
     const state =
       normalizeState(address?.addressRegion ?? cardState)?.sigla ??

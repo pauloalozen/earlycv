@@ -25,6 +25,9 @@ function createIngestionServiceFixture(options?: {
     status?: "active" | "inactive" | "removed";
     title?: string;
   }>;
+  // startedAt da execução concluída anterior (regra de 2 execuções em
+  // stale-policy.ts); null = fonte sem execução concluída anterior.
+  previousCompletedRunStartedAt?: Date | null;
   sourceType?: JobSourceType;
   webRevalidationThrows?: boolean;
 }) {
@@ -48,6 +51,11 @@ function createIngestionServiceFixture(options?: {
     data: Record<string, unknown>;
   }> = [];
   let staleUpdateManyCount = 0;
+  const staleCutoffs: Date[] = [];
+  const previousCompletedRunStartedAt =
+    options?.previousCompletedRunStartedAt === undefined
+      ? new Date("2026-05-31T12:00:00.000Z")
+      : options.previousCompletedRunStartedAt;
   let collectContext: IngestionCollectContext | undefined;
 
   const database = {
@@ -63,7 +71,10 @@ function createIngestionServiceFixture(options?: {
         startedAt: new Date("2026-06-01T12:00:00.000Z"),
         createdAt: new Date("2026-06-01T12:00:00.000Z"),
       }),
-      findFirst: async () => null,
+      findFirst: async ({ where }: { where: { status?: string } }) =>
+        where.status === "completed" && previousCompletedRunStartedAt
+          ? { startedAt: previousCompletedRunStartedAt }
+          : null,
       findMany: async () => [],
       update: async ({ data }: { data: Record<string, unknown> }) => ({
         id: "run-1",
@@ -163,6 +174,7 @@ function createIngestionServiceFixture(options?: {
         const status = where.status;
         const lastSeenAt = where.lastSeenAt as { lt?: Date } | undefined;
         if (status === "active" && lastSeenAt?.lt) {
+          staleCutoffs.push(lastSeenAt.lt);
           return Array.from({ length: staleUpdateManyCount }, (_, i) => ({
             slug: `stale-job-${i}`,
           }));
@@ -251,6 +263,7 @@ function createIngestionServiceFixture(options?: {
     rawJobUpdates,
     revalidationCalls,
     service,
+    staleCutoffs,
     setStaleCount(count: number) {
       staleUpdateManyCount = count;
     },
@@ -713,6 +726,52 @@ test("IngestionService works without any web revalidation service configured", a
   const result = await service.runJobSource("source-1");
 
   assert.equal(result.status, "completed");
+});
+
+test("IngestionService inactivates jobs missing from the current and the previous completed run", async () => {
+  const previousRun = new Date("2026-05-31T12:00:00.000Z");
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+    previousCompletedRunStartedAt: previousRun,
+  });
+  fixture.setStaleCount(1);
+
+  const result = await fixture.service.runJobSource("source-1");
+
+  assert.equal(result.staleMarkedCount, 1);
+  assert.deepEqual(fixture.staleCutoffs, [previousRun]);
+});
+
+test("IngestionService falls back to the 7-day rule when the source has no previous completed run", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [{ canonicalKey: "job-a" }],
+    previousCompletedRunStartedAt: null,
+  });
+  fixture.setStaleCount(1);
+
+  const before = Date.now();
+  await fixture.service.runJobSource("source-1");
+
+  const cutoff = fixture.staleCutoffs[0]?.getTime() ?? 0;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  assert.ok(cutoff <= before - sevenDays + 60_000);
+  assert.ok(cutoff >= before - sevenDays - 60_000);
+});
+
+test("IngestionService falls back to the 7-day rule when the run returns no observations", async () => {
+  const fixture = createIngestionServiceFixture({
+    observations: [],
+    previousCompletedRunStartedAt: new Date("2026-05-31T12:00:00.000Z"),
+  });
+  fixture.setStaleCount(1);
+
+  const before = Date.now();
+  await fixture.service.runJobSource("source-1");
+
+  const cutoff = fixture.staleCutoffs[0]?.getTime() ?? 0;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  assert.ok(cutoff <= before - sevenDays + 60_000);
+  assert.ok(cutoff >= before - sevenDays - 60_000);
 });
 
 test("IngestionService keeps staleMarkedCount zero when no old jobs are found", async () => {

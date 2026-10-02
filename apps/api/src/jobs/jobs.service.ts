@@ -369,6 +369,30 @@ export class JobsService {
     });
   }
 
+  // Vaga que já foi pública e saiu do radar (fechada na fonte = inactive, ou
+  // retirada pela curadoria = removed). Alimenta a página "vaga encerrada"
+  // de /radar/[slug], pra que links antigos (candidaturas, vagas salvas,
+  // Alerta, e-mails) não caiam num 404 genérico. Mesmo filtro de integridade
+  // das queries públicas: só aparece o que um dia pôde ser público.
+  async getClosedPublicBySlug(slug: string) {
+    return this.database.job.findFirst({
+      where: {
+        status: { in: ["inactive", "removed"] },
+        ...PUBLIC_JOB_INTEGRITY_WHERE,
+        slug,
+      },
+      select: {
+        company: { select: { logoUrl: true, name: true, websiteUrl: true } },
+        enrichment: { select: { dominantArea: true } },
+        lastSeenAt: true,
+        locationText: true,
+        slug: true,
+        title: true,
+        workModel: true,
+      },
+    });
+  }
+
   // Usado por /radar/empresa/[empresa]. Company não tem campo de slug
   // persistido, então o casamento é feito em memória: pega o nome de cada
   // empresa com pelo menos 1 vaga pública, computa o slug (toCompanySlug,

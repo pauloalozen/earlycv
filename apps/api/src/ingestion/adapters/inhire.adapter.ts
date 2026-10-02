@@ -228,6 +228,13 @@ export class InHireAdapter implements IngestionSourceAdapter {
           this.logger.warn(
             `Skipping InHire detail due to HTTP ${detailResponse.status} for job ${job.jobId}`,
           );
+          // Vaga já conhecida e presente na listagem: falha no detalhe não
+          // pode fazer ela parecer fechada (stale-policy.ts).
+          if (existing) {
+            observations.push(
+              this.toListingObservation(slug, job, canonicalKey),
+            );
+          }
           continue;
         }
 
@@ -238,6 +245,9 @@ export class InHireAdapter implements IngestionSourceAdapter {
         this.logger.warn(
           `Skipping InHire detail for ${job.jobId} due to error: ${error instanceof Error ? error.message : "unknown"}`,
         );
+        if (existing) {
+          observations.push(this.toListingObservation(slug, job, canonicalKey));
+        }
       }
     }
 

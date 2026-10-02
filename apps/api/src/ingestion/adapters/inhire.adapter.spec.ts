@@ -255,6 +255,72 @@ test("InHireAdapter fetches detail for a stale existing job", async () => {
   }
 });
 
+test("InHireAdapter keeps an existing listed job alive when its detail request fails", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        jobsPage: [
+          {
+            jobId: "job-1",
+            displayName: "Vaga Existente",
+            status: "published",
+          },
+        ],
+      },
+    },
+    { status: 500 },
+  ]);
+
+  try {
+    const adapter = new InHireAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://cielo.inhire.app"),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2024-01-01T10:00:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.detailFetchSkipped, true);
+    assert.equal(observations[0]?.canonicalKey, "inhire:cielo:job-1");
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("InHireAdapter skips a new job when its detail request fails", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        jobsPage: [
+          { jobId: "job-1", displayName: "Vaga Nova", status: "published" },
+        ],
+      },
+    },
+    { status: 500 },
+  ]);
+
+  try {
+    const adapter = new InHireAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://cielo.inhire.app"),
+      { getExistingJobByCanonicalKey: async () => null },
+    );
+
+    assert.equal(observations.length, 0);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("InHireAdapter discards a new job on noise_signal without a detail-fetch", async () => {
   const fetchMock = createFetchMock([
     {

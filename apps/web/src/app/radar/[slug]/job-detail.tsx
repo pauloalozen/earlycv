@@ -527,7 +527,7 @@ export function buildJobMetadata(job: PublicJob | null): Metadata {
   };
 }
 
-function SimCard({
+export function SimCard({
   job,
   showMatchLock = false,
 }: {

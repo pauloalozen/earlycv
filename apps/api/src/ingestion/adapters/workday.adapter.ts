@@ -77,7 +77,8 @@ function parseLocation(location: string): ParsedLocation {
 }
 
 function inferWorkModel(location: string, title: string, description: string) {
-  const text = `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
+  const text =
+    `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
 
   if (
     text.includes("remote") ||
@@ -89,7 +90,11 @@ function inferWorkModel(location: string, title: string, description: string) {
   if (text.includes("hibrido") || text.includes("hybrid")) {
     return "hybrid";
   }
-  if (text.includes("presencial") || text.includes("on-site") || text.includes("onsite")) {
+  if (
+    text.includes("presencial") ||
+    text.includes("on-site") ||
+    text.includes("onsite")
+  ) {
     return "onsite";
   }
 
@@ -148,7 +153,9 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
     jobSource: JobSourceContext,
     context?: IngestionCollectContext,
   ): Promise<NormalizedJobObservation[]> {
-    const { instance, site, tenant } = parseWorkdaySourceUrl(jobSource.sourceUrl);
+    const { instance, site, tenant } = parseWorkdaySourceUrl(
+      jobSource.sourceUrl,
+    );
     const baseUrl = `https://${tenant}.${instance}.myworkdayjobs.com`;
     const apiUrl = new URL(`${baseUrl}/wday/cxs/${tenant}/${site}/jobs`);
 
@@ -218,14 +225,20 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
         job.externalPath;
       const canonicalKey = `workday:${tenant}:${site}:${externalJobId}`;
       let existing: { lastSeenAt: Date | null } | null = null;
+      const listingObservation = () =>
+        this.toListingObservation(
+          baseUrl,
+          site,
+          job,
+          externalJobId,
+          canonicalKey,
+        );
 
       if (context) {
         try {
           existing = await context.getExistingJobByCanonicalKey(canonicalKey);
           if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
-            observations.push(
-              this.toListingObservation(baseUrl, site, job, externalJobId, canonicalKey),
-            );
+            observations.push(listingObservation());
             continue;
           }
         } catch (error) {
@@ -237,7 +250,8 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
 
       if (!existing) {
         const normalizedTitle = normalizeAdapterTitle(job.title);
-        const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
+        const filterDecision =
+          await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
           context?.onSemanticFilterSkip?.();
@@ -273,14 +287,19 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
           this.logger.warn(
             `Skipping Workday detail due to HTTP ${detailResponse.status} for job ${externalJobId}`,
           );
+          // Vaga já conhecida e presente na listagem: falha no detalhe não
+          // pode fazer ela parecer fechada (stale-policy.ts).
+          if (existing) observations.push(listingObservation());
           continue;
         }
 
-        const detail = (await detailResponse.json()) as WorkdayJobDetailResponse;
+        const detail =
+          (await detailResponse.json()) as WorkdayJobDetailResponse;
         if (!detail.jobPostingInfo) {
           this.logger.warn(
             `Skipping Workday detail missing jobPostingInfo for job ${externalJobId}`,
           );
+          if (existing) observations.push(listingObservation());
           continue;
         }
 
@@ -299,6 +318,7 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
         this.logger.warn(
           `Skipping Workday detail for ${externalJobId} due to error: ${error instanceof Error ? error.message : "unknown"}`,
         );
+        if (existing) observations.push(listingObservation());
       }
     }
 
@@ -398,7 +418,10 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
     externalJobId: string,
     canonicalKey: string,
   ): NormalizedJobObservation {
-    const title = detail.title?.trim() || listingJob.title?.trim() || `Workday job ${externalJobId}`;
+    const title =
+      detail.title?.trim() ||
+      listingJob.title?.trim() ||
+      `Workday job ${externalJobId}`;
     const locationText =
       detail.jobRequisitionLocation?.descriptor?.trim() ||
       detail.location?.trim() ||
@@ -410,7 +433,9 @@ export class WorkdayAdapter implements IngestionSourceAdapter {
       normalizeState(parsedLocation.state)?.sigla ?? parsedLocation.state;
     const country = detail.country?.descriptor?.trim();
 
-    const descriptionRaw = normalizeDescriptionHtml(detail.jobDescription ?? "");
+    const descriptionRaw = normalizeDescriptionHtml(
+      detail.jobDescription ?? "",
+    );
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
     const publishedAt = normalizeDate(detail.startDate);

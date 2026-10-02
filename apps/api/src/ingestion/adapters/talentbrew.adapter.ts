@@ -99,7 +99,8 @@ function parseListingCards(html: string): ListingCard[] {
 }
 
 function inferWorkModel(location: string, title: string, description: string) {
-  const text = `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
+  const text =
+    `${location} ${title} ${description.slice(0, 500)}`.toLowerCase();
 
   if (
     text.includes("remote") ||
@@ -111,7 +112,11 @@ function inferWorkModel(location: string, title: string, description: string) {
   if (text.includes("hibrido") || text.includes("hybrid")) {
     return "hybrid";
   }
-  if (text.includes("presencial") || text.includes("on-site") || text.includes("onsite")) {
+  if (
+    text.includes("presencial") ||
+    text.includes("on-site") ||
+    text.includes("onsite")
+  ) {
     return "onsite";
   }
 
@@ -195,7 +200,9 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
         try {
           existing = await context.getExistingJobByCanonicalKey(canonicalKey);
           if (shouldSkipDetailFetch(existing?.lastSeenAt, now)) {
-            observations.push(this.toListingObservation(origin, card, canonicalKey));
+            observations.push(
+              this.toListingObservation(origin, card, canonicalKey),
+            );
             continue;
           }
         } catch (error) {
@@ -207,7 +214,8 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
 
       if (!existing) {
         const normalizedTitle = normalizeAdapterTitle(card.title);
-        const filterDecision = await this.semanticFilter.evaluate(normalizedTitle);
+        const filterDecision =
+          await this.semanticFilter.evaluate(normalizedTitle);
 
         if (filterDecision.result === "SKIP") {
           context?.onSemanticFilterSkip?.();
@@ -241,16 +249,31 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
           this.logger.warn(
             `Skipping TalentBrew detail due to HTTP ${detailResponse.status} for job ${card.jobId}`,
           );
+          // Vaga já conhecida e presente na listagem: falha no detalhe não
+          // pode fazer ela parecer fechada (stale-policy.ts).
+          if (existing) {
+            observations.push(
+              this.toListingObservation(origin, card, canonicalKey),
+            );
+          }
           continue;
         }
 
         const detailHtml = await detailResponse.text();
-        const jobPosting = this.extractJobPosting(detailHtml, detailUrl.toString());
+        const jobPosting = this.extractJobPosting(
+          detailHtml,
+          detailUrl.toString(),
+        );
 
         if (!jobPosting) {
           this.logger.warn(
             `Skipping TalentBrew detail missing JSON-LD JobPosting for job ${card.jobId}`,
           );
+          if (existing) {
+            observations.push(
+              this.toListingObservation(origin, card, canonicalKey),
+            );
+          }
           continue;
         }
 
@@ -262,6 +285,11 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
         this.logger.warn(
           `Skipping TalentBrew detail for ${card.jobId} due to error: ${error instanceof Error ? error.message : "unknown"}`,
         );
+        if (existing) {
+          observations.push(
+            this.toListingObservation(origin, card, canonicalKey),
+          );
+        }
       }
     }
 
@@ -382,9 +410,15 @@ export class TalentbrewAdapter implements IngestionSourceAdapter {
       .filter((value): value is string => Boolean(value))
       .join(", ");
 
-    const descriptionRaw = normalizeDescriptionHtml(jobPosting.description ?? "");
+    const descriptionRaw = normalizeDescriptionHtml(
+      jobPosting.description ?? "",
+    );
     const descriptionClean = stripHtml(descriptionRaw) || title;
-    const workModel = inferWorkModel(locationText || card.location, title, descriptionClean);
+    const workModel = inferWorkModel(
+      locationText || card.location,
+      title,
+      descriptionClean,
+    );
     const publishedAt = normalizeDate(jobPosting.datePosted);
     const state =
       normalizeState(address?.addressRegion)?.sigla ??

@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 
-import { buildJobMetadata, JobDetailView } from "@/app/radar/[slug]/job-detail";
-import type { PublicJob } from "@/lib/public-jobs-api";
 import {
+  buildClosedJobMetadata,
+  ClosedJobView,
+} from "@/app/radar/[slug]/closed-job-view";
+import { buildJobMetadata, JobDetailView } from "@/app/radar/[slug]/job-detail";
+import type { ClosedPublicJob, PublicJob } from "@/lib/public-jobs-api";
+import {
+  fetchClosedPublicJobCached,
   fetchPublicJobCached,
   fetchPublicSimilarJobsCached,
 } from "@/lib/public-jobs-client";
@@ -39,18 +44,48 @@ const loadJob = cache(async (slug: string): Promise<PublicJob | null> => {
   return result.status === "ok" ? result.data : null;
 });
 
+// Só consultada quando a vaga ativa não existe (mesma regra de erro do
+// loadJob: só 404 real vira null).
+const loadClosedJob = cache(
+  async (slug: string): Promise<ClosedPublicJob | null> => {
+    const result = await fetchClosedPublicJobCached(slug);
+    return result.status === "ok" ? result.data : null;
+  },
+);
+
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  return buildJobMetadata(await loadJob(slug));
+  const job = await loadJob(slug);
+  if (job) return buildJobMetadata(job);
+
+  const closedJob = await loadClosedJob(slug);
+  return closedJob ? buildClosedJobMetadata(closedJob) : buildJobMetadata(null);
 }
 
 export default async function PublicJobPage({ params }: PageProps) {
   const { slug } = await params;
   const job = await loadJob(slug);
 
-  if (!job) notFound();
+  if (!job) {
+    const closedJob = await loadClosedJob(slug);
+    if (!closedJob) notFound();
+
+    const closedSimilarJobs = await fetchPublicSimilarJobsCached()
+      .then((result) =>
+        result.status === "ok" ? result.data.data.slice(0, 3) : [],
+      )
+      .catch(() => [] as PublicJob[]);
+
+    return (
+      <ClosedJobView
+        job={closedJob}
+        similarJobs={closedSimilarJobs}
+        user={null}
+      />
+    );
+  }
 
   // Lista genérica (anônima). Falha aqui degrada para "sem similares" — como
   // sempre foi — sem derrubar a página da vaga.

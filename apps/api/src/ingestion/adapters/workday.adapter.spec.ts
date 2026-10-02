@@ -70,10 +70,7 @@ function createFetchMock(sequence: MockResponse[]) {
   const calls: Array<{ url: URL; method?: string }> = [];
   let index = 0;
 
-  globalThis.fetch = (async (
-    input: URL | RequestInfo,
-    init?: RequestInit,
-  ) => {
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const callUrl = new URL(
       typeof input === "string" ? input : input.toString(),
     );
@@ -107,7 +104,8 @@ test("WorkdayAdapter paginates the listing (offset/limit) then fetches the detai
         jobPostings: [
           {
             title: "Investment Banking Analyst",
-            externalPath: "/job/Madison-Ave-Corp/Investment-Banking-Analyst_Req1555604",
+            externalPath:
+              "/job/Madison-Ave-Corp/Investment-Banking-Analyst_Req1555604",
             locationsText: "Madison Ave Corp",
             postedOn: "Posted 2 Days Ago",
             bulletFields: ["Req1555604"],
@@ -174,9 +172,7 @@ test("WorkdayAdapter paginates the listing (offset/limit) then fetches the detai
 });
 
 test("WorkdayAdapter accepts a different tenant instance number (wd501) and site name", async () => {
-  const fetchMock = createFetchMock([
-    { json: { total: 0, jobPostings: [] } },
-  ]);
+  const fetchMock = createFetchMock([{ json: { total: 0, jobPostings: [] } }]);
 
   try {
     const adapter = new WorkdayAdapter(
@@ -228,7 +224,10 @@ test("WorkdayAdapter saves CrawlerDiscardedTitle for noise_signal jobs without a
       createJobSourceContext(
         "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
       ),
-      { getExistingJobByCanonicalKey: async () => null, ingestionRunId: "run-1" },
+      {
+        getExistingJobByCanonicalKey: async () => null,
+        ingestionRunId: "run-1",
+      },
     );
 
     assert.equal(observations.length, 0);
@@ -275,6 +274,46 @@ test("WorkdayAdapter skips detail fetch for a fresh existing job", async () => {
     assert.equal(observations.length, 1);
     assert.equal(observations[0]?.detailFetchSkipped, true);
     assert.equal(fetchMock.calls.length, 1);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("WorkdayAdapter keeps an existing listed job alive when its detail request fails", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        total: 1,
+        jobPostings: [
+          {
+            title: "Analista de Dados",
+            externalPath: "/job/x/Analista_Req1",
+            bulletFields: ["Req1"],
+          },
+        ],
+      },
+    },
+    { status: 500 },
+  ]);
+
+  try {
+    const adapter = new WorkdayAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext(
+        "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
+      ),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2024-01-01T10:00:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.detailFetchSkipped, true);
   } finally {
     fetchMock.restore();
   }
@@ -367,7 +406,11 @@ test("WorkdayAdapter keeps paginating even when the API returns an unreliable to
       json: {
         total: 0,
         jobPostings: [
-          { title: "Vaga 40", externalPath: "/job/x/Vaga-40_Req40", bulletFields: ["Req40"] },
+          {
+            title: "Vaga 40",
+            externalPath: "/job/x/Vaga-40_Req40",
+            bulletFields: ["Req40"],
+          },
         ],
       },
     },
@@ -405,7 +448,8 @@ test("WorkdayAdapter throws an actionable error for an invalid sourceUrl", async
   );
 
   await assert.rejects(
-    () => adapter.collect(createJobSourceContext("https://careers.example.com")),
+    () =>
+      adapter.collect(createJobSourceContext("https://careers.example.com")),
     /Invalid Workday sourceUrl/,
   );
 });

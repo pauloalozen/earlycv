@@ -513,6 +513,40 @@ test("GupyAdapter fetches detail for stale existing HTML job", async () => {
   }
 });
 
+test("GupyAdapter keeps an existing listed HTML job alive when its detail request fails", async () => {
+  const boardPayload = {
+    props: { pageProps: { jobs: [{ id: "102", title: "Pessoa Backend" }] } },
+  };
+  const fetchMock = createFetchMock([
+    { status: 500, json: { message: "fallback html" } },
+    {
+      status: 200,
+      text: `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(boardPayload)}</script>`,
+    },
+    { status: 500, text: "" },
+  ]);
+
+  try {
+    const adapter = new GupyAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://ifood.gupy.io"),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2024-01-01T10:00:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.detailFetchSkipped, true);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("GupyAdapter fetches detail for new HTML job", async () => {
   const boardPayload = {
     props: { pageProps: { jobs: [{ id: "103", title: "Pessoa Frontend" }] } },

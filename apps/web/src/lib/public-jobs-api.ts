@@ -26,6 +26,21 @@ export type ExistingApplication = {
   bestScore: number | null;
 } | null;
 
+// Espelha ClosedPublicJobView (apps/api/src/jobs/public-job-view.ts): vaga
+// que saiu do radar, só com o necessário pra página "vaga encerrada".
+export type ClosedPublicJob = {
+  company: string;
+  companyLogoUrl: string | null;
+  companyWebsiteUrl: string | null;
+  dominantArea: string | null;
+  lastSeenAt: string;
+  location: string;
+  slug: string;
+  status: "closed";
+  title: string;
+  workModel: string | null;
+};
+
 export type PublicJob = {
   canonicalKey: string;
   city: string | null;

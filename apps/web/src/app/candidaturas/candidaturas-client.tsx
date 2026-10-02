@@ -10,10 +10,11 @@ import {
   useState,
   useTransition,
 } from "react";
+import { ClosedJobBadge } from "@/app/radar/closed-job-badge";
+import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { EcvBuildLoader } from "@/components/ecv-loader";
 import { PageShell } from "@/components/page-shell";
 import { PublicFooter } from "@/components/public-footer";
-import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { trackEvent } from "@/lib/analytics-tracking";
 import { downloadFromApi } from "@/lib/client-download";
 import { buildCvUnlockPlansHref } from "@/lib/cv-unlock-flow";
@@ -1089,6 +1090,10 @@ function CandRow({
             />
             {cfg.label.toUpperCase()}
           </span>
+
+          {/* Vaga do Radar fechada na fonte — só sinaliza, nunca move a
+              candidatura (o usuário decide se arquiva). */}
+          {application.jobClosed ? <ClosedJobBadge variant="pill" /> : null}
 
           {/* CV adaptado badge — omitido quando status já é CV_READY para não
               duplicar a informação do pill "CV Liberado" logo acima */}

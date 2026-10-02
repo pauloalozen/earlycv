@@ -211,6 +211,14 @@ function deriveSummaryFromAdaptations(
   };
 }
 
+// Vaga do radar que saiu do ar (fechada na fonte ou retirada pela curadoria).
+// Calculado a cada leitura a partir do status atual da vaga — se ela voltar a
+// aparecer na fonte, o sinal some sozinho. Candidatura sem vaga do radar
+// (manual) nunca é marcada.
+function isRadarJobClosed(job: { status: string } | null | undefined) {
+  return !!job && job.status !== "active";
+}
+
 @Injectable()
 export class JobApplicationsService {
   private readonly logger = new Logger(JobApplicationsService.name);
@@ -352,6 +360,7 @@ export class JobApplicationsService {
           job: {
             select: {
               company: { select: { logoUrl: true, websiteUrl: true } },
+              status: true,
             },
           },
         },
@@ -369,6 +378,7 @@ export class JobApplicationsService {
           ...rest,
           companyLogoUrl: job?.company.logoUrl ?? null,
           companyWebsiteUrl: job?.company.websiteUrl ?? null,
+          jobClosed: isRadarJobClosed(job),
           ...deriveSummaryFromAdaptations(
             item.cvAdaptations as AdaptationSummaryView[],
           ),
@@ -519,6 +529,7 @@ export class JobApplicationsService {
         job: {
           select: {
             slug: true,
+            status: true,
             company: { select: { logoUrl: true, websiteUrl: true } },
           },
         },
@@ -547,6 +558,7 @@ export class JobApplicationsService {
       companyLogoUrl: job?.company.logoUrl ?? null,
       companyWebsiteUrl: job?.company.websiteUrl ?? null,
       jobSlug: job?.slug ?? null,
+      jobClosed: isRadarJobClosed(job),
       ...deriveSummaryFromAdaptations(
         application.cvAdaptations as AdaptationSummaryView[],
       ),
