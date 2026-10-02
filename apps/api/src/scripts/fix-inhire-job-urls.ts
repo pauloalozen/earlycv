@@ -24,6 +24,29 @@ const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
 const PAGE_SIZE = 500;
 
+// Pelo proxy público do Railway a conexão cai de vez em quando no meio de
+// uma execução longa (P1017 "Server has closed the connection"). Cada vaga
+// é uma transação própria, então repetir a operação que falhou é seguro.
+const RETRYABLE_CODES = new Set(["P1001", "P1002", "P1017", "P2024"]);
+const MAX_ATTEMPTS = 5;
+
+async function withRetry<T>(label: string, run: () => Promise<T>) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (!code || !RETRYABLE_CODES.has(code) || attempt >= MAX_ATTEMPTS) {
+        throw error;
+      }
+      console.warn(
+        `[fix-inhire-job-urls] ${label}: ${code}, tentativa ${attempt}/${MAX_ATTEMPTS}, repetindo...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
+    }
+  }
+}
+
 // Link sem slug: termina logo depois do jobId.
 const BROKEN_URL = /^https:\/\/[a-z0-9-]+\.inhire\.app\/vagas\/[^/?#]+$/;
 
@@ -41,13 +64,15 @@ async function main() {
     let cursor: string | undefined;
 
     for (;;) {
-      const jobs = await prisma.job.findMany({
-        where: { sourceJobUrl: { contains: ".inhire.app/vagas/" } },
-        select: { id: true, title: true, sourceJobUrl: true },
-        orderBy: { id: "asc" },
-        take: PAGE_SIZE,
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      });
+      const jobs = await withRetry("listagem de vagas", () =>
+        prisma.job.findMany({
+          where: { sourceJobUrl: { contains: ".inhire.app/vagas/" } },
+          select: { id: true, title: true, sourceJobUrl: true },
+          orderBy: { id: "asc" },
+          take: PAGE_SIZE,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        }),
+      );
       if (jobs.length === 0) break;
       cursor = jobs[jobs.length - 1]?.id;
 
@@ -57,10 +82,12 @@ async function main() {
 
         const brokenUrl = job.sourceJobUrl;
         const fixedUrl = `${brokenUrl}/${buildInHireJobSlug(job.title)}`;
-        const applications = await prisma.jobApplication.findMany({
-          where: { jobId: job.id, jobUrl: brokenUrl },
-          select: { id: true },
-        });
+        const applications = await withRetry(`Job ${job.id}`, () =>
+          prisma.jobApplication.findMany({
+            where: { jobId: job.id, jobUrl: brokenUrl },
+            select: { id: true },
+          }),
+        );
 
         fixedJobs += 1;
         fixedApplications += applications.length;
@@ -69,16 +96,18 @@ async function main() {
         );
 
         if (!DRY_RUN) {
-          await prisma.$transaction([
-            prisma.job.update({
-              where: { id: job.id },
-              data: { sourceJobUrl: fixedUrl },
-            }),
-            prisma.jobApplication.updateMany({
-              where: { jobId: job.id, jobUrl: brokenUrl },
-              data: { jobUrl: fixedUrl },
-            }),
-          ]);
+          await withRetry(`Job ${job.id}`, () =>
+            prisma.$transaction([
+              prisma.job.update({
+                where: { id: job.id },
+                data: { sourceJobUrl: fixedUrl },
+              }),
+              prisma.jobApplication.updateMany({
+                where: { jobId: job.id, jobUrl: brokenUrl },
+                data: { jobUrl: fixedUrl },
+              }),
+            ]),
+          );
         }
       }
     }
