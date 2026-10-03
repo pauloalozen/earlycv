@@ -23,6 +23,7 @@ import {
 } from "../radar/matching.engine";
 import { UserRadarProfileService } from "../radar/user-radar-profile.service";
 import { SavedJobsService } from "../saved-jobs/saved-jobs.service";
+import { diversifyByCompany } from "./diversify-by-company";
 import { JobsService } from "./jobs.service";
 import { toClosedPublicJobView, toPublicJobView } from "./public-job-view";
 import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
@@ -145,7 +146,7 @@ export class PublicJobsController {
       filters,
     );
 
-    const scoredAll = jobsWithEnrichment
+    const sortedAll = jobsWithEnrichment
       .map((job) => {
         const enrichment = job.enrichment;
         if (!enrichment || enrichment.enrichmentStatus !== "COMPLETED") {
@@ -206,6 +207,15 @@ export class PublicJobsController {
         }
         return bDate - aDate;
       });
+
+    // Ordens "do melhor pro pior" (padrão: score; ou data mais recente)
+    // passam por diversifyByCompany pra uma empresa com muitas vagas de
+    // score/data parecidos não ocupar a página inteira. Ordens crescentes
+    // (escolha explícita do usuário) ficam puras.
+    const scoredAll =
+      sort === "score_asc" || sort === "date_asc"
+        ? sortedAll
+        : diversifyByCompany(sortedAll, (item) => item.job.companyId);
 
     const highCompatCount = scoredAll.filter(
       (item) => (item.match?.score ?? 0) >= 70,

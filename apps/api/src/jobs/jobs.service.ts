@@ -16,6 +16,7 @@ import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
 import { formatCompanyDisplayName } from "./company-display-name";
+import { diversifyByCompany } from "./diversify-by-company";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import { normalizeState } from "./geo-normalizer";
@@ -651,23 +652,38 @@ export class JobsService {
       workModel: true,
     } as const;
 
-    const [jobs, total] = await Promise.all([
-      this.database.job.findMany({
-        where,
-        // publishedAtSource e a data da vaga em si (reportada pela fonte);
-        // cai pro lastSeenAt (data de captura) so quando a fonte nao
-        // informa data de publicacao.
-        orderBy: [
-          { publishedAtSource: { sort: "desc", nulls: "last" } },
-          { lastSeenAt: "desc" },
-          { updatedAt: "desc" },
-        ],
-        skip,
-        take: limit,
-        select,
-      }),
-      this.database.job.count({ where }),
-    ]);
+    // Ordem padrão = data da vaga (publishedAtSource; lastSeenAt quando a
+    // fonte não informa), com diversifyByCompany por cima pra uma empresa
+    // não tomar a página inteira. A diversificação precisa da ordem do
+    // conjunto filtrado inteiro (senão a paginação repete/pula vagas), por
+    // isso a 1ª consulta traz só id+companyId de tudo e a 2ª carrega os
+    // dados completos apenas da página.
+    const ordered = await this.database.job.findMany({
+      where,
+      orderBy: [
+        { publishedAtSource: { sort: "desc", nulls: "last" } },
+        { lastSeenAt: "desc" },
+        { updatedAt: "desc" },
+      ],
+      select: { companyId: true, id: true },
+    });
+    const pageIds = diversifyByCompany(ordered, (job) => job.companyId)
+      .slice(skip, skip + limit)
+      .map((job) => job.id);
+
+    const pageJobs =
+      pageIds.length > 0
+        ? await this.database.job.findMany({
+            where: { id: { in: pageIds } },
+            select,
+          })
+        : [];
+    const byId = new Map(pageJobs.map((job) => [job.id, job]));
+    const jobs = pageIds.flatMap((id) => {
+      const job = byId.get(id);
+      return job ? [job] : [];
+    });
+    const total = ordered.length;
 
     return { jobs, total, page, limit };
   }

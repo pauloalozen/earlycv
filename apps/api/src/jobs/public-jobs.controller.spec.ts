@@ -229,6 +229,39 @@ test("list sorts by score DESC by default, and supports score_asc/date_desc/date
   ]);
 });
 
+test("list (score order) never shows more than 2 jobs of the same company in a row while others remain", async () => {
+  const jobs = [
+    buildJob({ id: "a1", companyId: "A", lastSeenAt: new Date("2026-07-05") }),
+    buildJob({ id: "a2", companyId: "A", lastSeenAt: new Date("2026-07-04") }),
+    buildJob({ id: "a3", companyId: "A", lastSeenAt: new Date("2026-07-03") }),
+    buildJob({ id: "b1", companyId: "B", lastSeenAt: new Date("2026-07-02") }),
+  ];
+  const controller = buildController(jobs, PROFILE);
+
+  async function idsFor(sort: string | undefined) {
+    const result = await controller.list(
+      undefined as never,
+      USER,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sort,
+    );
+    return result.data.map((item) => item.id);
+  }
+
+  // Mesmo score pra todas: desempate por data, com B puxada pra frente.
+  assert.deepEqual(await idsFor(undefined), ["a1", "a2", "b1", "a3"]);
+  // Ordem crescente escolhida pelo usuário fica pura.
+  assert.deepEqual(await idsFor("date_asc"), ["b1", "a3", "a2", "a1"]);
+});
+
 test("list sorts date_desc/date_asc by publishedAtSource (data da vaga), not lastSeenAt (data de captura)", async () => {
   // lastSeenAt inverso do publishedAtSource: se o sort caísse pra
   // lastSeenAt, o resultado sairia invertido do esperado.
