@@ -490,17 +490,10 @@ test("getBySlug throws NotFoundException when getPublicBySlug returns null", asy
   );
 });
 
-test("getClosedBySlug returns only the minimal closed view (no description, no source link)", async () => {
+test("getClosedBySlug returns the full job content without the source link", async () => {
   const jobsService = {
-    getClosedPublicBySlug: async (slug: string) => ({
-      company: { logoUrl: null, name: "Acme", websiteUrl: null },
-      enrichment: { dominantArea: "DATA_AI" },
-      lastSeenAt: new Date("2026-09-30T12:00:00.000Z"),
-      locationText: "Sao Paulo, SP",
-      slug,
-      title: "Engenheiro de Dados",
-      workModel: "remote",
-    }),
+    getClosedPublicBySlug: async (slug: string) =>
+      buildJob({ slug, status: "inactive" }),
   };
   const controller = new PublicJobsController(
     jobsService as never,
@@ -510,20 +503,15 @@ test("getClosedBySlug returns only the minimal closed view (no description, no s
     undefined as never,
   );
 
-  const result = await controller.getClosedBySlug("vaga-acme-job-1");
+  const result = (await controller.getClosedBySlug(
+    "vaga-acme-job-1",
+  )) as Record<string, unknown>;
 
-  assert.deepEqual(result, {
-    company: "Acme",
-    companyLogoUrl: null,
-    companyWebsiteUrl: null,
-    dominantArea: "DATA_AI",
-    lastSeenAt: "2026-09-30T12:00:00.000Z",
-    location: "Sao Paulo, SP",
-    slug: "vaga-acme-job-1",
-    status: "closed",
-    title: "Engenheiro de Dados",
-    workModel: "remote",
-  });
+  assert.equal(result.status, "closed");
+  assert.equal(result.slug, "vaga-acme-job-1");
+  assert.equal(result.title, "Vaga");
+  assert.equal(result.descriptionHtml, "<p>desc</p>");
+  assert.equal("sourceJobUrl" in result, false);
 });
 
 test("getClosedBySlug throws NotFoundException when there is no closed job", async () => {

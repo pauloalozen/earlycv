@@ -381,15 +381,7 @@ export class JobsService {
         ...PUBLIC_JOB_INTEGRITY_WHERE,
         slug,
       },
-      select: {
-        company: { select: { logoUrl: true, name: true, websiteUrl: true } },
-        enrichment: { select: { dominantArea: true } },
-        lastSeenAt: true,
-        locationText: true,
-        slug: true,
-        title: true,
-        workModel: true,
-      },
+      select: PUBLIC_JOB_SELECT,
     });
   }
 
