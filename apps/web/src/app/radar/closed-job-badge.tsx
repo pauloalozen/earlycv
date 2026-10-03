@@ -7,7 +7,8 @@ export function isJobClosed(status: string | null | undefined) {
 }
 
 // "tag": selo pequeno ao lado de título (cards do radar/Alerta).
-// "pill": mesmo formato dos pills de status das candidaturas.
+// "pill": formato dos pills de status das candidaturas, em destaque (preto
+// com ponto vermelho) — é o aviso mais importante do card.
 export function ClosedJobBadge({
   variant = "tag",
 }: {
@@ -20,15 +21,15 @@ export function ClosedJobBadge({
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 5,
-        background: "rgba(10,10,10,0.06)",
-        color: "#3a3a38",
-        border: "1px solid rgba(10,10,10,0.10)",
+        gap: pill ? 6 : 5,
+        background: pill ? "#0a0a0a" : "rgba(10,10,10,0.06)",
+        color: pill ? "#fafaf6" : "#3a3a38",
+        border: pill ? "1px solid #0a0a0a" : "1px solid rgba(10,10,10,0.10)",
         fontFamily: MONO,
         fontSize: pill ? 10.5 : 9.5,
         padding: pill ? "3px 8px 3px 7px" : "2px 7px",
         borderRadius: pill ? 999 : 4,
-        fontWeight: pill ? 500 : 600,
+        fontWeight: 600,
         letterSpacing: pill ? 0.3 : 0.4,
         lineHeight: pill ? 1 : undefined,
         whiteSpace: "nowrap",
@@ -38,10 +39,12 @@ export function ClosedJobBadge({
       <span
         aria-hidden
         style={{
-          width: 5,
-          height: 5,
+          width: pill ? 6 : 5,
+          height: pill ? 6 : 5,
           borderRadius: "50%",
-          background: "#a8a6a0",
+          background: pill ? "#ef4444" : "#a8a6a0",
+          boxShadow: pill ? "0 0 6px rgba(239,68,68,0.8)" : undefined,
+          flexShrink: 0,
         }}
       />
       {pill ? "VAGA ENCERRADA" : "Vaga encerrada"}
