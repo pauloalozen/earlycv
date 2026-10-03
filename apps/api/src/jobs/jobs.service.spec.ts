@@ -592,3 +592,49 @@ test("bulkSetStatusByJobSource propaga erro quando a fonte não existe (getById 
     service.bulkSetStatusByJobSource("missing", "active" as never),
   );
 });
+
+test("listPublicFiltered diversifies companies over the whole ordered set before paginating", async () => {
+  // Ordem do banco (data desc): 5 da empresa A seguidas, depois B e C.
+  const ordered = [
+    { id: "a1", companyId: "A" },
+    { id: "a2", companyId: "A" },
+    { id: "a3", companyId: "A" },
+    { id: "a4", companyId: "A" },
+    { id: "a5", companyId: "A" },
+    { id: "b1", companyId: "B" },
+    { id: "c1", companyId: "C" },
+  ];
+  const database = {
+    job: {
+      findMany: async (args: {
+        select: Record<string, unknown>;
+        where: { id?: { in: string[] } };
+      }) => {
+        if (args.where.id?.in) {
+          // Banco devolve fora de ordem — a página precisa respeitar a
+          // ordem diversificada, não a do IN.
+          return [...args.where.id.in].reverse().map((id) => ({ id }));
+        }
+        return ordered;
+      },
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  const page1 = await service.listPublicFiltered({ page: 1, limit: 4 });
+  const page2 = await service.listPublicFiltered({ page: 2, limit: 4 });
+
+  assert.deepEqual(
+    page1.jobs.map((job) => job.id),
+    ["a1", "a2", "b1", "a3"],
+  );
+  assert.deepEqual(
+    page2.jobs.map((job) => job.id),
+    ["a4", "c1", "a5"],
+  );
+  assert.equal(page1.total, 7);
+});

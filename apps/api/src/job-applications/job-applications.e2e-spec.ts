@@ -593,3 +593,140 @@ test("POST /job-applications/:id/interview-prep rejects when the selected CV is 
   await deleteUserByEmail(database, user.email);
   await app.close();
 });
+
+// ─── POST /job-applications/board-order ───────────────────────────────────────
+
+async function createManualApplications(
+  app: INestApplication,
+  accessToken: string,
+  titles: string[],
+) {
+  const ids: string[] = [];
+  for (const jobTitle of titles) {
+    const res = await request(app.getHttpServer())
+      .post("/api/job-applications")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ jobTitle, companyName: "Kanban Co" });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    ids.push(res.body.id as string);
+  }
+  return ids;
+}
+
+test("POST /job-applications/board-order grava a ordem da etapa sem mexer em updatedAt", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "ja-board-order");
+  const [a, b, c] = await createManualApplications(app, user.accessToken, [
+    "Vaga A",
+    "Vaga B",
+    "Vaga C",
+  ]);
+  const before = await database.jobApplication.findMany({
+    where: { id: { in: [a, b, c] as string[] } },
+    select: { id: true, updatedAt: true },
+  });
+
+  const res = await request(app.getHttpServer())
+    .post("/api/job-applications/board-order")
+    .set("Authorization", `Bearer ${user.accessToken}`)
+    .send({ ids: [c, a, b] });
+
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  assert.deepEqual(res.body, { updated: 3 });
+
+  const after = await database.jobApplication.findMany({
+    where: { id: { in: [a, b, c] as string[] } },
+    select: { id: true, boardPosition: true, updatedAt: true },
+  });
+  const byId = new Map(after.map((row) => [row.id, row]));
+  assert.equal(byId.get(c as string)?.boardPosition, 0);
+  assert.equal(byId.get(a as string)?.boardPosition, 1);
+  assert.equal(byId.get(b as string)?.boardPosition, 2);
+  for (const row of before) {
+    assert.equal(
+      byId.get(row.id)?.updatedAt.getTime(),
+      row.updatedAt.getTime(),
+    );
+  }
+
+  const list = await request(app.getHttpServer())
+    .get("/api/job-applications?page=1&limit=20&archived=false")
+    .set("Authorization", `Bearer ${user.accessToken}`);
+  assert.equal(list.status, 200);
+  const positions = new Map(
+    (
+      list.body.items as Array<{ id: string; boardPosition: number | null }>
+    ).map((item) => [item.id, item.boardPosition]),
+  );
+  assert.equal(positions.get(c as string), 0);
+
+  await deleteUserByEmail(database, user.email);
+});
+
+test("POST /job-applications/board-order recusa id de outro usuário e não grava nada", async () => {
+  const { app, database } = await createApp();
+  const owner = await registerUser(app, database, "ja-board-owner");
+  const intruder = await registerUser(app, database, "ja-board-intruder");
+  const [mine] = await createManualApplications(app, intruder.accessToken, [
+    "Minha vaga",
+  ]);
+  const [theirs] = await createManualApplications(app, owner.accessToken, [
+    "Vaga do outro",
+  ]);
+
+  const res = await request(app.getHttpServer())
+    .post("/api/job-applications/board-order")
+    .set("Authorization", `Bearer ${intruder.accessToken}`)
+    .send({ ids: [mine, theirs] });
+
+  assert.equal(res.status, 404, JSON.stringify(res.body));
+  const rows = await database.jobApplication.findMany({
+    where: { id: { in: [mine, theirs] as string[] } },
+    select: { boardPosition: true },
+  });
+  for (const row of rows) assert.equal(row.boardPosition, null);
+
+  await deleteUserByEmail(database, owner.email);
+  await deleteUserByEmail(database, intruder.email);
+});
+
+test("POST /job-applications/board-order valida o corpo (lista vazia ou com ids repetidos)", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "ja-board-invalid");
+  const [a] = await createManualApplications(app, user.accessToken, ["Vaga"]);
+
+  for (const body of [{ ids: [] }, { ids: [a, a] }, {}]) {
+    const res = await request(app.getHttpServer())
+      .post("/api/job-applications/board-order")
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send(body);
+    assert.equal(res.status, 400, JSON.stringify(body));
+  }
+
+  await deleteUserByEmail(database, user.email);
+});
+
+test("PATCH /job-applications/:id/status para um desfecho não arquiva a candidatura", async () => {
+  const { app, database } = await createApp();
+  const user = await registerUser(app, database, "ja-terminal-no-archive");
+  const [id] = await createManualApplications(app, user.accessToken, [
+    "Vaga finalizada",
+  ]);
+
+  for (const status of ["HIRED", "REJECTED", "WITHDRAWN"]) {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/job-applications/${id}/status`)
+      .set("Authorization", `Bearer ${user.accessToken}`)
+      .send({ status });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+
+    const row = await database.jobApplication.findUnique({
+      where: { id: id as string },
+      select: { status: true, archivedAt: true },
+    });
+    assert.equal(row?.status, status);
+    assert.equal(row?.archivedAt, null);
+  }
+
+  await deleteUserByEmail(database, user.email);
+});

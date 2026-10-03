@@ -874,21 +874,14 @@ export class JobApplicationsService {
 
     const previousStatus = application.status;
 
-    const TERMINAL_STATUSES: JobApplicationStatus[] = [
-      "REJECTED",
-      "HIRED",
-      "WITHDRAWN",
-    ];
-
     const appliedAt =
       newStatus === "APPLIED" && !application.appliedAt
         ? new Date()
         : undefined;
 
-    const autoArchiveAt =
-      TERMINAL_STATUSES.includes(newStatus) && application.archivedAt === null
-        ? new Date()
-        : undefined;
+    // Desfecho (Contratado/Recusado/Desistência) NÃO arquiva sozinho:
+    // arquivar é sempre ação manual do usuário — a candidatura finalizada
+    // continua visível na etapa "Finalizado" do quadro.
 
     // When moving to APPLIED without an explicit CV selection, ensure we don't
     // keep a locked (not yet purchased) adaptation as the "sent CV". If the
@@ -919,7 +912,6 @@ export class JobApplicationsService {
           ...(resolvedCvAdaptationId !== undefined
             ? { currentCvAdaptationId: resolvedCvAdaptationId }
             : {}),
-          ...(autoArchiveAt !== undefined ? { archivedAt: autoArchiveAt } : {}),
         },
       });
 
@@ -1011,6 +1003,36 @@ export class JobApplicationsService {
     );
 
     return updated;
+  }
+
+  // Quadro (kanban) de /candidaturas: grava a ordem manual de uma etapa
+  // depois de um arraste. Recebe a etapa inteira (do topo pra base) e
+  // reescreve boardPosition = índice — simples e determinístico, e a etapa
+  // nunca passa de poucas dezenas de cards. Só toca candidaturas do próprio
+  // usuário; qualquer id alheio/excluído derruba a operação inteira (nada é
+  // gravado), em vez de reordenar parcialmente.
+  async reorderBoard(userId: string, ids: string[]) {
+    const owned = await this.database.jobApplication.findMany({
+      where: { id: { in: ids }, userId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (owned.length !== ids.length) {
+      throw new NotFoundException("job application not found");
+    }
+
+    // SQL direto de propósito: o update do Prisma bumparia updatedAt (campo
+    // @updatedAt), e reordenar no quadro não é atividade na candidatura —
+    // updatedAt ordena os destaques "recentes" (listHighlights).
+    await this.database.$transaction(
+      ids.map(
+        (id, index) =>
+          this.database
+            .$executeRaw`UPDATE "JobApplication" SET "boardPosition" = ${index} WHERE "id" = ${id} AND "userId" = ${userId}`,
+      ),
+    );
+
+    return { updated: ids.length };
   }
 
   async archive(userId: string, id: string, sessionInternalId?: string | null) {

@@ -96,6 +96,59 @@ function createFetchMock(sequence: MockResponse[]) {
   };
 }
 
+test("GreenhouseAdapter uses first_published (not updated_at) as the publication date", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        jobs: [
+          {
+            id: 1,
+            title: "Engenheiro de Dados",
+            absolute_url: "https://job-boards.greenhouse.io/acme/jobs/1",
+            content: "<p>Descricao</p>",
+            location: { name: "Sao Paulo, SP, Brasil" },
+            first_published: "2026-05-20T19:20:34-04:00",
+            updated_at: "2026-10-01T19:11:15-04:00",
+          },
+          {
+            id: 2,
+            title: "Engenheira de Software",
+            absolute_url: "https://job-boards.greenhouse.io/acme/jobs/2",
+            content: "<p>Descricao</p>",
+            location: { name: "Sao Paulo, SP, Brasil" },
+            updated_at: "2026-10-01T19:11:15-04:00",
+          },
+        ],
+        meta: { total: 2 },
+      },
+    },
+  ]);
+
+  try {
+    const adapter = new GreenhouseAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext(
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs",
+      ),
+    );
+
+    assert.equal(
+      observations[0]?.publishedAtSource,
+      "2026-05-20T23:20:34.000Z",
+    );
+    // Sem first_published, cai pro updated_at.
+    assert.equal(
+      observations[1]?.publishedAtSource,
+      "2026-10-01T23:11:15.000Z",
+    );
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("GreenhouseAdapter maps observation fields from the board API", async () => {
   const fetchMock = createFetchMock([
     {

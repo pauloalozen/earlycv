@@ -77,6 +77,14 @@ function radarExclusionReason(job: JobRow): string | null {
   return null;
 }
 
+// /radar/[slug] só existe pra vaga que passa no filtro de integridade: ativa
+// abre o detalhe, inativa/removida abre a página "vaga encerrada". Mesmos
+// critérios de radarExclusionReason, independente do status.
+function radarPageUnavailableReason(job: JobRow): string | null {
+  if (job.status === "active") return radarExclusionReason(job);
+  return radarExclusionReason({ ...job, status: "active" });
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -308,7 +316,7 @@ export function VagasTabClient({
             <AdminTh w={110}>Área</AdminTh>
             <AdminTh w={160}>Radar</AdminTh>
             <AdminTh w={180}>Chave</AdminTh>
-            <AdminTh w={100}>Ações</AdminTh>
+            <AdminTh w={190}>Ações</AdminTh>
           </tr>
         </thead>
         <tbody>
@@ -329,6 +337,7 @@ export function VagasTabClient({
           )}
           {result?.jobs.map((job) => {
             const exclusionReason = radarExclusionReason(job);
+            const pageUnavailableReason = radarPageUnavailableReason(job);
             return (
               <tr key={job.id}>
                 <AdminTd>{job.title}</AdminTd>
@@ -392,17 +401,44 @@ export function VagasTabClient({
                   {job.canonicalKey}
                 </AdminTd>
                 <AdminTd>
-                  <button
-                    type="button"
-                    className={buttonVariants({
-                      size: "sm",
-                      variant: "outline",
-                    })}
-                    disabled={togglingId === job.id}
-                    onClick={() => handleToggleStatus(job)}
-                  >
-                    {job.status === "active" ? "Inativar" : "Ativar"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      type="button"
+                      className={buttonVariants({
+                        size: "sm",
+                        variant: "outline",
+                      })}
+                      disabled={togglingId === job.id}
+                      onClick={() => handleToggleStatus(job)}
+                    >
+                      {job.status === "active" ? "Inativar" : "Ativar"}
+                    </button>
+                    {pageUnavailableReason ? (
+                      <button
+                        type="button"
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
+                        disabled
+                        title={`Sem página pública: ${pageUnavailableReason}`}
+                      >
+                        Ver vaga ↗
+                      </button>
+                    ) : (
+                      <a
+                        href={`/radar/${job.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
+                      >
+                        Ver vaga ↗
+                      </a>
+                    )}
+                  </div>
                 </AdminTd>
               </tr>
             );

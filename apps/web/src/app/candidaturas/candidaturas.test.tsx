@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -335,9 +336,71 @@ describe("CandidaturasClient", () => {
     ];
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getByText("SALVA")).toBeInTheDocument();
-    expect(screen.getByText("EM ENTREVISTA")).toBeInTheDocument();
+    // Quadro (kanban): a etapa é a coluna; só Finalizada mostra o desfecho.
+    expect(
+      within(screen.getByRole("region", { name: "Salva" })).getByText(
+        "Job Salva",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Em entrevista" })).getByText(
+        "Job Proposta",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("CONTRATADO")).toBeInTheDocument();
+  });
+
+  it("abas Ativas/Arquivadas ficam na linha dos filtros e aparecem mesmo com ativas vazia", () => {
+    render(
+      <CandidaturasClient
+        initialApplications={[]}
+        initialArchivedApplications={[
+          makeApp({ id: "arch-1", jobTitle: "Job Arquivada" }),
+        ]}
+        header={null}
+        hasMasterResume
+        hasCredits
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Arquivadas/ }));
+    expect(screen.getByText("Job Arquivada")).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Filtrar candidaturas" }),
+    ).toBeInTheDocument();
+  });
+
+  it("filtros rápidos mostram só as candidaturas marcadas e combinam com qualquer um", () => {
+    const apps = [
+      makeApp({ id: "f1", jobTitle: "Job Analisada", status: "ANALYZED" }),
+      makeApp({ id: "f2", jobTitle: "Job Liberada", status: "CV_READY" }),
+      makeApp({
+        id: "f3",
+        jobTitle: "Job Encerrada",
+        status: "APPLIED",
+        jobClosed: true,
+      }),
+    ];
+    render(
+      <CandidaturasClient
+        initialApplications={apps}
+        header={null}
+        hasMasterResume
+        hasCredits
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Vaga encerrada/ }));
+    expect(screen.getByText("Job Encerrada")).toBeInTheDocument();
+    expect(screen.queryByText("Job Analisada")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /CV analisado/ }));
+    expect(screen.getByText("Job Analisada")).toBeInTheDocument();
+    expect(screen.getByText("Job Encerrada")).toBeInTheDocument();
+    expect(screen.queryByText("Job Liberada")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
+    expect(screen.getByText("Job Liberada")).toBeInTheDocument();
   });
 
   it("maps CV_READY to the CV Liberado label", () => {
@@ -348,12 +411,18 @@ describe("CandidaturasClient", () => {
     expect(screen.getByText(/^CV LIBERADO$/i)).toBeInTheDocument();
   });
 
-  it("maps APPLIED to the Candidatado label", () => {
-    const apps = [makeApp({ id: "applied-1", status: "APPLIED" })];
+  it("maps APPLIED to the Candidatura feita column", () => {
+    const apps = [
+      makeApp({ id: "applied-1", jobTitle: "Job Aplicada", status: "APPLIED" }),
+    ];
 
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getByText(/^CANDIDATADO$/i)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Candidatado" })).getByText(
+        "Job Aplicada",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("maps REJECTED and WITHDRAWN to approved semantic labels", () => {
@@ -438,10 +507,7 @@ describe("CandidaturasClient", () => {
 
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getAllByText("SCORE")).toHaveLength(1);
-    expect(screen.getByTestId("score-highlight-value")).toHaveTextContent(
-      "87%",
-    );
+    expect(screen.getByTestId("kanban-score")).toHaveTextContent("87%");
     expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
   });
 
@@ -459,14 +525,11 @@ describe("CandidaturasClient", () => {
 
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getAllByText("SCORE")).toHaveLength(1);
-    expect(screen.getByTestId("score-highlight-value")).toHaveTextContent(
-      "82%",
-    );
+    expect(screen.getByTestId("kanban-score")).toHaveTextContent("82%");
     expect(screen.queryByText("Ainda não analisada")).not.toBeInTheDocument();
   });
 
-  it("12c. score block shows delta against original when both values exist", () => {
+  it("12c. card do quadro mostra só o score, sem a diferença vs original", () => {
     const apps = [
       makeApp({
         id: "delta-1",
@@ -480,12 +543,8 @@ describe("CandidaturasClient", () => {
 
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getByTestId("score-highlight-value")).toHaveTextContent(
-      "83%",
-    );
-    expect(screen.getByTestId("score-highlight-delta")).toHaveTextContent(
-      "+16 vs original",
-    );
+    expect(screen.getByTestId("kanban-score")).toHaveTextContent("83%");
+    expect(screen.queryByText(/vs original/)).not.toBeInTheDocument();
   });
 
   it("12c2. score block uses score-based color variation", () => {
@@ -502,7 +561,7 @@ describe("CandidaturasClient", () => {
 
     render(<CandidaturasClient initialApplications={apps} header={null} />);
 
-    expect(screen.getByTestId("score-highlight-value")).toHaveStyle({
+    expect(screen.getByTestId("kanban-score")).toHaveStyle({
       color: getDashboardScoreColor(83),
     });
   });
@@ -616,14 +675,9 @@ describe("CandidaturasClient", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("score-highlight-value")).toHaveTextContent(
-        "83%",
-      );
+      expect(screen.getByTestId("kanban-score")).toHaveTextContent("83%");
     });
     expect(extractSignalSpy).toHaveBeenCalled();
-    expect(screen.getByTestId("score-highlight-delta")).toHaveTextContent(
-      "+16 vs original",
-    );
   });
 
   it("13. locked bestCvState asks confirmation before redeeming", async () => {
@@ -724,7 +778,9 @@ describe("CandidaturasClient", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: "Excluir" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Excluir candidatura" }),
+    ).toHaveLength(1);
   });
 
   it("16. archived card delete removes item from list on success", async () => {
@@ -751,11 +807,19 @@ describe("CandidaturasClient", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar exclusao" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Excluir candidatura" }),
+    );
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Excluir candidatura?" }),
+      ).getByRole("button", { name: "Excluir" }),
+    );
 
     await waitFor(() => {
-      expect(deleteJobApplication).toHaveBeenCalledWith("arch-delete");
+      expect(vi.mocked(deleteJobApplication).mock.calls[0]?.[0]).toBe(
+        "arch-delete",
+      );
       expect(screen.queryByText("Arquivada removivel")).not.toBeInTheDocument();
     });
   });

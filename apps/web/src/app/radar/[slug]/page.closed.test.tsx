@@ -37,14 +37,28 @@ vi.mock("@/lib/plans-api", () => ({ getMyPlan: vi.fn() }));
 import JobPage, { generateMetadata } from "./page";
 
 const closedJob: ClosedPublicJob = {
+  canonicalKey: "inhire:vitru:1",
+  city: "São Paulo",
   company: "Vitru Educação",
   companyLogoUrl: null,
   companyWebsiteUrl: null,
+  country: "BR",
+  description: "Liderar a governança de TI.",
+  descriptionHtml:
+    "<section><h2>Responsabilidades</h2><p>Liderar a governança de TI.</p></section>",
   dominantArea: "DATA_AI",
+  employmentType: "clt",
+  externalJobId: "1",
+  firstSeenAt: "2026-09-01T12:00:00.000Z",
+  id: "job-1",
   lastSeenAt: "2026-09-30T12:00:00.000Z",
   location: "São Paulo, SP, BR",
+  publishedAtSource: "2026-09-01T12:00:00.000Z",
+  seniorityLevel: "senior",
   slug: "gerente-ti-vitru-1",
+  state: "SP",
   status: "closed",
+  technologies: [],
   title: "Gerente de Governança de TI",
   workModel: "hybrid",
 };
@@ -78,6 +92,30 @@ describe("/radar/[slug] para vaga que saiu do radar", () => {
     expect(
       screen.getByRole("link", { name: "Ver vagas abertas →" }),
     ).toHaveAttribute("href", "/radar");
+  });
+
+  it("continua mostrando o conteúdo da vaga, sem nenhum CTA", async () => {
+    mocks.fetchClosedPublicJob.mockResolvedValue({
+      status: "ok",
+      data: closedJob,
+    });
+
+    render(
+      await JobPage({ params: Promise.resolve({ slug: closedJob.slug }) }),
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: closedJob.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Responsabilidades")).toBeInTheDocument();
+    expect(screen.getByText("Liderar a governança de TI.")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+    const hrefs = screen
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href") ?? "");
+    for (const href of hrefs) {
+      expect(href).not.toMatch(/adaptar|entrar|alerta|^https?:/);
+    }
   });
 
   it("não é indexável", async () => {
@@ -114,7 +152,7 @@ describe("/radar/[slug] para vaga que saiu do radar", () => {
 
     expect(screen.getByText(/nada foi apagado/)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Minhas candidaturas" }),
+      screen.getByRole("link", { name: "Minhas candidaturas →" }),
     ).toHaveAttribute("href", "/candidaturas");
   });
 
