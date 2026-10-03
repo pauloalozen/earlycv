@@ -29,15 +29,24 @@ export const metadata: Metadata = {
 
 type Props = {
   params: Promise<{ id: string }>;
+  // ?acao=entrevista|feedback — vindo do quadro (kanban) de /candidaturas:
+  // abre direto o modal de agendar entrevista / feedback da recusa.
+  searchParams?: Promise<{ acao?: string }>;
 };
 
-export default async function CandidaturaDetailPage({ params }: Props) {
+export default async function CandidaturaDetailPage({
+  params,
+  searchParams,
+}: Props) {
   const user = await getCurrentAppUserFromCookies();
   const redirectPath = getRouteAccessRedirectPath("/candidaturas", user);
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
   const { id } = await params;
+  const acao = searchParams ? (await searchParams).acao : undefined;
+  const initialAction =
+    acao === "entrevista" || acao === "feedback" ? acao : null;
 
   const [applicationResult, planResult] = await Promise.allSettled([
     getJobApplication(id),
@@ -162,6 +171,7 @@ export default async function CandidaturaDetailPage({ params }: Props) {
       }
       application={applicationWithScores}
       initialHasCredits={initialHasCredits}
+      initialAction={initialAction}
       header={
         <AppHeader
           userName={user.name}

@@ -24,6 +24,7 @@ import { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 import { ListJobApplicationHighlightsDto } from "./dto/list-job-application-highlights.dto";
 import { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import { RejectionFeedbackDto } from "./dto/rejection-feedback.dto";
+import { ReorderBoardDto } from "./dto/reorder-board.dto";
 import { ScheduleInterviewDto } from "./dto/schedule-interview.dto";
 import { UpdateJobApplicationDescriptionDto } from "./dto/update-job-application-description.dto";
 import { UpdateJobApplicationStatusDto } from "./dto/update-job-application-status.dto";
@@ -110,6 +111,24 @@ export class JobApplicationsController {
       dto,
       req.analysisContext.journeySessionInternalId,
     );
+  }
+
+  // Rota fixa declarada antes de qualquer ":id" pra nunca ser capturada
+  // como id.
+  @Post("board-order")
+  reorderBoard(
+    @AuthenticatedUser() user: { id: string },
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        expectedType: ReorderBoardDto,
+      }),
+    )
+    dto: ReorderBoardDto,
+  ) {
+    return this.service.reorderBoard(user.id, dto.ids);
   }
 
   @Patch(":id/status")

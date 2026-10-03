@@ -2943,6 +2943,10 @@ model JobApplication {
   rejectionImprovements String?
   archivedAt            DateTime?
   deletedAt             DateTime?
+  // Ordem manual dentro da etapa no quadro (kanban) de /candidaturas —
+  // definida ao arrastar. Null = nunca reordenada: vai depois das
+  // ordenadas, pela data de atualização (ordem padrão de antes do kanban).
+  boardPosition         Float?
   // Cópia de conveniência do language resolvido em CvAdaptation.language
   // (mantida em sync por upsertFromCvAdaptation) — fonte única de idioma
   // para todo o Kit de Candidatura.
