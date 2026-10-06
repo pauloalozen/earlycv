@@ -9,6 +9,7 @@ import {
   type PublicJob,
 } from "@/lib/public-jobs-api";
 import { fetchClosedPublicJob, fetchPublicJob } from "@/lib/public-jobs-client";
+import { getRadarLandingIndex } from "@/lib/radar-landings";
 import { buildClosedJobMetadata, ClosedJobView } from "./closed-job-view";
 import { buildJobMetadata, JobDetailView, loadJobViewer } from "./job-detail";
 
@@ -84,5 +85,14 @@ export default async function JobPage({ params }: JobPageProps) {
     .then((r) => r.data.filter((j) => j.slug !== job.slug).slice(0, 3))
     .catch(() => [] as PublicJob[]);
 
-  return <JobDetailView job={job} similarJobs={similarJobs} viewer={viewer} />;
+  const landingIndex = await getRadarLandingIndex();
+
+  return (
+    <JobDetailView
+      job={job}
+      similarJobs={similarJobs}
+      viewer={viewer}
+      landingIndex={landingIndex}
+    />
+  );
 }

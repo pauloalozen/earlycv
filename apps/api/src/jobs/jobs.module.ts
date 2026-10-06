@@ -15,6 +15,7 @@ import { JobsController } from "./jobs.controller";
 import { JobsService } from "./jobs.service";
 import { PublicJobsController } from "./public-jobs.controller";
 import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
+import { RadarLandingsService } from "./radar-landings.service";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PublicJobsGhostModeGuard } from "./public-jobs-ghost-mode.guard";
   controllers: [JobsController, PublicJobsController, InternalJobsController],
   providers: [
     JobsService,
+    RadarLandingsService,
     JwtAuthGuard,
     RolesGuard,
     PublicJobsGhostModeGuard,

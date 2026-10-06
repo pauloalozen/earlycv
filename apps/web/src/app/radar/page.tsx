@@ -3,7 +3,12 @@ import type { Metadata } from "next";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getMyPlan } from "@/lib/plans-api";
+import {
+  getRadarLandingIndex,
+  landingRelatedLinks,
+} from "@/lib/radar-landings";
 import { getAbsoluteUrl } from "@/lib/site";
+import { RadarExploreLinks } from "./_landing/radar-landing-page";
 import { RadarJobsListing, type RadarSearchParams } from "./jobs-listing";
 import { RadarPageShell } from "./page-shell";
 import { RadarViewTracker } from "./radar-view-tracker";
@@ -42,6 +47,7 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     : undefined;
 
   const params = await searchParams;
+  const landingIndex = await getRadarLandingIndex();
 
   const websiteJsonLd = {
     "@context": "https://schema.org",
@@ -68,6 +74,11 @@ export default async function VagasPage({ searchParams }: VagasPageProps) {
     >
       <RadarViewTracker radarViewType="all" />
       <RadarJobsListing basePath="/radar" user={user} searchParams={params} />
+      {landingIndex ? (
+        <RadarExploreLinks
+          groups={landingRelatedLinks(null, null, landingIndex)}
+        />
+      ) : null}
     </RadarPageShell>
   );
 }

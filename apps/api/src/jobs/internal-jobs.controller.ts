@@ -2,6 +2,7 @@ import { Controller, Get, Inject, Param, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { JobsService } from "./jobs.service";
 import { toPublicJobView } from "./public-job-view";
+import { RadarLandingsService } from "./radar-landings.service";
 
 const DEFAULT_TECH_MIN_COUNT = 10;
 const DEFAULT_TOP_COMPANIES_LIMIT = 24;
@@ -13,7 +14,11 @@ const DEFAULT_TOP_COMPANIES_LIMIT = 24;
 // usuário. Nunca adicionar campos sensíveis aqui.
 @Controller("internal/jobs")
 export class InternalJobsController {
-  constructor(@Inject(JobsService) private readonly jobsService: JobsService) {}
+  constructor(
+    @Inject(JobsService) private readonly jobsService: JobsService,
+    @Inject(RadarLandingsService)
+    private readonly radarLandingsService: RadarLandingsService,
+  ) {}
 
   @Get("sitemap-data")
   async getSitemapData(@Res({ passthrough: true }) response: Response) {
@@ -79,5 +84,38 @@ export class InternalJobsController {
     );
 
     return this.jobsService.listTopCompaniesWithActiveJobs(limit);
+  }
+
+  // Páginas perenes de SEO do Radar: índice de todas as landings com volume
+  // atual (sitemap, links internos, resolução de slug de empresa/cidade).
+  @Get("landings/index")
+  async getLandingsIndex(@Res({ passthrough: true }) response: Response) {
+    response.setHeader("Cache-Control", "public, max-age=300");
+    return this.radarLandingsService.getIndex();
+  }
+
+  // Panorama de um recorte (texto próprio, título com contagem e decisão de
+  // indexação da landing). Só filtros estruturais — nada de busca livre.
+  @Get("landings/summary")
+  async getLandingSummary(
+    @Res({ passthrough: true }) response: Response,
+    @Query("area") area?: string,
+    @Query("workModel") workModel?: string,
+    @Query("seniority") seniority?: string,
+    @Query("companyName") companyName?: string,
+    @Query("technology") technology?: string,
+    @Query("city") city?: string,
+    @Query("state") state?: string,
+  ) {
+    response.setHeader("Cache-Control", "public, max-age=300");
+    return this.radarLandingsService.getSummary({
+      area: area || undefined,
+      workModel: workModel || undefined,
+      seniority: seniority || undefined,
+      companyName: companyName || undefined,
+      technology: technology || undefined,
+      city: city || undefined,
+      state: state || undefined,
+    });
   }
 }

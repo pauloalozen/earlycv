@@ -89,7 +89,13 @@ export type RadarJobsListingProps = {
     // usuário edita hoje), então não precisa de tratamento de "hidden" nem
     // de round-trip pela URL — só entra direto na query.
     technology?: string;
+    // Landing de cidade (/radar/cidade/[cidade]): cidade + UF fixas. A UF vai
+    // nas duas grafias (sigla e nome) porque vagas antigas guardam o nome.
+    city?: string;
+    state?: string;
   };
+  // Nome do ItemList (JSON-LD) — cada landing usa o próprio título.
+  itemListName?: string;
   // Quando presente, substitui o hero padrão (título "Vagas em tech..."/
   // calibração + stats do Radar) por um cabeçalho simples e estático —
   // usado pelas landing pages de SEO, que não devem replicar a
@@ -661,6 +667,7 @@ export async function RadarJobsListing({
   user,
   searchParams: params,
   fixedFilters,
+  itemListName,
   landingHeader,
 }: RadarJobsListingProps) {
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
@@ -700,14 +707,15 @@ export async function RadarJobsListing({
   const isModalidadeFixed = !!fixedFilters?.workModel;
   const isSeniorityFixed = !!fixedFilters?.seniority;
   const isEmpresaFixed = !!fixedFilters?.companyName;
+  const isLocationFixed = !!fixedFilters?.city;
 
   const area = fixedFilters?.area ?? params.area;
   const q = params.q;
   const modalidade = fixedFilters?.workModel ?? params.modalidade;
   const senioridade = fixedFilters?.seniority ?? params.senioridade;
   const empresa = fixedFilters?.companyName ?? params.empresa;
-  const estado = params.estado;
-  const cidade = params.cidade;
+  const estado = isLocationFixed ? fixedFilters?.state : params.estado;
+  const cidade = isLocationFixed ? fixedFilters?.city : params.cidade;
   const publicada = params.publicada;
   const minSkillsPct = params.minSkillsPct;
   const aderencia = params.aderencia;
@@ -753,7 +761,9 @@ export async function RadarJobsListing({
       sort,
       excludeAnalyzed,
     }),
-    getPublicJobFacets({ state: estado }).catch(() => null),
+    getPublicJobFacets({ state: isLocationFixed ? undefined : estado }).catch(
+      () => null,
+    ),
   ]);
 
   const adaptarHref = user ? "/adaptar" : "/entrar?tab=cadastrar&ctx=radar";
@@ -770,8 +780,8 @@ export async function RadarJobsListing({
     empresa: isEmpresaFixed ? undefined : empresa,
     publicada,
     area: isAreaFixed ? undefined : area,
-    estado,
-    cidade,
+    estado: isLocationFixed ? undefined : estado,
+    cidade: isLocationFixed ? undefined : cidade,
     minSkillsPct,
     aderencia,
     sort,
@@ -782,14 +792,24 @@ export async function RadarJobsListing({
     isModalidadeFixed ? ("modalidade" as const) : null,
     isSeniorityFixed ? ("senioridade" as const) : null,
     isEmpresaFixed ? ("empresa" as const) : null,
+    isLocationFixed ? ("estado" as const) : null,
+    isLocationFixed ? ("cidade" as const) : null,
     // Sem UserRadarProfile não existe score calculável — filtrar por
     // categoria de aderência não faz sentido nesse estado (mesmo motivo do
     // backend rejeitar minScore/minSkillsPct sem score, ver
     // public-jobs.controller.ts).
     scoreState !== "has-cv" ? ("aderencia" as const) : null,
   ].filter(
-    (v): v is "area" | "modalidade" | "senioridade" | "empresa" | "aderencia" =>
-      v !== null,
+    (
+      v,
+    ): v is
+      | "area"
+      | "modalidade"
+      | "senioridade"
+      | "empresa"
+      | "aderencia"
+      | "estado"
+      | "cidade" => v !== null,
   );
 
   function buildPageUrl(targetPage: number) {
@@ -801,8 +821,8 @@ export async function RadarJobsListing({
     if (!isEmpresaFixed && empresa) p.set("empresa", empresa);
     if (publicada) p.set("publicada", publicada);
     if (!isAreaFixed && area) p.set("area", area);
-    if (estado) p.set("estado", estado);
-    if (cidade) p.set("cidade", cidade);
+    if (!isLocationFixed && estado) p.set("estado", estado);
+    if (!isLocationFixed && cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
     if (aderencia) p.set("aderencia", aderencia);
     if (sort) p.set("sort", sort);
@@ -820,8 +840,8 @@ export async function RadarJobsListing({
     if (!isEmpresaFixed && empresa) p.set("empresa", empresa);
     if (publicada) p.set("publicada", publicada);
     if (!isAreaFixed && area) p.set("area", area);
-    if (estado) p.set("estado", estado);
-    if (cidade) p.set("cidade", cidade);
+    if (!isLocationFixed && estado) p.set("estado", estado);
+    if (!isLocationFixed && cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
     if (aderencia) p.set("aderencia", aderencia);
     if (sortValue !== defaultSort) p.set("sort", sortValue);
@@ -839,8 +859,8 @@ export async function RadarJobsListing({
     if (!isEmpresaFixed && empresa) p.set("empresa", empresa);
     if (publicada) p.set("publicada", publicada);
     if (!isAreaFixed && area) p.set("area", area);
-    if (estado) p.set("estado", estado);
-    if (cidade) p.set("cidade", cidade);
+    if (!isLocationFixed && estado) p.set("estado", estado);
+    if (!isLocationFixed && cidade) p.set("cidade", cidade);
     if (minSkillsPct) p.set("minSkillsPct", minSkillsPct);
     if (aderencia) p.set("aderencia", aderencia);
     if (sort) p.set("sort", sort);
@@ -866,7 +886,7 @@ export async function RadarJobsListing({
   const itemListJsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: "Vagas de tecnologia e dados — EarlyCV",
+    name: itemListName ?? "Vagas de tecnologia e dados — EarlyCV",
     itemListElement: jobsResult.data.map((job, i) => ({
       "@type": "ListItem",
       position: (page - 1) * jobsResult.limit + i + 1,

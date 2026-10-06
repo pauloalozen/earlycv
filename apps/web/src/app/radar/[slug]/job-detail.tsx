@@ -11,7 +11,6 @@ import {
   type MatchData,
   OpportunityBadge,
   OpportunityRing,
-  RADAR_AREA_LABELS,
   ScoreRing,
   SkillChip,
   scoreColor,
@@ -20,11 +19,11 @@ import { SaveJobCtaBtn, SaveJobTextBtn } from "@/app/radar/save-job-btn";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
-import { toCompanySlug } from "@/lib/company-slug";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
+import { jobLandingLinks, type RadarLandingIndex } from "@/lib/radar-landings";
 import { getMyMasterResume } from "@/lib/resumes-api";
 import { getAbsoluteUrl } from "@/lib/site";
 import { EndOfDescriptionCta } from "../end-of-description-cta";
@@ -676,10 +675,12 @@ export function JobDetailView({
   job,
   similarJobs,
   viewer,
+  landingIndex,
 }: {
   job: PublicJob;
   similarJobs: PublicJob[];
   viewer: JobViewer | null;
+  landingIndex?: RadarLandingIndex | null;
 }) {
   const user = viewer?.user ?? null;
   const hasCvMaster = viewer?.hasCvMaster ?? false;
@@ -733,22 +734,9 @@ export function JobDetailView({
     new Date(job.lastSeenAt).getTime() + 30 * 86_400_000,
   ).toISOString();
 
-  const internalLinks: Array<{ href: string; label: string }> = [];
-  if (job.dominantArea) {
-    internalLinks.push({
-      href: `/radar/area/${job.dominantArea.toLowerCase()}`,
-      label: `← Todas as vagas de ${RADAR_AREA_LABELS[job.dominantArea] ?? job.dominantArea}`,
-    });
-  }
-  if (job.company) {
-    internalLinks.push({
-      href: `/radar/empresa/${toCompanySlug(job.company)}`,
-      label: `Vagas na ${job.company}`,
-    });
-  }
-  if (job.workModel === "remote") {
-    internalLinks.push({ href: "/radar/remotas", label: "Ver vagas remotas" });
-  }
+  // Links para as landings perenes em que a vaga se encaixa (só as com
+  // volume para serem indexáveis — ver lib/radar-landings.ts).
+  const internalLinks = jobLandingLinks(job, landingIndex ?? null);
 
   // job.city/job.state já vêm normalizados (geo-normalizer.ts, na
   // ingestão) — city em title case, state como sigla de UF. addressCountry
