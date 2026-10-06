@@ -15,6 +15,8 @@ const pushMock = vi.hoisted(() => vi.fn());
 const openMock = vi.hoisted(() => vi.fn());
 const extractDashboardAnalysisSignalMock = vi.hoisted(() => vi.fn());
 const getOrCaptureGaClientIdMock = vi.hoisted(() => vi.fn());
+const fetchMockInterviewOfferMock = vi.hoisted(() => vi.fn());
+const canAccessMockInterviewMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => useRouterMock(),
@@ -48,6 +50,14 @@ extractDashboardAnalysisSignalMock.mockImplementation(() => ({
   adjustments: { scoreBefore: null, scoreFinal: null },
 }));
 
+vi.mock("@/lib/mock-interview-offer.server", () => ({
+  fetchMockInterviewOffer: fetchMockInterviewOfferMock,
+}));
+
+vi.mock("@/lib/mock-interview-mode", () => ({
+  canAccessMockInterview: canAccessMockInterviewMock,
+}));
+
 vi.mock("./score-indicator", () => ({
   ScoreIndicator: () => <div>ScoreIndicator</div>,
 }));
@@ -64,6 +74,10 @@ describe("PlanosPage checkout", () => {
       name: "Alo",
     });
     extractDashboardAnalysisSignalMock.mockClear();
+    canAccessMockInterviewMock.mockReset();
+    canAccessMockInterviewMock.mockReturnValue(false);
+    fetchMockInterviewOfferMock.mockReset();
+    fetchMockInterviewOfferMock.mockResolvedValue(null);
     getOrCaptureGaClientIdMock.mockReset();
     getOrCaptureGaClientIdMock.mockResolvedValue("1234567890.1234567890");
     process.env.PRICE_PLAN_STARTER = "1190";
@@ -263,5 +277,30 @@ describe("PlanosPage checkout", () => {
       expect.any(Object),
       { selectedMissingKeywords: ["Python", "SQL"] },
     );
+  });
+
+  it("mock interview add-on card: hidden when the sale is closed for the user", async () => {
+    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.queryByTestId("planos-mock-interview-addon")).toBeNull();
+    expect(fetchMockInterviewOfferMock).not.toHaveBeenCalled();
+  });
+
+  it("mock interview add-on card: shown outside the plans as a separate purchase", async () => {
+    canAccessMockInterviewMock.mockReturnValue(true);
+    fetchMockInterviewOfferMock.mockResolvedValue({
+      amountInCents: 7990,
+      currency: "BRL",
+    });
+    render(await PlanosPage({ searchParams: Promise.resolve({}) }));
+    const card = screen.getByTestId("planos-mock-interview-addon");
+    expect(card.textContent).toMatch(/compra avulsa/i);
+    expect(card.textContent).toMatch(/não usa créditos/i);
+    expect(card.textContent).toContain("79,90");
+    expect(
+      screen
+        .getByRole("link", { name: /comprar entrevista simulada/i })
+        .getAttribute("href"),
+    ).toBe("/simulacao-de-entrevista/comprar");
+    expect(card.closest(".planos-grid")).toBeNull();
   });
 });
