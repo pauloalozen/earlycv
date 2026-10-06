@@ -13,6 +13,7 @@ import {
   fetchPublicJobCached,
   fetchPublicSimilarJobsCached,
 } from "@/lib/public-jobs-client";
+import { getRadarLandingIndex } from "@/lib/radar-landings";
 
 // Rota INTERNA em cache (ISR) do detalhe anônimo. Nunca é acessada pela URL
 // pública direta: next.config.ts reescreve /radar/:slug para cá SOMENTE
@@ -97,5 +98,14 @@ export default async function PublicJobPage({ params }: PageProps) {
     )
     .catch(() => [] as PublicJob[]);
 
-  return <JobDetailView job={job} similarJobs={similarJobs} viewer={null} />;
+  const landingIndex = await getRadarLandingIndex();
+
+  return (
+    <JobDetailView
+      job={job}
+      similarJobs={similarJobs}
+      viewer={null}
+      landingIndex={landingIndex}
+    />
+  );
 }

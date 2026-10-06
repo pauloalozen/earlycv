@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { areaLanding, isLandingArea } from "@/lib/radar-landings";
+import { areaRemoteLanding, isLandingArea } from "@/lib/radar-landings";
 import {
   buildRadarLandingMetadata,
   RadarLandingPage,
-} from "../../_landing/radar-landing-page";
-import type { RadarSearchParams } from "../../jobs-listing";
+} from "../../../_landing/radar-landing-page";
+import type { RadarSearchParams } from "../../../jobs-listing";
 
-// Landing perene: vagas por área (ver lib/radar-landings.ts).
+// Landing perene: vagas remotas de uma área.
 // [area] chega em lowercase na URL (ex.: "data_ai"); as chaves são os
 // valores do enum JobArea. OTHER ("Geral") nunca é pública, então não tem
 // landing (isLandingArea só aceita as áreas de AREA_SEO).
 function resolveLanding(areaSlug: string) {
   const area = areaSlug.toUpperCase();
-  return isLandingArea(area) ? areaLanding(area) : null;
+  return isLandingArea(area) ? areaRemoteLanding(area) : null;
 }
 
 type PageProps = {

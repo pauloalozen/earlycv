@@ -1,6 +1,14 @@
 # SEO — páginas perenes do Radar (área, empresa, tecnologia, remotas, nível, estágio, cidade)
 
-Status: em implementação (branch `feature/seo-paginas-perenes-radar`, a partir de `main`).
+Status: Fases 1 e 2 implementadas (branch `feature/seo-paginas-perenes-radar`, a partir de `main`), não mergeadas. Fase 3 (medição) começa após o deploy.
+
+## Implementação (06/10/2026)
+- API: `RadarLandingsService` + `GET /internal/jobs/landings/index` e `/landings/summary` (contagens no banco, nunca lista de vagas em memória).
+- Web: `lib/radar-landings.ts` (definições, títulos, textos, elegibilidade, links) e `app/radar/_landing/radar-landing-page.tsx` (metadata, panorama, FAQ, "Explore mais vagas", BreadcrumbList).
+- Rotas novas: `/radar/estagio`, `/radar/estagio/remoto`, `/radar/area/[area]/remoto`, `/radar/area/[area]/junior`, `/radar/cidade/[cidade]`; as 6 antigas passaram a usar o componente.
+- Sitemap com as landings elegíveis; hub de links em `/radar`; vaga linka área, área+remoto, empresa, cidade, remotas e até 2 tecnologias (só landings com volume).
+- Filtros: opções dos dropdowns só entram no DOM com o dropdown aberto.
+- Mínimo para indexar: 5 vagas (tecnologia: 10). Recorte sem vaga → 404 (empresa, cidade, tecnologia, combinações).
 Origem: análise da queda de impressões no Google (06/10/2026).
 
 ## Diagnóstico (06/10/2026)

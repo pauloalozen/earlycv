@@ -68,6 +68,7 @@ describe("rewrite do detalhe anônimo", () => {
     expect(regexp.test("/radar/junior")).toBe(false);
     expect(regexp.test("/radar/remotas")).toBe(false);
     expect(regexp.test("/radar/senior")).toBe(false);
+    expect(regexp.test("/radar/estagio")).toBe(false);
     // rotas de 2+ segmentos nunca casam
     expect(regexp.test("/radar/area/data_ai")).toBe(false);
     expect(regexp.test("/radar/empresa/acme")).toBe(false);

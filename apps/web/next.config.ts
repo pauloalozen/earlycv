@@ -109,7 +109,7 @@ const nextConfig: NextConfig = {
     return {
       beforeFiles: [
         {
-          source: "/radar/:slug((?!junior$|remotas$|senior$)[^/]+)",
+          source: "/radar/:slug((?!junior$|remotas$|senior$|estagio$)[^/]+)",
           missing: [
             { type: "cookie" as const, key: "earlycv-access-token" },
             { type: "cookie" as const, key: "earlycv-refresh-token" },

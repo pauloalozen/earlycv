@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 
-import { seniorLanding } from "@/lib/radar-landings";
+import { internshipLanding } from "@/lib/radar-landings";
 import {
   buildRadarLandingMetadata,
   RadarLandingPage,
 } from "../_landing/radar-landing-page";
 import type { RadarSearchParams } from "../jobs-listing";
 
-// Landing perene: vagas sênior (ver lib/radar-landings.ts).
+// Landing perene: vagas de estágio (ver lib/radar-landings.ts).
 type PageProps = {
   searchParams: Promise<RadarSearchParams>;
 };
@@ -15,13 +15,13 @@ type PageProps = {
 export async function generateMetadata({
   searchParams,
 }: PageProps): Promise<Metadata> {
-  return buildRadarLandingMetadata(seniorLanding(), await searchParams);
+  return buildRadarLandingMetadata(internshipLanding(), await searchParams);
 }
 
 export default async function Page({ searchParams }: PageProps) {
   return (
     <RadarLandingPage
-      landing={seniorLanding()}
+      landing={internshipLanding()}
       searchParams={await searchParams}
     />
   );

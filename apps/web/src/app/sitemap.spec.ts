@@ -83,3 +83,58 @@ test("sitemap tolerates the sitemap-data endpoint being unreachable (never break
     false,
   );
 });
+
+test("sitemap includes the evergreen radar landings that have enough jobs (and only those)", async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("/landings/index")
+      ? {
+          total: 300,
+          areas: [
+            { value: "DATA_AI", count: 120 },
+            { value: "DESIGN_UX", count: 2 },
+          ],
+          seniorities: [{ value: "INTERN", count: 40 }],
+          workModels: [{ value: "remote", count: 90 }],
+          companies: [
+            { name: "Stefanini", slug: "stefanini", count: 30 },
+            { name: "Pequena", slug: "pequena", count: 1 },
+          ],
+          technologies: [{ value: "power bi", count: 50 }],
+          cities: [
+            {
+              city: "São Paulo",
+              state: "SP",
+              stateName: "São Paulo",
+              slug: "sao-paulo-sp",
+              count: 80,
+            },
+          ],
+          areaWorkModels: [{ a: "DATA_AI", b: "remote", count: 30 }],
+          areaSeniorities: [{ a: "DATA_AI", b: "JUNIOR", count: 3 }],
+          seniorityWorkModels: [{ a: "INTERN", b: "remote", count: 6 }],
+        }
+      : [];
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  const urls = (await sitemap()).map((entry) => entry.url);
+  const has = (path: string) => urls.some((url) => url.endsWith(path));
+
+  assert.equal(has("/radar/area/data_ai"), true);
+  assert.equal(has("/radar/area/data_ai/remoto"), true);
+  assert.equal(has("/radar/remotas"), true);
+  assert.equal(has("/radar/estagio"), true);
+  assert.equal(has("/radar/estagio/remoto"), true);
+  assert.equal(has("/radar/empresa/stefanini"), true);
+  assert.equal(has("/radar/tecnologia/power-bi"), true);
+  assert.equal(has("/radar/cidade/sao-paulo-sp"), true);
+  // abaixo do mínimo: fora do sitemap
+  assert.equal(has("/radar/area/design_ux"), false);
+  assert.equal(has("/radar/area/data_ai/junior"), false);
+  assert.equal(has("/radar/empresa/pequena"), false);
+  assert.equal(has("/radar/junior"), false);
+});
