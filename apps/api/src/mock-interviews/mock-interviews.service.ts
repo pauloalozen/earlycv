@@ -570,6 +570,28 @@ export class MockInterviewsService {
     return purchases.map((p) => buildPurchaseView(p, user?.name ?? null));
   }
 
+  // Sininho do header: sessões agendadas do próprio usuário, a partir de 2h
+  // atrás (a sessão em andamento continua visível) e só pagas.
+  async listUpcomingSessions(userId: string, now: Date = new Date()) {
+    const rows = await this.database.mockInterviewPurchase.findMany({
+      where: {
+        userId,
+        paymentStatus: "completed",
+        sessionStatus: "SCHEDULED",
+        scheduledAt: { gte: new Date(now.getTime() - 2 * 60 * 60_000) },
+      },
+      orderBy: { scheduledAt: "asc" },
+      take: 5,
+      select: { id: true, scheduledAt: true },
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        scheduledAt: (row.scheduledAt as Date).toISOString(),
+      })),
+    };
+  }
+
   // Página do pedido (retorno do Mercado Pago). Com refresh, um pedido ainda
   // pendente é conferido direto na API do MP — cobre webhook atrasado.
   async getMine(

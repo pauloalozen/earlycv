@@ -15,9 +15,17 @@ const HOUR = 60 * 60_000;
 
 type Row = Record<string, unknown>;
 
-function createService(purchase: Row) {
+function createService(
+  purchase: Row,
+  options: {
+    inviteResult?: { status: "sent" | "failed"; error: string | null };
+    priorEvents?: Row[];
+  } = {},
+) {
   const row: Row = { ...purchase };
   const createdEvents: Row[] = [];
+  const invites: { id: string; kind: string }[] = [];
+  const priorEvents = options.priorEvents ?? [];
   const db = {
     mockInterviewPurchase: {
       findUnique: async (args: { include?: unknown }) =>
@@ -42,12 +50,28 @@ function createService(purchase: Row) {
         return row;
       },
     },
+    mockInterviewEvent: {
+      findFirst: async ({ where }: { where: Row }) =>
+        [...priorEvents, ...createdEvents].find((e) => e.type === where.type) ??
+        null,
+      create: async ({ data }: { data: Row }) => {
+        createdEvents.push(data);
+        return data;
+      },
+    },
     jobApplication: { findUnique: async () => null },
   };
+  const notifications = {
+    sendScheduleInvite: async (id: string, kind: string) => {
+      invites.push({ id, kind });
+      return options.inviteResult ?? { status: "sent" as const, error: null };
+    },
+  };
   return {
-    service: new AdminMockInterviewsService(db as never),
+    service: new AdminMockInterviewsService(db as never, notifications),
     row,
     createdEvents,
+    invites,
   };
 }
 
@@ -220,6 +244,132 @@ test("unpaid purchases cannot be scheduled; REFUNDED is never set by hand; SCHED
       { meetingUrl: "http://meet.google.com/abc" },
       NOW,
     ),
+    BadRequestException,
+  );
+});
+
+const MEET = "https://meet.google.com/abc-defg-hij";
+
+test("invite: scheduling with date and link emails the buyer and records it", async () => {
+  const { service, invites, createdEvents } = createService(paid());
+  const result = await service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    {
+      scheduledAt: new Date(NOW.getTime() + 3 * 24 * HOUR).toISOString(),
+      meetingUrl: MEET,
+    },
+    NOW,
+  );
+  assert.deepEqual(result.invite, { status: "sent" });
+  assert.deepEqual(invites, [{ id: "cmpurchase000abc123", kind: "scheduled" }]);
+  const event = createdEvents.find((e) => e.type === "invite_sent");
+  assert.equal(event?.note, "scheduled");
+});
+
+test("invite: no link means no email and the admin is told; past dates are not invited", async () => {
+  const a = createService(paid());
+  const noLink = await a.service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    { scheduledAt: new Date(NOW.getTime() + 3 * 24 * HOUR).toISOString() },
+    NOW,
+  );
+  assert.deepEqual(noLink.invite, { status: "skipped_missing_link" });
+  assert.equal(a.invites.length, 0);
+
+  const b = createService(paid());
+  const past = await b.service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    {
+      scheduledAt: new Date(NOW.getTime() - HOUR).toISOString(),
+      meetingUrl: MEET,
+    },
+    NOW,
+  );
+  assert.deepEqual(past.invite, { status: "skipped_past" });
+  assert.equal(b.invites.length, 0);
+});
+
+test("invite: reschedule and link change resend with the right wording; notes alone do not", async () => {
+  const when = new Date(NOW.getTime() + 3 * 24 * HOUR);
+  const scheduled = paid({
+    sessionStatus: "SCHEDULED",
+    scheduledAt: when,
+    meetingUrl: MEET,
+  });
+  const invited = [{ type: "invite_sent" }];
+
+  const r = createService(scheduled, { priorEvents: invited });
+  await r.service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    { scheduledAt: new Date(when.getTime() + 24 * HOUR).toISOString() },
+    NOW,
+  );
+  assert.equal(r.invites[0]?.kind, "rescheduled");
+
+  const u = createService(scheduled, { priorEvents: invited });
+  await u.service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    { meetingUrl: "https://meet.google.com/new-link-xyz" },
+    NOW,
+  );
+  assert.equal(u.invites[0]?.kind, "updated");
+
+  const n = createService(scheduled, { priorEvents: invited });
+  const notes = await n.service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    { adminNotes: "trazer a vaga" },
+    NOW,
+  );
+  assert.equal(notes.invite, null);
+  assert.equal(n.invites.length, 0);
+});
+
+test("invite: a provider failure is returned to the admin and recorded, the save still stands", async () => {
+  const { service, row, createdEvents } = createService(paid(), {
+    inviteResult: { status: "failed", error: "AccessDenied" },
+  });
+  const result = await service.update(
+    "cmpurchase000abc123",
+    "admin-1",
+    {
+      scheduledAt: new Date(NOW.getTime() + 3 * 24 * HOUR).toISOString(),
+      meetingUrl: MEET,
+    },
+    NOW,
+  );
+  assert.deepEqual(result.invite, { status: "failed", error: "AccessDenied" });
+  assert.equal(row.sessionStatus, "SCHEDULED");
+  assert.equal(
+    createdEvents.find((e) => e.type === "invite_failed")?.note,
+    "AccessDenied",
+  );
+});
+
+test("invite resend: only for paid, scheduled future sessions with a link", async () => {
+  const when = new Date(NOW.getTime() + 3 * 24 * HOUR);
+  const ok = createService(
+    paid({ sessionStatus: "SCHEDULED", scheduledAt: when, meetingUrl: MEET }),
+  );
+  const result = await ok.service.resendInvite("cmpurchase000abc123", NOW);
+  assert.deepEqual(result.invite, { status: "sent" });
+  assert.equal(ok.invites[0]?.kind, "scheduled");
+
+  const noLink = createService(
+    paid({ sessionStatus: "SCHEDULED", scheduledAt: when }),
+  );
+  await assert.rejects(
+    noLink.service.resendInvite("cmpurchase000abc123", NOW),
+    BadRequestException,
+  );
+  const waiting = createService(paid());
+  await assert.rejects(
+    waiting.service.resendInvite("cmpurchase000abc123", NOW),
     BadRequestException,
   );
 });

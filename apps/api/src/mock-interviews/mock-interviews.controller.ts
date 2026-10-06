@@ -77,6 +77,14 @@ export class MockInterviewsController {
     return this.service.listMine(user.id);
   }
 
+  // Sessões agendadas do usuário (sininho do header). Qualquer modo da flag:
+  // é pedido já pago.
+  @UseGuards(JwtAuthGuard)
+  @Get("upcoming")
+  upcoming(@AuthenticatedUser() user: AuthenticatedRequestUser) {
+    return this.service.listUpcomingSessions(user.id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get("purchases/:id")
   getMine(

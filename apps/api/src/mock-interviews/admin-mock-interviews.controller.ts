@@ -5,6 +5,7 @@ import {
   Inject,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -48,5 +49,11 @@ export class AdminMockInterviewsController {
     @AuthenticatedUser() admin: AuthenticatedRequestUser,
   ) {
     return this.service.update(id, admin.id, body);
+  }
+
+  // Reenvia o convite da sessão agendada (ex.: depois de uma falha).
+  @Post(":id/invite")
+  resendInvite(@Param("id") id: string) {
+    return this.service.resendInvite(id);
   }
 }
