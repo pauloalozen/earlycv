@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicFooter } from "@/components/public-footer";
@@ -272,16 +273,17 @@ export default async function SimulacaoDeEntrevistaPage() {
               ENTREVISTA SIMULADA AO VIVO · GOOGLE MEET
             </div>
             <h1 className="si-h1">
-              Você tem a experiência.{" "}
+              Sua primeira entrevista não precisa ser a de verdade.{" "}
               <em className="si-serif">
-                Treine como mostrar isso na entrevista.
+                Treine antes, com quem já entrevistou muita gente.
               </em>
             </h1>
             <p className="si-lede">
               Uma entrevista simulada de {OFFER.durationMinutes} minutos, ao
-              vivo, com quem está há 20 anos em TI. Você responde perguntas
-              baseadas na sua vaga, recebe feedback na hora e, depois, um
-              relatório formal com as minhas recomendações.
+              vivo, com quem está há 20 anos em TI e já esteve do outro lado da
+              mesa. Você responde perguntas baseadas na vaga que quer, recebe
+              feedback na hora e, depois, um relatório com o que ajustar antes
+              da entrevista real.
             </p>
             {priceAmount && (
               <div className="si-price">
@@ -463,11 +465,25 @@ export default async function SimulacaoDeEntrevistaPage() {
       {/* QUEM CONDUZ */}
       <section className="si-block" id="quem-conduz">
         <div className="si-wrap si-host reveal-card">
-          <div className="si-portrait" aria-hidden="true">
-            PA
-          </div>
           <div>
             <span className="si-label">QUEM CONDUZ</span>
+            <div className="si-host-id">
+              <Image
+                src="/paulo-alozen.jpg"
+                alt="Paulo Alozen"
+                width={88}
+                height={88}
+                className="si-avatar"
+              />
+              <Link
+                href="https://www.linkedin.com/in/pauloalozen/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="si-linkedin"
+              >
+                ↗ LinkedIn
+              </Link>
+            </div>
             <h2>
               Paulo Alozen, <em className="si-serif">20 anos de TI</em> e
               fundador do EarlyCV.
@@ -818,8 +834,11 @@ const PAGE_CSS = `
 .si-doc ol { list-style: decimal; }
 .si-doc ul, .si-doc ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; line-height: 1.5; font-weight: 300; color: #3a3a38; }
 
-.si-host { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 56px; align-items: center; }
-.si-portrait { aspect-ratio: 4 / 5; max-width: 100%; border-radius: 18px; background: radial-gradient(120% 90% at 50% 30%, #2a2a26, #121210); color: #f4f3ee; display: grid; place-items: center; font-size: 64px; font-weight: 500; letter-spacing: -2px; }
+.si-host > div { max-width: 760px; }
+.si-host-id { display: flex; align-items: center; gap: 16px; margin: 18px 0 20px; }
+.si-avatar { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.si-linkedin { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .3px; color: #5a5a55; text-decoration: none; border-bottom: 1px solid rgba(10,10,10,0.18); padding-bottom: 1px; }
+.si-linkedin:hover { color: #0a0a0a; border-bottom-color: #0a0a0a; }
 .si-bio { display: grid; gap: 14px; margin-top: 18px; font-size: 16.5px; line-height: 1.6; font-weight: 300; color: #5c5a52; max-width: 600px; }
 .si-bio p { margin: 0; }
 .si-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 28px; border-top: 1px solid rgba(10,10,10,0.08); }
@@ -883,9 +902,9 @@ const PAGE_CSS = `
   .si-steps li:last-child { grid-column: 1 / -1; border-bottom: 0; }
 }
 @media (max-width: 820px) {
-  .si-problem, .si-host, .si-faq, .si-offer { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .si-problem, .si-faq, .si-offer { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .si-offer { gap: 0; }
-  .si-portrait { max-width: 180px; font-size: 44px; }
+  .si-avatar { width: 72px; height: 72px; }
   .si-ruler-parts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .si-offer-main, .si-policy { padding: 28px 22px; }
 }
