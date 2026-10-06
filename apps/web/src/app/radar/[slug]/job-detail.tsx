@@ -790,7 +790,9 @@ export function JobDetailView({
     ...(jobLocation ? { jobLocation } : {}),
     ...(job.workModel === "remote" ? { jobLocationType: "TELECOMMUTE" } : {}),
     applicantLocationRequirements: { "@type": "Country", name: "Brasil" },
-    directApply: true,
+    // A candidatura acontece no site da empresa/ATS (ExternalApplyGate), não
+    // no EarlyCV — declarar true viola a diretriz de JobPosting do Google.
+    directApply: false,
     url: getAbsoluteUrl(`/radar/${job.slug}`),
     ...(job.externalJobId
       ? {
