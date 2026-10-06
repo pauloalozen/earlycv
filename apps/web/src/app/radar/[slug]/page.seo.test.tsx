@@ -183,6 +183,12 @@ describe("/radar/[slug] JSON-LD JobPosting", () => {
     });
   });
 
+  it("declares directApply false (candidatura acontece no site da empresa)", async () => {
+    const jsonLd = await renderJobJsonLd();
+
+    expect(jsonLd.directApply).toBe(false);
+  });
+
   it("falls back to a generated description when descriptionClean is empty", async () => {
     const jsonLd = await renderJobJsonLd({ description: "   " });
 
