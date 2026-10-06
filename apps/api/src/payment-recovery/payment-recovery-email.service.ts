@@ -17,6 +17,25 @@ type TxEmailRow = {
   realEmailSent: boolean;
 };
 
+export type SendPaymentRecoveryTestEmailResult = {
+  status: "sent" | "failed";
+  to: string;
+  subject: string;
+  mockedLocally: boolean;
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  // O que um envio real (por pedido) faria neste ambiente com a config atual.
+  realSendWouldBe: "sent" | "email_disabled" | "dry_run" | "allowlist_blocked";
+  config: {
+    emailEnabled: boolean;
+    dryRun: boolean;
+    allowlistSize: number;
+    toInAllowlist: boolean;
+    from: string;
+    frontendUrl: string;
+  };
+};
+
 export type SendPaymentRecoveryEmailResult = {
   success: boolean;
   status: "sent" | "skipped" | "failed";
@@ -62,6 +81,22 @@ export class PaymentRecoveryEmailService {
     return allowlistMatched;
   }
 
+  private emailFrom() {
+    return process.env.EMAIL_FROM ?? "EarlyCV <contato@earlycv.com.br>";
+  }
+
+  private isLocalEnv() {
+    const frontendUrl = process.env.FRONTEND_URL ?? "";
+    const apiUrl = process.env.API_URL ?? "";
+    const appEnv = process.env.APP_ENV ?? "";
+    return (
+      process.env.NODE_ENV !== "production" ||
+      appEnv === "development" ||
+      frontendUrl.includes("localhost") ||
+      apiUrl.includes("localhost")
+    );
+  }
+
   private async sendViaResend(
     to: string,
     subject: string,
@@ -69,17 +104,9 @@ export class PaymentRecoveryEmailService {
     html: string,
   ) {
     const apiKey = process.env.RESEND_API_KEY ?? "";
-    const from = process.env.EMAIL_FROM ?? "EarlyCV <contato@earlycv.com.br>";
-    const frontendUrl = process.env.FRONTEND_URL ?? "";
-    const apiUrl = process.env.API_URL ?? "";
-    const appEnv = process.env.APP_ENV ?? "";
-    const isLocalEnv =
-      process.env.NODE_ENV !== "production" ||
-      appEnv === "development" ||
-      frontendUrl.includes("localhost") ||
-      apiUrl.includes("localhost");
+    const from = this.emailFrom();
 
-    if (isLocalEnv) {
+    if (this.isLocalEnv()) {
       const mockMessageId = `mock-local-${Date.now()}`;
       this.logger.log(
         `[payment-recovery-email-mock] from="${from}" to="${to}" subject="${subject}" messageId=${mockMessageId}`,
@@ -322,5 +349,90 @@ export class PaymentRecoveryEmailService {
       eligibilityStatus,
       eligibilityReason,
     };
+  }
+
+  /**
+   * Envio de teste: mesmo template e mesmo caminho de provider (sendViaResend)
+   * do envio real, mas com dados fictícios e para um destinatário digitado pelo
+   * admin. Não usa dados de cliente, não cria token nem registro de envio, e
+   * ignora as travas de email_enabled/dry_run/allowlist (que são reportadas em
+   * `realSendWouldBe` para diagnosticar o envio real).
+   */
+  async sendTest(input: {
+    to: string;
+    adminUserId: string;
+  }): Promise<SendPaymentRecoveryTestEmailResult> {
+    const to = input.to.trim().toLowerCase();
+    const emailEnabled = this.config.isEmailEnabled();
+    const dryRun = this.config.isDryRun();
+    const allowlist = this.config.emailAllowlist();
+    const toInAllowlist = allowlist.length === 0 || allowlist.includes(to);
+    const realSendWouldBe = !emailEnabled
+      ? "email_disabled"
+      : dryRun
+        ? "dry_run"
+        : !toInAllowlist
+          ? "allowlist_blocked"
+          : "sent";
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "https://earlycv.com.br";
+    // Token no mesmo formato do real, mas não persistido: o link abre a página
+    // genérica de recuperação em vez de retomar um pedido.
+    const recoveryLink = `${frontendUrl}/recovery/${randomBytes(32).toString("hex")}`;
+    const copy = buildPaymentRecoveryEmailCopy({
+      firstName: "Teste",
+      jobTitle: "Analista de Dados (exemplo)",
+      scoreBefore: 42,
+      scoreAfter: 78,
+      scoreDelta: 36,
+      recoveryLink,
+    });
+    const subject = `[TESTE] ${copy.subject}`;
+
+    const base = {
+      to,
+      subject,
+      mockedLocally: this.isLocalEnv(),
+      realSendWouldBe,
+      config: {
+        emailEnabled,
+        dryRun,
+        allowlistSize: allowlist.length,
+        toInAllowlist,
+        from: this.emailFrom(),
+        frontendUrl,
+      },
+    } as const;
+
+    this.logger.log(
+      `[payment-recovery-test-email] admin=${input.adminUserId} to=${to} realSendWouldBe=${realSendWouldBe}`,
+    );
+
+    try {
+      const providerMessageId = await this.sendViaResend(
+        to,
+        subject,
+        copy.text,
+        copy.html,
+      );
+      return {
+        ...base,
+        status: "sent",
+        providerMessageId,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "provider_error";
+      this.logger.warn(
+        `[payment-recovery-test-email] provider failure to=${to}: ${errorMessage}`,
+      );
+      return {
+        ...base,
+        status: "failed",
+        providerMessageId: null,
+        errorMessage,
+      };
+    }
   }
 }

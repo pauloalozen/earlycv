@@ -409,3 +409,89 @@ test("copy supports jobTitle fallback and score sentence variants without forbid
   assert.equal(a.html.includes("Retomar pagamento agora"), true);
   assert.equal(a.html.includes('<a href="https://x"'), true);
 });
+
+async function withProdEnv<T>(
+  fetchImpl: typeof fetch,
+  run: () => Promise<T>,
+): Promise<T> {
+  const original = {
+    NODE_ENV: process.env.NODE_ENV,
+    APP_ENV: process.env.APP_ENV,
+    FRONTEND_URL: process.env.FRONTEND_URL,
+    API_URL: process.env.API_URL,
+  };
+  const originalFetch = global.fetch;
+  process.env.NODE_ENV = "production";
+  process.env.APP_ENV = "production";
+  process.env.FRONTEND_URL = "https://earlycv.com.br";
+  process.env.API_URL = "https://api.earlycv.com.br";
+  global.fetch = fetchImpl;
+  try {
+    return await run();
+  } finally {
+    global.fetch = originalFetch;
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test("sendTest sends via provider to typed email with sample data, ignoring dry-run, without persisting", async () => {
+  let payload: Record<string, unknown> | null = null;
+  const { service, emails, tokens } = makeService({
+    dryRun: true,
+    allowlist: ["ops@example.com"],
+  });
+
+  const result = await withProdEnv(
+    (async (_url: string, init?: RequestInit) => {
+      payload = JSON.parse(String(init?.body ?? "{}"));
+      return { ok: true, json: async () => ({ id: "provider-test" }) };
+    }) as typeof fetch,
+    () => service.sendTest({ to: " Tester@Example.com ", adminUserId: "a1" }),
+  );
+
+  assert.equal(result.status, "sent");
+  assert.equal(result.mockedLocally, false);
+  assert.equal(result.providerMessageId, "provider-test");
+  assert.equal(result.realSendWouldBe, "dry_run");
+  assert.equal(result.config.toInAllowlist, false);
+  assert.deepEqual(payload?.to, ["tester@example.com"]);
+  assert.match(String(payload?.subject), /^\[TESTE\] /);
+  assert.equal(String(payload?.text).includes("Joao"), false);
+  assert.match(
+    String(payload?.text),
+    /https:\/\/earlycv\.com\.br\/recovery\/[a-f0-9]{64}/,
+  );
+  assert.equal(emails.length, 0);
+  assert.equal(tokens.length, 0);
+});
+
+test("sendTest reports provider failure message", async () => {
+  const { service } = makeService();
+  const result = await withProdEnv(
+    (async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({ message: "domain not verified" }),
+    })) as unknown as typeof fetch,
+    () => service.sendTest({ to: "tester@example.com", adminUserId: "a1" }),
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.errorMessage, "domain not verified");
+  assert.equal(result.realSendWouldBe, "sent");
+});
+
+test("sendTest reports email_disabled for real sends", async () => {
+  const { service } = makeService({ emailEnabled: false });
+  const result = await withProdEnv(
+    (async () => ({
+      ok: true,
+      json: async () => ({ id: "x" }),
+    })) as unknown as typeof fetch,
+    () => service.sendTest({ to: "tester@example.com", adminUserId: "a1" }),
+  );
+  assert.equal(result.status, "sent");
+  assert.equal(result.realSendWouldBe, "email_disabled");
+});
