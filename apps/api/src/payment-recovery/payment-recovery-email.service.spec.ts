@@ -408,6 +408,22 @@ test("copy supports jobTitle fallback and score sentence variants without forbid
   assert.equal(a.text.toLowerCase().includes("company"), false);
   assert.equal(a.html.includes("Retomar pagamento agora"), true);
   assert.equal(a.html.includes('<a href="https://x"'), true);
+  assert.equal(a.html.includes("/favicon-192x192.png"), true);
+  assert.equal(a.html.includes(">early</span>"), true);
+});
+
+test("copy escapes user-provided values in the HTML", () => {
+  const copy = buildPaymentRecoveryEmailCopy({
+    firstName: "<b>Ana</b>",
+    jobTitle: 'Dev <script>alert("x")</script>',
+    scoreBefore: null,
+    scoreAfter: null,
+    scoreDelta: null,
+    recoveryLink: "https://x",
+  });
+  assert.equal(copy.html.includes("<script>"), false);
+  assert.equal(copy.html.includes("<b>Ana</b>"), false);
+  assert.equal(copy.html.includes("&lt;script&gt;"), true);
 });
 
 async function withProdEnv<T>(
