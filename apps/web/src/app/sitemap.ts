@@ -14,6 +14,13 @@ const PRIMARY_PAGES_LAST_MODIFIED = new Date("2026-05-02");
 const LEGAL_PAGES_LAST_MODIFIED = new Date("2026-04-14");
 const MOCK_INTERVIEW_PAGE_LAST_MODIFIED = new Date("2026-10-01");
 
+// Gerado a cada leitura (as chamadas à API seguem em cache de 5 min). Como
+// ISR, o sitemap ficava congelado no que a API devolveu durante o build na
+// Vercel — a revalidação de 5 min não acontecia em produção, então vagas
+// novas e landings só entravam no próximo deploy (e um build que rodasse
+// antes do deploy da API saía sem as landings).
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [jobs, landingIndex] = await Promise.all([
     getSitemapJobs(),
