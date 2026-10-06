@@ -31,7 +31,7 @@ export async function generateMetadata({
   const url = getAbsoluteUrl(`/radar/empresa/${companySlug}`);
 
   return {
-    title: `Vagas na ${companyName} | EarlyCV`,
+    title: `Vagas na ${companyName}`,
     description: `Veja as vagas abertas na ${companyName} e analise seu CV gratuitamente.`,
     alternates: { canonical: url },
   };

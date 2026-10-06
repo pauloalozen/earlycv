@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AdminAffiliatesModule } from "./admin-affiliates/admin-affiliates.module";
+import { AdminEmailsModule } from "./admin-emails/admin-emails.module";
 import { AdminMonitorModule } from "./admin-monitor/admin-monitor.module";
 import { AdminPendingModule } from "./admin-pending/admin-pending.module";
 import { AdminProductUpdatesModule } from "./admin-product-updates/admin-product-updates.module";
@@ -20,6 +21,7 @@ import { CvBenchmarkAdminModule } from "./cv-benchmark-admin/cv-benchmark-admin.
 import { CvProcessingModule } from "./cv-processing/cv-processing.module";
 import { CvUnlocksModule } from "./cv-unlocks/cv-unlocks.module";
 import { DatabaseModule } from "./database/database.module";
+import { EmailDispatchModule } from "./email-dispatch/email-dispatch.module";
 import { Ga4Module } from "./ga4/ga4.module";
 import { HealthModule } from "./health/health.module";
 import { InfraModule } from "./infra/infra.module";
@@ -28,6 +30,7 @@ import { JobCurationModule } from "./job-curation/job-curation.module";
 import { JobSourcesModule } from "./job-sources/job-sources.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { MasterCvCanonicalExtractionModule } from "./master-cv-canonical-extraction/master-cv-canonical-extraction.module";
+import { MockInterviewsModule } from "./mock-interviews/mock-interviews.module";
 import { MonitorModule } from "./monitor/monitor.module";
 import { PaymentRecoveryModule } from "./payment-recovery/payment-recovery.module";
 import { PaymentsModule } from "./payments/payments.module";
@@ -59,7 +62,10 @@ import { SuperadminStaffModule } from "./superadmin-staff/superadmin-staff.modul
     AdminUsersModule,
     AdminAffiliatesModule,
     AdminMonitorModule,
+    AdminEmailsModule,
     ProductUpdatesModule,
+    EmailDispatchModule,
+    MockInterviewsModule,
     AdminProductUpdatesModule,
     AdminProfilesModule,
     AdminResumesModule,

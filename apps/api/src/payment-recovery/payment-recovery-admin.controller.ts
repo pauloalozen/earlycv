@@ -21,6 +21,7 @@ import { RolesGuard } from "../common/roles.guard";
 import { IgnorePaymentRecoveryDto } from "./dto/ignore-payment-recovery.dto";
 import { ListPaymentRecoveryDto } from "./dto/list-payment-recovery.dto";
 import { SendPaymentRecoveryEmailDto } from "./dto/send-payment-recovery-email.dto";
+import { SendPaymentRecoveryTestEmailDto } from "./dto/send-payment-recovery-test-email.dto";
 import { PaymentRecoveryConfigService } from "./payment-recovery.config";
 import { PaymentRecoveryAdminEventsService } from "./payment-recovery-admin-events.service";
 import { PaymentRecoveryEligibilityService } from "./payment-recovery-eligibility.service";
@@ -120,6 +121,24 @@ export class PaymentRecoveryAdminController {
     await this.ignoreService.unignore({ purchaseId });
     this.events.unignored({ adminUserId: adminUser.id, purchaseId });
     return { ok: true };
+  }
+
+  @Post("test-email")
+  async sendTestEmail(
+    @AuthenticatedUser() adminUser: AuthenticatedRequestUser,
+    @Body(
+      new ValidationPipe({
+        ...paymentRecoveryValidationOptions,
+        expectedType: SendPaymentRecoveryTestEmailDto,
+      }),
+    )
+    body: SendPaymentRecoveryTestEmailDto,
+  ) {
+    this.assertAdminFeatureEnabled();
+    return this.emailService.sendTest({
+      to: body.email,
+      adminUserId: adminUser.id,
+    });
   }
 
   @Post(":purchaseId/send-email")

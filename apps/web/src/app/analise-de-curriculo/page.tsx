@@ -28,7 +28,7 @@ import { LandingScrollAnimations } from "../_landing-scroll-animations";
 const url = getAbsoluteUrl("/analise-de-curriculo");
 
 export const metadata: Metadata = {
-  title: "Análise de Currículo com Score ATS Grátis | EarlyCV",
+  title: "Análise de Currículo com Score ATS Grátis",
   description:
     "Descubra por que seu currículo está sendo eliminado antes de alguém ler. Receba um score ATS de 0 a 100, com keywords, lacunas e sugestões de ajuste — grátis.",
   alternates: { canonical: url },

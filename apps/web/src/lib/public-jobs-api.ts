@@ -26,6 +26,12 @@ export type ExistingApplication = {
   bestScore: number | null;
 } | null;
 
+// Espelha ClosedPublicJobView (apps/api/src/jobs/public-job-view.ts): vaga
+// que saiu do radar, com o conteúdo da vaga pública mas sem link de origem.
+export type ClosedPublicJob = Omit<PublicJob, "sourceJobUrl" | "status"> & {
+  status: "closed";
+};
+
 export type PublicJob = {
   canonicalKey: string;
   city: string | null;

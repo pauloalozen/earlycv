@@ -1,5 +1,7 @@
 import type { Logger } from "@nestjs/common";
-
+import type { EmailSuppressionService } from "../email/email-suppression.service";
+import type { SesEventPayload } from "../email/ses-event.util";
+import type { EmailDispatchWebhookService } from "../email-dispatch/email-dispatch-webhook.service";
 import type { ProductUpdateWebhookService } from "../product-updates/product-update-webhook.service";
 import type { MonitorDigestWebhookService } from "./monitor-digest-webhook.service";
 
@@ -16,7 +18,16 @@ export type SesWebhookDeps = {
     "processSesEvent" | "processSubscriptionEvent"
   >;
   webhookService: Pick<MonitorDigestWebhookService, "processSesEvent">;
-  logger: Pick<Logger, "log">;
+  // E-mails de relacionamento (correlationType EMAIL_DISPATCH + tópico de
+  // relacionamento do evento Subscription). Opcionais no tipo só para não
+  // quebrar chamadores/testes antigos; o controller sempre injeta.
+  emailDispatchWebhookService?: Pick<
+    EmailDispatchWebhookService,
+    "processSesEvent" | "processSubscriptionEvent"
+  >;
+  // Supressão compartilhada (bounce DURO/complaint de QUALQUER categoria).
+  suppressionService?: Pick<EmailSuppressionService, "recordFromSesEvent">;
+  logger: Pick<Logger, "log"> & Partial<Pick<Logger, "error">>;
 };
 
 export async function dispatchSesEvent(
@@ -43,7 +54,44 @@ export async function dispatchSesEvent(
         `product update subscription webhook not processed: ${result.reason}`,
       );
     }
+    // Mesma contact list, tópicos distintos: cada handler reage só à
+    // mudança do SEU tópico (ver ses-subscription.util.ts) — descadastrar
+    // de comunicados nunca descadastra de relacionamento, nem o inverso.
+    if (deps.emailDispatchWebhookService) {
+      const dispatchResult =
+        await deps.emailDispatchWebhookService.processSubscriptionEvent(
+          messageId,
+          sesEvent as Parameters<
+            typeof deps.emailDispatchWebhookService.processSubscriptionEvent
+          >[1],
+        );
+      if (!dispatchResult.processed) {
+        deps.logger.log(
+          `relationship subscription webhook not processed: ${dispatchResult.reason}`,
+        );
+      }
+    }
     return { ok: true };
+  }
+
+  // Supressão compartilhada ANTES do roteamento por categoria: bounce duro
+  // e complaint valem para o ENDEREÇO, qualquer que seja o tipo de e-mail
+  // que os gerou. Falha aqui nunca derruba o roteamento existente (Monitor/
+  // Product Updates) — fica no log e o SES mantém sua própria suppression
+  // list de conta; a próxima entrega do SNS tenta de novo.
+  if (deps.suppressionService) {
+    try {
+      await deps.suppressionService.recordFromSesEvent(
+        sesEvent as SesEventPayload,
+        messageId,
+      );
+    } catch (error) {
+      deps.logger.error?.(
+        `shared email suppression failed (type=${eventType}): ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      );
+    }
   }
 
   const correlationType = (
@@ -60,6 +108,27 @@ export async function dispatchSesEvent(
     if (!result.processed) {
       deps.logger.log(
         `product update ses webhook not processed: ${result.reason} (type=${eventType})`,
+      );
+    }
+    return { ok: true };
+  }
+
+  if (correlationType === "EMAIL_DISPATCH") {
+    if (!deps.emailDispatchWebhookService) {
+      deps.logger.log(
+        `SES webhook ignored: EMAIL_DISPATCH sem handler configurado (type=${eventType})`,
+      );
+      return { ok: true };
+    }
+    const result = await deps.emailDispatchWebhookService.processSesEvent(
+      messageId,
+      sesEvent as Parameters<
+        typeof deps.emailDispatchWebhookService.processSesEvent
+      >[1],
+    );
+    if (!result.processed) {
+      deps.logger.log(
+        `email dispatch ses webhook not processed: ${result.reason} (type=${eventType})`,
       );
     }
     return { ok: true };

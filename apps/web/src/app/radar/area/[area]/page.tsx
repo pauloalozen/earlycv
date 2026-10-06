@@ -46,7 +46,7 @@ export async function generateMetadata({
   const url = getAbsoluteUrl(`/radar/area/${areaSlug}`);
 
   return {
-    title: `Vagas de ${label} no Brasil | EarlyCV`,
+    title: `Vagas de ${label} no Brasil`,
     description: `Encontre vagas de ${label} com score de compatibilidade. Analise seu CV gratuitamente.`,
     alternates: { canonical: url },
   };

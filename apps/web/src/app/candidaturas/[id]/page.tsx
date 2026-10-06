@@ -13,27 +13,40 @@ import {
 } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getJobApplication } from "@/lib/job-applications-api";
+import { canAccessMockInterview } from "@/lib/mock-interview-mode";
+import { formatMockInterviewPrice } from "@/lib/mock-interview-offer";
+import { fetchMockInterviewOffer } from "@/lib/mock-interview-offer.server";
+import { listMyMockInterviews } from "@/lib/mock-interviews-api";
+import { hasAvailableCredits } from "@/lib/plan-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import { DetailClient } from "./detail-client";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Candidatura | EarlyCV",
+  title: "Candidatura",
 };
 
 type Props = {
   params: Promise<{ id: string }>;
+  // ?acao=entrevista|feedback — vindo do quadro (kanban) de /candidaturas:
+  // abre direto o modal de agendar entrevista / feedback da recusa.
+  searchParams?: Promise<{ acao?: string }>;
 };
 
-export default async function CandidaturaDetailPage({ params }: Props) {
+export default async function CandidaturaDetailPage({
+  params,
+  searchParams,
+}: Props) {
   const user = await getCurrentAppUserFromCookies();
   const redirectPath = getRouteAccessRedirectPath("/candidaturas", user);
   if (redirectPath) redirect(redirectPath);
   if (!user) redirect(getDefaultAppRedirectPath(null));
 
   const { id } = await params;
+  const acao = searchParams ? (await searchParams).acao : undefined;
+  const initialAction =
+    acao === "entrevista" || acao === "feedback" ? acao : null;
 
   const [applicationResult, planResult] = await Promise.allSettled([
     getJobApplication(id),
@@ -121,10 +134,44 @@ export default async function CandidaturaDetailPage({ params }: Props) {
     })),
   };
 
+  // Sessão paga e ainda não realizada: a oferta vira "você já tem uma".
+  const activeMockInterview =
+    application.status === "INTERVIEW"
+      ? await listMyMockInterviews()
+          .then(
+            (items) =>
+              items.find(
+                (item) =>
+                  item.paymentStatus === "paid" &&
+                  (item.sessionStatus === "AWAITING_SCHEDULING" ||
+                    item.sessionStatus === "SCHEDULED"),
+              ) ?? null,
+          )
+          .catch(() => null)
+      : null;
+
+  const mockInterviewEnabled = canAccessMockInterview(user);
+  const mockInterviewOffer =
+    mockInterviewEnabled && application.status === "INTERVIEW"
+      ? await fetchMockInterviewOffer()
+      : null;
+
   return (
     <DetailClient
+      mockInterviewEnabled={mockInterviewEnabled}
+      mockInterviewPriceLabel={
+        mockInterviewOffer
+          ? formatMockInterviewPrice(mockInterviewOffer.amountInCents)
+          : null
+      }
+      activeMockInterview={
+        activeMockInterview
+          ? { id: activeMockInterview.id, code: activeMockInterview.code }
+          : null
+      }
       application={applicationWithScores}
       initialHasCredits={initialHasCredits}
+      initialAction={initialAction}
       header={
         <AppHeader
           userName={user.name}

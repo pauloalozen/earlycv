@@ -24,7 +24,7 @@ import { HistoryActionLinks } from "../dashboard/history-action-links";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Análises | EarlyCV",
+  title: "Análises",
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";

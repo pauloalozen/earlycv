@@ -5,6 +5,9 @@ import { PageShell } from "@/components/page-shell";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 import { getCvAdaptationContent } from "@/lib/cv-adaptation-api";
 import { extractDashboardAnalysisSignal } from "@/lib/dashboard-test-metrics";
+import { canAccessMockInterview } from "@/lib/mock-interview-mode";
+import { fetchMockInterviewOffer } from "@/lib/mock-interview-offer.server";
+import { MockInterviewAddonCard } from "./mock-interview-addon-card";
 import { PaidPlanCheckoutForm } from "./paid-plan-checkout-form";
 import { buildPlanCatalog } from "./plan-catalog";
 import { ScoreIndicator } from "./score-indicator";
@@ -13,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Planos | EarlyCV",
+  title: "Planos",
 };
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
@@ -48,6 +51,11 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
   ]);
 
   const isAuthenticated = Boolean(user);
+  // Compra avulsa da entrevista simulada: só com a venda aberta para este
+  // usuário (MOCK_INTERVIEW_MODE) e preço configurado na API.
+  const mockInterviewOffer = canAccessMockInterview(user)
+    ? await fetchMockInterviewOffer()
+    : null;
   const PLANS = buildPlanCatalog(process.env, { isAuthenticated });
   const error = params.error;
   const adaptationId =
@@ -556,6 +564,12 @@ export default async function PlanosPage({ searchParams }: PlanosPageProps) {
             1 crédito = Kit completo por vaga (CV + carta de apresentação +
             preparaçao entrevista).
           </p>
+
+          {mockInterviewOffer && (
+            <MockInterviewAddonCard
+              amountInCents={mockInterviewOffer.amountInCents}
+            />
+          )}
 
           {/* Trust row */}
           <div

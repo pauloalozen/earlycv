@@ -16,6 +16,7 @@ type GreenhouseJob = {
   absolute_url?: string | null;
   content?: string | null;
   departments?: Array<{ name?: string | null }> | null;
+  first_published?: string | null;
   id: number | string;
   location?: { name?: string | null } | null;
   title?: string | null;
@@ -263,7 +264,12 @@ export class GreenhouseAdapter implements IngestionSourceAdapter {
     const descriptionRaw = normalizeDescriptionHtml(job.content ?? "");
     const descriptionClean = stripHtml(descriptionRaw) || title;
     const workModel = inferWorkModel(locationText, title, descriptionClean);
-    const publishedAt = normalizeDate(job.updated_at);
+    // first_published é a data real de publicação. updated_at muda a cada
+    // edição da vaga no Greenhouse — empresa que mexe em tudo de uma vez
+    // (ex.: BTG, 273 vagas com o mesmo updated_at em 01/10/2026) fazia todas
+    // parecerem recém-publicadas e tomarem o topo do /radar. updated_at só
+    // como reserva pra board que não informe first_published.
+    const publishedAt = normalizeDate(job.first_published ?? job.updated_at);
 
     return {
       canonicalKey,

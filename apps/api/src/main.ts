@@ -7,6 +7,7 @@ import helmet from "helmet";
 
 import { requestContextMiddleware } from "./analysis-protection/request-context.middleware";
 import { AppModule } from "./app.module";
+import { startMallocTrim } from "./common/malloc-trim";
 import { startMemoryDiagnostics } from "./common/memory-diagnostics";
 import { loadAppEnv, loadLocalEnvFileIfPresent } from "./config/env.module";
 import { registerSnsWebhookTextBodyParser } from "./config/sns-text-body-parser";
@@ -65,6 +66,10 @@ async function bootstrap() {
 
   // Diagnostico temporario de memoria; no-op sem MEMORY_DIAGNOSTICS_ENABLED=true.
   startMemoryDiagnostics();
+
+  // Devolve ao SO, de hora em hora, a memoria que o glibc segura apos picos
+  // do engine do Prisma; desliga com MALLOC_TRIM_ENABLED=false.
+  void startMallocTrim();
 }
 
 void bootstrap();

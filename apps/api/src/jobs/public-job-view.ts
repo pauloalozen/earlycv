@@ -105,3 +105,24 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     workModel: job.workModel,
   };
 }
+
+// Vaga fora do radar (inactive/removed): mesmo conteúdo da vaga pública pra
+// página continuar legível, mas sem o link de origem (não há mais onde se
+// candidatar) e com status "closed".
+export type ClosedPublicJobView = Omit<
+  PublicJobView,
+  "sourceJobUrl" | "status"
+> & {
+  status: "closed";
+};
+
+export function toClosedPublicJobView(
+  job: PublicJobInput,
+): ClosedPublicJobView {
+  const {
+    sourceJobUrl: _sourceJobUrl,
+    status: _status,
+    ...view
+  } = toPublicJobView(job);
+  return { ...view, status: "closed" };
+}

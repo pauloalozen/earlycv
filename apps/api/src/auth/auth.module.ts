@@ -11,6 +11,7 @@ import { AnalysisObservabilityModule } from "../analysis-observability/analysis-
 import { EnvModule } from "../config/env.module";
 import { DatabaseModule } from "../database/database.module";
 import { EmailModule } from "../email/email.module";
+import { EmailDispatchModule } from "../email-dispatch/email-dispatch.module";
 import { CouponResolutionService } from "../plans/coupon-resolution.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
@@ -26,6 +27,7 @@ import { LocalStrategy } from "./strategies/local.strategy";
     DatabaseModule,
     AnalysisObservabilityModule,
     EmailModule,
+    EmailDispatchModule,
     PassportModule,
     JwtModule.register({}),
   ],

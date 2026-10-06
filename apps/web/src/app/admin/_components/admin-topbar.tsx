@@ -4,25 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { isEmailsRoute } from "@/lib/admin-emails-nav";
+
 const NAV_ITEMS = [
   { id: "visao-geral", label: "Visão geral", href: "/admin", exact: true },
   { id: "usuarios", label: "Usuários", href: "/admin/usuarios" },
   { id: "talentos", label: "Talentos", href: "/admin/talentos" },
   { id: "pagamentos", label: "Pagamentos", href: "/admin/pagamentos" },
   {
+    id: "simulados",
+    label: "Entrevistas simuladas",
+    href: "/admin/simulados",
+  },
+  {
     id: "campanhas-cupom",
     label: "Campanhas de Cupom",
     href: "/admin/campanhas-cupom",
   },
-  { id: "recuperacao", label: "Recuperação", href: "/admin/payment-recovery" },
   { id: "liberacoes", label: "Liberações", href: "/admin/liberacoes-cv" },
   { id: "ingestao", label: "Radar Oportunidades", href: "/admin/ingestion" },
-  { id: "alerta-vagas", label: "Alerta de Vagas", href: "/admin/alerta-vagas" },
-  {
-    id: "product-updates",
-    label: "Product Updates",
-    href: "/admin/product-updates",
-  },
+  // Aba única de e-mails: Alerta de Vagas, Product Updates, Recuperação de
+  // pagamento e os envios do dispatch (relacionamento/compras) vivem aqui,
+  // sob a sub-navegação (ver emails-subnav.tsx / admin-emails-nav.ts).
+  { id: "emails", label: "Emails", href: "/admin/emails", area: "emails" },
   {
     id: "curadoria-vagas",
     label: "Curadoria de Vagas",
@@ -54,7 +58,10 @@ export function AdminTopbar({
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  function isActive(href: string, exact?: boolean) {
+  function isActive(href: string, exact?: boolean, area?: string) {
+    // "Emails" fica ativo em QUALQUER tela da área (incluindo as rotas
+    // antigas de Alerta de Vagas, Product Updates e Recuperação).
+    if (area === "emails") return isEmailsRoute(pathname);
     if (exact) return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
   }
@@ -234,7 +241,11 @@ export function AdminTopbar({
         }}
       >
         {NAV_ITEMS.map((item) => {
-          const active = isActive(item.href, "exact" in item && item.exact);
+          const active = isActive(
+            item.href,
+            "exact" in item && item.exact,
+            "area" in item ? item.area : undefined,
+          );
           return (
             <Link
               key={item.id}

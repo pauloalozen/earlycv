@@ -578,11 +578,22 @@ export async function getJobSource(jobSourceId: string, token?: string) {
   return apiRequest<JobSourceRecord>(`/job-sources/${jobSourceId}`, token);
 }
 
-export async function listIngestionRuns(jobSourceId: string, token?: string) {
-  return apiRequest<IngestionRunSummary[]>(
-    `/job-sources/${jobSourceId}/runs`,
-    token,
-  );
+export async function listIngestionRuns(
+  jobSourceId: string,
+  filters: { page?: number; limit?: number } = {},
+  token?: string,
+) {
+  const params = new URLSearchParams();
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  const qs = params.toString();
+
+  return apiRequest<{
+    limit: number;
+    page: number;
+    runs: IngestionRunSummary[];
+    total: number;
+  }>(`/job-sources/${jobSourceId}/runs${qs ? `?${qs}` : ""}`, token);
 }
 
 export async function getIngestionRun(

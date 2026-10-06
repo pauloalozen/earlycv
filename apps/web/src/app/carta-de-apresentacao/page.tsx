@@ -24,7 +24,7 @@ import { LandingScrollAnimations } from "../_landing-scroll-animations";
 const url = getAbsoluteUrl("/carta-de-apresentacao");
 
 export const metadata: Metadata = {
-  title: "Carta de Apresentação Personalizada para Cada Vaga | EarlyCV",
+  title: "Carta de Apresentação Personalizada para Cada Vaga",
   description:
     "Não envie a mesma carta pra toda empresa. O EarlyCV gera uma carta de apresentação personalizada a partir do seu currículo e da vaga — sem inventar experiências.",
   alternates: { canonical: url },

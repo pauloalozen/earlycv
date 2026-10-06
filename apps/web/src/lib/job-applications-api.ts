@@ -118,6 +118,9 @@ export type JobApplicationDto = {
   // link /radar/{slug} (ver detail-client.tsx).
   jobId?: string | null;
   jobSlug?: string | null;
+  // Vaga do Radar que saiu do ar (fechada na fonte/retirada). Calculado pela
+  // API a partir do status atual da vaga; candidatura manual é sempre false.
+  jobClosed?: boolean;
   jobDescriptionText: string | null;
   status: JobApplicationStatus;
   origin: JobApplicationOrigin;
@@ -143,6 +146,8 @@ export type JobApplicationDto = {
   rejectionImprovements: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
+  // Ordem manual na etapa do quadro (kanban); null = nunca reordenada.
+  boardPosition?: number | null;
   createdAt: string;
   updatedAt: string;
   events: JobApplicationEvent[];
@@ -356,6 +361,16 @@ export async function createJobApplication(
     throw new Error(text);
   }
   return response.json() as Promise<JobApplicationDto>;
+}
+
+// Quadro (kanban): grava a ordem completa de uma etapa, do topo pra base.
+export async function reorderJobApplicationsBoard(
+  ids: string[],
+): Promise<void> {
+  const response = await apiRequest("POST", "/job-applications/board-order", {
+    ids,
+  });
+  if (!response.ok) throw new Error("Falha ao salvar a ordem");
 }
 
 export async function updateJobApplicationStatus(

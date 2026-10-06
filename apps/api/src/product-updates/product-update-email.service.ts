@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
@@ -7,6 +7,7 @@ import {
   type EmailSendOutcome,
   type EmailService,
 } from "../email/email.types";
+import { EmailSuppressionService } from "../email/email-suppression.service";
 import { ProductUpdateTemplateService } from "./product-update-template.service";
 
 export type SendTestResult =
@@ -38,6 +39,12 @@ export class ProductUpdateEmailService {
       AppEnv,
       "AWS_SES_CONTACT_LIST_NAME" | "AWS_SES_PRODUCT_UPDATE_TOPIC_NAME"
     >,
+    // Supressão por ENDEREÇO compartilhada (bounce duro/complaint de
+    // qualquer categoria). Só barra o envio real; o opt-out de tópico
+    // continua exclusivo do SES List Management de comunicados.
+    @Optional()
+    @Inject(EmailSuppressionService)
+    private readonly suppression?: Pick<EmailSuppressionService, "findByEmail">,
   ) {}
 
   async sendTest(
@@ -130,6 +137,13 @@ export class ProductUpdateEmailService {
       // Nunca deveria acontecer (start() sempre congela os dois antes de
       // criar qualquer delivery) — defesa em profundidade.
       return { sent: false, skippedReason: "missing_snapshot" };
+    }
+
+    // Entre a criação da delivery e o envio o endereço pode ter dado hard
+    // bounce/complaint em outra categoria. Nunca envia; o worker fecha a
+    // delivery como CANCELLED (não é falha reenviável).
+    if (await this.suppression?.findByEmail(delivery.recipientEmail)) {
+      return { sent: false, skippedReason: "email_suppressed" };
     }
 
     const contactListName = this.env.AWS_SES_CONTACT_LIST_NAME;

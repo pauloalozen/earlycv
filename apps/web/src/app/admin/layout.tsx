@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     follow: false,
     index: false,
   },
-  title: "Admin | EarlyCV",
+  title: "Admin",
 };
 
 type AdminLayoutProps = {

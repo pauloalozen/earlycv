@@ -163,3 +163,45 @@ describe("JobCard keyword badges", () => {
     expect(screen.getAllByText("1 de 2 no seu CV").length).toBeGreaterThan(0);
   });
 });
+
+describe("JobCard de vaga encerrada", () => {
+  beforeEach(() => {
+    mocks.useRouter.mockReturnValue({ push: vi.fn() });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("mostra o selo e esconde o botão de analisar", () => {
+    render(
+      <JobCard
+        job={buildJob({ status: "inactive" })}
+        adaptarHref="/adaptar"
+        showScore={false}
+        isLoggedIn
+      />,
+    );
+
+    expect(screen.getByText("Vaga encerrada")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /analis/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /analis/i })).toBeNull();
+  });
+
+  it("vaga ativa não tem selo", () => {
+    render(
+      <JobCard
+        job={buildJob()}
+        adaptarHref="/adaptar"
+        showScore={false}
+        isLoggedIn
+      />,
+    );
+
+    expect(screen.queryByText("Vaga encerrada")).toBeNull();
+    expect(
+      screen.queryAllByRole("button", { name: /analis/i }).length +
+        screen.queryAllByRole("link", { name: /analis/i }).length,
+    ).toBeGreaterThan(0);
+  });
+});

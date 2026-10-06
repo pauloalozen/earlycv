@@ -1,6 +1,10 @@
 import "server-only";
 
-import type { PublicJob, PublicJobsPage } from "./public-jobs-api";
+import type {
+  ClosedPublicJob,
+  PublicJob,
+  PublicJobsPage,
+} from "./public-jobs-api";
 import {
   jobCacheTag,
   PUBLIC_JOB_REVALIDATE_SECONDS,
@@ -88,6 +92,24 @@ export function fetchPublicJob(slug: string, mode: PublicFetchMode) {
 // Versão cacheada padrão do detalhe anônimo.
 export function fetchPublicJobCached(slug: string) {
   return fetchPublicJob(slug, { kind: "cached", tags: [jobCacheTag(slug)] });
+}
+
+// Vaga que saiu do radar (fechada/retirada) — só consultada quando o
+// detalhe ativo devolve 404, pra mostrar "vaga encerrada" em vez do 404
+// genérico. Mesma tag de cache do detalhe: inativação e reativação (webhook
+// de revalidação da API) invalidam as duas respostas juntas.
+export function fetchClosedPublicJob(slug: string, mode: PublicFetchMode) {
+  return publicGet<ClosedPublicJob>(
+    `/public/jobs/${encodeURIComponent(slug)}/closed`,
+    mode,
+  );
+}
+
+export function fetchClosedPublicJobCached(slug: string) {
+  return fetchClosedPublicJob(slug, {
+    kind: "cached",
+    tags: [jobCacheTag(slug)],
+  });
 }
 
 // Lista genérica (anônima) para "vagas similares". Nunca personalizada:

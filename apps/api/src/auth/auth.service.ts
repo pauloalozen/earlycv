@@ -5,7 +5,9 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  type OnModuleInit,
   Optional,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -17,6 +19,7 @@ import { BusinessFunnelEventService } from "../analysis-observability/business-f
 import { APP_ENV, type AppEnv } from "../config/env.module";
 import { DatabaseService } from "../database/database.service";
 import { EMAIL_SERVICE, type EmailService } from "../email/email.types";
+import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
 import { CouponResolutionService } from "../plans/coupon-resolution.service";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -89,7 +92,9 @@ type RefreshTokenPayload = {
 };
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(JwtService) private readonly jwtService: JwtService,
@@ -108,7 +113,37 @@ export class AuthService {
     @Optional()
     @Inject(CouponResolutionService)
     private readonly couponResolutionService?: CouponResolutionService,
+    // E-mails de relacionamento (boas-vindas/feedback) — só ganchos
+    // pós-verificação, ver enqueueRelationshipEmails. Opcional: ausente em
+    // construções antigas/testes, nunca obrigatório para autenticar.
+    @Optional()
+    @Inject(EmailDispatchService)
+    private readonly emailDispatch?: Pick<
+      EmailDispatchService,
+      "enqueueRelationshipForVerifiedUser"
+    >,
   ) {}
+
+  // Observável: sem a dependência, boas-vindas/feedback nunca seriam criadas
+  // e nada no fluxo de login/cadastro denunciaria isso.
+  onModuleInit() {
+    if (!this.emailDispatch) {
+      this.logger.warn(
+        "email_dispatch_dependency_missing consumer=AuthService effect=relationship_emails_disabled",
+      );
+    }
+  }
+
+  // Melhor esforço, NUNCA lança (o serviço também captura): relacionamento
+  // jamais pode quebrar verificação de e-mail nem login. Chamado só depois
+  // que o e-mail está de fato verificado.
+  private async enqueueRelationshipEmails(userId: string) {
+    try {
+      await this.emailDispatch?.enqueueRelationshipForVerifiedUser(userId);
+    } catch {
+      // Intencionalmente silencioso: já logado dentro do serviço.
+    }
+  }
 
   private async recordSignupCompleted(input: {
     userId: string;
@@ -332,6 +367,11 @@ export class AuthService {
       });
     });
 
+    // Só aqui (verificação concluída na transação acima). O retorno
+    // antecipado de usuário já verificado, no começo do método, nunca
+    // chega neste ponto — verificar duas vezes não enfileira de novo.
+    await this.enqueueRelationshipEmails(verifiedUser.id);
+
     return this.sanitizeUser(verifiedUser);
   }
 
@@ -470,6 +510,10 @@ export class AuthService {
     }
 
     if (socialResult.isNewUser) {
+      // Social: o e-mail já nasce verificado. Só usuário REALMENTE novo
+      // (sem conta prévia com este e-mail) — quem já tinha conta e só
+      // vinculou o provedor não ganha boas-vindas.
+      await this.enqueueRelationshipEmails(socialResult.userId);
       await this.recordSignupCompleted({
         userId: socialResult.userId,
         signupMethod: input.provider,

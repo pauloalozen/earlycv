@@ -479,6 +479,9 @@ model User {
   monitorDigests               MonitorDigest[]
   productUpdateDeliveries      ProductUpdateDelivery[]
   productEmailSubscription     ProductEmailSubscription?
+  relationshipEmailPreference  RelationshipEmailPreference?
+  emailDispatches              EmailDispatch[]
+  mockInterviewPurchases       MockInterviewPurchase[]
 
   // Pipeline de perfil canônico de CV (docs/specs/2026-09-04-cv-canonical-profile-pipeline-plan.md).
   // Fase 1: só schema aditivo, nenhum código lê/escreve nestas relações ainda.
@@ -2637,6 +2640,229 @@ model ProductEmailSubscription {
   updatedAt DateTime @updatedAt
 }
 
+// ---------------------------------------------------------------------------
+// E-mails de RELACIONAMENTO (boas-vindas e feedback do primeiro uso) — ver
+// docs/specs/2026-10-01-email-relationship-dispatch.md. Fila própria
+// (outbox) com dedupe, claim atômico e agendamento; Monitor e Product
+// Updates continuam com suas tabelas.
+// ---------------------------------------------------------------------------
+
+enum EmailDispatchKind {
+  WELCOME
+  FEEDBACK_FIRST_USE
+  // Segunda chamada: 14 dias depois do ENVIO do FEEDBACK_FIRST_USE (criada
+  // pelo worker quando o primeiro vira SENT), dedupe feedback2:{userId}.
+  FEEDBACK_SECOND_CALL
+  // Transacional (categoria BILLING, Resend). Criado DENTRO da transação de
+  // aprovação da compra (PlansService.applyApprovedPurchaseInsideTransaction),
+  // dedupe purchase:{purchaseId}. Sem descadastro por tópico.
+  PURCHASE_CONFIRMATION
+  // Oferta da Entrevista Simulada (relacionamento, SES). Criada quando uma
+  // candidatura vai para INTERVIEW, agendada para 2h depois; no envio é
+  // pulada se o usuário já comprou depois da oferta ou recebeu outra oferta
+  // nos últimos 7 dias. dedupe mockoffer:{jobApplicationId}.
+  MOCK_INTERVIEW_OFFER
+}
+
+enum EmailDispatchStatus {
+  PENDING
+  PROCESSING
+  SENT
+  // Erro CONFIRMADO do provider (ou esgotou tentativas). Retry controlado
+  // volta para PENDING com backoff até MAX_ATTEMPTS.
+  FAILED
+  // Timeout/erro de rede ambíguo, ou PROCESSING travada. NUNCA reenviado
+  // automaticamente (mesma política de ProductUpdateDelivery) — só resolve
+  // por evento conclusivo do webhook.
+  OUTCOME_UNKNOWN
+  // Terminal por decisão de negócio (elegibilidade, preferência, supressão,
+  // modo SHADOW/ALLOWLIST) — skippedReason explica.
+  SKIPPED
+  // Terminal por expiração (expiresAt) ou condição que nunca mais valerá.
+  CANCELLED
+}
+
+enum EmailDispatchEventType {
+  SENT
+  DELIVERED
+  BOUNCED
+  COMPLAINED
+  REJECTED
+}
+
+model EmailDispatch {
+  id String @id @default(cuid())
+
+  kind EmailDispatchKind
+
+  // SetNull (nunca Cascade): excluir o usuário não apaga o histórico de
+  // envio; recipientEmail é o snapshot que sobrevive. null também em envio
+  // de teste explícito (isTest) para um destinatário que nem é usuário.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  recipientEmail String
+
+  // Entidade de origem (PURCHASE_CONFIRMATION: id da PlanPurchase) e
+  // snapshot dos valores no instante da aprovação — o e-mail nunca relê
+  // valores que possam mudar depois (estorno, edição).
+  referenceId String?
+  payloadJson Json?
+
+  // Prevenção de duplicado: welcome:{userId}, feedback:{userId},
+  // test:{uuid}. Único no banco — enqueue concorrente nunca cria 2 linhas.
+  dedupeKey String @unique
+
+  status       EmailDispatchStatus @default(PENDING)
+  scheduledFor DateTime
+  // Prazo final: PENDING além disto vira CANCELLED — nada fica pendente
+  // para sempre (ver EmailDispatchWorker).
+  expiresAt    DateTime
+
+  attempts Int     @default(0)
+  isTest   Boolean @default(false)
+
+  // Variante do feedback resolvida NO MOMENTO DO ENVIO (VIEWED | NEUTRAL).
+  variant       String?
+  skippedReason String?
+  lastError     String?
+
+  provider          EmailProviderName @default(SES)
+  providerMessageId String?
+  sentAt            DateTime?
+  outcomeUnknownAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events EmailDispatchEvent[]
+
+  @@index([status, scheduledFor])
+  @@index([providerMessageId])
+  @@index([userId, kind])
+  @@index([referenceId])
+  @@index([status, outcomeUnknownAt])
+}
+
+// Entrega/bounce/complaint via webhook SES. Sem OPENED/CLICKED de
+// propósito: o Configuration Set de relacionamento não faz tracking.
+model EmailDispatchEvent {
+  id String @id @default(cuid())
+
+  dispatchId String?
+  dispatch   EmailDispatch? @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+
+  providerMessageId String?
+  providerEventId   String                 @unique
+  type              EmailDispatchEventType
+  metadataJson      Json?
+  occurredAt        DateTime
+
+  provider EmailProviderName @default(SES)
+
+  createdAt DateTime @default(now())
+
+  @@index([dispatchId])
+  @@index([providerMessageId])
+}
+
+// Opt-out do TÓPICO de relacionamento do SES List Management — separado de
+// ProductEmailSubscription (descadastrar de comunicados NÃO descadastra
+// de relacionamento). Ausência de linha = optado (default opt-in).
+model RelationshipEmailPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscribed     Boolean   @default(true)
+  unsubscribedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum EmailSuppressionReason {
+  HARD_BOUNCE
+  COMPLAINT
+}
+
+// Supressão COMPARTILHADA entre categorias, por endereço: só bounce
+// PERMANENTE e complaint (bounce transitório/indeterminado nunca entra).
+// Alimentada pelo dispatcher do webhook SES para qualquer categoria.
+model EmailSuppression {
+  id String @id @default(cuid())
+
+  email  String                 @unique
+  reason EmailSuppressionReason
+
+  bounceSubType   String?
+  sourceCategory  String?
+  providerEventId String?
+  occurredAt      DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Modo de ativação de cada tipo de e-mail do dispatch (EmailDispatchSettings).
+// OFF nada é criado nem enviado; SHADOW avalia e renderiza mas NUNCA envia;
+// ALLOWLIST só para a allowlist; LIVE para todo elegível a partir do cutoff.
+enum EmailDispatchMode {
+  OFF
+  SHADOW
+  ALLOWLIST
+  LIVE
+}
+
+// Configuração do dispatch gerenciada pelo admin (aba Emails → Configurações),
+// no padrão de MonitorDigestScheduleConfig/Product Updates — NÃO por variável
+// de ambiente. Singleton id="default". Ausência de linha = tudo OFF e sem
+// cutoff (falha fechada). Identidade/credenciais do SES continuam em env.
+model EmailDispatchSettings {
+  id String @id @default("default")
+
+  welcomeMode              EmailDispatchMode @default(OFF)
+  feedbackMode             EmailDispatchMode @default(OFF)
+  feedbackSecondCallMode   EmailDispatchMode @default(OFF)
+  purchaseConfirmationMode EmailDispatchMode @default(OFF)
+  mockInterviewOfferMode   EmailDispatchMode @default(OFF)
+
+  // Cutoff: só usuários/compras criados a partir daqui entram. null = nada
+  // roda, mesmo com modo ligado.
+  startAt DateTime?
+
+  // E-mails normalizados (minúsculos). allowlist vale no modo ALLOWLIST;
+  // extraBlocklist ACRESCENTA às contas fixas do código.
+  allowlist      String[] @default([])
+  extraBlocklist String[] @default([])
+
+  updatedByAdminId String?
+  updatedAt        DateTime @updatedAt
+}
+
+enum EmailTemplateKey {
+  WELCOME
+  FEEDBACK_FIRST_USE
+  FEEDBACK_SECOND_CALL
+  PURCHASE_PAID
+  PURCHASE_COUPON
+  MOCK_INTERVIEW_OFFER
+}
+
+// Assunto e corpo editáveis de cada e-mail do dispatch. Ausência de linha =
+// texto padrão do código. O rodapé de descadastro (relacionamento) é sempre
+// acrescentado pelo sistema e não é editável.
+model EmailDispatchTemplate {
+  key EmailTemplateKey @id
+
+  subject String
+  body    String
+
+  version          Int      @default(1)
+  updatedByAdminId String?
+  updatedAt        DateTime @updatedAt
+}
+
 model JobEnrichment {
   id    String @id @default(cuid())
   jobId String @unique
@@ -2717,6 +2943,10 @@ model JobApplication {
   rejectionImprovements String?
   archivedAt            DateTime?
   deletedAt             DateTime?
+  // Ordem manual dentro da etapa no quadro (kanban) de /candidaturas —
+  // definida ao arrastar. Null = nunca reordenada: vai depois das
+  // ordenadas, pela data de atualização (ordem padrão de antes do kanban).
+  boardPosition         Float?
   // Cópia de conveniência do language resolvido em CvAdaptation.language
   // (mantida em sync por upsertFromCvAdaptation) — fonte única de idioma
   // para todo o Kit de Candidatura.
@@ -3688,4 +3918,103 @@ model MonitorProjectionJob {
 
   @@index([userId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Entrevista Simulada (venda avulsa, sessão ao vivo de 45 min com o Paulo).
+// Separada de PlanPurchase de propósito: a aprovação de PlanPurchase
+// sobrescreve User.planType e concede créditos; aqui nada disso acontece.
+// 1 compra = 1 sessão. Webhook próprio (/api/mock-interviews/webhook/mercadopago).
+// ---------------------------------------------------------------------------
+
+enum MockInterviewSessionStatus {
+  AWAITING_SCHEDULING
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  REFUNDED
+}
+
+enum MockInterviewOrigin {
+  landing
+  application_offer
+  offer_email
+  showcase
+  other
+}
+
+model MockInterviewPurchase {
+  id     String @id @default(cuid())
+  userId String
+
+  // Pagamento — valor/moeda são o snapshot cobrado (conferidos no webhook).
+  amountInCents     Int
+  currency          String          @default("BRL")
+  paymentProvider   PaymentProvider @default(mercadopago)
+  paymentStatus     PaymentStatus   @default(pending)
+  paymentMethod     String?
+  paidAt            DateTime?
+  refundedAt        DateTime?
+  mpPaymentId       String?
+  mpPreferenceId    String?
+  mpMerchantOrderId String?
+
+  origin                 MockInterviewOrigin @default(landing)
+  originJobApplicationId String?
+
+  // Política aceita no checkout (reembolso até 24h antes, remarcação com
+  // 24h, no-show perde o valor).
+  policyVersion    String
+  policyAcceptedAt DateTime
+
+  // Operação (mantida pelo admin).
+  sessionStatus   MockInterviewSessionStatus @default(AWAITING_SCHEDULING)
+  scheduledAt     DateTime?
+  meetingUrl      String?
+  completedAt     DateTime?
+  reportSentAt    DateTime?
+  rescheduleCount Int                        @default(0)
+  adminNotes      String?
+
+  // E-mails transacionais disparados na aprovação (aviso de venda para o
+  // admin e confirmação para o comprador). Claim atômico pelo *ClaimedAt
+  // evita envio duplicado; *SentAt marca o sucesso.
+  adminNotifyClaimedAt DateTime?
+  adminNotifiedAt      DateTime?
+  adminNotifyError     String?
+  buyerNotifyClaimedAt DateTime?
+  buyerNotifiedAt      DateTime?
+  buyerNotifyError     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events MockInterviewEvent[]
+
+  @@index([userId, createdAt])
+  @@index([paymentStatus, createdAt])
+  @@index([sessionStatus, scheduledAt])
+  @@index([mpPaymentId])
+  @@index([originJobApplicationId])
+}
+
+// Histórico de tudo que muda numa compra: pagamento (webhook), agenda,
+// status da sessão e anotações (admin).
+model MockInterviewEvent {
+  id         String  @id @default(cuid())
+  purchaseId String
+  type       String
+  actor      String
+  fromValue  String?
+  toValue    String?
+  note       String?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  purchase MockInterviewPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId, createdAt])
 }

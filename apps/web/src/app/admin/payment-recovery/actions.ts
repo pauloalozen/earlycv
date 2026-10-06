@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 
 import {
   ignoreAdminPaymentRecoveryPurchase,
+  type PaymentRecoveryTestEmailResult,
   sendAdminPaymentRecoveryEmail,
+  sendAdminPaymentRecoveryTestEmail,
   unignoreAdminPaymentRecoveryPurchase,
 } from "@/lib/admin-payment-recovery-api";
 
@@ -40,7 +42,7 @@ function mapSendMessage(status?: string, reason?: string) {
   if (reason === "ignored") {
     return "Pedido ignorado. Desfaca o ignore para permitir envio.";
   }
-  if (status === "skipped" && reason === "ok") {
+  if (reason === "dry_run" || (status === "skipped" && reason === "ok")) {
     return "Ambiente em dry-run: envio simulado sem disparo real.";
   }
   if (status === "failed" && reason === "provider_failure") {
@@ -90,6 +92,28 @@ export async function unignoreRecoveryAction(
       message: "Pedido removido da lista de ignorados.",
     };
   } catch (error) {
+    return { kind: "error", message: parseErrorMessage(error) };
+  }
+}
+
+export type RecoveryTestEmailUiResult =
+  | { kind: "error"; message: string }
+  | { kind: "result"; result: PaymentRecoveryTestEmailResult };
+
+export async function sendRecoveryTestEmailAction(
+  email: string,
+): Promise<RecoveryTestEmailUiResult> {
+  const trimmed = email.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { kind: "error", message: "Informe um email valido." };
+  }
+  try {
+    const result = await sendAdminPaymentRecoveryTestEmail(trimmed);
+    return { kind: "result", result };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("API 400")) {
+      return { kind: "error", message: "Email invalido." };
+    }
     return { kind: "error", message: parseErrorMessage(error) };
   }
 }

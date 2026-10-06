@@ -1692,6 +1692,49 @@ test("getById exposes jobSlug when the candidatura is linked to a Radar Job, nul
   assert.equal(withoutJob.jobSlug, null);
 });
 
+test("getById flags jobClosed from the current Radar job status (never for manual applications)", async () => {
+  async function jobClosedFor(job: Record<string, unknown> | null) {
+    const db = makeDb({
+      jobApplication: {
+        ...(makeDb().jobApplication as Record<string, unknown>),
+        findFirst: async () => ({
+          id: "app-1",
+          userId: "user-1",
+          jobTitle: "Engenheiro",
+          companyName: "Empresa",
+          status: "APPLIED",
+          updatedAt: new Date("2026-05-02T12:00:00Z"),
+          cvAdaptations: [],
+          events: [],
+          interviewPrep: null,
+          job,
+        }),
+      },
+    });
+    const service = new JobApplicationsServiceCtor(db);
+    const response = (await service.getById("user-1", "app-1")) as Record<
+      string,
+      unknown
+    >;
+    return response.jobClosed;
+  }
+
+  const company = { logoUrl: null, websiteUrl: null };
+  assert.equal(
+    await jobClosedFor({ slug: "s", status: "inactive", company }),
+    true,
+  );
+  assert.equal(
+    await jobClosedFor({ slug: "s", status: "removed", company }),
+    true,
+  );
+  assert.equal(
+    await jobClosedFor({ slug: "s", status: "active", company }),
+    false,
+  );
+  assert.equal(await jobClosedFor(null), false);
+});
+
 test("getById keeps strict CV_READY precedence when scores tie", async () => {
   const db = makeDb({
     jobApplication: {

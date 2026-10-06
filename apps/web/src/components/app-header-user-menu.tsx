@@ -43,7 +43,7 @@ export function buildUserMenuItems({
     },
     {
       href: "/adaptar",
-      label: "Adaptar CV",
+      label: "Analisar CV",
       icon: (
         <>
           <path d="M12 20h9" />

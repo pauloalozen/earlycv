@@ -226,3 +226,173 @@ test("um correlationType desconhecido não processado gera log genérico 'SES we
   assert.match(logs[0] ?? "", /^SES webhook not processed:/);
   assert.doesNotMatch(logs[0] ?? "", /digest/i);
 });
+
+// ---- Relacionamento (EMAIL_DISPATCH) e supressão compartilhada ----------
+
+function createRelationshipDeps() {
+  const base = createDeps();
+  const dispatchCalls: Array<{ messageId: string; payload: unknown }> = [];
+  const dispatchSubscriptionCalls: Array<{ messageId: string }> = [];
+  const suppressionCalls: Array<{ payload: unknown; messageId: string }> = [];
+  const errors: string[] = [];
+
+  const deps = {
+    ...base.deps,
+    emailDispatchWebhookService: {
+      processSesEvent: async (messageId: string, payload: unknown) => {
+        dispatchCalls.push({ messageId, payload });
+        return { processed: true };
+      },
+      processSubscriptionEvent: async (messageId: string) => {
+        dispatchSubscriptionCalls.push({ messageId });
+        return { processed: true };
+      },
+    },
+    suppressionService: {
+      recordFromSesEvent: async (payload: unknown, messageId: string) => {
+        suppressionCalls.push({ payload, messageId });
+        return { recorded: 1 };
+      },
+    },
+    logger: {
+      log: () => {},
+      error: (message: string) => {
+        errors.push(message);
+      },
+    },
+    // biome-ignore lint/suspicious/noExplicitAny: fake mínimo pro teste
+  } as any;
+
+  return {
+    ...base,
+    deps,
+    dispatchCalls,
+    dispatchSubscriptionCalls,
+    suppressionCalls,
+    errors,
+  };
+}
+
+test("correlationType EMAIL_DISPATCH is routed ONLY to the relationship handler", async () => {
+  const { deps, dispatchCalls, productUpdateCalls, monitorCalls } =
+    createRelationshipDeps();
+
+  await dispatchSesEvent(
+    "sns-1",
+    sesNotification({
+      eventType: "Delivery",
+      tags: { correlationType: ["EMAIL_DISPATCH"], correlationId: ["disp_1"] },
+    }),
+    deps,
+  );
+
+  assert.equal(dispatchCalls.length, 1);
+  assert.equal(productUpdateCalls.length, 0);
+  assert.equal(monitorCalls.length, 0);
+});
+
+test("MONITOR_DIGEST and PRODUCT_UPDATE routing are unchanged by the relationship branch", async () => {
+  const { deps, dispatchCalls, productUpdateCalls, monitorCalls } =
+    createRelationshipDeps();
+
+  await dispatchSesEvent(
+    "sns-2",
+    sesNotification({
+      eventType: "Delivery",
+      tags: { correlationType: ["MONITOR_DIGEST"] },
+    }),
+    deps,
+  );
+  await dispatchSesEvent(
+    "sns-3",
+    sesNotification({
+      eventType: "Delivery",
+      tags: { correlationType: ["PRODUCT_UPDATE"] },
+    }),
+    deps,
+  );
+
+  assert.equal(monitorCalls.length, 1);
+  assert.equal(productUpdateCalls.length, 1);
+  assert.equal(dispatchCalls.length, 0);
+});
+
+test("shared suppression is fed for EVERY category before routing (JOB_ALERT bounce is visible to relationship)", async () => {
+  const { deps, suppressionCalls, monitorCalls } = createRelationshipDeps();
+
+  await dispatchSesEvent(
+    "sns-4",
+    {
+      ...sesNotification({
+        eventType: "Bounce",
+        tags: { correlationType: ["MONITOR_DIGEST"] },
+      }),
+      bounce: {
+        bounceType: "Permanent",
+        bouncedRecipients: [{ emailAddress: "user@example.com" }],
+      },
+    },
+    deps,
+  );
+
+  assert.equal(suppressionCalls.length, 1);
+  assert.equal(suppressionCalls[0].messageId, "sns-4");
+  assert.equal(monitorCalls.length, 1); // roteamento existente intacto
+});
+
+test("a failure in the shared suppression never breaks the existing routing", async () => {
+  const { deps, monitorCalls, errors } = createRelationshipDeps();
+  deps.suppressionService.recordFromSesEvent = async () => {
+    throw new Error("db down");
+  };
+
+  await dispatchSesEvent(
+    "sns-5",
+    sesNotification({
+      eventType: "Delivery",
+      tags: { correlationType: ["MONITOR_DIGEST"] },
+    }),
+    deps,
+  );
+
+  assert.equal(monitorCalls.length, 1);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /shared email suppression failed/);
+});
+
+test("Subscription events reach BOTH topic handlers (each filters its own topic)", async () => {
+  const { deps, dispatchSubscriptionCalls } = createRelationshipDeps();
+  let productSubscriptionCalls = 0;
+  deps.productUpdateWebhookService.processSubscriptionEvent = async () => {
+    productSubscriptionCalls += 1;
+    return { processed: true };
+  };
+
+  await dispatchSesEvent("sns-6", { eventType: "Subscription" }, deps);
+
+  assert.equal(productSubscriptionCalls, 1);
+  assert.equal(dispatchSubscriptionCalls.length, 1);
+});
+
+test("without the new deps (old callers) existing routing still works and EMAIL_DISPATCH is ignored safely", async () => {
+  const { deps, monitorCalls } = createDeps();
+
+  await dispatchSesEvent(
+    "sns-7",
+    sesNotification({
+      eventType: "Delivery",
+      tags: { correlationType: ["EMAIL_DISPATCH"] },
+    }),
+    deps,
+  );
+  await dispatchSesEvent(
+    "sns-8",
+    sesNotification({
+      eventType: "Delivery",
+      tags: { correlationType: ["MONITOR_DIGEST"] },
+    }),
+    deps,
+  );
+
+  assert.equal(monitorCalls.length, 1);
+});

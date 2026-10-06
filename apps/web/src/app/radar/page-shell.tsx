@@ -59,6 +59,8 @@ export function RadarPageShell({
         userName={userName}
         userRole={userRole}
         credits={credits}
+        guestCtaLabel="Entrar"
+        guestCtaHref="/entrar?tab=entrar&next=/radar"
       />
 
       <div

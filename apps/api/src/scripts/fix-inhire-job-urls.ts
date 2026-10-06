@@ -1,0 +1,126 @@
+// Correção pontual (não parte do pipeline normal) — completa o link de
+// origem das vagas InHire que foram gravadas sem o segmento de slug.
+//
+// O InHireAdapter montava `https://{tenant}.inhire.app/vagas/{jobId}`, mas a
+// página pública do InHire é uma SPA cuja rota é `/vagas/:jobId/:jobSlug`:
+// sem o slug ela não renderiza nada. Corrigido no adapter
+// (buildInHireJobUrl). Vagas ainda ativas se corrigem sozinhas no próximo
+// crawl (o upsert sempre reescreve sourceJobUrl, inclusive em observação
+// leve); este script cobre o que o crawl não alcança mais:
+//   - Job.sourceJobUrl de vagas que já saíram da listagem (inativas);
+//   - JobApplication.jobUrl, que é uma cópia de Job.sourceJobUrl feita na
+//     criação da candidatura e nunca é reatualizada. Só troca quando o valor
+//     ainda é exatamente o link quebrado — se o usuário editou, não toca.
+//
+// Por padrão roda em --dry-run. Passe --apply pra gravar de verdade.
+//
+//   npm run fix:inhire-job-urls --workspace @earlycv/api
+//   npm run fix:inhire-job-urls --workspace @earlycv/api -- --apply
+
+import { PrismaClient } from "@prisma/client";
+import { buildInHireJobSlug } from "../ingestion/adapters/inhire.adapter";
+
+const APPLY = process.argv.includes("--apply");
+const DRY_RUN = !APPLY;
+const PAGE_SIZE = 500;
+
+// Pelo proxy público do Railway a conexão cai de vez em quando no meio de
+// uma execução longa (P1017 "Server has closed the connection"). Cada vaga
+// é uma transação própria, então repetir a operação que falhou é seguro.
+const RETRYABLE_CODES = new Set(["P1001", "P1002", "P1017", "P2024"]);
+const MAX_ATTEMPTS = 5;
+
+async function withRetry<T>(label: string, run: () => Promise<T>) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (!code || !RETRYABLE_CODES.has(code) || attempt >= MAX_ATTEMPTS) {
+        throw error;
+      }
+      console.warn(
+        `[fix-inhire-job-urls] ${label}: ${code}, tentativa ${attempt}/${MAX_ATTEMPTS}, repetindo...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
+    }
+  }
+}
+
+// Link sem slug: termina logo depois do jobId.
+const BROKEN_URL = /^https:\/\/[a-z0-9-]+\.inhire\.app\/vagas\/[^/?#]+$/;
+
+async function main() {
+  const prisma = new PrismaClient();
+  let checkedJobs = 0;
+  let fixedJobs = 0;
+  let fixedApplications = 0;
+
+  console.log(
+    `[fix-inhire-job-urls] modo: ${DRY_RUN ? "DRY-RUN (nada será gravado)" : "APPLY (gravando de verdade)"}`,
+  );
+
+  try {
+    let cursor: string | undefined;
+
+    for (;;) {
+      const jobs = await withRetry("listagem de vagas", () =>
+        prisma.job.findMany({
+          where: { sourceJobUrl: { contains: ".inhire.app/vagas/" } },
+          select: { id: true, title: true, sourceJobUrl: true },
+          orderBy: { id: "asc" },
+          take: PAGE_SIZE,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        }),
+      );
+      if (jobs.length === 0) break;
+      cursor = jobs[jobs.length - 1]?.id;
+
+      for (const job of jobs) {
+        checkedJobs += 1;
+        if (!BROKEN_URL.test(job.sourceJobUrl)) continue;
+
+        const brokenUrl = job.sourceJobUrl;
+        const fixedUrl = `${brokenUrl}/${buildInHireJobSlug(job.title)}`;
+        const applications = await withRetry(`Job ${job.id}`, () =>
+          prisma.jobApplication.findMany({
+            where: { jobId: job.id, jobUrl: brokenUrl },
+            select: { id: true },
+          }),
+        );
+
+        fixedJobs += 1;
+        fixedApplications += applications.length;
+        console.log(
+          `[fix-inhire-job-urls] Job ${job.id}: ${brokenUrl} -> ${fixedUrl} (candidaturas: ${applications.length})`,
+        );
+
+        if (!DRY_RUN) {
+          await withRetry(`Job ${job.id}`, () =>
+            prisma.$transaction([
+              prisma.job.update({
+                where: { id: job.id },
+                data: { sourceJobUrl: fixedUrl },
+              }),
+              prisma.jobApplication.updateMany({
+                where: { jobId: job.id, jobUrl: brokenUrl },
+                data: { jobUrl: fixedUrl },
+              }),
+            ]),
+          );
+        }
+      }
+    }
+
+    console.log(
+      `[fix-inhire-job-urls] vagas InHire verificadas: ${checkedJobs}, vagas corrigidas: ${fixedJobs}, candidaturas corrigidas: ${fixedApplications}${DRY_RUN ? " (dry-run)" : ""}`,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

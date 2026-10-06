@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
+import { DatabaseModule } from "../database/database.module";
 import { DefaultEmailService } from "./email.service";
 import { EMAIL_SERVICE } from "./email.types";
 import { EmailConfigService } from "./email-config.service";
 import { EMAIL_DELIVERY_PORT } from "./email-delivery.port";
 import { EmailDeliveryProviderAdapter } from "./email-delivery-provider.adapter";
 import { DefaultEmailRoutingPolicy } from "./email-routing.policy";
+import { EmailSuppressionService } from "./email-suppression.service";
 import { FakeEmailDeliveryService } from "./fake-email-delivery.service";
 import { ResendEmailDeliveryService } from "./resend-email-delivery.service";
 import { SesEmailProviderService } from "./ses-email-provider.service";
@@ -24,6 +26,7 @@ const useResend =
 // EmailRoutingPolicy). Nenhuma categoria hoje usa SesEmailProviderService
 // além de JOB_ALERT, e só quando SES_EMAIL_ENABLED=true.
 @Module({
+  imports: [DatabaseModule],
   providers: [
     FakeEmailDeliveryService,
     ResendEmailDeliveryService,
@@ -34,6 +37,7 @@ const useResend =
         : FakeEmailDeliveryService,
     },
     EmailConfigService,
+    EmailSuppressionService,
     EmailDeliveryProviderAdapter,
     SesEmailProviderService,
     DefaultEmailRoutingPolicy,
@@ -45,6 +49,10 @@ const useResend =
     EMAIL_DELIVERY_PORT,
     EMAIL_SERVICE,
     EmailConfigService,
+    // Supressão por endereço compartilhada (bounce duro/complaint de
+    // qualquer categoria) — lida pelo dispatch de relacionamento e
+    // alimentada pelo dispatcher do webhook SES.
+    EmailSuppressionService,
     // Exportado pra MonitorDigestEmailService poder chamar o Resend
     // direto quando MonitorDigestScheduleConfig.sesMode=LEGACY_RESEND,
     // bypassando a fachada/roteamento por categoria de propósito (ver

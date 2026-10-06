@@ -249,10 +249,13 @@ export class IngestionService {
         failedCount > 0 ? "failed" : "completed";
 
       if (failedCount === 0) {
-        staleMarkedCount = await this.markSourceJobsAsInactiveWhenStale(
-          jobSource.id,
-          new Date(),
-        );
+        staleMarkedCount = await this.markSourceJobsAsInactiveWhenStale({
+          jobSourceId: jobSource.id,
+          now: new Date(),
+          observationCount: observations.length,
+          runId: run.id,
+          runStartedAt: run.startedAt,
+        });
       }
 
       const circuitState = evaluate403CircuitBreaker({
@@ -359,17 +362,40 @@ export class IngestionService {
     };
   }
 
-  async listRuns(jobSourceId: string) {
+  // Historico de runs de UMA fonte, paginado no banco e sem previewJson —
+  // antes trazia todas as runs da fonte com o blob de preview, o que fazia o
+  // engine do Prisma alocar centenas de MB nativos que o glibc nao devolvia.
+  // O preview so e lido no detalhe de um run (getRun).
+  async listRuns(
+    jobSourceId: string,
+    filters: { page?: number; limit?: number } = {},
+  ) {
     await this.assertJobSourceExists(jobSourceId);
 
-    const runs = await this.database.ingestionRun.findMany({
-      where: { jobSourceId },
-      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-    });
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit =
+      filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 25;
+    const where = { jobSourceId };
 
-    return runs.map((run: IngestionRun) =>
-      toRunSummary(run as IngestionRunRecord),
-    );
+    const [runs, total] = await Promise.all([
+      this.database.ingestionRun.findMany({
+        orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+        omit: { previewJson: true },
+        skip: (page - 1) * limit,
+        take: limit,
+        where,
+      }),
+      this.database.ingestionRun.count({ where }),
+    ]);
+
+    return {
+      limit,
+      page,
+      runs: runs.map((run) =>
+        toRunSummary({ ...run, previewJson: null } as IngestionRunRecord),
+      ),
+      total,
+    };
   }
 
   async listAllRuns(filters: {
@@ -1097,11 +1123,31 @@ export class IngestionService {
     }
   }
 
-  private async markSourceJobsAsInactiveWhenStale(
-    jobSourceId: string,
-    now: Date,
-  ) {
-    const cutoff = getStaleCutoff(now);
+  private async markSourceJobsAsInactiveWhenStale(input: {
+    jobSourceId: string;
+    now: Date;
+    observationCount: number;
+    runId: string;
+    runStartedAt: Date;
+  }) {
+    const { jobSourceId, now, observationCount, runId, runStartedAt } = input;
+    // Execução concluída imediatamente anterior a esta — regra de "2
+    // execuções seguidas sem ver a vaga" (ver stale-policy.ts).
+    const previousCompletedRun = await this.database.ingestionRun.findFirst({
+      where: {
+        id: { not: runId },
+        jobSourceId,
+        startedAt: { lt: runStartedAt },
+        status: "completed",
+      },
+      orderBy: { startedAt: "desc" },
+      select: { startedAt: true },
+    });
+    const cutoff = getStaleCutoff({
+      now,
+      observationCount,
+      previousCompletedRunStartedAt: previousCompletedRun?.startedAt ?? null,
+    });
     const where = {
       jobSourceId,
       status: "active" as const,

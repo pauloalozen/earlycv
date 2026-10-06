@@ -39,13 +39,13 @@ const SERIF =
   "var(--font-instrument-serif), 'Instrument Serif', Georgia, serif";
 const GRAIN = `url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`;
 
-const WORK_MODEL_LABELS: Record<string, string> = {
+export const WORK_MODEL_LABELS: Record<string, string> = {
   remote: "Remoto",
   hybrid: "Híbrido",
   "on-site": "Presencial",
 };
 
-const SENIORITY_LABELS: Record<string, string> = {
+export const SENIORITY_LABELS: Record<string, string> = {
   intern: "Estagiário",
   junior: "Júnior",
   junior_level: "Júnior",
@@ -81,7 +81,7 @@ const BREAKDOWN_ROWS: Array<{ key: keyof MatchBreakdown; label: string }> = [
 // cortariam palavra composta por engano (ex.: "SR-Pleno").
 const TITLE_SPLIT_SEPARATORS = ["—", " - ", " | "] as const;
 
-function splitJobTitleForDisplay(title: string): {
+export function splitJobTitleForDisplay(title: string): {
   lead: string;
   emphasis: string | null;
 } {
@@ -441,7 +441,7 @@ function sanitizeJobHtml(html: string) {
 
 type JobSection = { title: string; bodyHtml: string };
 
-function splitHtmlSections(descriptionHtml: string): JobSection[] {
+export function splitHtmlSections(descriptionHtml: string): JobSection[] {
   const safeHtml = sanitizeJobHtml(descriptionHtml ?? "");
   const sectionRegex = /<section>\s*<h2>(.*?)<\/h2>([\s\S]*?)<\/section>/gi;
   const sections: JobSection[] = [];
@@ -486,7 +486,7 @@ const EMPLOYMENT_TYPE_DISPLAY_OVERRIDES: Record<string, string> = {
   pj: "PJ",
 };
 
-function formatEmploymentType(value: string): string {
+export function formatEmploymentType(value: string): string {
   const override = EMPLOYMENT_TYPE_DISPLAY_OVERRIDES[value];
   if (override) return override;
   const spaced = value.replace(/_/g, " ");
@@ -519,7 +519,9 @@ export function buildJobMetadata(job: PublicJob | null): Metadata {
   const url = getAbsoluteUrl(`/radar/${job.slug}`);
 
   return {
-    title,
+    // absolute: o sufixo "| EarlyCV" já está em `title` (reaproveitado no
+    // openGraph/twitter, que não passam pelo template do layout raiz).
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
     openGraph: { type: "article", url, title, description },
@@ -527,7 +529,7 @@ export function buildJobMetadata(job: PublicJob | null): Metadata {
   };
 }
 
-function SimCard({
+export function SimCard({
   job,
   showMatchLock = false,
 }: {

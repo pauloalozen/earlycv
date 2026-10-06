@@ -6,12 +6,13 @@ import {
   type ReactNode,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { HiredCelebrationDialog } from "@/app/candidaturas/hired-celebration";
+import { ClosedJobBadge } from "@/app/radar/closed-job-badge";
 import { CompanyLogo, getCompanyDisplayName } from "@/app/radar/company-logo";
 import { CoverLetterPanel } from "@/components/cover-letter-panel";
 import {
@@ -51,6 +52,12 @@ import {
 } from "@/lib/job-description-validation";
 import { getJourneySessionInternalId } from "@/lib/journey-session";
 import { InterviewPrepDrawer } from "./interview-prep-drawer";
+import {
+  type ActiveMockInterview,
+  MockInterviewOfferCard,
+  MockInterviewOfferModal,
+  shouldShowMockInterviewOfferModal,
+} from "./mock-interview-offer";
 
 const USER_VISIBLE_STATUS_OPTIONS: Array<{
   value: JobApplicationStatus;
@@ -3134,73 +3141,6 @@ function DetalhesCard({
 
 // ─── Hired celebration modal ──────────────────────────────────────
 
-function HiredConfetti({ active }: { active: boolean }) {
-  const pieces = useMemo(() => {
-    const arr = [];
-    const rand = (seed: number) => {
-      const x = Math.sin(seed * 9999) * 10000;
-      return x - Math.floor(x);
-    };
-    for (let i = 0; i < 40; i++) {
-      const r1 = rand(i + 1);
-      const r2 = rand(i + 31);
-      const r3 = rand(i + 71);
-      const r4 = rand(i + 113);
-      arr.push({
-        i,
-        left: 8 + r1 * 84,
-        dx: (r2 - 0.5) * 260,
-        rot: 200 + r3 * 720,
-        dur: 1.8 + r4 * 1.4,
-        delay: r1 * 0.45,
-        size: 6 + r2 * 8,
-        color: (
-          ["#c6ff3a", "#0a0a0a", "#f5c518", "#fafaf6", "#c6ff3a"] as const
-        )[Math.floor(r3 * 5)],
-        shape: r4 > 0.5 ? "rect" : "circle",
-      });
-    }
-    return arr;
-  }, []);
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        overflow: "hidden",
-        zIndex: 0,
-        borderRadius: 20,
-      }}
-    >
-      {pieces.map((p) => (
-        <span
-          key={p.i}
-          style={{
-            position: "absolute",
-            left: `${p.left}%`,
-            top: "18%",
-            width: p.size,
-            height: p.shape === "circle" ? p.size : p.size * 0.5,
-            background: p.color,
-            borderRadius: p.shape === "circle" ? "50%" : 2,
-            opacity: 0,
-            // @ts-expect-error CSS custom properties
-            "--dx": `${p.dx}px`,
-            "--rot": `${p.rot}deg`,
-            animation: active
-              ? `cv-fall-loop 5s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s infinite`
-              : "none",
-            boxShadow:
-              p.color === "#c6ff3a" ? "0 0 8px rgba(198,255,58,0.4)" : "none",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 function HiredCelebrationModal({
   applicationId,
   companyName,
@@ -3234,255 +3174,54 @@ function HiredCelebrationModal({
     });
   }
 
-  const stagger = (delay: number): React.CSSProperties => ({
-    transform: mounted ? "translateY(0)" : "translateY(8px)",
-    opacity: mounted ? 1 : 0,
-    transition: `transform 0.5s cubic-bezier(0.22,1,0.36,1) ${delay}s, opacity 0.45s ease-out ${delay}s`,
-  });
-
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 70,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(10,10,10,0.45)",
-        padding: "0 16px",
-        opacity: mounted ? 1 : 0,
-        transition: "opacity 180ms ease",
-      }}
-    >
-      <style>{`
-        @keyframes cv-fall {
-          0%   { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 0; }
-          12%  { opacity: 1; }
-          100% { transform: translate3d(var(--dx,0),480px,0) rotate(var(--rot,540deg)); opacity: 0; }
-        }
-        @keyframes cv-fall-loop {
-          0%   { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 0; }
-          8%   { opacity: 1; }
-          48%  { transform: translate3d(var(--dx,0),520px,0) rotate(var(--rot,540deg)); opacity: 0; }
-          100% { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 0; }
-        }
-        @keyframes cv-pulse {
-          0%   { transform: scale(0.6); opacity: 0.55; }
-          70%  { transform: scale(1.55); opacity: 0; }
-          100% { transform: scale(1.55); opacity: 0; }
-        }
-      `}</style>
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          maxWidth: 500,
-          background: "#fafaf6",
-          borderRadius: 20,
-          overflow: "hidden",
-          boxShadow: "0 24px 72px rgba(10,10,10,0.22)",
-        }}
-      >
-        <HiredConfetti active={mounted} />
-
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            padding: "40px 28px 28px",
-            textAlign: "center",
-          }}
-        >
-          {/* Check circle */}
-          <div
+    <HiredCelebrationDialog
+      mounted={mounted}
+      companyName={companyName}
+      jobTitle={jobTitle}
+      actions={
+        <>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={pending}
             style={{
-              display: "flex",
-              justifyContent: "center",
-              marginBottom: 20,
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <span
-                style={{
-                  position: "absolute",
-                  width: 78,
-                  height: 78,
-                  borderRadius: "50%",
-                  background: "rgba(198,255,58,0.55)",
-                  animation: mounted
-                    ? "cv-pulse 1.6s ease-out 0.1s 1 forwards"
-                    : "none",
-                }}
-              />
-              <div
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: "50%",
-                  background: "#c6ff3a",
-                  border: "1px solid rgba(64,84,16,0.18)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow:
-                    "0 6px 20px -6px rgba(198,255,58,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
-                  position: "relative",
-                  zIndex: 2,
-                }}
-              >
-                <svg
-                  width="34"
-                  height="34"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden
-                >
-                  <title>Confirmação de contratação</title>
-                  <path
-                    d="M5 12.5l4.5 4.5L19 7"
-                    stroke="#0a0a0a"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{
-                      strokeDasharray: 30,
-                      strokeDashoffset: mounted ? 0 : 30,
-                      transition:
-                        "stroke-dashoffset 0.55s cubic-bezier(0.6,0,0.4,1) 0.2s",
-                    }}
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          {/* Label */}
-          <div
-            style={{
-              ...stagger(0.3),
-              fontFamily: MONO,
-              fontSize: 10,
-              letterSpacing: "0.14em",
-              color: "#8a8a85",
+              flex: 2,
+              padding: "12px 0",
+              borderRadius: 10,
+              border: "none",
+              background: pending ? "rgba(10,10,10,0.08)" : "#0a0a0a",
+              color: pending ? "#8a8a85" : "#fafaf6",
+              fontSize: 13.5,
               fontWeight: 500,
-              marginBottom: 14,
+              cursor: pending ? "not-allowed" : "pointer",
+              fontFamily: GEIST,
+              transition: "opacity 140ms ease",
             }}
           >
-            STATUS · CONTRATADO
-          </div>
-
-          {/* Title */}
-          <div style={stagger(0.38)}>
-            <h2
-              style={{
-                margin: "0 0 6px",
-                fontSize: 26,
-                fontWeight: 500,
-                letterSpacing: "-0.04em",
-                lineHeight: 1.1,
-                color: "#0a0a0a",
-                fontFamily: GEIST,
-              }}
-            >
-              Parabéns!
-            </h2>
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 400,
-                fontStyle: "italic",
-                fontFamily: "var(--font-instrument-serif), Georgia, serif",
-                color: "#0a0a0a",
-                marginBottom: 16,
-                lineHeight: 1.2,
-              }}
-            >
-              Você foi contratado.
-            </div>
-          </div>
-
-          {/* Body */}
-          <div style={{ ...stagger(0.46), marginBottom: 28 }}>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 14,
-                color: "#5a5a55",
-                lineHeight: 1.6,
-                fontFamily: GEIST,
-              }}
-            >
-              A vaga de {jobTitle} na {companyName} é sua. Atualizamos a jornada
-              e guardamos o CV que te levou até aqui.
-            </p>
-          </div>
-
-          {/* Buttons */}
-          <div style={{ ...stagger(0.52), display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={pending}
-              style={{
-                flex: 2,
-                padding: "12px 0",
-                borderRadius: 10,
-                border: "none",
-                background: pending ? "rgba(10,10,10,0.08)" : "#0a0a0a",
-                color: pending ? "#8a8a85" : "#fafaf6",
-                fontSize: 13.5,
-                fontWeight: 500,
-                cursor: pending ? "not-allowed" : "pointer",
-                fontFamily: GEIST,
-                transition: "opacity 140ms ease",
-              }}
-            >
-              {pending ? "Salvando…" : "Concluir candidatura"}
-            </button>
-            <button
-              type="button"
-              onClick={close}
-              style={{
-                flex: 1,
-                padding: "12px 0",
-                borderRadius: 10,
-                border: "1px solid rgba(10,10,10,0.12)",
-                background: "rgba(255,255,255,0.7)",
-                color: "#3a3a36",
-                fontSize: 13.5,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: GEIST,
-              }}
-            >
-              Cancelar
-            </button>
-          </div>
-
-          {/* Footer note */}
-          <div style={{ ...stagger(0.56), marginTop: 16 }}>
-            <span
-              style={{
-                fontSize: 11.5,
-                color: "#a8a6a0",
-                fontFamily: MONO,
-                letterSpacing: 0.2,
-              }}
-            >
-              ◎ CV enviado preservado · candidatura arquivada como contratada
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+            {pending ? "Salvando…" : "Concluir candidatura"}
+          </button>
+          <button
+            type="button"
+            onClick={close}
+            style={{
+              flex: 1,
+              padding: "12px 0",
+              borderRadius: 10,
+              border: "1px solid rgba(10,10,10,0.12)",
+              background: "rgba(255,255,255,0.7)",
+              color: "#3a3a36",
+              fontSize: 13.5,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: GEIST,
+            }}
+          >
+            Cancelar
+          </button>
+        </>
+      }
+    />
   );
 }
 
@@ -5164,6 +4903,15 @@ type Props = {
   application: JobApplicationDetailDto;
   header: ReactNode;
   initialHasCredits: boolean;
+  // Entrevista simulada já paga e ainda não realizada (oferta não aparece).
+  activeMockInterview?: ActiveMockInterview;
+  mockInterviewPriceLabel?: string | null;
+  // Flag MOCK_INTERVIEW_MODE: venda aberta para este usuário. Fechada, só
+  // aparece o card de uma sessão já paga (nunca a oferta).
+  mockInterviewEnabled?: boolean;
+  // Vindo do quadro (kanban) de /candidaturas depois de um arraste: abre o
+  // modal de agendar entrevista ou de feedback da recusa ao carregar.
+  initialAction?: "entrevista" | "feedback" | null;
 };
 
 const PREP_ELIGIBLE_STATUSES: JobApplicationStatus[] = [
@@ -5178,15 +4926,24 @@ export function DetailClient({
   application,
   header,
   initialHasCredits,
+  activeMockInterview = null,
+  mockInterviewPriceLabel = null,
+  mockInterviewEnabled = false,
+  initialAction = null,
 }: Props) {
   const router = useRouter();
+  const [showMockInterviewOffer, setShowMockInterviewOffer] = useState(false);
   const [showPrep, setShowPrep] = useState(false);
   const [showCoverLetter, setShowCoverLetter] = useState(false);
   const [showStatusEdit, setShowStatusEdit] = useState(false);
   const [showUrlModal, setShowUrlModal] = useState(false);
-  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [showInterviewModal, setShowInterviewModal] = useState(
+    initialAction === "entrevista",
+  );
   const [showHiredModal, setShowHiredModal] = useState(false);
-  const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [showRejectionModal, setShowRejectionModal] = useState(
+    initialAction === "feedback",
+  );
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -5584,6 +5341,25 @@ export function DetailClient({
                 >
                   {application.jobTitle}
                 </h1>
+                {/* Vaga do Radar fechada na fonte — só sinaliza; a
+                    candidatura nunca é movida automaticamente. */}
+                {application.jobClosed ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      margin: "0 0 11px",
+                    }}
+                  >
+                    <ClosedJobBadge variant="pill" />
+                    <span style={{ fontSize: 12.5, color: "#6a6560" }}>
+                      A vaga saiu da página de carreiras da empresa. Sua
+                      candidatura continua aqui — arquive se não for seguir.
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -5952,6 +5728,19 @@ export function DetailClient({
             </div>
           )}
 
+          {/* Oferta da entrevista simulada (só em "Entrevista") */}
+          {!isArchivedManually &&
+            isInterview &&
+            (mockInterviewEnabled || activeMockInterview) && (
+              <div style={{ marginBottom: 28 }}>
+                <MockInterviewOfferCard
+                  active={activeMockInterview}
+                  applicationId={application.id}
+                  priceLabel={mockInterviewPriceLabel}
+                />
+              </div>
+            )}
+
           {/* Main grid */}
           <div
             className="candidatura-grid"
@@ -6129,7 +5918,24 @@ export function DetailClient({
           <InterviewScheduleModal
             applicationId={application.id}
             onClose={() => setShowInterviewModal(false)}
-            onUpdated={handleUpdated}
+            onUpdated={() => {
+              handleUpdated();
+              if (
+                mockInterviewEnabled &&
+                !activeMockInterview &&
+                shouldShowMockInterviewOfferModal(application.id)
+              ) {
+                setShowMockInterviewOffer(true);
+              }
+            }}
+          />
+        )}
+
+        {showMockInterviewOffer && (
+          <MockInterviewOfferModal
+            applicationId={application.id}
+            onClose={() => setShowMockInterviewOffer(false)}
+            priceLabel={mockInterviewPriceLabel}
           />
         )}
 

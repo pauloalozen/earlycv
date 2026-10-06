@@ -9,9 +9,11 @@ import { listAdminPaymentRecoveryPending } from "@/lib/admin-payment-recovery-ap
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 import { RecoveryTableClient } from "./_components/recovery-table-client";
+import { RecoveryTestEmailClient } from "./_components/recovery-test-email-client";
 import {
   ignoreRecoveryAction,
   sendRecoveryEmailAction,
+  sendRecoveryTestEmailAction,
   unignoreRecoveryAction,
 } from "./actions";
 
@@ -122,6 +124,8 @@ export default async function AdminPaymentRecoveryPage({
           value={String(response.items.length)}
         />
       </AdminStatsRow>
+
+      <RecoveryTestEmailClient onSendTest={sendRecoveryTestEmailAction} />
 
       <form
         action="/admin/payment-recovery"

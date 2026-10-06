@@ -8,7 +8,7 @@ import type {
   SemanticFilterService,
 } from "../semantic-filter.service";
 import type { JobSourceContext } from "../types";
-import { InHireAdapter } from "./inhire.adapter";
+import { buildInHireJobSlug, InHireAdapter } from "./inhire.adapter";
 
 type MockResponse = {
   status?: number;
@@ -70,10 +70,7 @@ function createFetchMock(sequence: MockResponse[]) {
   const calls: Array<{ url: URL; headers: Record<string, string> }> = [];
   let index = 0;
 
-  globalThis.fetch = (async (
-    input: URL | RequestInfo,
-    init?: RequestInit,
-  ) => {
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const callUrl = new URL(
       typeof input === "string" ? input : input.toString(),
     );
@@ -154,6 +151,10 @@ test("InHireAdapter fetches the listing then the detail for a new job, sending X
       true,
     );
     assert.equal(observations[0]?.detailFetchSkipped, undefined);
+    assert.equal(
+      observations[0]?.sourceJobUrl,
+      "https://cielo.inhire.app/vagas/job-1/advogado-especialista-regulatorio",
+    );
     assert.equal(fetchMock.calls.length, 2);
     assert.equal(fetchMock.calls[0]?.headers["X-Tenant"], "cielo");
     assert.equal(fetchMock.calls[1]?.headers["X-Tenant"], "cielo");
@@ -199,6 +200,10 @@ test("InHireAdapter skips detail fetch for a fresh existing job", async () => {
 
     assert.equal(observations.length, 1);
     assert.equal(observations[0]?.detailFetchSkipped, true);
+    assert.equal(
+      observations[0]?.sourceJobUrl,
+      "https://cielo.inhire.app/vagas/job-1/vaga-existente",
+    );
     assert.equal(fetchMock.calls.length, 1);
   } finally {
     fetchMock.restore();
@@ -250,12 +255,82 @@ test("InHireAdapter fetches detail for a stale existing job", async () => {
   }
 });
 
+test("InHireAdapter keeps an existing listed job alive when its detail request fails", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        jobsPage: [
+          {
+            jobId: "job-1",
+            displayName: "Vaga Existente",
+            status: "published",
+          },
+        ],
+      },
+    },
+    { status: 500 },
+  ]);
+
+  try {
+    const adapter = new InHireAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://cielo.inhire.app"),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2024-01-01T10:00:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.detailFetchSkipped, true);
+    assert.equal(observations[0]?.canonicalKey, "inhire:cielo:job-1");
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("InHireAdapter skips a new job when its detail request fails", async () => {
+  const fetchMock = createFetchMock([
+    {
+      json: {
+        jobsPage: [
+          { jobId: "job-1", displayName: "Vaga Nova", status: "published" },
+        ],
+      },
+    },
+    { status: 500 },
+  ]);
+
+  try {
+    const adapter = new InHireAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://cielo.inhire.app"),
+      { getExistingJobByCanonicalKey: async () => null },
+    );
+
+    assert.equal(observations.length, 0);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("InHireAdapter discards a new job on noise_signal without a detail-fetch", async () => {
   const fetchMock = createFetchMock([
     {
       json: {
         jobsPage: [
-          { jobId: "job-1", displayName: "Enfermeiro Plantonista", status: "published" },
+          {
+            jobId: "job-1",
+            displayName: "Enfermeiro Plantonista",
+            status: "published",
+          },
         ],
       },
     },
@@ -272,7 +347,10 @@ test("InHireAdapter discards a new job on noise_signal without a detail-fetch", 
 
     const observations = await adapter.collect(
       createJobSourceContext("https://cielo.inhire.app"),
-      { getExistingJobByCanonicalKey: async () => null, ingestionRunId: "run-1" },
+      {
+        getExistingJobByCanonicalKey: async () => null,
+        ingestionRunId: "run-1",
+      },
     );
 
     assert.equal(observations.length, 0);
@@ -289,7 +367,11 @@ test("InHireAdapter does not evaluate semantic filter for existing (dedup) jobs"
     {
       json: {
         jobsPage: [
-          { jobId: "job-1", displayName: "Vaga Existente", status: "published" },
+          {
+            jobId: "job-1",
+            displayName: "Vaga Existente",
+            status: "published",
+          },
         ],
       },
     },
@@ -340,7 +422,9 @@ test("InHireAdapter filters out non-published jobs from the listing", async () =
 });
 
 test("InHireAdapter throws typed error when the listing responds 403", async () => {
-  const fetchMock = createFetchMock([{ status: 403, json: { message: "forbidden" } }]);
+  const fetchMock = createFetchMock([
+    { status: 403, json: { message: "forbidden" } },
+  ]);
 
   try {
     const adapter = new InHireAdapter(
@@ -363,7 +447,13 @@ test("InHireAdapter throws typed error when the listing responds 403", async () 
 
 test("InHireAdapter throws typed error when a detail request responds 403", async () => {
   const fetchMock = createFetchMock([
-    { json: { jobsPage: [{ jobId: "job-1", displayName: "Vaga", status: "published" }] } },
+    {
+      json: {
+        jobsPage: [
+          { jobId: "job-1", displayName: "Vaga", status: "published" },
+        ],
+      },
+    },
     { status: 403, json: { message: "forbidden" } },
   ]);
 
@@ -415,7 +505,21 @@ test("InHireAdapter throws an actionable error for an invalid sourceUrl", async 
   );
 
   await assert.rejects(
-    () => adapter.collect(createJobSourceContext("https://careers.example.com")),
+    () =>
+      adapter.collect(createJobSourceContext("https://careers.example.com")),
     /Invalid InHire sourceUrl/,
   );
+});
+
+test("buildInHireJobSlug reproduces the slug InHire generates for the job page", () => {
+  assert.equal(
+    buildInHireJobSlug("Gerente de Governança de TI - São Paulo/SP"),
+    "gerente-de-governanca-de-ti-sao-paulosp",
+  );
+  assert.equal(
+    buildInHireJobSlug("ANALISTA ACADEMICO - INDAIAL, SC."),
+    "analista-academico-indaial-sc",
+  );
+  assert.equal(buildInHireJobSlug("  "), "vaga");
+  assert.equal(buildInHireJobSlug(null), "vaga");
 });

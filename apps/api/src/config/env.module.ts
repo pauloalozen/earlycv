@@ -59,6 +59,20 @@ export type AppEnv = {
   // Nunca usado pelo Monitor (que não passa ListManagementOptions).
   AWS_SES_CONTACT_LIST_NAME?: string;
   AWS_SES_PRODUCT_UPDATE_TOPIC_NAME?: string;
+  // E-mails de RELACIONAMENTO (boas-vindas/feedback) — ver
+  // apps/api/src/email-dispatch/. Identidade e Configuration Set PRÓPRIOS
+  // (sem tracking de abertura/clique) e tópico próprio na MESMA contact
+  // list de AWS_SES_CONTACT_LIST_NAME — descadastro de comunicados não
+  // descadastra relacionamento. Todos opcionais: o worker só envia quando
+  // tudo estiver completo (EmailDispatchConfigService.checkSendReadiness).
+  AWS_SES_RELATIONSHIP_FROM_EMAIL?: string;
+  AWS_SES_RELATIONSHIP_FROM_NAME?: string;
+  AWS_SES_RELATIONSHIP_REPLY_TO?: string;
+  AWS_SES_RELATIONSHIP_CONFIGURATION_SET?: string;
+  AWS_SES_RELATIONSHIP_TOPIC_NAME?: string;
+  // Modos de ativação, cutoff, allowlist e bloqueios do dispatch NÃO são
+  // variáveis de ambiente: ficam no banco (EmailDispatchSettings) e são
+  // editados em /admin/emails/configuracoes.
   // Gate mestre do domínio Product Updates — nasce false: nenhum deploy,
   // migration ou criação de rascunho pode disparar envio de teste/real
   // enquanto esta flag não for ligada manualmente (ver
@@ -141,6 +155,11 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     },
     AWS_SES_CONTACT_LIST_NAME: { optional: true },
     AWS_SES_PRODUCT_UPDATE_TOPIC_NAME: { optional: true },
+    AWS_SES_RELATIONSHIP_FROM_EMAIL: { optional: true },
+    AWS_SES_RELATIONSHIP_FROM_NAME: { optional: true },
+    AWS_SES_RELATIONSHIP_REPLY_TO: { optional: true },
+    AWS_SES_RELATIONSHIP_CONFIGURATION_SET: { optional: true },
+    AWS_SES_RELATIONSHIP_TOPIC_NAME: { optional: true },
     PRODUCT_UPDATES_ENABLED: {
       default: "false",
       parse: (value: string) => envToBoolean(value),
@@ -205,8 +224,23 @@ export async function loadAppEnv(source?: EnvSource): Promise<AppEnv> {
     AWS_SES_PRODUCT_UPDATE_TOPIC_NAME: env.AWS_SES_PRODUCT_UPDATE_TOPIC_NAME as
       | string
       | undefined,
+    AWS_SES_RELATIONSHIP_FROM_EMAIL: env.AWS_SES_RELATIONSHIP_FROM_EMAIL as
+      | string
+      | undefined,
+    AWS_SES_RELATIONSHIP_FROM_NAME: env.AWS_SES_RELATIONSHIP_FROM_NAME as
+      | string
+      | undefined,
+    AWS_SES_RELATIONSHIP_REPLY_TO: env.AWS_SES_RELATIONSHIP_REPLY_TO as
+      | string
+      | undefined,
+    AWS_SES_RELATIONSHIP_CONFIGURATION_SET:
+      env.AWS_SES_RELATIONSHIP_CONFIGURATION_SET as string | undefined,
+    AWS_SES_RELATIONSHIP_TOPIC_NAME: env.AWS_SES_RELATIONSHIP_TOPIC_NAME as
+      | string
+      | undefined,
     PRODUCT_UPDATES_ENABLED: env.PRODUCT_UPDATES_ENABLED,
-    PRODUCT_UPDATE_SEND_RATE_PER_SECOND: env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND,
+    PRODUCT_UPDATE_SEND_RATE_PER_SECOND:
+      env.PRODUCT_UPDATE_SEND_RATE_PER_SECOND,
   };
 }
 

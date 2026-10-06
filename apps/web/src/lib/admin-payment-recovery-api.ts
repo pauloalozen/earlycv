@@ -163,3 +163,31 @@ export async function sendAdminPaymentRecoveryEmail(
     },
   );
 }
+
+export type PaymentRecoveryTestEmailResult = {
+  status: "sent" | "failed";
+  to: string;
+  subject: string;
+  mockedLocally: boolean;
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  realSendWouldBe: "sent" | "email_disabled" | "dry_run" | "allowlist_blocked";
+  config: {
+    emailEnabled: boolean;
+    dryRun: boolean;
+    allowlistSize: number;
+    toInAllowlist: boolean;
+    from: string;
+    frontendUrl: string;
+  };
+};
+
+export async function sendAdminPaymentRecoveryTestEmail(email: string) {
+  return apiRequest<PaymentRecoveryTestEmailResult>(
+    "/admin/payment-recovery/test-email",
+    {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    },
+  );
+}

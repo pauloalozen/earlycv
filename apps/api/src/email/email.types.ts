@@ -15,6 +15,7 @@ export type EmailCategory =
   | "BILLING"
   | "JOB_ALERT"
   | "PRODUCT_ANNOUNCEMENT"
+  | "RELATIONSHIP" // boas-vindas e feedback do primeiro uso (email-dispatch/)
   | "MARKETING" // reservado — sem uso nesta entrega
   | "ADMIN_COMMUNICATION"; // reservado — sem uso nesta entrega
 

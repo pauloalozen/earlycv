@@ -175,10 +175,7 @@ test("PandapeAdapter paginates listing pages, stops when a page has fewer than P
     );
 
     assert.equal(observations.length, 1);
-    assert.equal(
-      observations[0]?.canonicalKey,
-      "pandape:tendaatacado:3611348",
-    );
+    assert.equal(observations[0]?.canonicalKey, "pandape:tendaatacado:3611348");
     assert.equal(observations[0]?.title, "Analista de Risco e Compliance Pl.");
     assert.equal(observations[0]?.city, "São Paulo");
     assert.equal(observations[0]?.state, "SP");
@@ -245,7 +242,11 @@ test("PandapeAdapter saves CrawlerDiscardedTitle for noise_signal jobs without a
   const fetchMock = createFetchMock([
     {
       text: listingPage([
-        { jobId: "1", title: "Enfermeiro Plantonista", location: "Sao Paulo - SP" },
+        {
+          jobId: "1",
+          title: "Enfermeiro Plantonista",
+          location: "Sao Paulo - SP",
+        },
       ]),
     },
   ]);
@@ -261,7 +262,10 @@ test("PandapeAdapter saves CrawlerDiscardedTitle for noise_signal jobs without a
 
     const observations = await adapter.collect(
       createJobSourceContext("https://tendaatacado.pandape.com.br"),
-      { getExistingJobByCanonicalKey: async () => null, ingestionRunId: "run-1" },
+      {
+        getExistingJobByCanonicalKey: async () => null,
+        ingestionRunId: "run-1",
+      },
     );
 
     assert.equal(observations.length, 0);
@@ -305,6 +309,37 @@ test("PandapeAdapter skips detail fetch for a fresh existing job", async () => {
   }
 });
 
+test("PandapeAdapter keeps an existing listed job alive when its detail request fails", async () => {
+  const fetchMock = createFetchMock([
+    {
+      text: listingPage([
+        { jobId: "1", title: "Analista de Dados", location: "Sao Paulo - SP" },
+      ]),
+    },
+    { status: 500, text: "" },
+  ]);
+
+  try {
+    const adapter = new PandapeAdapter(
+      createSemanticFilterMock().semanticFilter,
+      createDatabaseMock().database,
+    );
+    const observations = await adapter.collect(
+      createJobSourceContext("https://tendaatacado.pandape.com.br"),
+      {
+        getExistingJobByCanonicalKey: async () => ({
+          lastSeenAt: new Date("2024-01-01T10:00:00.000Z"),
+        }),
+      },
+    );
+
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.detailFetchSkipped, true);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
 test("PandapeAdapter throws typed error when the listing responds 403", async () => {
   const fetchMock = createFetchMock([{ status: 403, text: "" }]);
 
@@ -315,7 +350,10 @@ test("PandapeAdapter throws typed error when the listing responds 403", async ()
     );
 
     await assert.rejects(
-      () => adapter.collect(createJobSourceContext("https://tendaatacado.pandape.com.br")),
+      () =>
+        adapter.collect(
+          createJobSourceContext("https://tendaatacado.pandape.com.br"),
+        ),
       (error) => {
         assert.equal(error instanceof IngestionFetchError, true);
         assert.equal((error as IngestionFetchError).statusCode, 403);

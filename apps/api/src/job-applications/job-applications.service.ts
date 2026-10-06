@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   type JobApplicationOrigin,
@@ -15,6 +16,12 @@ import {
 
 import { BusinessFunnelEventService } from "../analysis-observability/business-funnel-event.service";
 import { DatabaseService } from "../database/database.service";
+import { EmailDispatchService } from "../email-dispatch/email-dispatch.service";
+import {
+  getMockInterviewAmountInCents,
+  getMockInterviewMode,
+  MOCK_INTERVIEW_PRODUCT,
+} from "../mock-interviews/mock-interview.config";
 import type { CreateJobApplicationDto } from "./dto/create-job-application.dto";
 
 type UpsertFromAdaptationInput = {
@@ -204,6 +211,14 @@ function deriveSummaryFromAdaptations(
   };
 }
 
+// Vaga do radar que saiu do ar (fechada na fonte ou retirada pela curadoria).
+// Calculado a cada leitura a partir do status atual da vaga — se ela voltar a
+// aparecer na fonte, o sinal some sozinho. Candidatura sem vaga do radar
+// (manual) nunca é marcada.
+function isRadarJobClosed(job: { status: string } | null | undefined) {
+  return !!job && job.status !== "active";
+}
+
 @Injectable()
 export class JobApplicationsService {
   private readonly logger = new Logger(JobApplicationsService.name);
@@ -212,7 +227,42 @@ export class JobApplicationsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(BusinessFunnelEventService)
     private readonly funnelEvents: BusinessFunnelEventService,
+    @Optional()
+    @Inject(EmailDispatchService)
+    private readonly emailDispatch?: Pick<
+      EmailDispatchService,
+      "enqueueMockInterviewOffer"
+    >,
   ) {}
+
+  // Candidatura entrou em INTERVIEW: agenda a oferta da entrevista simulada
+  // por e-mail (2h depois). Fire-and-forget: nunca atrasa nem falha a
+  // mudança de status (o enqueue não lança).
+  private offerMockInterview(application: {
+    id: string;
+    userId: string;
+    jobTitle: string;
+    companyName: string;
+  }) {
+    const amountInCents = getMockInterviewAmountInCents();
+    // Sem preço configurado ou com a flag fora de "on", a venda está fechada
+    // para o público: não oferece (staff nunca recebe oferta de relacionamento).
+    if (
+      !this.emailDispatch ||
+      amountInCents === null ||
+      getMockInterviewMode() !== "on"
+    ) {
+      return;
+    }
+    void this.emailDispatch.enqueueMockInterviewOffer({
+      userId: application.userId,
+      jobApplicationId: application.id,
+      jobTitle: application.jobTitle,
+      companyName: application.companyName,
+      amountInCents,
+      currency: MOCK_INTERVIEW_PRODUCT.currency,
+    });
+  }
 
   private buildBackendContext(userId: string, key: string) {
     return {
@@ -310,6 +360,7 @@ export class JobApplicationsService {
           job: {
             select: {
               company: { select: { logoUrl: true, websiteUrl: true } },
+              status: true,
             },
           },
         },
@@ -327,6 +378,7 @@ export class JobApplicationsService {
           ...rest,
           companyLogoUrl: job?.company.logoUrl ?? null,
           companyWebsiteUrl: job?.company.websiteUrl ?? null,
+          jobClosed: isRadarJobClosed(job),
           ...deriveSummaryFromAdaptations(
             item.cvAdaptations as AdaptationSummaryView[],
           ),
@@ -477,6 +529,7 @@ export class JobApplicationsService {
         job: {
           select: {
             slug: true,
+            status: true,
             company: { select: { logoUrl: true, websiteUrl: true } },
           },
         },
@@ -505,6 +558,7 @@ export class JobApplicationsService {
       companyLogoUrl: job?.company.logoUrl ?? null,
       companyWebsiteUrl: job?.company.websiteUrl ?? null,
       jobSlug: job?.slug ?? null,
+      jobClosed: isRadarJobClosed(job),
       ...deriveSummaryFromAdaptations(
         application.cvAdaptations as AdaptationSummaryView[],
       ),
@@ -762,6 +816,10 @@ export class JobApplicationsService {
       { sessionInternalId },
     );
 
+    if (previousStatus !== "INTERVIEW") {
+      this.offerMockInterview(result);
+    }
+
     return result;
   }
 
@@ -816,21 +874,14 @@ export class JobApplicationsService {
 
     const previousStatus = application.status;
 
-    const TERMINAL_STATUSES: JobApplicationStatus[] = [
-      "REJECTED",
-      "HIRED",
-      "WITHDRAWN",
-    ];
-
     const appliedAt =
       newStatus === "APPLIED" && !application.appliedAt
         ? new Date()
         : undefined;
 
-    const autoArchiveAt =
-      TERMINAL_STATUSES.includes(newStatus) && application.archivedAt === null
-        ? new Date()
-        : undefined;
+    // Desfecho (Contratado/Recusado/Desistência) NÃO arquiva sozinho:
+    // arquivar é sempre ação manual do usuário — a candidatura finalizada
+    // continua visível na etapa "Finalizado" do quadro.
 
     // When moving to APPLIED without an explicit CV selection, ensure we don't
     // keep a locked (not yet purchased) adaptation as the "sent CV". If the
@@ -861,7 +912,6 @@ export class JobApplicationsService {
           ...(resolvedCvAdaptationId !== undefined
             ? { currentCvAdaptationId: resolvedCvAdaptationId }
             : {}),
-          ...(autoArchiveAt !== undefined ? { archivedAt: autoArchiveAt } : {}),
         },
       });
 
@@ -885,6 +935,10 @@ export class JobApplicationsService {
       { from_status: previousStatus, to_status: newStatus },
       { sessionInternalId },
     );
+
+    if (newStatus === "INTERVIEW" && previousStatus !== "INTERVIEW") {
+      this.offerMockInterview(updated);
+    }
 
     if (newStatus === "APPLIED") {
       await this.recordEvent(
@@ -949,6 +1003,36 @@ export class JobApplicationsService {
     );
 
     return updated;
+  }
+
+  // Quadro (kanban) de /candidaturas: grava a ordem manual de uma etapa
+  // depois de um arraste. Recebe a etapa inteira (do topo pra base) e
+  // reescreve boardPosition = índice — simples e determinístico, e a etapa
+  // nunca passa de poucas dezenas de cards. Só toca candidaturas do próprio
+  // usuário; qualquer id alheio/excluído derruba a operação inteira (nada é
+  // gravado), em vez de reordenar parcialmente.
+  async reorderBoard(userId: string, ids: string[]) {
+    const owned = await this.database.jobApplication.findMany({
+      where: { id: { in: ids }, userId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (owned.length !== ids.length) {
+      throw new NotFoundException("job application not found");
+    }
+
+    // SQL direto de propósito: o update do Prisma bumparia updatedAt (campo
+    // @updatedAt), e reordenar no quadro não é atividade na candidatura —
+    // updatedAt ordena os destaques "recentes" (listHighlights).
+    await this.database.$transaction(
+      ids.map(
+        (id, index) =>
+          this.database
+            .$executeRaw`UPDATE "JobApplication" SET "boardPosition" = ${index} WHERE "id" = ${id} AND "userId" = ${userId}`,
+      ),
+    );
+
+    return { updated: ids.length };
   }
 
   async archive(userId: string, id: string, sessionInternalId?: string | null) {

@@ -25,8 +25,22 @@ export type SesEventPayload = {
   delivery?: { timestamp?: string };
   open?: { timestamp?: string };
   click?: { link?: string; timestamp?: string };
-  bounce?: { timestamp?: string };
-  complaint?: { timestamp?: string };
+  // bounceType: "Permanent" | "Transient" | "Undetermined" — só Permanent
+  // é bounce DURO (ver EmailSuppressionService); Transient (caixa cheia,
+  // servidor fora do ar) nunca vira supressão.
+  bounce?: {
+    timestamp?: string;
+    bounceType?: string;
+    bounceSubType?: string;
+    bouncedRecipients?: Array<{
+      emailAddress?: string;
+      diagnosticCode?: string;
+    }>;
+  };
+  complaint?: {
+    timestamp?: string;
+    complainedRecipients?: Array<{ emailAddress?: string }>;
+  };
   [key: string]: unknown;
 };
 

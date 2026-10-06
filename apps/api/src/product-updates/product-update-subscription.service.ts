@@ -1,7 +1,8 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { Prisma, ProductUpdateAudience } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { EmailSuppressionService } from "../email/email-suppression.service";
 
 export type EligibleRecipient = {
   userId: string;
@@ -39,6 +40,7 @@ const PAID_USER_FILTER: Prisma.UserWhereInput = {
 // bounce/complaint.
 function eligibilityWhere(
   audience: ProductUpdateAudience,
+  suppressedEmails: string[] = [],
 ): Prisma.UserWhereInput {
   const notOptedOut: Prisma.UserWhereInput = {
     OR: [
@@ -47,9 +49,17 @@ function eligibilityWhere(
     ],
   };
 
+  // Hard bounce/complaint registrados por QUALQUER categoria (inclusive o
+  // fluxo de relacionamento) — por endereço, independente do opt-out de
+  // tópico acima, que continua só de comunicados.
   const base: Prisma.UserWhereInput = {
     status: "active",
-    AND: [notOptedOut],
+    AND: [
+      notOptedOut,
+      ...(suppressedEmails.length > 0
+        ? [{ email: { notIn: suppressedEmails } }]
+        : []),
+    ],
   };
 
   if (audience === "INTERNAL_TEST") {
@@ -70,19 +80,31 @@ function eligibilityWhere(
 export class ProductUpdateSubscriptionService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Optional()
+    @Inject(EmailSuppressionService)
+    private readonly suppression?: Pick<
+      EmailSuppressionService,
+      "listSuppressedEmails"
+    >,
   ) {}
+
+  private async suppressedEmails(): Promise<string[]> {
+    return (await this.suppression?.listSuppressedEmails()) ?? [];
+  }
 
   async countEligibleRecipients(
     audience: ProductUpdateAudience,
   ): Promise<number> {
-    return this.database.user.count({ where: eligibilityWhere(audience) });
+    return this.database.user.count({
+      where: eligibilityWhere(audience, await this.suppressedEmails()),
+    });
   }
 
   async resolveEligibleRecipients(
     audience: ProductUpdateAudience,
   ): Promise<EligibleRecipient[]> {
     const users = await this.database.user.findMany({
-      where: eligibilityWhere(audience),
+      where: eligibilityWhere(audience, await this.suppressedEmails()),
       select: { id: true, email: true, name: true },
     });
     return users.map((user) => ({

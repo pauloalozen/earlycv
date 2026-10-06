@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Finalizar pagamento | EarlyCV",
+  title: "Finalizar pagamento",
 };
 
 export default async function PagamentoCheckoutPage({

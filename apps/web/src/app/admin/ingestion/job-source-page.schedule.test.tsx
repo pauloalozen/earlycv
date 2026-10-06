@@ -42,7 +42,12 @@ describe("JobSourceAdminPage schedule", () => {
       sourceType: "gupy",
       sourceUrl: "https://acme.gupy.io",
     });
-    listIngestionRunsMock.mockResolvedValue([]);
+    listIngestionRunsMock.mockResolvedValue({
+      limit: 25,
+      page: 1,
+      runs: [],
+      total: 0,
+    });
 
     const page = await JobSourceAdminPage({
       params: Promise.resolve({ jobSourceId: "src_1" }),
@@ -92,7 +97,12 @@ describe("JobSourceAdminPage schedule", () => {
       sourceType: "gupy",
       sourceUrl: "https://acme.gupy.io",
     });
-    listIngestionRunsMock.mockResolvedValue([]);
+    listIngestionRunsMock.mockResolvedValue({
+      limit: 25,
+      page: 1,
+      runs: [],
+      total: 0,
+    });
 
     const page = await JobSourceAdminPage({
       params: Promise.resolve({ jobSourceId: "src_1" }),
@@ -139,7 +149,12 @@ describe("JobSourceAdminPage schedule", () => {
       sourceType: "gupy",
       sourceUrl: "https://acme.gupy.io",
     });
-    listIngestionRunsMock.mockResolvedValue([]);
+    listIngestionRunsMock.mockResolvedValue({
+      limit: 25,
+      page: 1,
+      runs: [],
+      total: 0,
+    });
 
     const page = await JobSourceAdminPage({
       params: Promise.resolve({ jobSourceId: "src_1" }),
@@ -156,5 +171,64 @@ describe("JobSourceAdminPage schedule", () => {
     expect(scheduleCard).not.toBeNull();
     const cardScope = within(scheduleCard as HTMLElement);
     expect(cardScope.getByText("Desligado")).toBeInTheDocument();
+  });
+});
+
+describe("JobSourceAdminPage historico de runs", () => {
+  it("pede a pagina da URL e mostra navegacao entre paginas", async () => {
+    getBackofficeSessionTokenMock.mockResolvedValue("token-1");
+    getJobSourceMock.mockResolvedValue({
+      checkIntervalMinutes: 30,
+      company: { id: "cmp_1", name: "ACME", normalizedName: "acme" },
+      companyId: "cmp_1",
+      id: "src_1",
+      isActive: true,
+      lastCheckedAt: null,
+      lastErrorAt: null,
+      lastErrorMessage: null,
+      lastSuccessAt: null,
+      parserKey: "gupy",
+      scheduleCron: null,
+      scheduleEnabled: false,
+      scheduleTimezone: "America/Sao_Paulo",
+      sourceName: "ACME Careers",
+      sourceType: "gupy",
+      sourceUrl: "https://acme.gupy.io",
+    });
+    listIngestionRunsMock.mockResolvedValue({
+      limit: 25,
+      page: 2,
+      runs: [
+        {
+          failedCount: 0,
+          id: "run_1",
+          newCount: 3,
+          startedAt: "2026-10-01T10:00:00.000Z",
+          status: "completed",
+          updatedCount: 1,
+        },
+      ],
+      total: 60,
+    });
+
+    const page = await JobSourceAdminPage({
+      params: Promise.resolve({ jobSourceId: "src_1" }),
+      searchParams: Promise.resolve({ runsPage: "2" }),
+    });
+
+    render(page);
+
+    expect(listIngestionRunsMock).toHaveBeenLastCalledWith("src_1", {
+      page: 2,
+    });
+    expect(screen.getByText(/60 runs - pagina 2 de 3/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mais recentes" })).toHaveAttribute(
+      "href",
+      "/admin/ingestion/src_1?runsPage=1",
+    );
+    expect(screen.getByRole("link", { name: "Mais antigos" })).toHaveAttribute(
+      "href",
+      "/admin/ingestion/src_1?runsPage=3",
+    );
   });
 });

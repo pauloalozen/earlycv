@@ -30,7 +30,7 @@ import { SaveToast } from "./save-toast";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
-  title: "Meu CV Master | EarlyCV",
+  title: "Meu CV Master",
 };
 
 async function loadMyProfile(): Promise<UserProfileRecord | null> {

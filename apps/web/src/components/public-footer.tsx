@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { openAnalyticsConsentPreferences } from "@/lib/analytics-consent";
+import { isMockInterviewPublic } from "@/lib/mock-interview-mode";
 
 const GEIST = "var(--font-geist), -apple-system, system-ui, sans-serif";
 const MONO = "var(--font-geist-mono), monospace";
@@ -16,6 +17,9 @@ const footerColumns = [
       { href: "/adaptar-curriculo-para-vaga", label: "Adaptar currículo" },
       { href: "/curriculo-ats", label: "Currículo ATS" },
       { href: "/palavras-chave-curriculo", label: "Palavras-chave" },
+      ...(isMockInterviewPublic()
+        ? [{ href: "/simulacao-de-entrevista", label: "Entrevista simulada" }]
+        : []),
     ],
   },
   {
