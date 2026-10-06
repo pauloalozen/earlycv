@@ -136,13 +136,13 @@ describe("emails admin actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/admin/emails/templates");
 
     api.updateEmailTemplate.mockRejectedValueOnce(
-      new Error("O feedback precisa ter exatamente uma pergunta"),
+      new Error("Variável desconhecida: {{nmoe}}"),
     );
     expect(
       await saveEmailTemplateAction("FEEDBACK_FIRST_USE", "a", "b"),
     ).toEqual({
       ok: false,
-      message: "O feedback precisa ter exatamente uma pergunta",
+      message: "Variável desconhecida: {{nmoe}}",
     });
 
     api.resetEmailTemplate.mockResolvedValueOnce({});

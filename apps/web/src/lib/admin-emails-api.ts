@@ -118,6 +118,8 @@ export type EmailTemplateSendTestResult =
       sent: true;
       outcome: "SENT" | "FAILED" | "OUTCOME_UNKNOWN";
       dispatchId: string;
+      errorCode?: string | null;
+      errorMessage?: string | null;
     }
   | { transport: "real" | "fake"; sent: false; reason: string };
 
