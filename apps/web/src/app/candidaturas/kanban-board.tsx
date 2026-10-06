@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type CollisionDetection,
   closestCorners,
   DndContext,
   type DragEndEvent,
@@ -9,6 +10,7 @@ import {
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
   TouchSensor,
   useDroppable,
   useSensor,
@@ -525,6 +527,28 @@ export function KanbanBoard({
     [persistMove],
   );
 
+  // Colisão: primeiro a etapa onde o ponteiro está, e só dentro dela o card
+  // mais próximo. Só closestCorners falha com etapa vazia: os cantos dela
+  // (esticada até a altura da mais cheia) ficam longe e os cards da etapa
+  // vizinha "ganham" — o card caía na coluna ao lado. Teclado (sem ponteiro)
+  // continua no closestCorners puro.
+  const collisionDetection = useCallback<CollisionDetection>(
+    (args) => {
+      const columnHit = pointerWithin(args).find((c) =>
+        String(c.id).startsWith(COLUMN_PREFIX),
+      );
+      if (!columnHit) return closestCorners(args);
+      const target = findColumn(columns, String(columnHit.id));
+      return closestCorners({
+        ...args,
+        droppableContainers: args.droppableContainers.filter(
+          (container) => findColumn(columns, String(container.id)) === target,
+        ),
+      });
+    },
+    [columns],
+  );
+
   function handleDragStart(event: DragStartEvent) {
     setMenuFor(null);
     setActiveId(String(event.active.id));
@@ -846,7 +870,7 @@ export function KanbanBoard({
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
