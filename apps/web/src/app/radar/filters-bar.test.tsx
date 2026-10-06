@@ -78,11 +78,20 @@ describe("FiltersBar", () => {
     expect(applyButtons).toHaveLength(1);
   });
 
-  it("selecting a filter does not navigate immediately — only the apply button does", () => {
+  it("closed dropdowns keep their options out of the DOM (SEO: no facet noise in the HTML)", () => {
+    const { container } = render(
+      <FiltersBar facets={FACETS} activeFilters={{}} />,
+    );
+
+    expect(container.textContent).not.toContain("SND Solucoes Tecnologia");
+    expect(container.textContent).not.toContain("Dados & IA");
+  });
+
+  it("selecting a filter does not navigate immediately — only the apply button does", async () => {
     render(<FiltersBar facets={FACETS} activeFilters={{}} />);
 
     fireEvent.click(screen.getByText("ÁREA"));
-    fireEvent.click(screen.getByText("Dados & IA"));
+    fireEvent.click(await screen.findByText("Dados & IA"));
 
     expect(push).not.toHaveBeenCalled();
 
@@ -144,13 +153,14 @@ describe("FiltersBar", () => {
     );
   });
 
-  it("normalizes ALL CAPS company names to Title Case in the EMPRESA dropdown, keeps short acronyms and already-mixed-case names untouched", () => {
+  it("normalizes ALL CAPS company names to Title Case in the EMPRESA dropdown, keeps short acronyms and already-mixed-case names untouched", async () => {
     const { container } = render(
       <FiltersBar facets={FACETS} activeFilters={{}} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
     fireEvent.click(screen.getByText("EMPRESA"));
+    await screen.findByText("SND Solucoes Tecnologia");
 
     // "SND" tem 3 letras (<=4): mantém sigla em caixa alta; o resto vira
     // Title Case.
@@ -162,13 +172,15 @@ describe("FiltersBar", () => {
     expect(container.textContent).toContain("AB InBev Brasil");
   });
 
-  it("renders the ADERÊNCIA dropdown with the 5 opportunity categories and applies it as a CSV filter", () => {
+  it("renders the ADERÊNCIA dropdown with the 5 opportunity categories and applies it as a CSV filter", async () => {
     render(<FiltersBar facets={FACETS} activeFilters={{}} />);
 
     fireEvent.click(screen.getByRole("button", { name: /mais filtros/ }));
     fireEvent.click(screen.getByText("ADERÊNCIA"));
 
-    expect(screen.getByText("Excelente oportunidade")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Excelente oportunidade"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Muito aderente")).toBeInTheDocument();
     expect(screen.getByText("Aderente")).toBeInTheDocument();
     expect(screen.getByText("Pouco aderente")).toBeInTheDocument();

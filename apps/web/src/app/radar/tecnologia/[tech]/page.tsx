@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
-import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
-import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { getPublicJobsByTech } from "@/lib/internal-jobs-api";
-import { getMyPlan } from "@/lib/plans-api";
-import { getAbsoluteUrl } from "@/lib/site";
-import { RadarJobsListing, type RadarSearchParams } from "../../jobs-listing";
-import { RadarPageShell } from "../../page-shell";
-import { RadarViewTracker } from "../../radar-view-tracker";
+import {
+  getRadarLandingIndex,
+  resolveTechnologySlug,
+  technologyLanding,
+} from "@/lib/radar-landings";
+import {
+  buildRadarLandingMetadata,
+  RadarLandingPage,
+} from "../../_landing/radar-landing-page";
+import type { RadarSearchParams } from "../../jobs-listing";
 
-// Só existe conteúdo publicável na landing page de tecnologia se houver
-// pelo menos esse tanto de vagas ativas com ela — abaixo disso, notFound()
-// (ver JobsService#listPublicJobsByTech, que já aplica o mesmo threshold no
-// endpoint /internal/jobs/by-tech).
-const MIN_TECH_JOBS = 10;
+// Landing perene: vagas que pedem uma tecnologia. O slug da URL ("power-bi",
+// "c-sharp") é resolvido para a tecnologia do enrichment pelo índice; abaixo
+// de MIN_TECH_JOBS vagas a página fica noindex e, sem vaga, vira 404 (ver
+// RadarLandingPage).
+async function resolveLanding(techSlug: string) {
+  const index = await getRadarLandingIndex();
+  return technologyLanding(resolveTechnologySlug(index, techSlug));
+}
 
 type PageProps = {
   params: Promise<{ tech: string }>;
@@ -23,67 +27,21 @@ type PageProps = {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps): Promise<Metadata> {
-  const { tech: techSlug } = await params;
-  const tech = techSlug.toLowerCase();
-  const { total } = await getPublicJobsByTech(tech, MIN_TECH_JOBS);
-
-  if (total < MIN_TECH_JOBS) {
-    return {
-      title: "Tecnologia não encontrada",
-      robots: { index: false, follow: false },
-    };
-  }
-
-  const url = getAbsoluteUrl(`/radar/tecnologia/${tech}`);
-
-  return {
-    title: `Vagas de ${tech} no Brasil`,
-    description: `Encontre vagas que exigem ${tech} e analise seu CV gratuitamente.`,
-    alternates: { canonical: url },
-  };
+  const { tech } = await params;
+  return buildRadarLandingMetadata(
+    await resolveLanding(tech),
+    await searchParams,
+  );
 }
 
-export default async function RadarTecnologiaPage({
-  params,
-  searchParams,
-}: PageProps) {
-  const user = await getCurrentAppUserFromCookies().catch(() => null);
-
-  const availableCredits = user
-    ? toHeaderAvailableCredits(await getMyPlan().catch(() => null))
-    : undefined;
-
-  const { tech: techSlug } = await params;
-  const tech = techSlug.toLowerCase();
-  // Confirma o threshold de volume antes de renderizar qualquer coisa — a
-  // listagem de verdade (com score/paginação/ordenação) vem de
-  // RadarJobsListing logo abaixo, via fixedFilters.technology; essa
-  // primeira chamada é só pra decidir notFound().
-  const { total } = await getPublicJobsByTech(tech, MIN_TECH_JOBS);
-
-  if (total < MIN_TECH_JOBS) notFound();
-
-  const resolvedSearchParams = await searchParams;
-
+export default async function Page({ params, searchParams }: PageProps) {
+  const { tech } = await params;
   return (
-    <RadarPageShell
-      userName={user?.name}
-      userRole={user?.internalRole}
-      credits={availableCredits}
-    >
-      <RadarViewTracker radarViewType="technology" technology={tech} />
-      <RadarJobsListing
-        basePath={`/radar/tecnologia/${tech}`}
-        user={user}
-        searchParams={resolvedSearchParams}
-        fixedFilters={{ technology: tech }}
-        landingHeader={{
-          eyebrow: "PORTAL DE VAGAS",
-          title: `Vagas de ${tech} no Brasil`,
-          description: `Encontre vagas que exigem ${tech} e analise seu CV gratuitamente.`,
-        }}
-      />
-    </RadarPageShell>
+    <RadarLandingPage
+      landing={await resolveLanding(tech)}
+      searchParams={await searchParams}
+    />
   );
 }

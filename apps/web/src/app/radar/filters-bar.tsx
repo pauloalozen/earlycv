@@ -338,6 +338,11 @@ function MultiFilterDropdown({
   searchable = false,
 }: MultiFilterDropdownProps) {
   const [search, setSearch] = useState("");
+  // As opções só entram no DOM com o dropdown aberto: <details> fechado
+  // ainda renderiza o conteúdo no HTML, e as listas de empresa/estado/cidade
+  // (centenas de nomes) viravam a maior parte do texto que o Google lia nas
+  // páginas do radar.
+  const [open, setOpen] = useState(false);
   if (options.length === 0) return null;
   const isActive = selected.length > 0;
   const visibleOptions = searchable
@@ -358,6 +363,7 @@ function MultiFilterDropdown({
   return (
     <details
       className="vagas-filter-dropdown"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
       style={{
         position: "relative",
         width: variant === "field" ? "100%" : undefined,
@@ -374,99 +380,101 @@ function MultiFilterDropdown({
         currentLabel={currentLabel}
         isActive={isActive}
       />
-      <DropdownMenu>
-        {searchable ? (
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Buscar ${label.toLowerCase()}…`}
-            style={{
-              display: "block",
-              width: "100%",
-              boxSizing: "border-box",
-              margin: "0 0 6px",
-              padding: "7px 10px",
-              borderRadius: 7,
-              fontSize: 13,
-              fontFamily: GEIST,
-              color: "#0a0a0a",
-              background: "#fbfbf7",
-              border: "1px solid rgba(10,10,10,0.1)",
-              outline: "none",
-            }}
-          />
-        ) : null}
-        <button
-          type="button"
-          onClick={onClear}
-          style={{
-            display: "block",
-            width: "100%",
-            textAlign: "left",
-            padding: "7px 10px",
-            borderRadius: 7,
-            fontSize: 12,
-            fontFamily: MONO,
-            letterSpacing: 0.2,
-            color: "#8a8a85",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          {allLabel}
-        </button>
-        {searchable && visibleOptions.length === 0 ? (
-          <p
-            style={{
-              margin: 0,
-              padding: "7px 10px",
-              fontSize: 12.5,
-              color: "#8a8a85",
-            }}
-          >
-            Nenhum resultado encontrado.
-          </p>
-        ) : null}
-        {visibleOptions.map((opt) => {
-          const checked = selected.includes(opt.value);
-          return (
-            <button
-              type="button"
-              key={opt.value}
-              onClick={() => onToggle(opt.value)}
+      {open ? (
+        <DropdownMenu>
+          {searchable ? (
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Buscar ${label.toLowerCase()}…`}
               style={{
-                display: "flex",
+                display: "block",
                 width: "100%",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
+                boxSizing: "border-box",
+                margin: "0 0 6px",
                 padding: "7px 10px",
                 borderRadius: 7,
                 fontSize: 13,
+                fontFamily: GEIST,
                 color: "#0a0a0a",
-                background: checked ? "rgba(10,10,10,0.05)" : "transparent",
-                border: "none",
-                cursor: "pointer",
-                textAlign: "left",
+                background: "#fbfbf7",
+                border: "1px solid rgba(10,10,10,0.1)",
+                outline: "none",
+              }}
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={onClear}
+            style={{
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "7px 10px",
+              borderRadius: 7,
+              fontSize: 12,
+              fontFamily: MONO,
+              letterSpacing: 0.2,
+              color: "#8a8a85",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {allLabel}
+          </button>
+          {searchable && visibleOptions.length === 0 ? (
+            <p
+              style={{
+                margin: 0,
+                padding: "7px 10px",
+                fontSize: 12.5,
+                color: "#8a8a85",
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <CheckboxIcon checked={checked} />
-                {opt.label}
-              </span>
-              {opt.count !== undefined ? (
-                <span
-                  style={{ fontFamily: MONO, fontSize: 11, color: "#8a8a85" }}
-                >
-                  {opt.count}
+              Nenhum resultado encontrado.
+            </p>
+          ) : null}
+          {visibleOptions.map((opt) => {
+            const checked = selected.includes(opt.value);
+            return (
+              <button
+                type="button"
+                key={opt.value}
+                onClick={() => onToggle(opt.value)}
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  fontSize: 13,
+                  color: "#0a0a0a",
+                  background: checked ? "rgba(10,10,10,0.05)" : "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <CheckboxIcon checked={checked} />
+                  {opt.label}
                 </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </DropdownMenu>
+                {opt.count !== undefined ? (
+                  <span
+                    style={{ fontFamily: MONO, fontSize: 11, color: "#8a8a85" }}
+                  >
+                    {opt.count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </DropdownMenu>
+      ) : null}
     </details>
   );
 }
@@ -578,7 +586,13 @@ type FiltersBarProps = {
   // quem decide o filtro fixo é a camada de dados (RadarJobsListing); esta
   // prop só esconde o controle.
   hiddenFilters?: Array<
-    "area" | "modalidade" | "senioridade" | "empresa" | "aderencia"
+    | "area"
+    | "modalidade"
+    | "senioridade"
+    | "empresa"
+    | "aderencia"
+    | "estado"
+    | "cidade"
   >;
 };
 
@@ -1334,26 +1348,30 @@ export function FiltersBar({
               }}
             >
               <div className="radar-filters-grid">
-                <MultiFilterDropdown
-                  label="ESTADO"
-                  allLabel="todos"
-                  options={stateItems}
-                  selected={estado}
-                  onToggle={toggleEstado}
-                  onClear={clearEstado}
-                  variant="field"
-                  searchable
-                />
-                <MultiFilterDropdown
-                  label="CIDADE"
-                  allLabel="todas"
-                  options={cityItems}
-                  selected={cidade}
-                  onToggle={(v) => toggle(cidade, setCidade, v)}
-                  onClear={() => setCidade([])}
-                  variant="field"
-                  searchable
-                />
+                {hiddenFilters.includes("estado") ? null : (
+                  <MultiFilterDropdown
+                    label="ESTADO"
+                    allLabel="todos"
+                    options={stateItems}
+                    selected={estado}
+                    onToggle={toggleEstado}
+                    onClear={clearEstado}
+                    variant="field"
+                    searchable
+                  />
+                )}
+                {hiddenFilters.includes("cidade") ? null : (
+                  <MultiFilterDropdown
+                    label="CIDADE"
+                    allLabel="todas"
+                    options={cityItems}
+                    selected={cidade}
+                    onToggle={(v) => toggle(cidade, setCidade, v)}
+                    onClear={() => setCidade([])}
+                    variant="field"
+                    searchable
+                  />
+                )}
                 {hiddenFilters.includes("empresa") ? null : (
                   <MultiFilterDropdown
                     label="EMPRESA"

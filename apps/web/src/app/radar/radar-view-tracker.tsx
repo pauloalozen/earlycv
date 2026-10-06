@@ -12,7 +12,9 @@ export type RadarViewTrackerProps = {
     | "senior"
     | "remote"
     | "technology"
-    | "company";
+    | "company"
+    | "internship"
+    | "city";
   area?: string;
   seniority?: string;
   technology?: string;

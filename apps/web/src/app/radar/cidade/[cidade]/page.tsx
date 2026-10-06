@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import {
-  companyLanding,
-  findCompanyBySlug,
+  cityLanding,
+  findCityBySlug,
   getRadarLandingIndex,
 } from "@/lib/radar-landings";
 import {
@@ -12,17 +12,17 @@ import {
 } from "../../_landing/radar-landing-page";
 import type { RadarSearchParams } from "../../jobs-listing";
 
-// Landing perene: vagas de uma empresa. Company não tem slug persistido; o
-// índice de landings (contado no banco, cache de 5 min) traz nome e slug de
-// toda empresa com vaga pública — antes isto carregava todas as vagas.
-async function resolveLanding(companySlug: string) {
+// Landing perene: vagas de tecnologia numa cidade. O slug ("sao-paulo-sp")
+// só existe para cidades do índice (UF brasileira válida e volume mínimo),
+// o que deixa de fora o lixo de localização vindo dos crawlers.
+async function resolveLanding(citySlug: string) {
   const index = await getRadarLandingIndex();
-  const company = index ? findCompanyBySlug(index, companySlug) : null;
-  return company ? companyLanding(company.name) : null;
+  const city = index ? findCityBySlug(index, citySlug) : null;
+  return city ? cityLanding(city) : null;
 }
 
 type PageProps = {
-  params: Promise<{ empresa: string }>;
+  params: Promise<{ cidade: string }>;
   searchParams: Promise<RadarSearchParams>;
 };
 
@@ -30,16 +30,16 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps): Promise<Metadata> {
-  const { empresa } = await params;
+  const { cidade } = await params;
   return buildRadarLandingMetadata(
-    await resolveLanding(empresa),
+    await resolveLanding(cidade),
     await searchParams,
   );
 }
 
 export default async function Page({ params, searchParams }: PageProps) {
-  const { empresa } = await params;
-  const landing = await resolveLanding(empresa);
+  const { cidade } = await params;
+  const landing = await resolveLanding(cidade);
   if (!landing) notFound();
 
   return (
