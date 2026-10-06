@@ -67,7 +67,8 @@ export default async function ComprarEntrevistaSimuladaPage({
       style={{
         fontFamily: SANS,
         minHeight: "100dvh",
-        background: "#ffffff",
+        // Mesma cor do AppHeader: sem faixa de contraste entre header e corpo.
+        background: "#f3f2ed",
         color: "#0a0a0a",
       }}
     >

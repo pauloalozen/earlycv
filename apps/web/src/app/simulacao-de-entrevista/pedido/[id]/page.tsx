@@ -48,8 +48,11 @@ export default async function PedidoEntrevistaSimuladaPage({
       style={{
         fontFamily: SANS,
         minHeight: "100dvh",
-        background: "#ffffff",
+        // Mesma cor do AppHeader: sem faixa de contraste entre header e corpo.
+        background: "#f3f2ed",
         color: "#0a0a0a",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <AppHeader
@@ -61,15 +64,23 @@ export default async function PedidoEntrevistaSimuladaPage({
       />
       <PageShell>
         <div
-          style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px 80px" }}
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px 16px 48px",
+          }}
         >
-          <OrderStatus
-            canBuy={canAccessMockInterview(user)}
-            initial={purchase}
-            returnHint={
-              retorno === "falhou" || retorno === "pendente" ? retorno : null
-            }
-          />
+          <div style={{ width: "100%", maxWidth: 560 }}>
+            <OrderStatus
+              canBuy={canAccessMockInterview(user)}
+              initial={purchase}
+              returnHint={
+                retorno === "falhou" || retorno === "pendente" ? retorno : null
+              }
+            />
+          </div>
         </div>
       </PageShell>
     </main>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { MOCK_INTERVIEW_OFFER as OFFER } from "@/lib/mock-interview-offer";
@@ -144,6 +145,26 @@ export function OrderStatus({
                 Entrar no Google Meet →
               </a>
             )}
+          </div>
+        )}
+
+        {!done && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Image
+              src="/paulo-alozen.jpg"
+              alt="Paulo Alozen"
+              width={48}
+              height={48}
+              style={{ borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+            />
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ fontSize: 15, fontWeight: 500 }}>
+                Paulo Alozen
+              </span>
+              <span style={{ fontSize: 13, color: "#8a8a85" }}>
+                Quem vai conduzir a sua entrevista
+              </span>
+            </div>
           </div>
         )}
 
