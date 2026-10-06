@@ -270,6 +270,61 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     assert.equal(notified.total, 1);
   });
 
+  test("vaga reativada depois de um URL_DELETED volta pra fila e é re-notificada", async () => {
+    const log = (
+      slug: string,
+      type: "URL_UPDATED" | "URL_DELETED",
+      status: "SUCCESS" | "ERROR",
+      createdAt: string,
+    ) =>
+      prisma.googleIndexingLog.create({
+        data: {
+          createdAt: new Date(createdAt),
+          slug: slugOf(slug),
+          status,
+          type,
+        },
+      });
+    // Notificada, removida e reativada: o URL_UPDATED antigo não vale mais.
+    await addJob({ slug: "reativada", firstSeenAt: new Date("2026-03-01") });
+    await log("reativada", "URL_UPDATED", "SUCCESS", "2026-08-01");
+    await log("reativada", "URL_DELETED", "SUCCESS", "2026-08-10");
+    // Removida e já re-notificada depois: segue notificada.
+    await addJob({ slug: "renotificada", firstSeenAt: new Date("2026-02-01") });
+    await log("renotificada", "URL_UPDATED", "SUCCESS", "2026-08-01");
+    await log("renotificada", "URL_DELETED", "SUCCESS", "2026-08-10");
+    await log("renotificada", "URL_UPDATED", "SUCCESS", "2026-08-20");
+    // Remoção que falhou não invalida a notificação.
+    await addJob({
+      slug: "remocao-falhou",
+      firstSeenAt: new Date("2026-01-01"),
+    });
+    await log("remocao-falhou", "URL_UPDATED", "SUCCESS", "2026-08-01");
+    await log("remocao-falhou", "URL_DELETED", "ERROR", "2026-08-10");
+    const service = makeService();
+
+    const status = await service.getStatus();
+    assert.equal(status.totalEligible, 3);
+    assert.equal(status.notified, 2);
+    assert.equal(status.pending, 1);
+
+    const pending = await service.listJobsByIndexingStatus({
+      page: 1,
+      pageSize: 20,
+      status: "pending",
+    });
+    assert.deepEqual(
+      pending.jobs.map((j) => j.slug),
+      [slugOf("reativada")],
+    );
+    assert.equal(pending.jobs[0]?.lastAttemptAt, null);
+
+    const result = await service.runBackfillBatch();
+    assert.equal(result.processed, 1);
+    assert.equal(result.succeeded, 1);
+    assert.equal((await service.getStatus()).pending, 0);
+  });
+
   test("listJobsByIndexingStatus paginates within the filtered bucket, in the database", async () => {
     for (let i = 0; i < 5; i++) {
       await addJob({
