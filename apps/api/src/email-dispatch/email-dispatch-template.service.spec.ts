@@ -67,107 +67,38 @@ test("common rules: subject/body required and bounded, subject is plain text, un
   );
 });
 
-test("feedback (first and second call): exactly ONE question, subject is not a question, no links", () => {
-  const v = TEMPLATE_DEFINITIONS.FEEDBACK_FIRST_USE.defaults;
+test("no editorial rules per template: questions, links, missing summary or {{link}} are the admin's call", () => {
+  const f = TEMPLATE_DEFINITIONS.FEEDBACK_FIRST_USE.defaults;
   assert.deepEqual(
-    ok("FEEDBACK_FIRST_USE", v.subject, "{{saudacao}} O que achou?"),
+    ok(
+      "FEEDBACK_FIRST_USE",
+      "Gostou?",
+      "{{saudacao}} Gostou? Útil? Viu? Ok? https://x.com",
+    ),
     [],
   );
-  assert.ok(
-    ok("FEEDBACK_FIRST_USE", v.subject, "{{saudacao}} Gostou? Útil?").some(
-      (e) => /exatamente uma pergunta.*tem 2/.test(e),
-    ),
-  );
-  assert.ok(
-    ok("FEEDBACK_FIRST_USE", v.subject, "{{saudacao}} Sem pergunta.").some(
-      (e) => /exatamente uma pergunta.*tem 0/.test(e),
-    ),
-  );
-  assert.ok(
-    ok("FEEDBACK_FIRST_USE", "Gostou?", "{{saudacao}} O que achou?").some((e) =>
-      /assunto do feedback não pode ser uma pergunta/.test(e),
-    ),
-  );
-  assert.ok(
-    ok("FEEDBACK_FIRST_USE", v.subject, "O que achou? https://x.com").some(
-      (e) => /não leva links/.test(e),
-    ),
-  );
-
-  // A segunda chamada tem as mesmas regras (uma pergunta, sem links) e pode
-  // falar da análise: já não presume nada sobre ter visto o resultado.
-  const second = TEMPLATE_DEFINITIONS.FEEDBACK_SECOND_CALL.defaults;
   assert.deepEqual(
-    ok("FEEDBACK_SECOND_CALL", second.subject, "Como foi sua experiência?"),
+    ok("FEEDBACK_SECOND_CALL", f.subject, "Sem pergunta nenhuma."),
     [],
   );
-  assert.ok(
-    ok("FEEDBACK_SECOND_CALL", second.subject, "Gostou? Útil?").some((e) =>
-      /exatamente uma pergunta.*tem 2/.test(e),
+  assert.deepEqual(
+    ok(
+      "WELCOME",
+      TEMPLATE_DEFINITIONS.WELCOME.defaults.subject,
+      "{{link}} e https://x.com",
     ),
-  );
-  assert.ok(
-    ok("FEEDBACK_SECOND_CALL", second.subject, "Oi? https://x.com").some((e) =>
-      /não leva links/.test(e),
-    ),
-  );
-});
-
-test("welcome: at most one link (literal URLs + {{link}})", () => {
-  const w = TEMPLATE_DEFINITIONS.WELCOME.defaults;
-  assert.ok(
-    ok("WELCOME", w.subject, "{{link}} e https://x.com").some((e) =>
-      /no máximo um link/.test(e),
-    ),
-  );
-  assert.deepEqual(ok("WELCOME", w.subject, "Oi, {{nome}}. Veja {{link}}"), []);
-});
-
-test("paid receipt must inform plan, amount and credits ({{resumo}} or all three variables)", () => {
-  const p = TEMPLATE_DEFINITIONS.PURCHASE_PAID.defaults;
-  assert.ok(
-    ok("PURCHASE_PAID", p.subject, "Obrigado pela compra.").some((e) =>
-      /plano, valor e créditos/.test(e),
-    ),
-  );
-  assert.ok(
-    ok("PURCHASE_PAID", p.subject, "Plano {{plano}}, valor {{valor}}").some(
-      (e) => /plano, valor e créditos/.test(e),
-    ),
+    [],
   );
   assert.deepEqual(
     ok(
       "PURCHASE_PAID",
-      p.subject,
-      "Plano {{plano}}, valor {{valor}}, créditos {{creditos}}",
+      TEMPLATE_DEFINITIONS.PURCHASE_PAID.defaults.subject,
+      "Obrigado.",
     ),
     [],
   );
-  assert.deepEqual(ok("PURCHASE_PAID", p.subject, "{{resumo}}"), []);
-});
-
-test("coupon redemption can NEVER claim payment: no value variable/text, no 'Valor pago', no 'recebemos o pagamento', no 'compra' in the subject", () => {
-  const c = TEMPLATE_DEFINITIONS.PURCHASE_COUPON.defaults;
-  for (const body of [
-    "{{resumo}} Valor {{valor}}",
-    "{{resumo}} Você pagou R$ 10",
-    "{{resumo}} Valor pago: zero",
-    "{{resumo}} Recebemos o pagamento!",
-    "{{resumo}} Pagamento confirmado.",
-  ]) {
-    assert.ok(ok("PURCHASE_COUPON", c.subject, body).length > 0, body);
-  }
-  assert.ok(
-    ok("PURCHASE_COUPON", "Confirmação da sua compra", c.body).some((e) =>
-      /não pode falar em "compra"/.test(e),
-    ),
-  );
-  assert.ok(
-    ok("PURCHASE_COUPON", c.subject, "Cupom resgatado.").some((e) =>
-      /plano e créditos/.test(e),
-    ),
-  );
-  assert.deepEqual(ok("PURCHASE_COUPON", c.subject, "{{resumo}}"), []);
+  assert.deepEqual(ok("PURCHASE_COUPON", "Sua compra", "Cupom resgatado."), []);
+  assert.deepEqual(ok("MOCK_INTERVIEW_OFFER", "Treine", "Sem link."), []);
 });
 
 test("renderTemplate substitutes variables, splits paragraphs, escapes HTML and appends the unsubscribe footer ONLY for relationship templates", () => {
@@ -279,16 +210,13 @@ test("an invalid template is rejected with all the reasons and nothing is saved"
   await assert.rejects(
     () =>
       service.update("a", "FEEDBACK_FIRST_USE", {
-        subject: "Gostou?",
-        body: "Útil? Mesmo?",
+        subject: "",
+        body: "Oi {{nmoe}}",
       }),
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
-      assert.match(error.message, /exatamente uma pergunta/);
-      assert.match(
-        error.message,
-        /assunto do feedback não pode ser uma pergunta/,
-      );
+      assert.match(error.message, /assunto é obrigatório/);
+      assert.match(error.message, /Variável desconhecida/);
       return true;
     },
   );
@@ -335,7 +263,7 @@ test("preview validates AND renders with sample data without saving; invalid con
 
   const bad = service.preview("PURCHASE_PAID", {
     subject: "s",
-    body: "sem resumo",
+    body: "Oi {{nmoe}}",
   });
   assert.ok(bad.errors.length > 0);
   assert.equal(bad.rendered, null);

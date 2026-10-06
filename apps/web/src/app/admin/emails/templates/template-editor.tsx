@@ -28,8 +28,8 @@ const inputStyle: React.CSSProperties = {
 type Message = { ok: boolean; text: string };
 
 // Editor de UM template (assunto + corpo). Sem salvar, o admin pode
-// pré-visualizar: as MESMAS regras do salvar (variáveis, uma pergunta no
-// feedback, cupom nunca alega pagamento…) aparecem como erros antes de gravar.
+// pré-visualizar: as MESMAS checagens do salvar (variáveis, tamanho,
+// descadastro) aparecem como erros antes de gravar.
 // O rodapé de descadastro dos e-mails de relacionamento é acrescentado pelo
 // sistema e não é editável. O pai usa key={template.key}: trocar de template
 // reinicia este estado.
@@ -95,10 +95,18 @@ export function TemplateEditor({ template }: { template: EmailTemplateInfo }) {
           ok: true,
           text: "Transporte fake (fora de produção): nada foi enviado pela rede.",
         });
-      } else {
+      } else if (sent.outcome === "SENT") {
         setMessage({
-          ok: sent.outcome === "SENT",
-          text: `Teste enviado para ${testEmail} (${sent.outcome}). Usa o texto SALVO — salve antes de testar edições.`,
+          ok: true,
+          text: `Teste enviado para ${testEmail}. Usa o texto SALVO — salve antes de testar edições.`,
+        });
+      } else {
+        const reason = [sent.errorCode, sent.errorMessage]
+          .filter(Boolean)
+          .join(": ");
+        setMessage({
+          ok: false,
+          text: `Teste NÃO enviado para ${testEmail} (${sent.outcome})${reason ? ` — ${reason}` : ""}.`,
         });
       }
     });

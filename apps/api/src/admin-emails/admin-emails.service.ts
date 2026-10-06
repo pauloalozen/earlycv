@@ -258,6 +258,10 @@ export class AdminEmailsService {
             sent: true as const,
             outcome: result.result.outcome,
             dispatchId: result.dispatchId,
+            // Motivo do provedor (ex.: SES) quando não foi SENT — sem isso a
+            // tela só mostrava "FAILED".
+            errorCode: result.result.errorCode ?? null,
+            errorMessage: result.result.errorMessage ?? null,
           }
         : { sent: false as const, reason: result.reason }),
     };

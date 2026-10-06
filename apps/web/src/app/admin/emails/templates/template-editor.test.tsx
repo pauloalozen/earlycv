@@ -117,7 +117,7 @@ describe("TemplateEditor", () => {
   it("a rule violation from the backend is shown as an alert", async () => {
     actions.saveEmailTemplateAction.mockResolvedValue({
       ok: false,
-      message: "O feedback precisa ter exatamente uma pergunta",
+      message: "Variável desconhecida: {{nmoe}}",
     });
     render(<TemplateEditor template={template()} />);
 
@@ -127,20 +127,20 @@ describe("TemplateEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /exatamente uma pergunta/,
+      /Variável desconhecida/,
     );
   });
 
   it("preview shows validation errors BEFORE saving, or the rendered e-mail (subject + sandboxed HTML + text) when valid", async () => {
     actions.previewEmailTemplateAction.mockResolvedValueOnce({
       ok: true,
-      preview: { errors: ["O feedback não leva links."], rendered: null },
+      preview: { errors: ["O corpo é obrigatório."], rendered: null },
     });
     render(<TemplateEditor template={template()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Pré-visualizar" }));
     expect(
-      await screen.findByText("O feedback não leva links."),
+      await screen.findByText("O corpo é obrigatório."),
     ).toBeInTheDocument();
 
     actions.previewEmailTemplateAction.mockResolvedValueOnce({
@@ -268,7 +268,7 @@ describe("TemplateEditor", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Enviar teste" }));
     expect(await screen.findByRole("status")).toHaveTextContent(
-      /Teste enviado para paulo\.alozen@gmail\.com \(SENT\)/,
+      /Teste enviado para paulo\.alozen@gmail\.com\./,
     );
 
     // a transição anterior termina antes de o botão voltar a aceitar clique
@@ -288,6 +288,29 @@ describe("TemplateEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enviar teste" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Teste não enviado: not_ready:ses_disabled/,
+    );
+  });
+
+  it("send-test shows the provider error when the real send fails", async () => {
+    render(<TemplateEditor template={template()} />);
+    fireEvent.change(
+      screen.getByPlaceholderText(/E-mail do destinatário do teste/),
+      { target: { value: "paulo.alozen@gmail.com" } },
+    );
+    actions.sendTestEmailTemplateAction.mockResolvedValueOnce({
+      ok: true,
+      result: {
+        transport: "real",
+        sent: true,
+        outcome: "FAILED",
+        dispatchId: "d1",
+        errorCode: "NotFoundException",
+        errorMessage: "List does not exist",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar teste" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /NÃO enviado .*FAILED.*NotFoundException: List does not exist/,
     );
   });
 });

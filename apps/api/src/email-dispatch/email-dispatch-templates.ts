@@ -9,8 +9,9 @@
 //     é sempre acrescentado pelo sistema;
 //   - o bloco de resumo da compra ({{resumo}}), montado a partir do snapshot
 //     da compra aprovada (valores nunca vêm de texto digitado).
-// Regras de conteúdo (uma pergunta no feedback, cupom nunca alega pagamento…)
-// são aplicadas por validateTemplate — no salvar e no preview.
+// validateTemplate só barra o que quebra o e-mail (assunto/corpo vazios ou
+// longos demais, variável desconhecida, descadastro manual) — o conteúdo do
+// texto é decisão do admin, sem regras editoriais por template.
 
 export const SES_UNSUBSCRIBE_PLACEHOLDER = "{{amazonSESUnsubscribeUrl}}";
 
@@ -92,7 +93,7 @@ EarlyCV`,
   FEEDBACK_FIRST_USE: {
     label: "Feedback",
     description:
-      "Enviado 24h após o cadastro (janela 8h–20h de Brasília). O cadastro nasce da primeira análise, então o texto pode falar da análise. Exatamente uma pergunta, sem links.",
+      "Enviado 24h após o cadastro (janela 8h–20h de Brasília). O cadastro nasce da primeira análise, então o texto pode falar da análise.",
     unsubscribeFooter: true,
     variables: [GREETING_VAR, NAME_VAR],
     defaults: {
@@ -111,7 +112,7 @@ EarlyCV`,
   FEEDBACK_SECOND_CALL: {
     label: "Feedback segunda chamada",
     description:
-      "Enviado 14 dias depois do ENVIO do feedback (janela 8h–20h de Brasília), só se o primeiro foi realmente enviado. Exatamente uma pergunta, sem links.",
+      "Enviado 14 dias depois do ENVIO do feedback (janela 8h–20h de Brasília), só se o primeiro foi realmente enviado.",
     unsubscribeFooter: true,
     variables: [GREETING_VAR, NAME_VAR],
     defaults: {
@@ -167,7 +168,7 @@ Equipe EarlyCV`,
   PURCHASE_COUPON: {
     label: "Compra — cupom 100% resgatado",
     description:
-      'Recibo de resgate (cupom que zera o preço). NUNCA pode alegar pagamento: não há {{valor}}, "valor pago" nem "recebemos o pagamento".',
+      "Recibo de resgate (cupom que zera o preço): não houve pagamento, por isso não existe {{valor}}.",
     unsubscribeFooter: false,
     variables: [
       GREETING_VAR,
@@ -203,7 +204,7 @@ Equipe EarlyCV`,
   MOCK_INTERVIEW_OFFER: {
     label: "Oferta da entrevista simulada",
     description:
-      "Enviado 2h depois que uma candidatura vai para Entrevista, só se a pessoa ainda não comprou a entrevista simulada depois disso e não recebeu outra oferta nos últimos 7 dias. Precisa do {{link}}.",
+      "Enviado 2h depois que uma candidatura vai para Entrevista, só se a pessoa ainda não comprou a entrevista simulada depois disso e não recebeu outra oferta nos últimos 7 dias. Use {{link}} para a página da entrevista simulada.",
     unsubscribeFooter: true,
     variables: [
       GREETING_VAR,
@@ -241,15 +242,10 @@ EarlyCV`,
 
 const SUBJECT_MAX = 150;
 const BODY_MAX = 5000;
-const URL_PATTERN = /https?:\/\//gi;
 const VARIABLE_PATTERN = /\{\{\s*([A-Za-z]+)\s*\}\}/g;
 
 function usedVariables(text: string): string[] {
   return [...text.matchAll(VARIABLE_PATTERN)].map((match) => match[1]);
-}
-
-function countMatches(text: string, pattern: RegExp): number {
-  return [...text.matchAll(pattern)].length;
 }
 
 // Devolve a lista de erros (vazia = válido). Nunca lança. As mesmas regras
@@ -294,68 +290,6 @@ export function validateTemplate(
       errors.push(
         `Variável desconhecida: {{${name}}}. Disponíveis: ${[...allowed].map((v) => `{{${v}}}`).join(", ")}.`,
       );
-    }
-  }
-
-  const has = (name: string) => used.includes(name);
-
-  if (key === "FEEDBACK_FIRST_USE" || key === "FEEDBACK_SECOND_CALL") {
-    // Uma única pergunta por e-mail (e o assunto não é pergunta).
-    const questions = countMatches(body, /\?/g);
-    if (questions !== 1) {
-      errors.push(
-        `O feedback precisa ter exatamente uma pergunta (um "?"); o corpo tem ${questions}.`,
-      );
-    }
-    if (subject.includes("?")) {
-      errors.push("O assunto do feedback não pode ser uma pergunta.");
-    }
-    if (countMatches(body, URL_PATTERN) > 0) {
-      errors.push("O feedback não leva links.");
-    }
-  }
-
-  if (key === "WELCOME") {
-    const links =
-      countMatches(body, URL_PATTERN) + used.filter((n) => n === "link").length;
-    if (links > 1) errors.push("A boas-vindas leva no máximo um link.");
-  }
-
-  if (key === "PURCHASE_PAID") {
-    const summaryOk =
-      has("resumo") || (has("plano") && has("valor") && has("creditos"));
-    if (!summaryOk) {
-      errors.push(
-        "A confirmação de compra precisa informar plano, valor e créditos: use {{resumo}} (ou {{plano}}, {{valor}} e {{creditos}}).",
-      );
-    }
-  }
-
-  if (key === "MOCK_INTERVIEW_OFFER" && !has("link")) {
-    errors.push(
-      "A oferta precisa do {{link}} para a página da entrevista simulada.",
-    );
-  }
-
-  if (key === "PURCHASE_COUPON") {
-    const summaryOk = has("resumo") || (has("plano") && has("creditos"));
-    if (!summaryOk) {
-      errors.push(
-        "O resgate precisa informar plano e créditos: use {{resumo}} (ou {{plano}} e {{creditos}}).",
-      );
-    }
-    if (
-      /R\$/.test(body) ||
-      /valor pago/i.test(body) ||
-      /recebemos o pagamento/i.test(body) ||
-      /pagamento (recebido|confirmado|aprovado)/i.test(body)
-    ) {
-      errors.push(
-        "O resgate de cupom nunca pode alegar pagamento nem mostrar valor pago.",
-      );
-    }
-    if (/compra/i.test(subject)) {
-      errors.push('O assunto do resgate não pode falar em "compra".');
     }
   }
 
