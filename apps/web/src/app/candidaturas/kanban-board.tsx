@@ -730,7 +730,7 @@ export function KanbanBoard({
     <div className="kb-root">
       <style>{`
         .kb-board { display: flex; overflow-x: auto; padding: 4px 0 16px; scrollbar-width: none; -ms-overflow-style: none; }
-        .kb-track { display: flex; gap: 12px; align-items: flex-start; justify-content: center; flex: 1 1 auto; min-width: min-content; }
+        .kb-track { display: flex; gap: 12px; align-items: stretch; justify-content: center; flex: 1 1 auto; min-width: min-content; }
         .kb-board::-webkit-scrollbar { display: none; }
         .kb-board[data-panning="true"] { cursor: grabbing; user-select: none; }
         .kb-board[data-scrollable="true"] .kb-col-head { cursor: grab; }
@@ -1124,6 +1124,8 @@ function BoardColumn({
         // Recolhida: só o cabeçalho (a lista some na vertical). Continua
         // aceitando card solto — entra no fim da etapa.
         minHeight: collapsed ? 0 : undefined,
+        // As abertas esticam até a mais alta do quadro; a recolhida não.
+        alignSelf: collapsed ? "flex-start" : undefined,
         background: isOver ? "rgba(198,255,58,0.12)" : headerBg,
         borderColor: isOver ? "#0a0a0a" : "transparent",
       }}
