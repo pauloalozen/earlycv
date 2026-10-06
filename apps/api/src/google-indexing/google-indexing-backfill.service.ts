@@ -74,13 +74,42 @@ export class GoogleIndexingBackfillService {
       AND j.status = 'active'
       AND e."enrichmentStatus" = 'COMPLETED'`;
 
-  private readonly notNotifiedSql = Prisma.sql`
-    AND NOT EXISTS (
+  // "Notificada" = tem URL_UPDATED com sucesso DEPOIS do último URL_DELETED
+  // com sucesso. Vaga inativada manda URL_DELETED (ingestion.service.ts);
+  // se ela volta a ficar ativa, o URL_UPDATED antigo não vale mais — o Google
+  // recebeu o pedido de remoção — e ela volta pra fila do backfill.
+  private readonly notifiedSinceLastRemovalSql = Prisma.sql`EXISTS (
       SELECT 1 FROM "GoogleIndexingLog" l
       WHERE l.slug = j.slug AND l.type = 'URL_UPDATED' AND l.status = 'SUCCESS'
+        AND NOT EXISTS (
+          SELECT 1 FROM "GoogleIndexingLog" d
+          WHERE d.slug = l.slug AND d.type = 'URL_DELETED'
+            AND d.status = 'SUCCESS' AND d."createdAt" > l."createdAt"
+        )
     )`;
 
-  // Slugs ainda sem nenhuma notificacao URL_UPDATED com sucesso, das mais
+  private readonly notNotifiedSql = Prisma.sql`
+    AND NOT ${this.notifiedSinceLastRemovalSql}`;
+
+  // Tentativas de URL_UPDATED que contam pro status da listagem: só as
+  // posteriores ao último URL_DELETED com sucesso (mesma regra acima).
+  private readonly latestUpdateAttemptCte = Prisma.sql`
+      WITH last_removal AS (
+        SELECT slug, max("createdAt") AS "removedAt"
+        FROM "GoogleIndexingLog"
+        WHERE type = 'URL_DELETED' AND status = 'SUCCESS'
+        GROUP BY slug
+      ),
+      latest AS (
+        SELECT DISTINCT ON (l.slug) l.slug, l.status, l."createdAt", l."errorMsg"
+        FROM "GoogleIndexingLog" l
+        LEFT JOIN last_removal r ON r.slug = l.slug
+        WHERE l.type = 'URL_UPDATED'
+          AND (r."removedAt" IS NULL OR l."createdAt" > r."removedAt")
+        ORDER BY l.slug, l."createdAt" DESC
+      )`;
+
+  // Slugs sem notificacao URL_UPDATED com sucesso valida (ver acima), das mais
   // recentes para as mais antigas, limitado ao que o lote precisa.
   async getPendingSlugs(limit: number): Promise<string[]> {
     if (limit <= 0) return [];
@@ -96,11 +125,7 @@ export class GoogleIndexingBackfillService {
       Array<{ total: number; notified: number }>
     >`
       SELECT count(*)::int AS total,
-             (count(*) FILTER (WHERE EXISTS (
-               SELECT 1 FROM "GoogleIndexingLog" l
-               WHERE l.slug = j.slug AND l.type = 'URL_UPDATED'
-                 AND l.status = 'SUCCESS'
-             )))::int AS notified
+             (count(*) FILTER (WHERE ${this.notifiedSinceLastRemovalSql}))::int AS notified
       ${this.eligibleFromSql} ${this.eligibleWhereSql}`;
     return { notified: row?.notified ?? 0, total: row?.total ?? 0 };
   }
@@ -213,7 +238,7 @@ export class GoogleIndexingBackfillService {
     const pageSize = Math.min(100, Math.max(1, params.pageSize));
     const offset = (Math.max(1, params.page) - 1) * pageSize;
     // "notified" = ultima tentativa com sucesso; "failed" = ultima com erro;
-    // "pending" = nunca tentada (mesma semantica de antes).
+    // "pending" = nunca tentada desde a ultima remocao.
     const bucket =
       params.status === "notified"
         ? Prisma.sql`AND lt.status = 'SUCCESS'`
@@ -234,12 +259,7 @@ export class GoogleIndexingBackfillService {
         total: number;
       }>
     >`
-      WITH latest AS (
-        SELECT DISTINCT ON (slug) slug, status, "createdAt", "errorMsg"
-        FROM "GoogleIndexingLog"
-        WHERE type = 'URL_UPDATED'
-        ORDER BY slug, "createdAt" DESC
-      )
+      ${this.latestUpdateAttemptCte}
       SELECT j.id, j.slug, j.title, c.name AS "companyName",
              j."firstSeenAt", lt."createdAt" AS "lastAttemptAt",
              lt.status AS "lastAttemptStatus", lt."errorMsg" AS "lastError",
@@ -255,12 +275,7 @@ export class GoogleIndexingBackfillService {
     if (rows.length === 0 && offset > 0) {
       // Pagina alem do fim: ainda devolve o total real do balde.
       const [row] = await this.database.$queryRaw<Array<{ total: number }>>`
-        WITH latest AS (
-          SELECT DISTINCT ON (slug) slug, status
-          FROM "GoogleIndexingLog"
-          WHERE type = 'URL_UPDATED'
-          ORDER BY slug, "createdAt" DESC
-        )
+        ${this.latestUpdateAttemptCte}
         SELECT count(*)::int AS total
         ${this.eligibleFromSql}
         LEFT JOIN latest lt ON lt.slug = j.slug
