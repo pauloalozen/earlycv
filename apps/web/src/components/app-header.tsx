@@ -18,7 +18,29 @@ type UpcomingInterview = {
   companyName: string;
   nextActionAt: string;
   interviewTitle: string | null;
+  // Entrevista simulada: leva para a página do pedido (não da candidatura).
+  href?: string;
 };
+
+// Sessão da entrevista simulada vira um item do sininho. O id inclui o
+// horário: se for remarcada, o aviso volta mesmo que o anterior tenha sido
+// dispensado.
+function toMockInterviewItem(session: {
+  id: string;
+  scheduledAt: string;
+}): UpcomingInterview {
+  return {
+    id: `mi:${session.id}:${session.scheduledAt}`,
+    jobTitle: "Entrevista simulada com o Paulo",
+    companyName: `${new Date(session.scheduledAt).toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })} · Google Meet (link no seu e-mail)`,
+    nextActionAt: session.scheduledAt,
+    interviewTitle: null,
+    href: `/simulacao-de-entrevista/pedido/${session.id}`,
+  };
+}
 
 function formatInterviewDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -92,12 +114,29 @@ export function AppHeader({
 
   useEffect(() => {
     if (!userName) return;
-    fetch("/api/job-applications/upcoming-interviews")
-      .then((r) => r.json())
-      .then((data: { items?: UpcomingInterview[] }) =>
-        setUpcomingInterviews(data.items ?? []),
-      )
-      .catch(() => {});
+    const load = (url: string) =>
+      fetch(url)
+        .then((r) => r.json())
+        .catch(() => ({ items: [] }));
+    Promise.all([
+      load("/api/job-applications/upcoming-interviews"),
+      load("/api/mock-interviews/upcoming"),
+    ]).then(
+      ([applications, sessions]: [
+        { items?: UpcomingInterview[] },
+        { items?: { id: string; scheduledAt: string }[] },
+      ]) => {
+        const items = [
+          ...(applications.items ?? []),
+          ...(sessions.items ?? []).map(toMockInterviewItem),
+        ].sort(
+          (a, b) =>
+            new Date(a.nextActionAt).getTime() -
+            new Date(b.nextActionAt).getTime(),
+        );
+        setUpcomingInterviews(items);
+      },
+    );
   }, [userName]);
 
   function dismissNotification(id: string) {
@@ -470,7 +509,7 @@ export function AppHeader({
                   {visibleInterviews.map((iv) => (
                     <div key={iv.id} className="app-hdr-notif-row">
                       <a
-                        href={`/candidaturas/${iv.id}`}
+                        href={iv.href ?? `/candidaturas/${iv.id}`}
                         onClick={() => {
                           setBellOpen(false);
                           dismissNotification(iv.id);
@@ -731,7 +770,7 @@ export function AppHeader({
                     style={{ position: "relative", margin: "0 16px 8px" }}
                   >
                     <a
-                      href={`/candidaturas/${iv.id}`}
+                      href={iv.href ?? `/candidaturas/${iv.id}`}
                       onClick={() => {
                         setMobileOpen(false);
                         dismissNotification(iv.id);

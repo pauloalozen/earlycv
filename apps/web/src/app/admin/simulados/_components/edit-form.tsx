@@ -4,10 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type {
   AdminMockInterviewDetail,
+  AdminMockInterviewInviteOutcome,
   AdminMockInterviewUpdate,
   MockInterviewSessionStatus,
 } from "@/lib/admin-mock-interviews-api";
-import { updateMockInterviewAction } from "../_actions/update";
+import {
+  resendMockInterviewInviteAction,
+  updateMockInterviewAction,
+} from "../_actions/update";
 
 const STATUS_OPTIONS: {
   value: Exclude<MockInterviewSessionStatus, "REFUNDED">;
@@ -49,6 +53,36 @@ const labelStyle: React.CSSProperties = {
   color: "#2a2620",
 };
 
+// Mensagem depois de salvar, incluindo o convite por e-mail ao comprador.
+function describeSaveResult(invite: AdminMockInterviewInviteOutcome): {
+  tone: "ok" | "error";
+  text: string;
+} {
+  if (!invite) return { tone: "ok", text: "Salvo." };
+  if (invite.status === "sent") {
+    return {
+      tone: "ok",
+      text: "Salvo. Convite enviado por e-mail ao comprador.",
+    };
+  }
+  if (invite.status === "skipped_missing_link") {
+    return {
+      tone: "error",
+      text: "Salvo, mas o convite NÃO foi enviado: falta o link da chamada.",
+    };
+  }
+  if (invite.status === "skipped_past") {
+    return {
+      tone: "ok",
+      text: "Salvo. Horário no passado: nenhum convite enviado.",
+    };
+  }
+  return {
+    tone: "error",
+    text: `Salvo, mas o convite falhou${invite.error ? `: ${invite.error}` : ""}. Use "Reenviar convite" para tentar de novo.`,
+  };
+}
+
 export function MockInterviewEditForm({
   detail,
 }: {
@@ -75,6 +109,31 @@ export function MockInterviewEditForm({
   const [sessionStatus, setSessionStatus] = useState(initialStatus);
   const [adminNotes, setAdminNotes] = useState(detail.adminNotes ?? "");
   const [reportSent, setReportSent] = useState(Boolean(detail.reportSentAt));
+
+  // Reenvio manual do convite: só com a sessão salva como agendada, com
+  // link e data futura (mesmas regras da API).
+  const canResendInvite =
+    !locked &&
+    detail.sessionStatus === "SCHEDULED" &&
+    Boolean(detail.meetingUrl) &&
+    Boolean(detail.scheduledAt) &&
+    new Date(detail.scheduledAt as string).getTime() > Date.now();
+
+  function resendInvite() {
+    startTransition(async () => {
+      const result = await resendMockInterviewInviteAction(detail.id);
+      if (result.ok) {
+        setMessage(
+          result.invite?.status === "sent"
+            ? { tone: "ok", text: "Convite reenviado por e-mail ao comprador." }
+            : describeSaveResult(result.invite),
+        );
+        router.refresh();
+      } else {
+        setMessage({ tone: "error", text: result.message });
+      }
+    });
+  }
 
   function save() {
     const body: AdminMockInterviewUpdate = {};
@@ -106,7 +165,7 @@ export function MockInterviewEditForm({
     startTransition(async () => {
       const result = await updateMockInterviewAction(detail.id, body);
       if (result.ok) {
-        setMessage({ tone: "ok", text: "Salvo." });
+        setMessage(describeSaveResult(result.invite));
         router.refresh();
       } else {
         setMessage({ tone: "error", text: result.message });
@@ -244,6 +303,26 @@ export function MockInterviewEditForm({
         >
           {pending ? "Salvando..." : "Salvar alterações"}
         </button>
+        {canResendInvite && (
+          <button
+            disabled={pending}
+            onClick={resendInvite}
+            style={{
+              background: "transparent",
+              color: "#0a0a0a",
+              border: "1px solid rgba(10,10,10,0.2)",
+              borderRadius: 8,
+              padding: "9px 14px",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: pending ? "default" : "pointer",
+              opacity: pending ? 0.6 : 1,
+            }}
+            type="button"
+          >
+            Reenviar convite
+          </button>
+        )}
         {message && (
           <span
             role="status"

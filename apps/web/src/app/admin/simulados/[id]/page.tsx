@@ -50,6 +50,8 @@ const EVENT_LABELS: Record<string, string> = {
   notes_updated: "Anotações atualizadas",
   report_sent: "Relatório marcado como enviado",
   report_unmarked: "Relatório desmarcado",
+  invite_sent: "Convite enviado por e-mail",
+  invite_failed: "Falha ao enviar o convite",
 };
 
 function describeValue(value: string | null) {

@@ -174,14 +174,33 @@ export function getAdminMockInterview(id: string) {
   );
 }
 
+// Convite por e-mail disparado no salvar (null = o salvar não mexeu em
+// data/link/agendamento).
+export type AdminMockInterviewInviteOutcome =
+  | { status: "sent" }
+  | { status: "failed"; error: string | null }
+  | { status: "skipped_missing_link" }
+  | { status: "skipped_past" }
+  | null;
+
 export function updateAdminMockInterview(
   id: string,
   body: AdminMockInterviewUpdate,
 ) {
-  return request<AdminMockInterviewDetail>(
-    `/admin/mock-interviews/${encodeURIComponent(id)}`,
-    { method: "PATCH", body: JSON.stringify(body) },
-  );
+  return request<
+    AdminMockInterviewDetail & { invite?: AdminMockInterviewInviteOutcome }
+  >(`/admin/mock-interviews/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function resendAdminMockInterviewInvite(id: string) {
+  return request<
+    AdminMockInterviewDetail & { invite?: AdminMockInterviewInviteOutcome }
+  >(`/admin/mock-interviews/${encodeURIComponent(id)}/invite`, {
+    method: "POST",
+  });
 }
 
 export const SESSION_STATUS_LABELS: Record<MockInterviewSessionStatus, string> =

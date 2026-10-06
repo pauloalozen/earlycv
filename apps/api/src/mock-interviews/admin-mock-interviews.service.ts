@@ -16,6 +16,10 @@ import {
   MOCK_INTERVIEW_PRODUCT,
   purchaseCode,
 } from "./mock-interview.config";
+import {
+  MockInterviewNotificationsService,
+  type ScheduleInviteKind,
+} from "./mock-interview-notifications.service";
 import { toPublicPaymentStatus } from "./mock-interviews.service";
 
 const HOUR_MS = 60 * 60_000;
@@ -31,6 +35,15 @@ const ADMIN_SETTABLE_STATUSES: MockInterviewSessionStatus[] = [
   "NO_SHOW",
   "CANCELLED",
 ];
+
+// Resultado do convite da sessão no salvar (null = salvar não mexeu em
+// data/link/agendamento).
+export type ScheduleInviteOutcome =
+  | { status: "sent" }
+  | { status: "failed"; error: string | null }
+  | { status: "skipped_missing_link" }
+  | { status: "skipped_past" }
+  | null;
 
 export type AdminUpdateInput = {
   scheduledAt?: string | null;
@@ -102,6 +115,11 @@ export function computeRefundEligibility(
 export class AdminMockInterviewsService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(MockInterviewNotificationsService)
+    private readonly notifications: Pick<
+      MockInterviewNotificationsService,
+      "sendScheduleInvite"
+    >,
   ) {}
 
   async list(query: {
@@ -399,12 +417,114 @@ export class AdminMockInterviewsService {
       }
     }
 
-    if (events.length === 0) return this.detail(id, now);
+    if (events.length === 0)
+      return { ...(await this.detail(id, now)), invite: null };
 
     await this.database.mockInterviewPurchase.update({
       where: { id },
       data: { ...data, events: { createMany: { data: events } } },
     });
-    return this.detail(id, now);
+
+    const invite = await this.maybeSendInvite(id, purchase, data, events, now);
+    return { ...(await this.detail(id, now)), invite };
+  }
+
+  // Convite por e-mail quando o salvar deixa a sessão agendada E mexeu em
+  // data, link ou status. Sem link não envia (a tela avisa). O resultado
+  // vira evento no histórico do pedido.
+  private async maybeSendInvite(
+    id: string,
+    before: {
+      sessionStatus: MockInterviewSessionStatus;
+      scheduledAt: Date | null;
+      meetingUrl: string | null;
+    },
+    data: Prisma.MockInterviewPurchaseUpdateInput,
+    events: Prisma.MockInterviewEventCreateManyPurchaseInput[],
+    now: Date,
+  ): Promise<ScheduleInviteOutcome> {
+    const status =
+      (data.sessionStatus as MockInterviewSessionStatus | undefined) ??
+      before.sessionStatus;
+    const scheduledAt =
+      data.scheduledAt !== undefined
+        ? (data.scheduledAt as Date | null)
+        : before.scheduledAt;
+    const meetingUrl =
+      data.meetingUrl !== undefined
+        ? (data.meetingUrl as string | null)
+        : before.meetingUrl;
+    const touched =
+      data.scheduledAt !== undefined ||
+      data.meetingUrl !== undefined ||
+      data.sessionStatus === "SCHEDULED";
+    if (status !== "SCHEDULED" || !scheduledAt || !touched) return null;
+    if (!meetingUrl) return { status: "skipped_missing_link" };
+    if (scheduledAt.getTime() <= now.getTime())
+      return { status: "skipped_past" };
+
+    const alreadyInvited = await this.database.mockInterviewEvent.findFirst({
+      where: { purchaseId: id, type: "invite_sent" },
+      select: { id: true },
+    });
+    const kind: ScheduleInviteKind = events.some(
+      (e) => e.type === "rescheduled",
+    )
+      ? "rescheduled"
+      : alreadyInvited
+        ? "updated"
+        : "scheduled";
+
+    return this.deliverInvite(id, scheduledAt, kind);
+  }
+
+  // Reenvio manual (botão no admin), ex.: depois de uma falha. Mesmas
+  // condições do envio automático; texto de "sessão marcada".
+  async resendInvite(id: string, now: Date = new Date()) {
+    const purchase = await this.database.mockInterviewPurchase.findUnique({
+      where: { id },
+    });
+    if (!purchase) throw new NotFoundException("Compra não encontrada.");
+    if (
+      purchase.paymentStatus !== "completed" ||
+      purchase.sessionStatus !== "SCHEDULED" ||
+      !purchase.scheduledAt
+    ) {
+      throw new BadRequestException(
+        "Só sessões pagas e agendadas recebem convite.",
+      );
+    }
+    if (!purchase.meetingUrl) {
+      throw new BadRequestException("Informe o link da chamada antes.");
+    }
+    if (purchase.scheduledAt.getTime() <= now.getTime()) {
+      throw new BadRequestException("O horário da sessão já passou.");
+    }
+    const invite = await this.deliverInvite(
+      id,
+      purchase.scheduledAt,
+      "scheduled",
+    );
+    return { ...(await this.detail(id, now)), invite };
+  }
+
+  private async deliverInvite(
+    id: string,
+    scheduledAt: Date,
+    kind: ScheduleInviteKind,
+  ): Promise<ScheduleInviteOutcome> {
+    const result = await this.notifications.sendScheduleInvite(id, kind);
+    await this.database.mockInterviewEvent.create({
+      data: {
+        purchaseId: id,
+        type: result.status === "sent" ? "invite_sent" : "invite_failed",
+        actor: "system",
+        toValue: scheduledAt.toISOString(),
+        note: result.status === "sent" ? kind : result.error?.slice(0, 500),
+      },
+    });
+    return result.status === "sent"
+      ? { status: "sent" }
+      : { status: "failed", error: result.error };
   }
 }

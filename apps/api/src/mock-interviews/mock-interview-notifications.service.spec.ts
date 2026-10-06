@@ -188,3 +188,38 @@ test("e-mail contents: admin gets buyer and order code; buyer gets the order lin
   // O número do WhatsApp nunca vai no e-mail (só na página do pedido).
   assert.doesNotMatch(buyer.text, /wa\.me/);
 });
+
+test("schedule invite: São Paulo time, call link, Google Calendar link and reschedule rule", async () => {
+  const { buildScheduleInviteEmail } = await import(
+    "./mock-interview-notifications.service"
+  );
+  const email = buildScheduleInviteEmail({
+    purchaseId: "cmpurchase000abc123",
+    buyerName: "Maria Souza",
+    // 22:00 UTC = 19:00 em Brasília
+    scheduledAt: new Date("2026-10-20T22:00:00.000Z"),
+    meetingUrl: "https://meet.google.com/abc-defg-hij",
+    kind: "scheduled",
+  });
+  assert.match(email.subject, /marcada/);
+  assert.match(email.text, /Oi, Maria!/);
+  assert.match(email.text, /19:00/);
+  assert.match(email.text, /https:\/\/meet\.google\.com\/abc-defg-hij/);
+  assert.match(
+    email.text,
+    /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/,
+  );
+  assert.match(email.text, /dates=20261020T220000Z%2F20261020T224500Z/);
+  assert.match(email.text, /24 horas de antecedência/);
+  assert.match(email.html, /Entrar na chamada/);
+
+  const moved = buildScheduleInviteEmail({
+    purchaseId: "cmpurchase000abc123",
+    buyerName: "",
+    scheduledAt: new Date("2026-10-21T22:00:00.000Z"),
+    meetingUrl: "https://meet.google.com/abc-defg-hij",
+    kind: "rescheduled",
+  });
+  assert.match(moved.subject, /remarcada/);
+  assert.match(moved.text, /^Oi!/);
+});
