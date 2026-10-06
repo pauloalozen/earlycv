@@ -7,12 +7,14 @@ import { afterEach, beforeEach, test } from "node:test";
 import {
   BadRequestException,
   ConflictException,
+  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 
 import {
   buildWhatsappUrl,
+  canSimulateMockInterviewPayment,
   purchaseCode,
   purchaseIdFromExternalReference,
   toExternalReference,
@@ -773,4 +775,70 @@ test("brick: checkout data comes from the order", async () => {
   assert.equal(data.currency, "BRL");
   assert.equal(data.payerEmail, "maria@example.com");
   assert.equal(data.code, "ABC123");
+});
+
+test("simulated payment: approves own order via applyPayment, without Mercado Pago", async () => {
+  const db = createFakeDb([basePurchase()]);
+  let mpCalls = 0;
+  const { service, notified } = createService(db, {
+    createBrickPayment: async () => {
+      mpCalls += 1;
+      throw new Error("should not be called");
+    },
+    getPayment: async () => {
+      mpCalls += 1;
+      return null;
+    },
+  });
+
+  const result = await service.simulatePayment("user-1", "cmpurchase000abc123");
+
+  assert.equal(result.result, "approved");
+  assert.equal(
+    result.redirectTo,
+    "/simulacao-de-entrevista/pedido/cmpurchase000abc123",
+  );
+  const row = db.purchases.get("cmpurchase000abc123");
+  assert.equal(row?.paymentStatus, "completed");
+  assert.equal(row?.paymentMethod, "admin_simulated");
+  assert.match(String(row?.mpPaymentId), /^simulated-/);
+  assert.deepEqual(notified, ["cmpurchase000abc123"]);
+  const event = db.events.find((e) => e.type === "payment_approved");
+  assert.equal(event?.actor, "admin_simulated");
+  assert.equal(mpCalls, 0);
+});
+
+test("simulated payment: refuses other users' orders and orders already paid", async () => {
+  const db = createFakeDb([basePurchase()]);
+  const { service } = createService(db);
+  await assert.rejects(
+    service.simulatePayment("user-2", "cmpurchase000abc123"),
+    NotFoundException,
+  );
+
+  const paidDb = createFakeDb([basePurchase({ paymentStatus: "completed" })]);
+  const paid = createService(paidDb);
+  await assert.rejects(
+    paid.service.simulatePayment("user-1", "cmpurchase000abc123"),
+    ConflictException,
+  );
+});
+
+test("simulated payment gate: needs flag, non-production and staff admin", () => {
+  const admin = { isStaff: true, internalRole: "admin" } as const;
+  const customer = { isStaff: false, internalRole: "none" } as const;
+  const roleWithoutStaff = { isStaff: false, internalRole: "admin" } as const;
+
+  process.env.NODE_ENV = "development";
+  delete process.env.MOCK_INTERVIEW_SIMULATED_PAYMENT;
+  assert.equal(canSimulateMockInterviewPayment(admin), false);
+
+  process.env.MOCK_INTERVIEW_SIMULATED_PAYMENT = "true";
+  assert.equal(canSimulateMockInterviewPayment(admin), true);
+  assert.equal(canSimulateMockInterviewPayment(customer), false);
+  assert.equal(canSimulateMockInterviewPayment(roleWithoutStaff), false);
+  assert.equal(canSimulateMockInterviewPayment(null), false);
+
+  process.env.NODE_ENV = "production";
+  assert.equal(canSimulateMockInterviewPayment(admin), false);
 });

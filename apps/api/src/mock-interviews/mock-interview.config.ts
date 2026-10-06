@@ -43,6 +43,23 @@ export function canAccessMockInterview(
   );
 }
 
+// Pagamento simulado (botão "Simular pagamento aprovado" no checkout): só
+// para testar o pós-pagamento sem cobrar. Exige
+// MOCK_INTERVIEW_SIMULATED_PAYMENT=true, nunca vale em produção (NODE_ENV)
+// e só para staff admin/superadmin no próprio pedido.
+export function canSimulateMockInterviewPayment(
+  viewer: MockInterviewViewer | undefined,
+): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  if (process.env.MOCK_INTERVIEW_SIMULATED_PAYMENT?.trim() !== "true") {
+    return false;
+  }
+  return Boolean(
+    viewer?.isStaff &&
+      (viewer.internalRole === "admin" || viewer.internalRole === "superadmin"),
+  );
+}
+
 // Preço em centavos (PRICE_INTERVIEW_SIM=7990 -> R$ 79,90). Só aceita inteiro
 // positivo; ausente ou inválido = null, e aí a venda fica fechada (o checkout
 // recusa) em vez de cobrar um valor que ninguém configurou.

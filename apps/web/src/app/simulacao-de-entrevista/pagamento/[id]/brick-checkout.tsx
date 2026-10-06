@@ -27,6 +27,8 @@ type BrickCheckoutData = {
   currency: string;
   description: string;
   payerEmail: string | null;
+  // Só fora de produção, com a flag ligada, para staff (decidido na API).
+  canSimulatePayment?: boolean;
 };
 
 type BrickPayResponse = {
@@ -72,6 +74,8 @@ export function MockInterviewBrickCheckout({
     qrCodeText: string | null;
   } | null>(null);
   const [pixCopied, setPixCopied] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [simulateError, setSimulateError] = useState<string | null>(null);
   const brickControlRef = useRef<{ unmount?: () => void } | null>(null);
   const brickInitializedRef = useRef(false);
   const submitAttemptedRef = useRef(false);
@@ -280,6 +284,33 @@ export function MockInterviewBrickCheckout({
     };
   }, [awaitingApproval, purchaseId, router]);
 
+  // Modo teste (admin): aprova o pedido sem cobrar, pelo mesmo caminho do
+  // webhook, para ver o pós-pagamento.
+  async function simulatePayment() {
+    if (simulating) return;
+    setSimulating(true);
+    setSimulateError(null);
+    try {
+      const response = await fetch(
+        `/api/mock-interviews/purchases/${purchaseId}/simulate-payment`,
+        { method: "POST" },
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        redirectTo?: string;
+        orderPath?: string;
+      };
+      if (response.ok || response.status === 409) {
+        router.push(body.redirectTo ?? body.orderPath ?? orderPath(purchaseId));
+        return;
+      }
+      setSimulateError("Não foi possível simular o pagamento.");
+    } catch {
+      setSimulateError("Não foi possível simular o pagamento.");
+    } finally {
+      setSimulating(false);
+    }
+  }
+
   async function copyPixCode() {
     if (!pixPending?.qrCodeText) return;
     try {
@@ -292,6 +323,65 @@ export function MockInterviewBrickCheckout({
 
   return (
     <PageShell>
+      {data?.canSimulatePayment && (
+        <div
+          data-testid="mock-interview-simulate-payment"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            zIndex: 50,
+            maxWidth: 300,
+            background: "#0a0a0a",
+            color: "#fafaf6",
+            borderRadius: 12,
+            padding: "14px 16px",
+            boxShadow: "0 8px 24px rgba(10,10,10,0.18)",
+            fontSize: 12.5,
+            lineHeight: 1.45,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: "0.12em",
+              color: "#a0a098",
+              marginBottom: 6,
+            }}
+          >
+            MODO TESTE · ADMIN
+          </div>
+          <p style={{ margin: "0 0 10px" }}>
+            Aprova este pedido sem cobrar, como se o pagamento tivesse sido
+            confirmado.
+          </p>
+          <button
+            type="button"
+            onClick={simulatePayment}
+            disabled={simulating}
+            style={{
+              width: "100%",
+              height: 34,
+              borderRadius: 8,
+              border: 0,
+              background: "#fafaf6",
+              color: "#0a0a0a",
+              fontWeight: 500,
+              fontSize: 12.5,
+              cursor: simulating ? "default" : "pointer",
+              opacity: simulating ? 0.6 : 1,
+            }}
+          >
+            {simulating ? "Aprovando…" : "Simular pagamento aprovado"}
+          </button>
+          {simulateError && (
+            <p style={{ margin: "8px 0 0", color: "#f5b5b5" }}>
+              {simulateError}
+            </p>
+          )}
+        </div>
+      )}
       <div
         style={{
           minHeight: "100dvh",

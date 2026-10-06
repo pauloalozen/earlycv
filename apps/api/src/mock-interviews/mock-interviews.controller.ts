@@ -25,7 +25,10 @@ import { OptionalJwtAuthGuard } from "../common/optional-jwt-auth.guard";
 import { CreateMockInterviewCheckoutDto } from "./dto/create-checkout.dto";
 import { GetMockInterviewPurchaseQueryDto } from "./dto/get-purchase-query.dto";
 // biome-ignore-end lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype
-import { canAccessMockInterview } from "./mock-interview.config";
+import {
+  canAccessMockInterview,
+  canSimulateMockInterviewPayment,
+} from "./mock-interview.config";
 import { MockInterviewsService } from "./mock-interviews.service";
 
 // Venda fechada para este usuário (MOCK_INTERVIEW_MODE): responde 404, como
@@ -92,7 +95,25 @@ export class MockInterviewsController {
     @Param("id") id: string,
   ) {
     assertMockInterviewAvailable(user);
-    return this.service.getBrickCheckout(user.id, id);
+    return this.service.getBrickCheckout(user.id, id, {
+      canSimulatePayment: canSimulateMockInterviewPayment(user),
+    });
+  }
+
+  // Pagamento simulado para testar o pós-pagamento (só fora de produção,
+  // com MOCK_INTERVIEW_SIMULATED_PAYMENT=true, staff no próprio pedido).
+  // Fora disso responde 404, como se a rota não existisse.
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Post("purchases/:id/simulate-payment")
+  simulatePayment(
+    @AuthenticatedUser() user: AuthenticatedRequestUser,
+    @Param("id") id: string,
+  ) {
+    if (!canSimulateMockInterviewPayment(user)) {
+      throw new NotFoundException();
+    }
+    return this.service.simulatePayment(user.id, id);
   }
 
   // Envio do formulário do Brick (cartão com token ou Pix).

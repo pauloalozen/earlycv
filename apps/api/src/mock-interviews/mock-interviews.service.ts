@@ -285,7 +285,11 @@ export class MockInterviewsService {
 
   // Dados para montar o Payment Brick. Só pedido do próprio usuário, ainda
   // sem pagamento em andamento.
-  async getBrickCheckout(userId: string, purchaseId: string) {
+  async getBrickCheckout(
+    userId: string,
+    purchaseId: string,
+    options: { canSimulatePayment?: boolean } = {},
+  ) {
     const purchase = await this.database.mockInterviewPurchase.findFirst({
       where: { id: purchaseId, userId },
       include: { user: { select: { email: true } } },
@@ -314,6 +318,53 @@ export class MockInterviewsService {
       payerEmail: isValidEmail(purchase.user.email)
         ? purchase.user.email
         : null,
+      canSimulatePayment: options.canSimulatePayment === true,
+    };
+  }
+
+  // Pagamento simulado (teste do pós-pagamento sem cobrar). Quem chama já
+  // validou canSimulateMockInterviewPayment; aqui só o próprio pedido, ainda
+  // pagável. Passa pelo mesmo applyPayment do webhook (status, evento,
+  // e-mails), com método "admin_simulated" para ficar identificável.
+  async simulatePayment(
+    userId: string,
+    purchaseId: string,
+  ): Promise<{ purchaseId: string; result: ApplyResult; redirectTo: string }> {
+    const purchase = await this.database.mockInterviewPurchase.findFirst({
+      where: { id: purchaseId, userId },
+    });
+    if (!purchase) throw new NotFoundException("Pedido não encontrado.");
+    if (!BRICK_PAYABLE_STATUSES.includes(purchase.paymentStatus)) {
+      throw new ConflictException({
+        errorCode: "purchase_status_invalid",
+        message: "Este pedido já tem um pagamento em andamento ou concluído.",
+        orderPath: orderPathFor(purchase.id),
+      });
+    }
+
+    this.logger.warn(
+      `[mock-interview] simulated payment purchaseId=${purchase.id} userId=${userId}`,
+    );
+    const result = await this.applyPayment(
+      purchase.id,
+      {
+        paymentId: `simulated-${randomUUID()}`,
+        status: "approved",
+        rawStatus: "approved",
+        statusDetail: "admin_simulated",
+        externalReference: null,
+        preferenceId: null,
+        merchantOrderId: null,
+        paymentMethod: "admin_simulated",
+        paidAmountInCents: purchase.amountInCents,
+        paidCurrency: purchase.currency,
+      },
+      "admin_simulated",
+    );
+    return {
+      purchaseId: purchase.id,
+      result,
+      redirectTo: orderPathFor(purchase.id),
     };
   }
 
@@ -626,7 +677,7 @@ export class MockInterviewsService {
   async applyPayment(
     purchaseId: string,
     payment: NormalizedMpPayment,
-    actor: "webhook" | "reconcile" | "brick",
+    actor: "webhook" | "reconcile" | "brick" | "admin_simulated",
   ): Promise<ApplyResult> {
     const purchase = await this.database.mockInterviewPurchase.findUnique({
       where: { id: purchaseId },
