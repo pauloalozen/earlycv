@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { getRouteAccessRedirectPath } from "@/lib/app-session";
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
 
+import { AdminScrollKeeper } from "./_components/admin-scroll-keeper";
 import { AdminTopbar } from "./_components/admin-topbar";
 
 export const metadata: Metadata = {
@@ -37,6 +38,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     >
       <AdminTopbar userInitial={userInitial} userName={userName} />
       <div className="min-h-screen">{children}</div>
+      <AdminScrollKeeper />
     </div>
   );
 }
