@@ -14,6 +14,7 @@ import { AdminTokenState } from "@/app/admin/_components/admin-token-state";
 import {
   getProductUpdateDetail,
   getProductUpdateEligibleCount,
+  listProductUpdateDeliveries,
   type ProductUpdateAudience,
   type ProductUpdateStats,
   previewProductUpdate,
@@ -27,6 +28,11 @@ import {
   sendTestProductUpdateAction,
   startProductUpdateAction,
 } from "../actions";
+import {
+  type DELIVERY_FILTER_LABEL,
+  isDeliveryFilter,
+  ProductUpdateDeliveriesSection,
+} from "./deliveries-section";
 import { ProductUpdateEditorForm } from "./editor-form";
 
 export const metadata = buildAdminMetadata("Product Updates — campanha");
@@ -65,6 +71,10 @@ type SearchParams = Promise<{
   message?: string;
   withName?: string;
   audience?: string;
+  // Drill-down dos cards de métricas (lista os destinatários por trás do
+  // número) e a página dessa lista.
+  filter?: string;
+  deliveriesPage?: string;
 }>;
 
 export default async function ProductUpdateDetailPage({
@@ -75,7 +85,8 @@ export default async function ProductUpdateDetailPage({
   searchParams: SearchParams;
 }) {
   const { id } = await params;
-  const { status, message, withName, audience } = await searchParams;
+  const { status, message, withName, audience, filter, deliveriesPage } =
+    await searchParams;
   const token = await getBackofficeSessionToken();
   const rootPath = `/admin/product-updates/${id}`;
 
@@ -121,6 +132,22 @@ export default async function ProductUpdateDetailPage({
   const eligibleCount = selectedAudience
     ? await getProductUpdateEligibleCount(id, selectedAudience, token)
     : null;
+
+  const deliveryFilter = isDeliveryFilter(filter) ? filter : null;
+  const deliveries = deliveryFilter
+    ? await listProductUpdateDeliveries(
+        id,
+        {
+          filter: deliveryFilter,
+          page:
+            Number(deliveriesPage) > 0 ? Math.floor(Number(deliveriesPage)) : 1,
+          limit: 20,
+        },
+        token,
+      )
+    : null;
+  const cardHref = (key: keyof typeof DELIVERY_FILTER_LABEL) =>
+    `${rootPath}?filter=${key}#entregas`;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px" }}>
@@ -341,29 +368,62 @@ export default async function ProductUpdateDetailPage({
 
       <AdminSectionGroup label="Métricas e falhas">
         <AdminStatsRow cols={4}>
-          <AdminStatCard label="Enviados" value={String(stats.sent)} />
-          <AdminStatCard label="Falhas" value={String(stats.failed)} />
+          <AdminStatCard
+            label="Enviados"
+            value={String(stats.sent)}
+            href={cardHref("sent")}
+          />
+          <AdminStatCard
+            label="Falhas"
+            value={String(stats.failed)}
+            href={cardHref("failed")}
+          />
           <AdminStatCard
             label="Indeterminados"
             value={String(stats.outcomeUnknown)}
+            href={cardHref("outcome_unknown")}
           />
-          <AdminStatCard label="Cancelados" value={String(stats.cancelled)} />
+          <AdminStatCard
+            label="Cancelados"
+            value={String(stats.cancelled)}
+            href={cardHref("cancelled")}
+          />
           <AdminStatCard
             label="Aberturas únicas"
             value={String(stats.uniqueOpened)}
+            tooltip="Pode estar inflada: o Apple Mail Privacy Protection pré-carrega o pixel de rastreio mesmo sem abertura real. Clique pra ver a lista."
+            href={cardHref("opened")}
           />
           <AdminStatCard
             label="Cliques únicos"
             value={String(stats.uniqueClicked)}
+            href={cardHref("clicked")}
           />
-          <AdminStatCard label="Bounces" value={String(stats.bounced)} />
-          <AdminStatCard label="Complaints" value={String(stats.complained)} />
+          <AdminStatCard
+            label="Bounces"
+            value={String(stats.bounced)}
+            href={cardHref("bounced")}
+          />
+          <AdminStatCard
+            label="Complaints"
+            value={String(stats.complained)}
+            href={cardHref("complained")}
+          />
           <AdminStatCard
             label="Descadastros"
             value={String(stats.unsubscribed)}
             tooltip="Status atual de opt-out entre os destinatários desta campanha — o descadastro do SES é por tópico, não por envio específico, então este número reflete quem está descadastrado agora, não necessariamente por causa deste e-mail."
+            href={cardHref("unsubscribed")}
           />
         </AdminStatsRow>
+
+        {deliveryFilter && deliveries ? (
+          <ProductUpdateDeliveriesSection
+            filter={deliveryFilter}
+            data={deliveries}
+            rootPath={rootPath}
+          />
+        ) : null}
       </AdminSectionGroup>
 
       <div style={{ marginBottom: 12 }}>

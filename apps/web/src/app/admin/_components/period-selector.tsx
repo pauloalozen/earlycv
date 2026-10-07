@@ -32,7 +32,9 @@ export function PeriodSelector({ current }: { current: Period }) {
           <button
             key={p.id}
             type="button"
-            onClick={() => router.push(`/admin?period=${p.id}`)}
+            onClick={() =>
+              router.push(`/admin?period=${p.id}`, { scroll: false })
+            }
             style={{
               padding: "5px 12px",
               borderRadius: 6,

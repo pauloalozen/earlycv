@@ -9,6 +9,12 @@ import {
   ProductUpdatesService,
   type UpdateProductUpdateInput,
 } from "../product-updates/product-updates.service";
+import {
+  buildDeliveryListWhere,
+  type DeliveryListFilter,
+  eventTypeForFilter,
+  summarizeEventMetadata,
+} from "./delivery-list-filter";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -121,22 +127,52 @@ export class AdminProductUpdatesService {
 
   async listDeliveries(
     id: string,
-    pagination: { page?: number; limit?: number },
+    query: { page?: number; limit?: number; filter?: DeliveryListFilter },
   ) {
-    const page = pagination.page ?? 1;
-    const limit = pagination.limit ?? DEFAULT_PAGE_SIZE;
+    const page = query.page ?? 1;
+    const limit = query.limit ?? DEFAULT_PAGE_SIZE;
+    const where = buildDeliveryListWhere(id, query.filter);
+    const eventType = eventTypeForFilter(query.filter);
 
-    const [items, total] = await Promise.all([
+    const [deliveries, total] = await Promise.all([
       this.database.productUpdateDelivery.findMany({
-        where: { productUpdateId: id },
+        where,
         orderBy: [{ createdAt: "asc" }],
         skip: (page - 1) * limit,
         take: limit,
+        include: eventType
+          ? {
+              // Primeiro evento do tipo (quando aconteceu + detalhe, ex.:
+              // link clicado) e quantas vezes aconteceu nessa entrega.
+              events: {
+                where: { type: eventType },
+                orderBy: [{ occurredAt: "asc" }],
+                take: 1,
+                select: { occurredAt: true, metadataJson: true },
+              },
+              _count: { select: { events: { where: { type: eventType } } } },
+            }
+          : undefined,
       }),
-      this.database.productUpdateDelivery.count({
-        where: { productUpdateId: id },
-      }),
+      this.database.productUpdateDelivery.count({ where }),
     ]);
+
+    const items = deliveries.map((delivery) => {
+      const { events, _count, ...rest } = delivery as typeof delivery & {
+        events?: { occurredAt: Date; metadataJson: unknown }[];
+        _count?: { events: number };
+      };
+      const first = events?.[0];
+      return {
+        ...rest,
+        eventAt: first?.occurredAt ?? null,
+        eventCount: _count?.events ?? null,
+        eventDetail:
+          eventType && first
+            ? summarizeEventMetadata(eventType, first.metadataJson)
+            : null,
+      };
+    });
 
     return { items, total, page, limit };
   }

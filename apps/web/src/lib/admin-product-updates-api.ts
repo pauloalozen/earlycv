@@ -287,17 +287,44 @@ export function cancelProductUpdate(id: string, token?: string) {
   );
 }
 
+// Drill-down dos cards de métricas — mesmo critério de cada contagem (ver
+// delivery-list-filter.ts na API).
+export type ProductUpdateDeliveryFilter =
+  | "sent"
+  | "failed"
+  | "outcome_unknown"
+  | "cancelled"
+  | "opened"
+  | "clicked"
+  | "bounced"
+  | "complained"
+  | "unsubscribed";
+
+export type ProductUpdateDeliveryListItem = ProductUpdateDelivery & {
+  // Preenchidos só nos filtros de evento (aberto/clicado/bounce/complaint):
+  // primeira ocorrência, quantas vezes aconteceu e o detalhe útil do
+  // payload (link clicado, tipo de bounce/complaint).
+  eventAt: string | null;
+  eventCount: number | null;
+  eventDetail: string | null;
+};
+
 export function listProductUpdateDeliveries(
   id: string,
-  params: { page?: number; limit?: number } = {},
+  params: {
+    page?: number;
+    limit?: number;
+    filter?: ProductUpdateDeliveryFilter;
+  } = {},
   token?: string,
 ) {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
+  if (params.filter) qs.set("filter", params.filter);
   const suffix = qs.toString();
   return apiRequest<{
-    items: ProductUpdateDelivery[];
+    items: ProductUpdateDeliveryListItem[];
     total: number;
     page: number;
     limit: number;

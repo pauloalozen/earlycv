@@ -24,6 +24,7 @@ import { AdminProductUpdatesService } from "./admin-product-updates.service";
 // biome-ignore-start lint/style/useImportType: DTOs de @Query/@Body precisam de import de valor pro Nest reflectir o metatype
 import { CreateProductUpdateDto } from "./dto/create-product-update.dto";
 import { EligibleCountQueryDto } from "./dto/eligible-count-query.dto";
+import { ListDeliveriesQueryDto } from "./dto/list-deliveries-query.dto";
 import { PageQueryDto } from "./dto/page-query.dto";
 import { PreviewProductUpdateDto } from "./dto/preview-product-update.dto";
 import { SendTestProductUpdateDto } from "./dto/send-test-product-update.dto";
@@ -120,7 +121,10 @@ export class AdminProductUpdatesController {
   }
 
   @Get(":id/deliveries")
-  listDeliveries(@Param("id") id: string, @Query() query: PageQueryDto) {
+  listDeliveries(
+    @Param("id") id: string,
+    @Query() query: ListDeliveriesQueryDto,
+  ) {
     return this.service.listDeliveries(id, query);
   }
 
