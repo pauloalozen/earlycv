@@ -39,6 +39,34 @@ const adminUserArgs = Prisma.validator<Prisma.UserDefaultArgs>()({
 
 type AdminUserRecord = Prisma.UserGetPayload<typeof adminUserArgs>;
 
+export const ADMIN_USER_SORTS = [
+  "created_desc",
+  "created_asc",
+  "name_asc",
+  "name_desc",
+] as const;
+
+export type AdminUserSort = (typeof ADMIN_USER_SORTS)[number];
+
+// Ordem estável: o default é data de criação (mais novo primeiro). Antes
+// ordenava por updatedAt, e qualquer escrita no usuário (login, crédito,
+// perfil) jogava ele pro topo da lista. `id` desempata pra paginação não
+// repetir/pular linhas quando dois usuários têm o mesmo nome/createdAt.
+export function buildAdminUserOrderBy(
+  sort?: string,
+): Prisma.UserOrderByWithRelationInput[] {
+  switch (sort) {
+    case "created_asc":
+      return [{ createdAt: "asc" }, { id: "asc" }];
+    case "name_asc":
+      return [{ name: "asc" }, { id: "asc" }];
+    case "name_desc":
+      return [{ name: "desc" }, { id: "desc" }];
+    default:
+      return [{ createdAt: "desc" }, { id: "desc" }];
+  }
+}
+
 // "blank" == null ou string vazia — aproxima o `hasValue` (trim + truthy)
 // que o front usa (admin-users-operations.ts) pra decidir completude de
 // perfil. Espaco-em-branco-so nunca acontece em dado real vindo do form de
@@ -160,10 +188,13 @@ export class AdminUsersService {
   async list(
     filters: {
       page?: number;
+      createdSince?: Date;
       limit?: number;
+      loggedInSince?: Date;
       planType?: UserPlanType;
       profileStatus?: string;
       query?: string;
+      sort?: string;
       status?: string;
     } = {},
   ) {
@@ -190,6 +221,14 @@ export class AdminUsersService {
       AND: [
         { isStaff: false },
         ...(filters.planType ? [{ planType: filters.planType }] : []),
+        ...(filters.createdSince
+          ? [{ createdAt: { gte: filters.createdSince } }]
+          : []),
+        // lastLoginAt é gravado a cada sessão emitida (login, cadastro,
+        // social e refresh), então ">= since" = acessou no período.
+        ...(filters.loggedInSince
+          ? [{ lastLoginAt: { gte: filters.loggedInSince } }]
+          : []),
         ...(statusWhere ? [statusWhere] : []),
         ...(profileStatusWhere ? [profileStatusWhere] : []),
         ...(filters.query
@@ -210,7 +249,7 @@ export class AdminUsersService {
       this.database.user.findMany({
         where,
         ...adminUserArgs,
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        orderBy: buildAdminUserOrderBy(filters.sort),
         skip: (page - 1) * limit,
         take: limit,
       }),

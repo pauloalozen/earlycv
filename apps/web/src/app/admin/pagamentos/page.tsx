@@ -9,6 +9,11 @@ import {
   AdminTh,
 } from "@/app/admin/_components/admin-primitives";
 import { listAdminPayments } from "@/lib/admin-payments-api";
+import {
+  adminPeriodSubLabel,
+  getAdminPeriodSince,
+  isAdminPeriod,
+} from "@/lib/admin-period";
 import { buildAdminMetadata } from "@/lib/route-metadata";
 import { AdminShellHeader } from "../_components/admin-shell-header";
 
@@ -54,6 +59,7 @@ type SearchParams = {
   from?: string;
   to?: string;
   page?: string;
+  period?: string;
 };
 
 export default async function AdminPagamentosPage({
@@ -63,11 +69,15 @@ export default async function AdminPagamentosPage({
 }) {
   const sp = await searchParams;
   const page = sp.page ? parseInt(sp.page, 10) : 1;
+  // ?period= vem dos cards da visão geral (mesmo corte de data do card).
+  // Datas explícitas do formulário têm precedência sobre ele.
+  const period =
+    isAdminPeriod(sp.period) && !sp.from && !sp.to ? sp.period : undefined;
 
   const { items, total } = await listAdminPayments({
     status: sp.status,
     userId: sp.userId,
-    from: sp.from,
+    from: period ? getAdminPeriodSince(period).toISOString() : sp.from,
     to: sp.to,
     page,
     limit: 50,
@@ -80,6 +90,7 @@ export default async function AdminPagamentosPage({
       userId: sp.userId,
       from: sp.from,
       to: sp.to,
+      period,
       page: String(page),
       ...overrides,
     };
@@ -110,6 +121,7 @@ export default async function AdminPagamentosPage({
         className="mb-4 flex flex-wrap gap-2"
         method="GET"
       >
+        {period ? <input name="period" type="hidden" value={period} /> : null}
         <select
           className="h-9 rounded-md border px-3 text-[12.5px] font-medium"
           style={{
@@ -168,6 +180,24 @@ export default async function AdminPagamentosPage({
           Limpar
         </Link>
       </form>
+
+      {period ? (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-3 text-[12.5px]"
+          style={{ color: "#8a8580" }}
+        >
+          <span>
+            Período: {adminPeriodSubLabel(period)} · {total} registro
+            {total !== 1 ? "s" : ""}
+          </span>
+          <Link
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href={buildUrl({ period: undefined, page: undefined })}
+          >
+            Limpar período
+          </Link>
+        </div>
+      ) : null}
 
       <AdminTable>
         <thead>

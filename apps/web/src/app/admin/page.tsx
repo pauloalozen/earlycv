@@ -12,6 +12,11 @@ import {
   getAdminOverviewStats,
   getAdminPaymentsSummary,
 } from "@/lib/admin-overview-api";
+import {
+  adminPeriodSubLabel,
+  getAdminPeriodSince,
+  resolveAdminPeriod,
+} from "@/lib/admin-period";
 import { buildAdminStateModel } from "@/lib/admin-state";
 import { getAdminDataErrorKind } from "@/lib/admin-token-errors";
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
@@ -21,41 +26,6 @@ import { AdminTokenState } from "./_components/admin-token-state";
 import { type Period, PeriodSelector } from "./_components/period-selector";
 
 export const metadata = buildAdminMetadata("Visao geral");
-
-const VALID_PERIODS: Period[] = ["hoje", "7d", "30d", "mes"];
-
-function resolvePeriod(raw?: string): Period {
-  return VALID_PERIODS.includes(raw as Period) ? (raw as Period) : "30d";
-}
-
-function getSinceDate(period: Period): Date {
-  const now = new Date();
-  switch (period) {
-    case "hoje":
-      return new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-      );
-    case "7d":
-      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    case "mes":
-      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    default:
-      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  }
-}
-
-function periodSubLabel(period: Period): string {
-  switch (period) {
-    case "hoje":
-      return "hoje";
-    case "7d":
-      return "últimos 7 dias";
-    case "30d":
-      return "últimos 30 dias";
-    case "mes":
-      return "este mês";
-  }
-}
 
 function formatBRL(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -91,7 +61,7 @@ export default async function AdminOverviewPage({
   searchParams,
 }: AdminOverviewPageProps) {
   const { period: rawPeriod } = await searchParams;
-  const period = resolvePeriod(rawPeriod);
+  const period = resolveAdminPeriod(rawPeriod);
 
   const token = await getBackofficeSessionToken();
 
@@ -151,11 +121,11 @@ function OverviewSkeleton() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(5, 1fr)",
           gap: 12,
         }}
       >
-        {[76, 77, 78, 79].map((height) => (
+        {[76, 77, 78, 79, 80].map((height) => (
           <div key={height} style={{ ...card, height }} />
         ))}
       </div>
@@ -165,16 +135,18 @@ function OverviewSkeleton() {
 }
 
 async function OverviewContent({ period }: { period: Period }) {
-  const since = getSinceDate(period);
+  const since = getAdminPeriodSince(period);
   const sinceIso = since.toISOString();
-  const subLabel = periodSubLabel(period);
+  const subLabel = adminPeriodSubLabel(period);
 
   // Só agregados (COUNT/SUM no banco): a visão geral nunca carrega listas
   // de usuários, currículos, empresas, fontes ou pagamentos.
   const [statsResult, paymentsSummary] = await Promise.all([
     getAdminOverviewStats(sinceIso)
       .then((data) => ({ data, kind: "ok" }) as const)
-      .catch((error: unknown) => ({ kind: getAdminDataErrorKind(error) }) as const),
+      .catch(
+        (error: unknown) => ({ kind: getAdminDataErrorKind(error) }) as const,
+      ),
     getAdminPaymentsSummary(sinceIso).catch(() => null),
   ]);
 
@@ -188,9 +160,15 @@ async function OverviewContent({ period }: { period: Period }) {
     );
   }
 
-  const { newUsers, totalAdaptedResumes, totalUsers } = statsResult.data;
+  const { loggedInUsers, newUsers, totalAdaptedResumes, totalUsers } =
+    statsResult.data;
   const approvedPaymentsCount = paymentsSummary?.approvedCount ?? 0;
   const revenueInCents = paymentsSummary?.revenueInCents ?? 0;
+  // Pagamentos é só superadmin: sem summary (403), os cards mostram "—"
+  // e não viram link pra uma tela que também seria negada.
+  const approvedPaymentsHref = paymentsSummary
+    ? `/admin/pagamentos?status=completed&period=${period}`
+    : undefined;
 
   return (
     <>
@@ -217,23 +195,34 @@ async function OverviewContent({ period }: { period: Period }) {
         <PeriodSelector current={period} />
       </div>
 
-      <AdminStatsRow cols={4}>
+      <AdminStatsRow cols={5}>
         <AdminStatCard
+          href={`/admin/usuarios?createdPeriod=${period}`}
           label="Novos cadastros"
           value={String(newUsers)}
           sub={subLabel}
         />
         <AdminStatCard
+          href={`/admin/usuarios?loginPeriod=${period}`}
+          label="Usuários logados"
+          tooltip="Usuários que entraram ou mantiveram sessão ativa no período"
+          value={String(loggedInUsers)}
+          sub={subLabel}
+        />
+        <AdminStatCard
+          href={approvedPaymentsHref}
           label="Pagamentos aprovados"
           value={String(approvedPaymentsCount)}
           sub={subLabel}
         />
         <AdminStatCard
+          href={approvedPaymentsHref}
           label="Receita"
           value={revenueInCents > 0 ? formatBRL(revenueInCents) : "—"}
           sub={subLabel}
         />
         <AdminStatCard
+          href="/admin/curriculos?kind=adapted"
           label="CVs adaptados"
           value={String(totalAdaptedResumes)}
           sub="total acumulado"
