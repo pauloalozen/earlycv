@@ -11,9 +11,11 @@ export type JobSourceTypeOption =
   | "workday"
   | "solides"
   | "pandape"
-  | "eightfold";
+  | "eightfold"
+  | "successfactors"
+  | "lgcloud";
 
-// Source types selectable in the admin UI. solides/pandape don't have an
+// Source types selectable in the admin UI. solides/successfactors/lgcloud don't have an
 // adapter implemented yet — creating a source with one of these types only
 // tags the company for later; running it will fail until the matching
 // adapter ships.
@@ -31,6 +33,8 @@ export const JOB_SOURCE_TYPE_OPTIONS: JobSourceTypeOption[] = [
   "solides",
   "pandape",
   "eightfold",
+  "successfactors",
+  "lgcloud",
 ];
 
 export type SourceDefaults = {
@@ -116,7 +120,11 @@ export function buildAdminRedirect(
 // ATS types without an adapter yet — API-based platforms, same shape as
 // gupy/custom_api, so crawlStrategy defaults to "api". They only exist so
 // companies can be tagged now; running them fails until the adapter ships.
-const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = ["solides"];
+const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = [
+  "solides",
+  "successfactors",
+  "lgcloud",
+];
 
 export function getSourceDefaults(sourceType: string): SourceDefaults {
   if (sourceType === "gupy") {

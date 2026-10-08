@@ -627,6 +627,8 @@ export function FontesTableClient({ initialData, initialTypeFilter }: Props) {
           <option value="solides">solides</option>
           <option value="pandape">pandape</option>
           <option value="eightfold">eightfold</option>
+          <option value="successfactors">successfactors</option>
+          <option value="lgcloud">lgcloud</option>
         </select>
         {/* Sempre visiveis (nunca somem/aparecem) pra nao deslocar os
             outros itens da barra — so ficam desabilitados sem adapter
