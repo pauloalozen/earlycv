@@ -36,6 +36,7 @@
     "apply:company-source-audit": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-company-source-audit.ts",
     "cleanup:foreign-jobs": "NODE_OPTIONS='--conditions=development' tsx src/scripts/cleanup-foreign-jobs.ts",
     "fix:mismatched-sources": "NODE_OPTIONS='--conditions=development' tsx src/scripts/fix-mismatched-sources.ts",
+    "apply:source-review-csv": "NODE_OPTIONS='--conditions=development' tsx src/scripts/apply-source-review-csv.ts",
     "fix:stuck-unlock-cv-delivery": "sh -c 'if [ -z \"$RAILWAY_ENVIRONMENT\" ] && [ -f ../../.env ]; then set -a && . ../../.env && set +a; fi; NODE_OPTIONS=\"--conditions=development\" tsx src/scripts/repair-stuck-unlock-cv-delivery.ts \"$@\"' --"
   },
   "dependencies": {

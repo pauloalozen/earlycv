@@ -11,21 +11,27 @@ export class DashboardAdminService {
   // usuários/currículos para contar em memória. Usuários de staff ficam de
   // fora, como sempre ficaram na listagem do admin.
   async getOverviewStats(since: Date) {
-    const [totalUsers, newUsers, totalAdaptedResumes] = await Promise.all([
-      this.database.user.count({ where: { isStaff: false } }),
-      this.database.user.count({
-        where: { isStaff: false, createdAt: { gte: since } },
-      }),
-      this.database.resume.count({
-        where: {
-          isMaster: false,
-          kind: "adapted",
-          user: { isStaff: false },
-        },
-      }),
-    ]);
+    const [totalUsers, newUsers, loggedInUsers, totalAdaptedResumes] =
+      await Promise.all([
+        this.database.user.count({ where: { isStaff: false } }),
+        this.database.user.count({
+          where: { isStaff: false, createdAt: { gte: since } },
+        }),
+        // lastLoginAt é atualizado a cada sessão emitida (login, cadastro,
+        // social e refresh) — mesmo filtro do drill-down em /admin/usuarios.
+        this.database.user.count({
+          where: { isStaff: false, lastLoginAt: { gte: since } },
+        }),
+        this.database.resume.count({
+          where: {
+            isMaster: false,
+            kind: "adapted",
+            user: { isStaff: false },
+          },
+        }),
+      ]);
 
-    return { newUsers, totalAdaptedResumes, totalUsers };
+    return { loggedInUsers, newUsers, totalAdaptedResumes, totalUsers };
   }
 
   async getIndexingLog(limit: number) {

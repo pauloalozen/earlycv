@@ -133,6 +133,7 @@ async function buildFixture() {
 
   return {
     cleanup,
+    database,
     service,
     suffix,
     userAusente,
@@ -232,6 +233,115 @@ test("AdminUsersService.list filters by planType", async () => {
     assert.deepEqual(
       proIds,
       [fixture.userSemMaster.id, fixture.userCompleto.id].sort(),
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("AdminUsersService.list orders by createdAt desc by default (ignores updatedAt) and supports created/name sorts", async () => {
+  const fixture = await buildFixture();
+
+  try {
+    const base = Date.UTC(2026, 0, 1);
+    const day = 24 * 60 * 60 * 1000;
+    // Ordem de cadastro: SemMaster < Completo < Ausente < Incompleto.
+    const createdOrder = [
+      fixture.userSemMaster,
+      fixture.userCompleto,
+      fixture.userAusente,
+      fixture.userIncompleto,
+    ];
+    for (const [index, user] of createdOrder.entries()) {
+      await fixture.database.user.update({
+        where: { id: user.id },
+        data: { createdAt: new Date(base + index * day) },
+      });
+    }
+    // Escrita depois no mais antigo: com a ordem antiga (updatedAt) ele
+    // pularia pro topo.
+    await fixture.database.user.update({
+      where: { id: fixture.userSemMaster.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const ids = async (sort?: string) =>
+      (await fixture.service.list({ query: fixture.suffix, sort })).users.map(
+        (u) => u.id,
+      );
+
+    const createdAsc = createdOrder.map((u) => u.id);
+    assert.deepEqual(await ids(), [...createdAsc].reverse());
+    assert.deepEqual(await ids("created_desc"), [...createdAsc].reverse());
+    assert.deepEqual(await ids("created_asc"), createdAsc);
+
+    const nameAsc = [
+      fixture.userAusente.id,
+      fixture.userCompleto.id,
+      fixture.userIncompleto.id,
+      fixture.userSemMaster.id,
+    ];
+    assert.deepEqual(await ids("name_asc"), nameAsc);
+    assert.deepEqual(await ids("name_desc"), [...nameAsc].reverse());
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("AdminUsersService.list filters by loggedInSince (lastLoginAt >= since)", async () => {
+  const fixture = await buildFixture();
+
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await fixture.database.user.update({
+      where: { id: fixture.userCompleto.id },
+      data: { lastLoginAt: new Date() },
+    });
+    await fixture.database.user.update({
+      where: { id: fixture.userAusente.id },
+      data: { lastLoginAt: new Date(since.getTime() - 60 * 1000) },
+    });
+
+    const result = await fixture.service.list({
+      loggedInSince: since,
+      query: fixture.suffix,
+    });
+    assert.equal(result.total, 1);
+    assert.deepEqual(
+      result.users.map((u) => u.id),
+      [fixture.userCompleto.id],
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("AdminUsersService.list filters by createdSince (createdAt >= since)", async () => {
+  const fixture = await buildFixture();
+
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await fixture.database.user.updateMany({
+      where: {
+        id: {
+          in: [
+            fixture.userAusente.id,
+            fixture.userIncompleto.id,
+            fixture.userSemMaster.id,
+          ],
+        },
+      },
+      data: { createdAt: new Date(since.getTime() - 60 * 1000) },
+    });
+
+    const result = await fixture.service.list({
+      createdSince: since,
+      query: fixture.suffix,
+    });
+    assert.equal(result.total, 1);
+    assert.deepEqual(
+      result.users.map((u) => u.id),
+      [fixture.userCompleto.id],
     );
   } finally {
     await fixture.cleanup();

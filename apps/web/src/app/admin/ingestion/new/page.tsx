@@ -175,6 +175,8 @@ export default async function NewAdminSourcePage({
                       <option value="talentbrew">talentbrew</option>
                       <option value="workday">workday</option>
                       <option value="solides">solides (sem adapter)</option>
+                      <option value="successfactors">successfactors (sem adapter)</option>
+                      <option value="lgcloud">lgcloud (sem adapter)</option>
                       <option value="pandape">pandape</option>
                       <option value="eightfold">eightfold</option>
                     </select>
@@ -407,6 +409,8 @@ export default async function NewAdminSourcePage({
                       <option value="talentbrew">talentbrew</option>
                       <option value="workday">workday</option>
                       <option value="solides">solides (sem adapter)</option>
+                      <option value="successfactors">successfactors (sem adapter)</option>
+                      <option value="lgcloud">lgcloud (sem adapter)</option>
                       <option value="pandape">pandape</option>
                       <option value="eightfold">eightfold</option>
                     </select>
