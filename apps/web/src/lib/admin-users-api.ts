@@ -144,11 +144,14 @@ async function apiRequest<T>(path: string, token?: string, init?: RequestInit) {
 
 export async function listAdminUsers(
   filters: {
+    createdSince?: string;
     page?: number;
     limit?: number;
+    loggedInSince?: string;
     planType?: string;
     profileStatus?: string;
     query?: string;
+    sort?: string;
     status?: string;
   } = {},
   token?: string,
@@ -156,6 +159,9 @@ export async function listAdminUsers(
   const params = new URLSearchParams();
   if (filters.page) params.set("page", String(filters.page));
   if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.loggedInSince) params.set("loggedInSince", filters.loggedInSince);
+  if (filters.sort) params.set("sort", filters.sort);
+  if (filters.createdSince) params.set("createdSince", filters.createdSince);
   if (filters.planType) params.set("planType", filters.planType);
   if (filters.profileStatus) params.set("profileStatus", filters.profileStatus);
   if (filters.query) params.set("query", filters.query);

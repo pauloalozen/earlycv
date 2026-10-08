@@ -9,6 +9,8 @@ type UserRow = {
   name: string;
   email: string;
   planType: string;
+  createdAt: string;
+  lastLoginAt: string | null;
   completenessStatus: { label: string; tone: string };
   detailHref: string;
   masterResumeHref: string | null;
@@ -18,6 +20,17 @@ type UsersListProps = {
   users: UserRow[];
   deleteAction: (userId: string) => Promise<void>;
 };
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+}
 
 export function UsersList({ users, deleteAction }: UsersListProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -48,6 +61,12 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
               <th className="hidden px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 lg:table-cell">
                 Status
               </th>
+              <th className="hidden px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 lg:table-cell">
+                Cadastro
+              </th>
+              <th className="hidden px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 lg:table-cell">
+                Último acesso
+              </th>
               <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider text-stone-400">
                 Acoes
               </th>
@@ -67,6 +86,12 @@ export function UsersList({ users, deleteAction }: UsersListProps) {
                   <span className="inline-block rounded-md bg-stone-100 px-2 py-0.5 text-[11px] text-stone-600">
                     {user.completenessStatus.label}
                   </span>
+                </td>
+                <td className="hidden whitespace-nowrap px-4 py-3 text-xs text-stone-600 lg:table-cell">
+                  {formatDateTime(user.createdAt)}
+                </td>
+                <td className="hidden whitespace-nowrap px-4 py-3 text-xs text-stone-600 lg:table-cell">
+                  {user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">

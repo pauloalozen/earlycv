@@ -7,6 +7,7 @@ import { getBackofficeSessionToken } from "./backoffice-session.server";
 // estes cards.
 
 export type AdminOverviewStats = {
+  loggedInUsers: number;
   newUsers: number;
   totalAdaptedResumes: number;
   totalUsers: number;

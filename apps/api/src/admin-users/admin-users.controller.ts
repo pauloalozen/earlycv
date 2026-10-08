@@ -51,9 +51,15 @@ export class AdminUsersController {
     @Query("query") query?: string,
     @Query("status") status?: string,
     @Query("profileStatus") profileStatus?: string,
+    @Query("sort") sort?: string,
+    @Query("loggedInSince") loggedInSince?: string,
+    @Query("createdSince") createdSince?: string,
   ) {
     return this.adminUsersService.list({
+      createdSince: parseOptionalDate(createdSince),
       limit: limit ? Number.parseInt(limit, 10) : undefined,
+      loggedInSince: parseOptionalDate(loggedInSince),
+      sort,
       page: page ? Number.parseInt(page, 10) : undefined,
       planType,
       profileStatus,
@@ -175,4 +181,10 @@ export class AdminUsersController {
   ) {
     return this.adminUsersService.startAssistedSession(operator.id, id, dto);
   }
+}
+
+function parseOptionalDate(raw?: string): Date | undefined {
+  if (!raw) return undefined;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }

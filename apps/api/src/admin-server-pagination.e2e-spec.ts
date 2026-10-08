@@ -429,6 +429,7 @@ describe("Visão geral e pagamentos — só agregados / paginação real", () =>
       new Date(Date.now() - 60_000),
     );
     assert.deepEqual(Object.keys(stats).sort(), [
+      "loggedInUsers",
       "newUsers",
       "totalAdaptedResumes",
       "totalUsers",
@@ -436,6 +437,7 @@ describe("Visão geral e pagamentos — só agregados / paginação real", () =>
     assert.ok(stats.totalUsers >= 4);
     assert.ok(stats.newUsers >= 4);
     assert.equal(typeof stats.totalAdaptedResumes, "number");
+    assert.equal(typeof stats.loggedInUsers, "number");
   });
 
   it("listPayments pagina no banco (total real, página com take)", async () => {

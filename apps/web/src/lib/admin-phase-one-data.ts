@@ -107,11 +107,14 @@ export async function getAdminResumeOwnerDataSafely(
 
 export async function getAdminUsersListData(
   filters: {
+    createdSince?: string;
     page: number;
     limit?: number;
+    loggedInSince?: string;
     planType?: string;
     profileStatus?: string;
     query?: string;
+    sort?: string;
     status?: string;
   },
   token?: string,
@@ -129,11 +132,14 @@ export async function getAdminUsersListData(
 
 export async function getAdminUsersListDataSafely(
   filters: {
+    createdSince?: string;
     page: number;
     limit?: number;
+    loggedInSince?: string;
     planType?: string;
     profileStatus?: string;
     query?: string;
+    sort?: string;
     status?: string;
   },
   token?: string,
