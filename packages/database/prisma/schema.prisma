@@ -69,6 +69,8 @@ enum JobSourceType {
   teamtailor
   talentbrew
   eightfold
+  // LG lugar de trabalho (lgcloud.com.br) — ainda sem adapter
+  lgcloud
 }
 
 enum DiscoveredCompanyStatus {
