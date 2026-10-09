@@ -18,7 +18,7 @@ import Script from "next/script";
 import "./globals.css";
 
 import { IncidentBanner } from "@/components/incident-banner";
-import { getAbsoluteUrl, siteConfig } from "@/lib/site";
+import { defaultOpenGraph, getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -134,27 +134,11 @@ export const metadata: Metadata = {
   },
   description: siteConfig.description,
   applicationName: siteConfig.name,
-  alternates: {
-    canonical: getAbsoluteUrl("/"),
-  },
   category: "jobs",
   keywords: [...siteConfig.keywords],
-  openGraph: {
-    type: "website",
-    url: getAbsoluteUrl("/"),
-    title: siteConfig.defaultTitle,
-    description: siteConfig.description,
-    siteName: siteConfig.name,
-    locale: "pt_BR",
-    images: [
-      {
-        url: getAbsoluteUrl(siteConfig.ogImage),
-        width: 1200,
-        height: 630,
-        alt: "EarlyCV - monitoramento de vagas e adaptacao de curriculo",
-      },
-    ],
-  },
+  // Sem og:url (nem alternates.canonical) aqui de propósito: herdado pelas
+  // páginas, apontava todas pra home. Cada página indexável declara os seus.
+  openGraph: defaultOpenGraph,
   twitter: {
     card: "summary_large_image",
     title: siteConfig.defaultTitle,

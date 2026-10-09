@@ -7,7 +7,10 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
 import { toCompanySlug } from "@/lib/company-slug";
+import { cleanJobTitleForDisplay } from "@/lib/job-seo";
 import type { ClosedPublicJob, PublicJob } from "@/lib/public-jobs-api";
+import { companyDisplayName } from "@/lib/radar-landings";
+import { getAbsoluteUrl } from "@/lib/site";
 import {
   formatEmploymentType,
   SENIORITY_LABELS,
@@ -24,12 +27,21 @@ const SERIF =
 
 // Vaga encerrada não é conteúdo indexável (o Google já é avisado da remoção
 // na inativação) e não leva JobPosting JSON-LD, mas os links dela continuam
-// valendo pro crawler seguir.
+// valendo pro crawler seguir. Canonical e og:url na própria URL: herdar os
+// do layout apontava pra home, sinal contraditório com o noindex.
 export function buildClosedJobMetadata(job: ClosedPublicJob): Metadata {
+  const cargo = cleanJobTitleForDisplay(job.title);
+  const empresa = companyDisplayName(job.company);
+  const title = `Vaga encerrada: ${cargo} na ${empresa} | EarlyCV`;
+  const description = `A vaga de ${cargo} na ${empresa} foi encerrada. Veja outras vagas abertas no EarlyCV.`;
+  const url = getAbsoluteUrl(`/radar/${job.slug}`);
   return {
-    title: `Vaga encerrada — ${job.title} — ${job.company}`,
-    description: `A vaga de ${job.title} na ${job.company} foi encerrada. Veja outras vagas abertas no EarlyCV.`,
+    title: { absolute: title },
+    description,
     robots: { index: false, follow: true },
+    alternates: { canonical: url },
+    openGraph: { type: "article", url, title, description },
+    twitter: { title, description },
   };
 }
 
@@ -80,7 +92,8 @@ export function ClosedJobView({
   user: AppSessionUser | null;
 }) {
   const sections = splitHtmlSections(job.descriptionHtml);
-  const titleParts = splitJobTitleForDisplay(job.title);
+  const displayTitle = cleanJobTitleForDisplay(job.title);
+  const titleParts = splitJobTitleForDisplay(displayTitle);
   const workModelLabel = job.workModel
     ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
     : null;
@@ -173,7 +186,7 @@ export function ClosedJobView({
               minWidth: 0,
             }}
           >
-            {job.title}
+            {displayTitle}
           </span>
         </nav>
 

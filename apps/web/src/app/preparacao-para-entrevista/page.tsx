@@ -27,13 +27,13 @@ import { LandingScrollAnimations } from "../_landing-scroll-animations";
 const url = getAbsoluteUrl("/preparacao-para-entrevista");
 
 export const metadata: Metadata = {
-  title: "Como se Preparar para Entrevista de Emprego — Roteiro Personalizado",
+  title: "Como se Preparar para Entrevista de Emprego: Roteiro Personalizado",
   description:
     "Prepare-se para a entrevista daquela vaga, não para uma entrevista genérica. Perguntas técnicas, comportamentais e um roteiro personalizado a partir do seu currículo e da vaga.",
   alternates: { canonical: url },
   openGraph: {
     title:
-      "Como se Preparar para Entrevista de Emprego — Roteiro Personalizado | EarlyCV",
+      "Como se Preparar para Entrevista de Emprego: Roteiro Personalizado | EarlyCV",
     description:
       "Roteiro de entrevista personalizado a partir do seu currículo, da vaga e da empresa.",
     url,
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     title:
-      "Como se Preparar para Entrevista de Emprego — Roteiro Personalizado | EarlyCV",
+      "Como se Preparar para Entrevista de Emprego: Roteiro Personalizado | EarlyCV",
     description:
       "Roteiro de entrevista personalizado a partir do seu currículo, da vaga e da empresa.",
   },

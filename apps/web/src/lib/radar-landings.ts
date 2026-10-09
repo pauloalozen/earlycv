@@ -276,14 +276,45 @@ export function toTechnologySlug(tech: string): string {
 const LEGAL_SUFFIX = /[\s,.-]+(ltda\.?|s\.?\/?a\.?|eireli|me|epp)$/i;
 const LOWERCASE_CONNECTORS = new Set(["de", "da", "do", "das", "dos", "e"]);
 
+// Grafia oficial de marcas e siglas que a regra de caixa abaixo erraria
+// ("TOTVS" virando "Totvs", "IFOOD" virando "Ifood"). Chave: palavra em
+// minúsculas e sem acento. Só se aplica a nome inteiro em caixa alta.
+const COMPANY_WORD_OVERRIDES: Record<string, string> = {
+  aacd: "AACD",
+  ccee: "CCEE",
+  cctvm: "CCTVM",
+  cnpem: "CNPEM",
+  ebac: "EBAC",
+  ifood: "iFood",
+  itau: "Itaú",
+  neobpo: "NeoBPO",
+  pagbank: "PagBank",
+  pagseguro: "PagSeguro",
+  tecban: "TecBan",
+  tmsa: "TMSA",
+  totvs: "TOTVS",
+  yduqs: "YDUQS",
+};
+
+function companyWordOverride(word: string): string | undefined {
+  const key = word
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return COMPANY_WORD_OVERRIDES[key];
+}
+
 // Company.name vem cru da ingestão — muitas vezes a razão social em caixa
 // alta ("BTG PACTUAL HOLDING DE SEGUROS LTDA."). Para título e texto, tira
 // o sufixo societário e, só quando o nome inteiro está em caixa alta,
 // normaliza a caixa (siglas curtas como "BRQ" ficam como estão).
 export function companyDisplayName(rawName: string): string {
   // Aspas soltas vindas da ingestão (ex.: `"tivit`).
+  // Travessão vindo do dado ("Vivo – Áreas Técnicas") não entra em título:
+  // vira vírgula.
   let name = rawName
     .replace(/["'“”‘’]/g, "")
+    .replace(/\s*[—–]\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim();
   for (let i = 0; i < 3 && LEGAL_SUFFIX.test(name); i++) {
@@ -296,7 +327,15 @@ export function companyDisplayName(rawName: string): string {
     .map((word, index) => {
       const lower = word.toLowerCase();
       if (index > 0 && LOWERCASE_CONNECTORS.has(lower)) return lower;
-      if (/^[a-z]{1,3}$/i.test(word) || /[&\d]/.test(word)) return word;
+      // "IFOOD.COM" -> "iFood.com": a grafia vale pro trecho antes do ponto.
+      const [head, ...rest] = word.split(".");
+      const override = companyWordOverride(head ?? "");
+      if (override) {
+        return [override, ...rest.map((part) => part.toLowerCase())].join(".");
+      }
+      // Até 4 letras fica como veio (sigla: "BTG", "CPFL"). Na dúvida,
+      // manter a caixa: sigla em minúscula parece erro, marca em caixa alta não.
+      if (/^[a-z]{1,4}$/i.test(word) || /[&\d]/.test(word)) return word;
       return lower.charAt(0).toUpperCase() + lower.slice(1);
     })
     .join(" ");
@@ -626,7 +665,7 @@ export function landingSeoTitle(
     summary && summary.total > 0
       ? `${landing.heading}: ${formatCount(summary.total)} ${summary.total === 1 ? "vaga aberta" : "vagas abertas"}`
       : landing.heading;
-  return page > 1 ? `${base} — página ${page}` : base;
+  return page > 1 ? `${base} (página ${page})` : base;
 }
 
 function truncateAtWord(text: string, max: number): string {
@@ -716,6 +755,15 @@ export function percent(part: number, total: number): number {
   return Math.round((part / total) * 100);
 }
 
+// landing.subject é sempre plural ("vagas remotas de Dados", "vagas que
+// pedem React"); para o texto com 1 vaga.
+function singularSubject(subject: string): string {
+  return subject
+    .replace(/^vagas remotas\b/, "vaga remota")
+    .replace(/^vagas que pedem\b/, "vaga que pede")
+    .replace(/^vagas\b/, "vaga");
+}
+
 export type LandingFaqItem = { question: string; answer: string };
 
 // Perguntas e respostas montadas com os números do recorte — conteúdo
@@ -728,7 +776,7 @@ export function landingFaq(
   const total = formatCount(summary.total);
   items.push({
     question: `Quantas ${landing.subject} estão abertas?`,
-    answer: `Agora o EarlyCV tem ${total} ${summary.total === 1 ? "vaga aberta" : "vagas abertas"} nesse recorte${summary.newLast7Days > 0 ? `, sendo ${formatCount(summary.newLast7Days)} publicadas nos últimos 7 dias` : ""}. A lista é atualizada várias vezes ao dia a partir dos sites de carreira das empresas.`,
+    answer: `${total} ${summary.total === 1 ? `${singularSubject(landing.subject)} aberta` : `${landing.subject} abertas`} agora${summary.newLast7Days > 0 ? `, ${formatCount(summary.newLast7Days)} ${summary.newLast7Days === 1 ? "publicada" : "publicadas"} nos últimos 7 dias` : ""}. A lista é atualizada várias vezes ao dia e você vê quais combinam com seu currículo.`,
   });
 
   const remote = summary.workModels.find((item) => item.value === "remote");
