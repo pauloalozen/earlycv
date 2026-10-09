@@ -647,7 +647,8 @@ test("resolveViaWebSearch restringe a busca aos domínios de adapter conhecidos 
 });
 
 test("validatePending marca candidato Sólides achado via busca web como INVALID com adapterType/careersUrl preenchidos, em vez de cair no chute de slug", async () => {
-  // Sólides não tem adapter implementado — probeSource retorna
+  // Simula um tipo reconhecido pela URL mas sem adapter registrado (era o
+  // caso da Sólides antes do adapter existir) — probeSource retorna
   // ok:false/inconclusive:false com "no adapter implemented for solides"
   // (mesmo contrato de qualquer sourceType sem adapter registrado). Sem o
   // tratamento especial em resolveFromScratch, esse achado seria

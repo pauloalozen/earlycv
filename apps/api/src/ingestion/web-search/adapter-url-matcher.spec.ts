@@ -47,7 +47,19 @@ test("matchAdapterUrl reconhece Workday (tenant + instance + site)", () => {
   assert.equal(result?.sourceType, "workday");
   assert.equal(
     result?.careersUrl,
-    "https://empresax.wd3.myworkdayjobs.com/pt-BR/Careers/job/Some-Role_R123",
+    "https://empresax.wd3.myworkdayjobs.com/pt-BR/Careers",
+  );
+  assert.equal(
+    matchAdapterUrl(
+      "https://astrazeneca.wd3.myworkdayjobs.com/Careers/job/Minas-Gerais/Consultor_R-260979",
+    )?.careersUrl,
+    "https://astrazeneca.wd3.myworkdayjobs.com/Careers",
+  );
+  assert.equal(
+    matchAdapterUrl(
+      "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
+    )?.careersUrl,
+    "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
   );
 });
 
@@ -65,7 +77,7 @@ test("matchAdapterUrl reconhece Pandape nos dois dominios (pandape.com.br e pand
   );
 });
 
-test("matchAdapterUrl reconhece Solides mesmo sem adapter implementado (pra marcar o candidato)", () => {
+test("matchAdapterUrl reconhece Solides", () => {
   assert.deepEqual(matchAdapterUrl("https://empresax.vagas.solides.com.br/vagas/1"), {
     careersUrl: "https://empresax.vagas.solides.com.br",
     sourceType: "solides",

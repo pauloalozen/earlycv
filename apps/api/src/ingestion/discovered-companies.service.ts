@@ -533,7 +533,7 @@ export class DiscoveredCompaniesService {
         }
 
         // Board achado de verdade (URL bateu um domínio de ATS conhecido),
-        // mas o adapter desse tipo ainda não existe (ex: Sólides) — marca o
+        // mas o adapter desse tipo ainda não existe (ex: LG lugar de trabalho) — marca o
         // candidato com o adapterType/careersUrl certos em vez de descartar
         // esse achado e cair no chute de slug (que nunca ia bater um
         // adapter diferente do real, só gastaria orçamento à toa). Assim

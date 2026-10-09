@@ -195,7 +195,7 @@ test("importCompanySourcesCsv rejects an unknown tipo_adapter value", async () =
 
   const csv = [
     "nome,setor,site_url,careers_url,linkedin_url,tipo_adapter",
-    "ACME,Tech,https://acme.dev,https://acme.gupy.io,,solides",
+    "ACME,Tech,https://acme.dev,https://acme.gupy.io,,kenoby",
   ].join("\n");
 
   const report = await service.importCompanySourcesCsv({
