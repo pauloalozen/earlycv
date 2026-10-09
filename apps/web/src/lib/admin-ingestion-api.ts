@@ -172,7 +172,8 @@ export type ManualAdapterType =
   | "talentbrew"
   | "workday"
   | "pandape"
-  | "eightfold";
+  | "eightfold"
+  | "solides";
 
 export type ManualRunStatus =
   | "queued"

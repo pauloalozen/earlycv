@@ -44,10 +44,6 @@ export const ATS_SEARCH_DOMAINS = [
   // formato (empresa hospeda proxy proprio, ex: careers-meli.mercadolibre.com)
   // nao tem padrao de URL fixo, nao da pra detectar so pela URL.
   "eightfold.ai",
-  // Sólides ainda nao tem adapter implementado, mas reconhecer o dominio
-  // aqui evita que a busca web pra um candidato hospedado la caia no chute
-  // de slug (que nunca vai bater) — ver o tratamento "sem adapter" em
-  // resolveFromScratch (discovered-companies.service.ts).
   "vagas.solides.com.br",
 ];
 
@@ -158,11 +154,17 @@ export function matchAdapterUrl(rawUrl: string): ResolvedAdapterUrl | null {
     /^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/,
   );
   if (workdayMatch) {
+    // Path = [/{locale}]/{site}[/job/{local}/{titulo}_{id}]. O site e o
+    // primeiro segmento que nao e locale — nunca o ultimo, que numa URL de
+    // vaga e o slug da vaga (o adapter le o site do ultimo segmento da
+    // careersUrl, entao ela tem que terminar no site).
     const segments = parsed.pathname.split("/").filter(Boolean);
-    const site = segments[segments.length - 1];
-    if (site) {
+    const siteIndex = segments.findIndex(
+      (segment) => !/^[a-z]{2}-[a-z]{2}$/i.test(segment),
+    );
+    if (siteIndex >= 0) {
       return {
-        careersUrl: `https://${hostname}/${segments.join("/")}`,
+        careersUrl: `https://${hostname}/${segments.slice(0, siteIndex + 1).join("/")}`,
         sourceType: "workday",
       };
     }

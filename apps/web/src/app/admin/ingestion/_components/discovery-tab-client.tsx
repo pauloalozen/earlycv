@@ -68,6 +68,7 @@ const MANUAL_ADAPTER_TYPES = [
   "custom_html",
   "custom_api",
   "eightfold",
+  "solides",
 ] as const;
 
 const QUEUE_STATUSES: DiscoveredCompanyStatus[] = [

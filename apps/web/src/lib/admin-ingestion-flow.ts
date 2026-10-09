@@ -15,7 +15,7 @@ export type JobSourceTypeOption =
   | "successfactors"
   | "lgcloud";
 
-// Source types selectable in the admin UI. solides/successfactors/lgcloud don't have an
+// Source types selectable in the admin UI. successfactors/lgcloud don't have an
 // adapter implemented yet — creating a source with one of these types only
 // tags the company for later; running it will fail until the matching
 // adapter ships.
@@ -80,6 +80,7 @@ export const MANUAL_ADAPTER_TYPES = [
   "workday",
   "pandape",
   "eightfold",
+  "solides",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
@@ -121,7 +122,6 @@ export function buildAdminRedirect(
 // gupy/custom_api, so crawlStrategy defaults to "api". They only exist so
 // companies can be tagged now; running them fails until the adapter ships.
 const UNIMPLEMENTED_API_SOURCE_TYPES: JobSourceTypeOption[] = [
-  "solides",
   "successfactors",
   "lgcloud",
 ];
@@ -212,6 +212,14 @@ export function getSourceDefaults(sourceType: string): SourceDefaults {
       crawlStrategy: "api",
       parserKey: "eightfold",
       sourceType: "eightfold",
+    };
+  }
+
+  if (sourceType === "solides") {
+    return {
+      crawlStrategy: "api",
+      parserKey: "solides",
+      sourceType: "solides",
     };
   }
 

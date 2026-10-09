@@ -252,6 +252,7 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "workday", collect: async () => [] } as never,
     { sourceType: "pandape", collect: async () => [] } as never,
     { sourceType: "eightfold", collect: async () => [] } as never,
+    { sourceType: "solides", collect: async () => [] } as never,
     googleIndexingService as never,
     webRevalidation as never,
   );
@@ -1098,7 +1099,7 @@ test("IngestionService dispatches to the workday adapter for workday sources", a
 });
 
 test("IngestionService fails the run for a source type without a registered adapter", async () => {
-  const fixture = createIngestionServiceFixture({ sourceType: "solides" });
+  const fixture = createIngestionServiceFixture({ sourceType: "lgcloud" });
   fixture.service.adapters = new Map([
     ["custom_html", { sourceType: "custom_html", collect: async () => [] }],
   ]);
@@ -1108,7 +1109,7 @@ test("IngestionService fails the run for a source type without a registered adap
   assert.equal(result.status, "failed");
   assert.match(
     result.errorSummary ?? "",
-    /manual ingestion is not supported for source type solides/,
+    /manual ingestion is not supported for source type lgcloud/,
   );
 });
 

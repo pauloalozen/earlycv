@@ -25,7 +25,7 @@ const FULL_CSV_HEADER = [
 ];
 
 // Tipos de adapter que a coluna tipo_adapter aceita explicitamente. Os
-// demais valores do enum JobSourceType (kenoby, successfactors, solides)
+// demais valores do enum JobSourceType (kenoby, successfactors, lgcloud)
 // ainda nao tem adapter implementado — aceitar aqui so criaria fonte que
 // nunca roda.
 export const IMPORTABLE_ADAPTER_TYPES = [
@@ -41,6 +41,7 @@ export const IMPORTABLE_ADAPTER_TYPES = [
   "workday",
   "pandape",
   "eightfold",
+  "solides",
 ] as const;
 export type ImportableAdapterType = (typeof IMPORTABLE_ADAPTER_TYPES)[number];
 

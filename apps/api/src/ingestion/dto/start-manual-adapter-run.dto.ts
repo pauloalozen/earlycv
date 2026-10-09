@@ -13,6 +13,7 @@ const MANUAL_ADAPTER_TYPES = [
   "workday",
   "pandape",
   "eightfold",
+  "solides",
 ] as const;
 
 export type ManualAdapterType = (typeof MANUAL_ADAPTER_TYPES)[number];
