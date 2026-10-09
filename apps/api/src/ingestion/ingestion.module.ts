@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { createAiClientFromEnv } from "../common/ai-client-factory";
 import { DatabaseModule } from "../database/database.module";
 import { GoogleIndexingModule } from "../google-indexing/google-indexing.module";
+import { JobLifecycleModule } from "../jobs/job-lifecycle.module";
 import { WebRevalidationModule } from "../web-revalidation/web-revalidation.module";
 import {
   AshbyAdapter,
@@ -58,7 +59,12 @@ import { BraveSearchProvider } from "./web-search/brave-search.provider";
 import { WebSearchService } from "./web-search/web-search.service";
 
 @Module({
-  imports: [DatabaseModule, GoogleIndexingModule, WebRevalidationModule],
+  imports: [
+    DatabaseModule,
+    GoogleIndexingModule,
+    JobLifecycleModule,
+    WebRevalidationModule,
+  ],
   controllers: [
     IngestionController,
     IngestionJobController,

@@ -386,11 +386,183 @@ function isBrazilianCountryValue(value: string): boolean {
 export function isForeignLocation(
   country: string | null | undefined,
   state: string | null | undefined,
+  extra: { city?: string | null; locationText?: string | null } = {},
 ): boolean {
-  const trimmedCountry = country?.trim();
-  if (trimmedCountry) {
-    return !isBrazilianCountryValue(trimmedCountry);
+  return (
+    classifyJobLocation({
+      city: extra.city,
+      country,
+      locationText: extra.locationText,
+      state,
+    }) === "foreign"
+  );
+}
+
+export type JobLocationClass = "brazil" | "foreign" | "review";
+
+// Regiões e códigos de país que aparecem nos boards globais e não estão nas
+// listas acima ("North America, Remote", "United States; Remote").
+const FOREIGN_REGION_TOKENS = new Set(
+  [
+    "North America",
+    "United States",
+    "United States of America",
+    "USA",
+    "US",
+    "EMEA",
+    "APAC",
+    "Europe",
+    "Canada/US",
+    "The Netherlands",
+    "NL",
+    "Denmark",
+    "Belgium",
+    "Austria",
+    "Finland",
+    "Norway",
+    "Uruguay",
+    "Paraguay",
+    "Bolivia",
+    "Ecuador",
+    "Venezuela",
+    "Bogotá",
+    "Buenos Aires",
+    "London",
+    "Paris",
+    "Dublin",
+    "Lisbon",
+    "Toronto",
+  ].map(normalizeLookupKey),
+);
+
+// "Remote" e afins: modelo de trabalho, não país. Sozinhos não dizem se a
+// vaga é do Brasil.
+const REMOTE_LIKE_TOKENS = new Set(
+  [
+    "remote",
+    "remoto",
+    "home office",
+    "homeoffice",
+    "teletrabalho",
+    "anywhere",
+    "global",
+    "worldwide",
+  ].map(normalizeLookupKey),
+);
+
+const BRAZILIAN_UF_SIGLAS = new Set(BRAZILIAN_STATES.map((s) => s.sigla));
+
+function locationTokens(value: string | null | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .replace(/[()]/g, "|")
+    .replace(/\s+ou\s+/gi, "|")
+    .replace(/\s+e\s+/gi, "|")
+    .split(/[/;,|•]|\s+-\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+// Sigla de 2 letras que é UF brasileira (SC, MS, MT, PA, MA, AL...) nunca
+// conta como estado americano: colide com South Carolina, Mississippi,
+// Montana... e marcaria vaga de Blumenau/SC como estrangeira. As demais
+// siglas americanas (CA, TX, NY) só valem no campo state, onde já eram
+// usadas antes.
+function isForeignToken(token: string, field: "state" | "other"): boolean {
+  const key = normalizeLookupKey(token);
+  if (FOREIGN_COUNTRY_TOKENS.has(key) || FOREIGN_REGION_TOKENS.has(key)) {
+    return true;
+  }
+  if (!US_STATE_TOKENS.has(key)) return false;
+  if (key.length > 2) return true;
+  return field === "state" && !BRAZILIAN_UF_SIGLAS.has(token.toUpperCase());
+}
+
+function isBrazilToken(token: string, allowUf: boolean): boolean {
+  const key = normalizeLookupKey(token);
+  if (BRAZIL_COUNTRY_NAMES.has(key) || isBrazilianStateFullNameToken(token)) {
+    return true;
+  }
+  return (
+    allowUf &&
+    /^[a-zA-Z]{2}$/.test(token) &&
+    BRAZILIAN_UF_SIGLAS.has(token.toUpperCase())
+  );
+}
+
+// Classifica a localização de uma vaga:
+// - "foreign": sinal de outro país sem sinal de Brasil (ou com Brasil só no
+//   country, que pode ser o valor padrão gravado pela ingestão);
+// - "review": só "Remote" (ou nada além disso) vindo de board global
+//   (JobSource.isGlobalBoard): não dá pra saber se é do Brasil;
+// - "brazil": o resto. "Remote" sozinho fora de board global continua sendo
+//   aceito como vaga remota brasileira (Stone, Arco, Jusbrasil...).
+// country preenchido e não reconhecido como Brasil continua sendo
+// estrangeiro, como antes (ver isBrazilianCountryValue), exceto quando o
+// único motivo de aceitar era o token "Remote" ao lado de um país/estado
+// estrangeiro ("Remote; Texas").
+export function classifyJobLocation(input: {
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  locationText?: string | null;
+  isGlobalBoard?: boolean;
+}): JobLocationClass {
+  const countryTokens = locationTokens(input.country);
+  const stateTokens = locationTokens(input.state);
+  const placeTokens = [
+    ...locationTokens(input.city),
+    ...locationTokens(input.locationText),
+  ];
+
+  const foreign =
+    countryTokens.some((t) => isForeignToken(t, "other")) ||
+    stateTokens.some((t) => isForeignToken(t, "state")) ||
+    placeTokens.some((t) => isForeignToken(t, "other"));
+  const brazilInPlace =
+    stateTokens.some((t) => isBrazilToken(t, true)) ||
+    placeTokens.some((t) => isBrazilToken(t, true));
+  const brazilInCountry = countryTokens.some((t) => isBrazilToken(t, false));
+
+  if (foreign) {
+    // Brasil explícito na cidade/estado/locationText: vaga em mais de um
+    // país, incluindo o Brasil ("Colombia; São Paulo, Brazil") fica.
+    if (brazilInPlace) return "brazil";
+    // Brasil só no country e locationText apontando outro país: o country
+    // é o padrão gravado pela ingestão ("Bangalore, India" com
+    // country="Brasil").
+    if (brazilInCountry && !input.locationText?.trim()) return "brazil";
+    return "foreign";
   }
 
-  return isRecognizedForeignRegion(state);
+  // country não reconhecido como Brasil continua estrangeiro, salvo quando
+  // cidade/estado/locationText trazem Brasil por extenso (XP Inc.:
+  // country="SP", locationText="São Paulo, SP"). Sigla de UF sozinha não
+  // basta: "RO" é Romênia no country estruturado (LOUIS DREYFUS).
+  const trimmedCountry = input.country?.trim();
+  const brazilInPlaceByName =
+    stateTokens.some((t) => isBrazilToken(t, false)) ||
+    placeTokens.some((t) => isBrazilToken(t, false));
+  if (
+    trimmedCountry &&
+    !isBrazilianCountryValue(trimmedCountry) &&
+    !brazilInPlaceByName
+  ) {
+    return "foreign";
+  }
+
+  const allTokens = [...countryTokens, ...stateTokens, ...placeTokens];
+  const onlyRemoteLike = allTokens.every((t) =>
+    REMOTE_LIKE_TOKENS.has(normalizeLookupKey(t)),
+  );
+  if (
+    input.isGlobalBoard &&
+    onlyRemoteLike &&
+    !brazilInPlace &&
+    !brazilInCountry
+  ) {
+    return "review";
+  }
+
+  return "brazil";
 }

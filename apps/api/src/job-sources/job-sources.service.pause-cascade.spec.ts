@@ -5,6 +5,17 @@ import { test } from "node:test";
 
 import { JobSourcesService } from "./job-sources.service";
 
+// A cascata passa pelo JobLifecycle (status + Indexing API + cache do front):
+// o fake registra cada closeJobs no lugar do updateMany direto.
+function makeLifecycle(calls: unknown[]) {
+  return {
+    closeJobs: async (args: { where: unknown; status: string }) => {
+      calls.push({ where: args.where, data: { status: args.status } });
+      return { count: calls.length, slugs: [] };
+    },
+  };
+}
+
 function makeDatabase(overrides: Record<string, unknown> = {}) {
   const jobUpdateManyCalls: unknown[] = [];
   const database = {
@@ -29,12 +40,20 @@ function makeDatabase(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   };
-  return { database, jobUpdateManyCalls };
+  return {
+    database,
+    jobUpdateManyCalls,
+    lifecycle: makeLifecycle(jobUpdateManyCalls),
+  };
 }
 
 test("update() marca vagas ativas como inactive quando isActive vira false", async () => {
-  const { database, jobUpdateManyCalls } = makeDatabase();
-  const service = new JobSourcesService(database as never, {} as never);
+  const { database, jobUpdateManyCalls, lifecycle } = makeDatabase();
+  const service = new JobSourcesService(
+    database as never,
+    {} as never,
+    lifecycle as never,
+  );
 
   await service.update("js1", { isActive: false } as never);
 
@@ -46,20 +65,40 @@ test("update() marca vagas ativas como inactive quando isActive vira false", asy
 });
 
 test("update() nao toca em Job quando isActive nao muda ou vira true", async () => {
-  const { database: db1, jobUpdateManyCalls: calls1 } = makeDatabase();
-  const service1 = new JobSourcesService(db1 as never, {} as never);
+  const {
+    database: db1,
+    jobUpdateManyCalls: calls1,
+    lifecycle: lc1,
+  } = makeDatabase();
+  const service1 = new JobSourcesService(
+    db1 as never,
+    {} as never,
+    lc1 as never,
+  );
   await service1.update("js1", { sourceName: "Nova fonte" } as never);
   assert.equal(calls1.length, 0);
 
-  const { database: db2, jobUpdateManyCalls: calls2 } = makeDatabase();
-  const service2 = new JobSourcesService(db2 as never, {} as never);
+  const {
+    database: db2,
+    jobUpdateManyCalls: calls2,
+    lifecycle: lc2,
+  } = makeDatabase();
+  const service2 = new JobSourcesService(
+    db2 as never,
+    {} as never,
+    lc2 as never,
+  );
   await service2.update("js1", { isActive: true } as never);
   assert.equal(calls2.length, 0);
 });
 
 test("bulkUpdateActive() marca vagas ativas do sourceType como inactive quando isActive=false", async () => {
-  const { database, jobUpdateManyCalls } = makeDatabase();
-  const service = new JobSourcesService(database as never, {} as never);
+  const { database, jobUpdateManyCalls, lifecycle } = makeDatabase();
+  const service = new JobSourcesService(
+    database as never,
+    {} as never,
+    lifecycle as never,
+  );
 
   const result = await service.bulkUpdateActive({
     sourceType: "gupy" as never,
@@ -75,8 +114,12 @@ test("bulkUpdateActive() marca vagas ativas do sourceType como inactive quando i
 });
 
 test("bulkUpdateActive() nao toca em Job quando isActive=true", async () => {
-  const { database, jobUpdateManyCalls } = makeDatabase();
-  const service = new JobSourcesService(database as never, {} as never);
+  const { database, jobUpdateManyCalls, lifecycle } = makeDatabase();
+  const service = new JobSourcesService(
+    database as never,
+    {} as never,
+    lifecycle as never,
+  );
 
   await service.bulkUpdateActive({
     sourceType: "gupy" as never,

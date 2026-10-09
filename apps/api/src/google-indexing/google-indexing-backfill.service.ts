@@ -2,62 +2,42 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { GoogleIndexingService } from "./google-indexing.service";
+import {
+  GoogleIndexingQueueService,
+  INDEXING_PRIORITY,
+} from "./google-indexing-queue.service";
+import {
+  countIndexingSentToday,
+  getIndexingDailyLimit,
+} from "./indexing-quota";
 
-export const DEFAULT_BACKFILL_DAILY_LIMIT = 200;
-
-// America/Sao_Paulo abandonou horario de verao em 2019 — offset fixo UTC-3
-// o ano inteiro (mesma premissa de ingestion-job-schedule.util.ts).
-const SAO_PAULO_OFFSET_MS = 3 * 60 * 60 * 1000;
-
-function startOfSaoPauloDay(from: Date): Date {
-  const shifted = new Date(from.getTime() - SAO_PAULO_OFFSET_MS);
-  const startUtc = Date.UTC(
-    shifted.getUTCFullYear(),
-    shifted.getUTCMonth(),
-    shifted.getUTCDate(),
-  );
-  return new Date(startUtc + SAO_PAULO_OFFSET_MS);
-}
+export { DEFAULT_INDEXING_DAILY_LIMIT as DEFAULT_BACKFILL_DAILY_LIMIT } from "./indexing-quota";
 
 export type IndexingStatus = "pending" | "notified" | "failed";
 
 // Vagas que passaram pelo enrichment antes de GOOGLE_INDEXING_ENABLED ligar
-// nunca disparam notifyIndexing (job-enrichment.worker.ts só notifica no
-// momento em que o enrichment termina) — esse passivo (~6000 vagas na
-// ativação) precisa de um processo à parte pra ser coberto aos poucos,
-// respeitando a cota de 200 notificações/dia da Indexing API.
+// nunca foram notificadas (job-enrichment.worker.ts só enfileira no momento
+// em que o enrichment termina) — esse passivo (~6000 vagas na ativação) é
+// coberto aos poucos: o backfill só ENFILEIRA (prioridade de backfill, a mais
+// baixa) e o GoogleIndexingQueueWorker envia respeitando a cota diária.
 @Injectable()
 export class GoogleIndexingBackfillService {
   private readonly logger = new Logger(GoogleIndexingBackfillService.name);
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(GoogleIndexingService)
-    private readonly googleIndexingService: GoogleIndexingService,
+    @Inject(GoogleIndexingQueueService)
+    private readonly queueService: GoogleIndexingQueueService,
   ) {}
 
   private getDailyLimit(): number {
-    const raw = process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT;
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    return Number.isFinite(parsed) && parsed > 0
-      ? parsed
-      : DEFAULT_BACKFILL_DAILY_LIMIT;
+    return getIndexingDailyLimit();
   }
 
-  // Quantas notificações URL_UPDATED já tiveram sucesso hoje (dia
-  // calendário em America/Sao_Paulo) — precisa entrar na conta antes de
-  // rodar um novo lote, senão duas execuções no mesmo dia (agendada às 3h +
-  // "Rodar agora" manual) somadas podem passar da cota real da Indexing
-  // API, que é por dia, não por execução.
+  // Enviadas hoje (URL_UPDATED + URL_DELETED, janela do Pacífico): é o que
+  // conta contra a cota real da Indexing API.
   private async getNotifiedTodayCount(): Promise<number> {
-    return this.database.googleIndexingLog.count({
-      where: {
-        type: "URL_UPDATED",
-        status: "SUCCESS",
-        createdAt: { gte: startOfSaoPauloDay(new Date()) },
-      },
-    });
+    return countIndexingSentToday(this.database);
   }
 
   // Vagas elegiveis (ativas, com slug e enrichment concluido) e o log de
@@ -88,8 +68,13 @@ export class GoogleIndexingBackfillService {
         )
     )`;
 
+  // Fora também quem já tem pendência na fila (enfileirada pelo enrichment
+  // ou por um backfill anterior ainda não enviado).
   private readonly notNotifiedSql = Prisma.sql`
-    AND NOT ${this.notifiedSinceLastRemovalSql}`;
+    AND NOT ${this.notifiedSinceLastRemovalSql}
+    AND NOT EXISTS (
+      SELECT 1 FROM "GoogleIndexingQueueItem" q WHERE q."pendingKey" = j.slug
+    )`;
 
   // Tentativas de URL_UPDATED que contam pro status da listagem: só as
   // posteriores ao último URL_DELETED com sucesso (mesma regra acima).
@@ -130,58 +115,30 @@ export class GoogleIndexingBackfillService {
     return { notified: row?.notified ?? 0, total: row?.total ?? 0 };
   }
 
+  // Enfileira até um dia de cota de vagas ainda não notificadas. O envio é
+  // do GoogleIndexingQueueWorker (prioridade de backfill fica atrás de
+  // remoções e de vagas novas).
   async runBackfillBatch(): Promise<{
     dailyLimit: number;
     notifiedToday: number;
-    processed: number;
-    succeeded: number;
-    failed: number;
+    enqueued: number;
   }> {
     const dailyLimit = this.getDailyLimit();
     const notifiedToday = await this.getNotifiedTodayCount();
-    const remainingToday = Math.max(0, dailyLimit - notifiedToday);
-    const batch = await this.getPendingSlugs(remainingToday);
-    const runStartedAt = new Date();
-    let processed = 0;
-
-    // Achado real: quando a cota DIARIA da Indexing API estoura no meio do
-    // lote (ver comentario em getNotifiedTodayCount — nosso "dia" vira 3h
-    // antes do dia de cota do Google), continuar batendo nos itens
-    // restantes so gera falha garantida item a item, sem chance de
-    // recuperar nessa mesma execucao. Corta o lote assim que detecta isso
-    // em vez de gastar o resto em chamadas inuteis.
-    for (const slug of batch) {
-      processed += 1;
-      const result = await this.googleIndexingService.notifyIndexing(slug);
-      if (result.quotaExceeded) {
-        this.logger.warn(
-          `backfill batch interrompido: cota diaria da Indexing API estourada apos ${processed}/${batch.length} itens`,
-        );
-        break;
-      }
-    }
-
-    const succeeded = await this.database.googleIndexingLog.count({
-      where: {
-        slug: { in: batch.slice(0, processed) },
-        type: "URL_UPDATED",
-        status: "SUCCESS",
-        createdAt: { gte: runStartedAt },
-      },
-    });
-    const failed = processed - succeeded;
-
-    this.logger.log(
-      `backfill batch complete: processed=${processed} succeeded=${succeeded} failed=${failed} notifiedToday=${notifiedToday + succeeded}/${dailyLimit} batchSize=${batch.length}`,
+    const batch = await this.getPendingSlugs(dailyLimit);
+    const enqueued = await this.queueService.enqueue(
+      batch.map((slug) => ({
+        priority: INDEXING_PRIORITY.backfill,
+        slug,
+        type: "URL_UPDATED" as const,
+      })),
     );
 
-    return {
-      dailyLimit,
-      failed,
-      notifiedToday,
-      processed,
-      succeeded,
-    };
+    this.logger.log(
+      `backfill: ${enqueued} vagas enfileiradas (notifiedToday=${notifiedToday}/${dailyLimit})`,
+    );
+
+    return { dailyLimit, enqueued, notifiedToday };
   }
 
   async getStatus(): Promise<{

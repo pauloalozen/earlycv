@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  classifyJobLocation,
   isForeignLocation,
   normalizeCity,
   normalizeState,
@@ -221,4 +222,117 @@ test("isForeignLocation resolve o par '<País> - Remote' (boards Greenhouse glob
   assert.equal(isForeignLocation("US-Remote", null), true);
   assert.equal(isForeignLocation("Canada-Remote", null), true);
   assert.equal(isForeignLocation("Colombia - Remote", null), true);
+});
+
+test("classifyJobLocation: sigla de UF brasileira nunca vira estado americano", () => {
+  for (const locationText of [
+    "Blumenau, SC, BR",
+    "Cuiabá, MT",
+    "Campo Grande, MS",
+    "Maceió, AL",
+    "Marabá, PA",
+    "São Luís, MA",
+  ]) {
+    assert.equal(
+      classifyJobLocation({ country: "BR", locationText }),
+      "brazil",
+      locationText,
+    );
+  }
+  // As siglas americanas que não colidem continuam valendo no campo state.
+  assert.equal(classifyJobLocation({ state: "CA" }), "foreign");
+});
+
+test("classifyJobLocation: Remote só vale como Brasil sem país estrangeiro junto", () => {
+  assert.equal(
+    classifyJobLocation({
+      country: "Remote; Texas",
+      state: "USA",
+      city: "Illinois",
+      locationText: "Illinois, USA, Remote; Texas, USA, Remote",
+    }),
+    "foreign",
+  );
+  assert.equal(
+    classifyJobLocation({
+      country: "Remote",
+      city: "Canada",
+      locationText: "Canada, Remote",
+    }),
+    "foreign",
+  );
+  assert.equal(
+    classifyJobLocation({
+      country: "Remote",
+      locationText: "North America, Remote",
+    }),
+    "foreign",
+  );
+  assert.equal(
+    classifyJobLocation({ country: "Remote", locationText: "Remote" }),
+    "brazil",
+  );
+});
+
+test("classifyJobLocation: Remote sozinho de board global vai para revisão", () => {
+  assert.equal(
+    classifyJobLocation({
+      country: "Remote",
+      locationText: "Remote",
+      isGlobalBoard: true,
+    }),
+    "review",
+  );
+  assert.equal(
+    classifyJobLocation({
+      country: "Remote",
+      locationText: "Brazil, Remote",
+      isGlobalBoard: true,
+    }),
+    "brazil",
+  );
+});
+
+test("classifyJobLocation: country Brasil padrão não vence locationText estrangeiro", () => {
+  assert.equal(
+    classifyJobLocation({
+      country: "Brazil",
+      locationText: "Bangalore, India",
+    }),
+    "foreign",
+  );
+  assert.equal(
+    classifyJobLocation({
+      country: "Brasil",
+      locationText: "UK Field Based, Field Based, United Kingdom",
+    }),
+    "foreign",
+  );
+});
+
+test("classifyJobLocation: vaga em mais de um país incluindo o Brasil fica", () => {
+  assert.equal(
+    classifyJobLocation({
+      country: "Colombia; São Paulo",
+      state: "Huila",
+      city: "Colombia",
+      locationText: "Colombia, Huila, Colombia; São Paulo, Brazil",
+    }),
+    "brazil",
+  );
+});
+
+test("classifyJobLocation: UF no country com cidade brasileira por extenso é Brasil, sigla sozinha não", () => {
+  assert.equal(
+    classifyJobLocation({
+      country: "SP",
+      city: "São Paulo",
+      locationText: "São Paulo, SP",
+    }),
+    "brazil",
+  );
+  assert.equal(
+    classifyJobLocation({ country: "RO", locationText: "Bucharest, RO" }),
+    "foreign",
+  );
 });

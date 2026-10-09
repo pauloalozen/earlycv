@@ -182,11 +182,14 @@ function createFixture() {
   let enrichCalls = 0;
 
   const indexingCalls: string[] = [];
-  const googleIndexingService = {
-    notifyIndexing: async (slug: string) => {
-      indexingCalls.push(slug);
+  // Fila da Indexing API: o worker só enfileira URL_UPDATED.
+  const indexingQueue = {
+    enqueue: async (items: Array<{ slug: string; type: string }>) => {
+      for (const item of items) {
+        if (item.type === "URL_UPDATED") indexingCalls.push(item.slug);
+      }
+      return items.length;
     },
-    notifyRemoval: async () => {},
   };
 
   const revalidationCalls: Array<{ slug: string; reason: string }> = [];
@@ -203,7 +206,7 @@ function createFixture() {
     semanticFilterService as never,
     lockRepository as never,
     enrichmentConfigService as never,
-    googleIndexingService as never,
+    indexingQueue as never,
     undefined,
     {
       enrich: async (input) => {

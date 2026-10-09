@@ -253,6 +253,7 @@ export function VagasTabClient({
           <option value="active">active</option>
           <option value="inactive">inactive</option>
           <option value="removed">removed</option>
+          <option value="pending_review">pending_review</option>
         </select>
         <select
           className="h-9 rounded-md border px-3 text-[12.5px]"

@@ -16,6 +16,7 @@
 import { PrismaClient } from "@prisma/client";
 import type { DatabaseService } from "../database/database.service";
 import { CompanySourceAuditService } from "../ingestion/company-source-audit.service";
+import { buildScriptJobLifecycle } from "./support-job-lifecycle";
 
 const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
@@ -25,6 +26,7 @@ async function main() {
   try {
     const service = new CompanySourceAuditService(
       prisma as unknown as DatabaseService,
+      buildScriptJobLifecycle(prisma),
     );
     console.log(
       `[apply-company-source-audit] modo: ${DRY_RUN ? "DRY-RUN (nada será gravado)" : "APPLY (gravando de verdade)"}`,

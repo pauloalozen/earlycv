@@ -14,6 +14,7 @@ import type {
   GoogleIndexingBackfillStatus,
   GoogleIndexingJobStatus,
   GoogleIndexingJobsPage,
+  GoogleIndexingQueueStatus,
 } from "@/lib/admin-ingestion-api";
 
 const STAT_ITEMS: Array<{
@@ -23,10 +24,37 @@ const STAT_ITEMS: Array<{
   { key: "totalEligible", label: "Elegíveis" },
   { key: "notified", label: "Notificadas" },
   { key: "pending", label: "Pendentes (passivo)" },
-  { key: "notifiedToday", label: "Cota usada hoje" },
+  { key: "notifiedToday", label: "Enviadas hoje" },
   { key: "dailyLimit", label: "Cota diária" },
   { key: "estimatedDaysRemaining", label: "Dias restantes (estimado)" },
 ];
+
+function queueStatItems(queue: GoogleIndexingQueueStatus) {
+  return [
+    { label: "Na fila: remoção", value: queue.pending.deleted },
+    { label: "Na fila: publicação", value: queue.pending.updated },
+    { label: "Enviadas hoje", value: queue.sentToday },
+    { label: "Cota restante hoje", value: queue.remainingToday },
+    { label: "Falhas (5 tentativas)", value: queue.failed },
+  ];
+}
+
+const STAT_LABEL_STYLE = {
+  color: AT.muted2,
+  fontFamily: '"Geist Mono", monospace',
+  fontSize: 10,
+  fontWeight: 500,
+  letterSpacing: 1.1,
+  textTransform: "uppercase" as const,
+};
+
+const STAT_VALUE_STYLE = {
+  color: AT.ink2,
+  fontSize: 26,
+  fontWeight: 500,
+  letterSpacing: -1,
+  marginTop: 4,
+};
 
 const STATUS_LABELS: Record<
   GoogleIndexingJobStatus,
@@ -48,6 +76,7 @@ export function IndexacaoTabClient() {
   const [status, setStatus] = useState<GoogleIndexingBackfillStatus | null>(
     null,
   );
+  const [queue, setQueue] = useState<GoogleIndexingQueueStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +95,12 @@ export function IndexacaoTabClient() {
       );
       if (!res.ok) throw new Error("failed to fetch status");
       setStatus(await res.json());
+      const queueRes = await fetch(
+        "/api/admin/ingestion/google-indexing/queue-status",
+        { cache: "no-store" },
+      );
+      if (!queueRes.ok) throw new Error("failed to fetch queue status");
+      setQueue(await queueRes.json());
       setError(null);
     } catch {
       setError("Não foi possível carregar o status da indexação.");
@@ -137,10 +172,11 @@ export function IndexacaoTabClient() {
         }}
       >
         <p style={{ color: AT.muted, fontSize: 13, maxWidth: 560 }}>
-          Notifica a Google Indexing API sobre vagas ativas com enriquecimento
-          concluído ainda não notificadas, respeitando a cota diária. Roda
-          automaticamente todo dia às 3h — o botão abaixo dispara um lote agora,
-          fora do horário agendado.
+          O backfill enfileira as vagas ativas com enriquecimento concluído
+          ainda não notificadas. Roda sozinho todo dia às 3h; o botão abaixo
+          enfileira um lote agora. O envio para a Google Indexing API é feito
+          pela fila, a cada minuto, com remoções antes de publicações e
+          respeitando a cota diária (janela do horário do Pacífico).
         </p>
         <button
           className={buttonVariants({ variant: "outline" })}
@@ -189,6 +225,31 @@ export function IndexacaoTabClient() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {!loading && queue && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {!queue.enabled && (
+            <p style={{ color: AT.danger, fontSize: 13 }}>
+              GOOGLE_INDEXING_ENABLED desligado: a fila continua recebendo
+              pendências, mas nada é enviado.
+            </p>
+          )}
+          <div
+            style={{
+              display: "grid",
+              gap: 16,
+              gridTemplateColumns: "repeat(5, 1fr)",
+            }}
+          >
+            {queueStatItems(queue).map((item) => (
+              <div key={item.label}>
+                <div style={STAT_LABEL_STYLE}>{item.label}</div>
+                <div style={STAT_VALUE_STYLE}>{item.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
