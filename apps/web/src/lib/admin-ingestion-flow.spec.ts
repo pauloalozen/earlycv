@@ -58,6 +58,7 @@ test("getSourceDefaults maps implemented API adapters to their own parserKey", (
     "talentbrew",
     "workday",
     "pandape",
+    "solides",
   ] as const) {
     assert.deepEqual(getSourceDefaults(type), {
       crawlStrategy: "api",
@@ -68,7 +69,7 @@ test("getSourceDefaults maps implemented API adapters to their own parserKey", (
 });
 
 test("getSourceDefaults maps ATS types without an adapter yet to api strategy", () => {
-  for (const type of ["solides"] as const) {
+  for (const type of ["successfactors", "lgcloud"] as const) {
     assert.deepEqual(getSourceDefaults(type), {
       crawlStrategy: "api",
       parserKey: type,
@@ -197,7 +198,7 @@ test("parseManualAdapterType rejects empty and unknown adapter values", () => {
     /Informe o tipo de adaptador/,
   );
   assert.throws(
-    () => parseManualAdapterType("solides"),
+    () => parseManualAdapterType("lgcloud"),
     /Tipo de adaptador invalido/,
   );
 });

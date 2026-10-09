@@ -28,6 +28,8 @@ dist/
 storybook-static/
 
 # misc
+# cache local de scripts (ex: discover:bebee-sources)
+.cache/
 .DS_Store
 *.pem
 

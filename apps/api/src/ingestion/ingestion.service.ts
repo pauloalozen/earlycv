@@ -29,6 +29,7 @@ import {
   InHireAdapter,
   LeverAdapter,
   PandapeAdapter,
+  SolidesAdapter,
   TalentbrewAdapter,
   TeamtailorAdapter,
   WorkdayAdapter,
@@ -126,6 +127,7 @@ export class IngestionService {
     @Inject(WorkdayAdapter) workdayAdapter: WorkdayAdapter,
     @Inject(PandapeAdapter) pandapeAdapter: PandapeAdapter,
     @Inject(EightfoldAdapter) eightfoldAdapter: EightfoldAdapter,
+    @Inject(SolidesAdapter) solidesAdapter: SolidesAdapter,
     @Inject(GoogleIndexingService)
     private readonly googleIndexingService: GoogleIndexingService,
     // Opcional e por último: cache do front (ISR do detalhe da vaga). Nunca
@@ -147,6 +149,7 @@ export class IngestionService {
       [workdayAdapter.sourceType, workdayAdapter],
       [pandapeAdapter.sourceType, pandapeAdapter],
       [eightfoldAdapter.sourceType, eightfoldAdapter],
+      [solidesAdapter.sourceType, solidesAdapter],
     ]);
   }
 
@@ -790,7 +793,7 @@ export class IngestionService {
   // URL/adapter chutados) antes de virar Company+JobSource de verdade —
   // roda o adapter real de producao (mesmo collect() de um crawl normal)
   // contra um JobSourceContext sintetico, sem persistir nada. Um candidato
-  // sem adapter implementado (kenoby/successfactors/solides) so
+  // sem adapter implementado (kenoby/successfactors/lgcloud) so
   // retorna "sem adapter", nao lanca.
   async probeSource(
     sourceType: JobSource["sourceType"],
