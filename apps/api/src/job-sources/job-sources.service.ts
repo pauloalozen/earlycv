@@ -11,6 +11,7 @@ import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { normalizeCompanyName } from "../ingestion/name-normalization";
 import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
+import { JobLifecycleService } from "../jobs/job-lifecycle.service";
 import type { BulkDeleteJobSourcesDto } from "./dto/bulk-delete-job-sources.dto";
 import type { BulkUpdateActiveDto } from "./dto/bulk-update-active.dto";
 import type { BulkUpdateScheduleDto } from "./dto/bulk-update-schedule.dto";
@@ -35,6 +36,8 @@ export class JobSourcesService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CompaniesService)
     private readonly companiesService: CompaniesService,
+    @Inject(JobLifecycleService)
+    private readonly jobLifecycle: JobLifecycleService,
   ) {}
 
   // Opções leves (id/nome/empresa/tipo) para filtros e seletores do admin.
@@ -303,9 +306,10 @@ export class JobSourcesService {
       // historico, so tira do radar) ja usado por
       // CompanySourceAuditService.applyApproved() pros rascunhos.
       if (dto.isActive === false) {
-        await this.database.job.updateMany({
+        await this.jobLifecycle.closeJobs({
+          reason: "job-source-paused",
+          status: "inactive",
           where: { jobSourceId, status: "active" },
-          data: { status: "inactive" },
         });
       }
 
@@ -424,9 +428,10 @@ export class JobSourcesService {
 
     // Mesma cascata do update() individual, ver comentario la.
     if (dto.isActive === false) {
-      await this.database.job.updateMany({
+      await this.jobLifecycle.closeJobs({
+        reason: "job-sources-paused-by-type",
+        status: "inactive",
         where: { status: "active", jobSource: { sourceType: dto.sourceType } },
-        data: { status: "inactive" },
       });
     }
 
@@ -491,9 +496,10 @@ export class JobSourcesService {
   // navigate-away de um <form action> por linha).
   async bulkDelete(dto: BulkDeleteJobSourcesDto) {
     if (dto.removeJobs) {
-      await this.database.job.updateMany({
+      await this.jobLifecycle.closeJobs({
+        reason: "job-sources-bulk-delete",
+        status: "removed",
         where: { jobSourceId: { in: dto.ids } },
-        data: { status: "removed" },
       });
     }
 
@@ -514,9 +520,10 @@ export class JobSourcesService {
     await this.getById(jobSourceId);
 
     if (removeJobs) {
-      await this.database.job.updateMany({
+      await this.jobLifecycle.closeJobs({
+        reason: "job-source-deleted",
+        status: "removed",
         where: { jobSourceId },
-        data: { status: "removed" },
       });
     }
 

@@ -81,9 +81,9 @@ export class IngestionJobDispatchService {
             finishedAt: new Date(),
             status: "COMPLETED",
             errorMessage:
-              result.processed === 0
+              result.enqueued === 0
                 ? "nenhuma vaga pendente"
-                : `${result.succeeded}/${result.processed} notificados, ${result.failed} falharam`,
+                : `${result.enqueued} vagas enfileiradas para notificação`,
           },
           where: { id: jobRun.id },
         });

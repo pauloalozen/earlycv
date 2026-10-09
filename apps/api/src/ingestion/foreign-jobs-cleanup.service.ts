@@ -2,10 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
 import {
-  isForeignLocation,
+  classifyJobLocation,
   isRecognizedForeignRegion,
   normalizeState,
 } from "../jobs/geo-normalizer";
+import { JobLifecycleService } from "../jobs/job-lifecycle.service";
 
 export type ForeignJobCleanupFinding = {
   jobId: string;
@@ -21,11 +22,15 @@ export type ForeignJobsCleanupPreview = {
   checked: number;
   foreign: ForeignJobCleanupFinding[];
   ambiguous: ForeignJobCleanupFinding[];
+  // Ativas, só "Remote", de board global (JobSource.isGlobalBoard): vão para
+  // pending_review (revisão manual em /admin/vagas-em-revisao).
+  review: ForeignJobCleanupFinding[];
 };
 
 export type ForeignJobsCleanupApplySummary = {
   dryRun: boolean;
   removed: number;
+  sentToReview: number;
   skippedAmbiguous: number;
 };
 
@@ -60,6 +65,8 @@ export type ForeignJobsCleanupApplySummary = {
 export class ForeignJobsCleanupService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(JobLifecycleService)
+    private readonly jobLifecycle: JobLifecycleService,
   ) {}
 
   private isAmbiguousBrazilianUf(
@@ -73,29 +80,36 @@ export class ForeignJobsCleanupService {
     return !isRecognizedForeignRegion(state);
   }
 
-  private async collect(): Promise<{
-    checked: number;
-    foreign: ForeignJobCleanupFinding[];
-    ambiguous: ForeignJobCleanupFinding[];
-  }> {
+  private async collect(): Promise<ForeignJobsCleanupPreview> {
     const jobs = await this.database.job.findMany({
       where: { status: { not: "removed" } },
       select: {
         id: true,
         title: true,
+        city: true,
         country: true,
+        locationText: true,
+        reviewApprovedAt: true,
         state: true,
         status: true,
         company: { select: { name: true } },
-        jobSource: { select: { sourceUrl: true } },
+        jobSource: { select: { isGlobalBoard: true, sourceUrl: true } },
       },
     });
 
     const foreign: ForeignJobCleanupFinding[] = [];
     const ambiguous: ForeignJobCleanupFinding[] = [];
+    const review: ForeignJobCleanupFinding[] = [];
 
     for (const job of jobs) {
-      if (!isForeignLocation(job.country, job.state)) continue;
+      const locationClass = classifyJobLocation({
+        city: job.city,
+        country: job.country,
+        isGlobalBoard: job.jobSource?.isGlobalBoard ?? false,
+        locationText: job.locationText,
+        state: job.state,
+      });
+      if (locationClass === "brazil") continue;
 
       const finding: ForeignJobCleanupFinding = {
         companyName: job.company.name,
@@ -107,36 +121,50 @@ export class ForeignJobsCleanupService {
         title: job.title,
       };
 
-      if (this.isAmbiguousBrazilianUf(job.country, job.state)) {
+      if (locationClass === "review") {
+        if (job.status === "active" && !job.reviewApprovedAt) {
+          review.push(finding);
+        }
+      } else if (this.isAmbiguousBrazilianUf(job.country, job.state)) {
         ambiguous.push(finding);
       } else {
         foreign.push(finding);
       }
     }
 
-    return { ambiguous, checked: jobs.length, foreign };
+    return { ambiguous, checked: jobs.length, foreign, review };
   }
 
   async preview(): Promise<ForeignJobsCleanupPreview> {
-    const { checked, foreign, ambiguous } = await this.collect();
-    return { ambiguous, checked, foreign };
+    return this.collect();
   }
 
   async apply(params: {
     dryRun: boolean;
   }): Promise<ForeignJobsCleanupApplySummary> {
-    const { foreign, ambiguous } = await this.collect();
+    const { foreign, ambiguous, review } = await this.collect();
 
+    // JobLifecycle: status, URL_DELETED das que estavam no radar e cache do
+    // front.
     if (!params.dryRun && foreign.length > 0) {
-      await this.database.job.updateMany({
+      await this.jobLifecycle.closeJobs({
+        reason: "foreign-jobs-cleanup",
+        status: "removed",
         where: { id: { in: foreign.map((f) => f.jobId) } },
-        data: { status: "removed" },
+      });
+    }
+    if (!params.dryRun && review.length > 0) {
+      await this.jobLifecycle.closeJobs({
+        reason: "foreign-jobs-cleanup-review",
+        status: "pending_review",
+        where: { id: { in: review.map((f) => f.jobId) } },
       });
     }
 
     return {
       dryRun: params.dryRun,
       removed: foreign.length,
+      sentToReview: review.length,
       skippedAmbiguous: ambiguous.length,
     };
   }

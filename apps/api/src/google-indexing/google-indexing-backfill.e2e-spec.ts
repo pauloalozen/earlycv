@@ -9,7 +9,13 @@ import { afterEach, before, beforeEach, describe, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
+import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { GoogleIndexingBackfillService } from "./google-indexing-backfill.service";
+import {
+  GoogleIndexingQueueService,
+  INDEXING_PRIORITY,
+} from "./google-indexing-queue.service";
+import { GoogleIndexingQueueWorker } from "./google-indexing-queue.worker";
 
 const prisma = new PrismaClient();
 const database = new DatabaseService(prisma);
@@ -44,7 +50,11 @@ async function addJob(opts: JobOpts) {
     },
   });
   await prisma.jobEnrichment.create({
-    data: { enrichmentStatus: opts.enrichment ?? "COMPLETED", jobId: job.id },
+    data: {
+      dominantArea: "DATA_AI",
+      enrichmentStatus: opts.enrichment ?? "COMPLETED",
+      jobId: job.id,
+    },
   });
   return job;
 }
@@ -61,34 +71,64 @@ async function addLog(
   });
 }
 
-// Espelha GoogleIndexingService.notify: sempre grava um log, nunca lanca.
+// Espelha GoogleIndexingService.send: sempre grava um log, nunca lança.
 function makeIndexingStub(
   outcomes: Record<string, "SUCCESS" | "ERROR" | "QUOTA"> = {},
 ) {
   return {
-    notifyIndexing: async (slug: string) => {
-      const outcome = outcomes[slug.replace(`${tag}-`, "")] ?? "SUCCESS";
+    isEnabled: () => true,
+    send: async (input: {
+      slug: string;
+      url: string;
+      type: "URL_UPDATED" | "URL_DELETED";
+    }) => {
+      const outcome = outcomes[input.slug.replace(`${tag}-`, "")] ?? "SUCCESS";
       await prisma.googleIndexingLog.create({
         data: {
-          slug,
+          slug: input.slug,
           status: outcome === "SUCCESS" ? "SUCCESS" : "ERROR",
-          type: "URL_UPDATED",
+          type: input.type,
+          url: input.url,
         },
       });
-      return { ok: outcome === "SUCCESS", quotaExceeded: outcome === "QUOTA" };
+      return {
+        error: outcome === "SUCCESS" ? null : `falha ${outcome}`,
+        ok: outcome === "SUCCESS",
+        quotaExceeded: outcome === "QUOTA",
+      };
     },
   };
 }
 
+// Backfill (só enfileira) + fila + worker de verdade sobre o banco; só o
+// envio para o Google é o stub acima.
 function makeService(outcomes?: Record<string, "SUCCESS" | "ERROR" | "QUOTA">) {
-  return new GoogleIndexingBackfillService(
+  const indexing = makeIndexingStub(outcomes);
+  const queue = new GoogleIndexingQueueService(
     database as never,
-    makeIndexingStub(outcomes) as never,
+    indexing as never,
   );
+  const worker = new GoogleIndexingQueueWorker(
+    database as never,
+    indexing as never,
+    new IngestionLockRepository(database),
+  );
+  const backfill = new GoogleIndexingBackfillService(database as never, queue);
+  return Object.assign(backfill, { queue, worker });
+}
+
+function queueItems() {
+  return prisma.googleIndexingQueueItem.findMany({
+    orderBy: { createdAt: "asc" },
+    where: { slug: { startsWith: tag } },
+  });
 }
 
 async function cleanup() {
   await prisma.googleIndexingLog.deleteMany({
+    where: { slug: { startsWith: tag } },
+  });
+  await prisma.googleIndexingQueueItem.deleteMany({
     where: { slug: { startsWith: tag } },
   });
   await prisma.job.deleteMany({ where: { companyId } });
@@ -143,7 +183,7 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     assert.equal(status.pending, 1);
   });
 
-  test("runBackfillBatch respects the daily limit, prioritizing most recent jobs", async () => {
+  test("runBackfillBatch só enfileira, até a cota diária, mais recentes primeiro", async () => {
     process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "2";
     await addJob({ slug: "old", firstSeenAt: new Date("2026-01-01") });
     await addJob({ slug: "mid", firstSeenAt: new Date("2026-02-01") });
@@ -153,45 +193,144 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     const result = await service.runBackfillBatch();
 
     assert.equal(result.dailyLimit, 2);
-    assert.equal(result.processed, 2);
-    assert.equal(result.succeeded, 2);
-    assert.equal(result.failed, 0);
-    const done = await prisma.googleIndexingLog.findMany({
-      where: { slug: { startsWith: tag } },
-      select: { slug: true },
-    });
-    assert.deepEqual(done.map((l) => l.slug).sort(), [
+    assert.equal(result.enqueued, 2);
+    const items = await queueItems();
+    assert.deepEqual(items.map((i) => i.slug).sort(), [
       slugOf("mid"),
       slugOf("new"),
     ]);
-    assert.equal((await service.getStatus()).pending, 1);
+    assert.ok(items.every((i) => i.priority === INDEXING_PRIORITY.backfill));
+    assert.ok(items.every((i) => i.url.endsWith(`/radar/${i.slug}`)));
+    // Nada foi enviado ainda: o envio é do worker.
+    assert.equal(
+      await prisma.googleIndexingLog.count({
+        where: { slug: { startsWith: tag } },
+      }),
+      0,
+    );
   });
 
-  test("runBackfillBatch counts failures without throwing", async () => {
-    await addJob({ slug: "vaga-a" });
-    await addJob({ slug: "vaga-b" });
+  test("worker envia até a cota do dia e grava a URL no log", async () => {
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "3";
+    await addJob({ slug: "a", firstSeenAt: new Date("2026-01-01") });
+    await addJob({ slug: "b", firstSeenAt: new Date("2026-01-02") });
+    await addJob({ slug: "c", firstSeenAt: new Date("2026-01-03") });
+    const service = makeService();
+    await service.runBackfillBatch();
 
-    const result = await makeService({
-      "vaga-b": "ERROR",
-    }).runBackfillBatch();
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "2";
+    const first = await service.worker.runOnce();
+    assert.equal(first.sent, 2);
+    const second = await service.worker.runOnce();
+    assert.equal(second.sent, 0);
 
-    assert.equal(result.processed, 2);
-    assert.equal(result.succeeded, 1);
-    assert.equal(result.failed, 1);
+    const logs = await prisma.googleIndexingLog.findMany({
+      where: { slug: { startsWith: tag } },
+    });
+    assert.equal(logs.length, 2);
+    assert.ok(logs.every((l) => l.url?.endsWith(`/radar/${l.slug}`)));
+    assert.equal(
+      (await queueItems()).filter((i) => i.status === "pending").length,
+      1,
+    );
   });
 
-  test("runBackfillBatch para o lote assim que a cota diaria do Google estoura", async () => {
+  test("erro conta tentativa e reagenda; cota estourada para a execução sem contar tentativa", async () => {
     await addJob({ slug: "vaga-a", firstSeenAt: new Date("2026-03-01") });
     await addJob({ slug: "vaga-b", firstSeenAt: new Date("2026-02-01") });
     await addJob({ slug: "vaga-c", firstSeenAt: new Date("2026-01-01") });
+    const service = makeService({ "vaga-a": "ERROR", "vaga-b": "QUOTA" });
+    await service.runBackfillBatch();
 
-    const result = await makeService({ "vaga-b": "QUOTA" }).runBackfillBatch();
+    const result = await service.worker.runOnce();
 
-    // vaga-a (mais recente) tem sucesso, vaga-b estoura a cota e interrompe
-    // o lote — vaga-c nunca chega a ser tentada.
-    assert.equal(result.processed, 2);
-    assert.equal(result.succeeded, 1);
-    assert.equal(result.failed, 1);
+    // vaga-a falha (1 tentativa, reagendada), vaga-b estoura a cota e
+    // interrompe: vaga-c nem é tentada.
+    assert.equal(result.sent, 0);
+    assert.equal(result.quotaExceeded, true);
+    const bySlug = new Map((await queueItems()).map((i) => [i.slug, i]));
+    const a = bySlug.get(slugOf("vaga-a"));
+    assert.equal(a?.attempts, 1);
+    assert.equal(a?.status, "pending");
+    assert.ok((a?.nextAttemptAt.getTime() ?? 0) > Date.now());
+    assert.equal(bySlug.get(slugOf("vaga-b"))?.attempts, 0);
+    assert.equal(bySlug.get(slugOf("vaga-c"))?.attempts, 0);
+  });
+
+  test("remoção sai antes de publicação; status mudado vira skipped sem gastar cota", async () => {
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "1";
+    await addJob({ slug: "ativa" });
+    await addJob({ slug: "fechada", status: "inactive" });
+    await addJob({ slug: "fechou-depois" });
+    const service = makeService();
+    await service.queue.enqueue([
+      {
+        priority: INDEXING_PRIORITY.newJob,
+        slug: slugOf("ativa"),
+        type: "URL_UPDATED",
+      },
+      {
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf("fechada"),
+        type: "URL_DELETED",
+      },
+      {
+        priority: INDEXING_PRIORITY.newJob,
+        slug: slugOf("fechou-depois"),
+        type: "URL_UPDATED",
+      },
+    ]);
+    await prisma.job.updateMany({
+      data: { status: "inactive" },
+      where: { slug: slugOf("fechou-depois") },
+    });
+
+    // Cota de 1: vai a remoção.
+    const first = await service.worker.runOnce();
+    assert.equal(first.sent, 1);
+    const sent = await prisma.googleIndexingLog.findFirst({
+      where: { slug: { startsWith: tag } },
+    });
+    assert.equal(sent?.slug, slugOf("fechada"));
+    assert.equal(sent?.type, "URL_DELETED");
+
+    // Cota esgotada: nada mais é tentado, nem descartado.
+    const second = await service.worker.runOnce();
+    assert.equal(second.sent + second.skipped, 0);
+
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "5";
+    const third = await service.worker.runOnce();
+    assert.equal(third.sent, 1);
+    assert.equal(third.skipped, 1);
+    const skipped = (await queueItems()).find(
+      (i) => i.slug === slugOf("fechou-depois"),
+    );
+    assert.equal(skipped?.status, "skipped");
+    assert.equal(skipped?.pendingKey, null);
+  });
+
+  test("uma pendência por vaga: tipo novo substitui o anterior; mesmo tipo só sobe a prioridade", async () => {
+    await addJob({ slug: "vaga" });
+    const service = makeService();
+    const slug = slugOf("vaga");
+
+    await service.queue.enqueue([
+      { priority: INDEXING_PRIORITY.backfill, slug, type: "URL_UPDATED" },
+    ]);
+    await service.queue.enqueue([
+      { priority: INDEXING_PRIORITY.newJob, slug, type: "URL_UPDATED" },
+    ]);
+    let items = await queueItems();
+    assert.equal(items.length, 1);
+    assert.equal(items[0]?.priority, INDEXING_PRIORITY.newJob);
+
+    await service.queue.enqueue([
+      { priority: INDEXING_PRIORITY.deleted, slug, type: "URL_DELETED" },
+    ]);
+    items = await queueItems();
+    assert.equal(items.length, 1);
+    assert.equal(items[0]?.type, "URL_DELETED");
+    assert.equal(items[0]?.priority, INDEXING_PRIORITY.deleted);
   });
 
   test("uses the default daily limit of 200 when env var is unset", async () => {
@@ -199,19 +338,17 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     assert.equal(status.dailyLimit, 200);
   });
 
-  test("runBackfillBatch caps the batch by what was already notified today, across runs", async () => {
-    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "2";
+  test("runBackfillBatch não enfileira de novo quem já está na fila", async () => {
     await addJob({ slug: "a", firstSeenAt: new Date("2026-01-01") });
     await addJob({ slug: "b", firstSeenAt: new Date("2026-01-02") });
-    await addJob({ slug: "c", firstSeenAt: new Date("2026-01-03") });
     const service = makeService();
 
     const first = await service.runBackfillBatch();
-    assert.equal(first.processed, 2);
+    assert.equal(first.enqueued, 2);
 
     const second = await service.runBackfillBatch();
-    assert.equal(second.notifiedToday, 2);
-    assert.equal(second.processed, 0);
+    assert.equal(second.enqueued, 0);
+    assert.equal((await queueItems()).length, 2);
   });
 
   test("listJobsByIndexingStatus separates pending, notified (SUCCESS) and failed (latest ERROR)", async () => {
@@ -320,8 +457,9 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     assert.equal(pending.jobs[0]?.lastAttemptAt, null);
 
     const result = await service.runBackfillBatch();
-    assert.equal(result.processed, 1);
-    assert.equal(result.succeeded, 1);
+    assert.equal(result.enqueued, 1);
+    const sent = await service.worker.runOnce();
+    assert.equal(sent.sent, 1);
     assert.equal((await service.getStatus()).pending, 0);
   });
 

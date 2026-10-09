@@ -9,27 +9,40 @@ type FakeJob = {
   title: string;
   country: string | null;
   state: string | null;
+  city?: string | null;
+  locationText?: string | null;
+  reviewApprovedAt?: Date | null;
   status: string;
   company: { name: string };
-  jobSource: { sourceUrl: string } | null;
+  jobSource: { sourceUrl: string; isGlobalBoard?: boolean } | null;
 };
 
 function createFixture(jobs: FakeJob[]) {
-  const updateManyCalls: Array<{ ids: string[] }> = [];
+  // apply() fecha pelo JobLifecycle (status + URL_DELETED + cache do front).
+  const updateManyCalls: Array<{ ids: string[]; status: string }> = [];
 
   const database = {
     job: {
       findMany: async () => jobs,
-      updateMany: async ({ where }: { where: { id: { in: string[] } } }) => {
-        updateManyCalls.push({ ids: where.id.in });
-        return { count: where.id.in.length };
-      },
+    },
+  };
+  const jobLifecycle = {
+    closeJobs: async ({
+      where,
+      status,
+    }: {
+      where: { id: { in: string[] } };
+      status: string;
+    }) => {
+      updateManyCalls.push({ ids: where.id.in, status });
+      return { count: where.id.in.length, slugs: [] };
     },
   };
 
   return {
     service: new ForeignJobsCleanupService(
       database as unknown as DatabaseService,
+      jobLifecycle as never,
     ),
     updateManyCalls,
   };
@@ -154,4 +167,60 @@ test("apply em dry-run nao grava nada; apply real fecha so as estrangeiras confi
   assert.equal(applySummary.skippedAmbiguous, 1);
   assert.equal(updateManyCalls.length, 1);
   assert.deepEqual(updateManyCalls[0]?.ids, ["job-foreign"]);
+  assert.equal(updateManyCalls[0]?.status, "removed");
+});
+
+test("vaga ativa só Remote de board global vai para revisão (pending_review), não é removida", async () => {
+  const { service, updateManyCalls } = createFixture([
+    {
+      id: "job-review",
+      title: "Senior Product Manager",
+      country: "Remote",
+      state: null,
+      locationText: "Remote",
+      status: "active",
+      company: { name: "Seed" },
+      jobSource: {
+        isGlobalBoard: true,
+        sourceUrl: "https://boards.greenhouse.io/seed",
+      },
+    },
+    {
+      id: "job-approved",
+      title: "Product Manager",
+      country: "Remote",
+      state: null,
+      locationText: "Remote",
+      reviewApprovedAt: new Date("2026-10-01T00:00:00.000Z"),
+      status: "active",
+      company: { name: "Seed" },
+      jobSource: {
+        isGlobalBoard: true,
+        sourceUrl: "https://boards.greenhouse.io/seed",
+      },
+    },
+    {
+      id: "job-stone",
+      title: "Engenheira de Dados",
+      country: "Remote",
+      state: null,
+      locationText: "Remote",
+      status: "active",
+      company: { name: "Stone" },
+      jobSource: { sourceUrl: "https://boards.greenhouse.io/stone" },
+    },
+  ]);
+
+  const preview = await service.preview();
+  assert.deepEqual(
+    preview.review.map((f) => f.jobId),
+    ["job-review"],
+  );
+  assert.equal(preview.foreign.length, 0);
+
+  const summary = await service.apply({ dryRun: false });
+  assert.equal(summary.sentToReview, 1);
+  assert.deepEqual(updateManyCalls, [
+    { ids: ["job-review"], status: "pending_review" },
+  ]);
 });

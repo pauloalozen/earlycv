@@ -491,6 +491,16 @@ export type GoogleIndexingBackfillStatus = {
   ingestionJobId: string | null;
 };
 
+// Fila de envio da Indexing API (GoogleIndexingQueueWorker na API).
+export type GoogleIndexingQueueStatus = {
+  enabled: boolean;
+  dailyLimit: number;
+  sentToday: number;
+  remainingToday: number;
+  pending: { updated: number; deleted: number };
+  failed: number;
+};
+
 export type GoogleIndexingJobStatus = "pending" | "notified" | "failed";
 
 export type GoogleIndexingJobRow = {

@@ -11,6 +11,9 @@ import { JobSourcesModule } from "../job-sources/job-sources.module";
 import { RadarModule } from "../radar/radar.module";
 import { SavedJobsModule } from "../saved-jobs/saved-jobs.module";
 import { InternalJobsController } from "./internal-jobs.controller";
+import { JobLifecycleModule } from "./job-lifecycle.module";
+import { JobReviewService } from "./job-review.service";
+import { JobReviewAdminController } from "./job-review-admin.controller";
 import { JobsController } from "./jobs.controller";
 import { JobsService } from "./jobs.service";
 import { PublicJobsController } from "./public-jobs.controller";
@@ -23,13 +26,20 @@ import { RadarLandingsService } from "./radar-landings.service";
     DatabaseModule,
     CompaniesModule,
     JobApplicationsModule,
+    JobLifecycleModule,
     JobSourcesModule,
     RadarModule,
     SavedJobsModule,
   ],
-  controllers: [JobsController, PublicJobsController, InternalJobsController],
+  controllers: [
+    JobsController,
+    PublicJobsController,
+    InternalJobsController,
+    JobReviewAdminController,
+  ],
   providers: [
     JobsService,
+    JobReviewService,
     RadarLandingsService,
     JwtAuthGuard,
     RolesGuard,

@@ -95,6 +95,10 @@ enum JobStatus {
   active
   inactive
   removed
+  // Fora do radar até revisão manual no admin (/admin/vagas-em-revisao):
+  // hoje, vaga só "Remote" de board global (JobSource.isGlobalBoard), sem
+  // como saber se é do Brasil.
+  pending_review
 }
 
 enum LinkedinCurationStatus {
@@ -1184,6 +1188,9 @@ model JobSource {
   consecutive403Count  Int                     @default(0)
   pausedUntil          DateTime?
   pauseReason          String?
+  // Board global (empresa estrangeira com vagas de vários países): vaga só
+  // "Remote", sem país, vai para revisão em vez de ser aceita como do Brasil.
+  isGlobalBoard        Boolean                 @default(false)
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
   company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1872,6 +1879,9 @@ model Job {
   // conteúdo. Usado como lastModified do sitemap (ver ingestion.service.ts).
   contentUpdatedAt  DateTime?
   status            JobStatus               @default(active)
+  // Aprovada manualmente em /admin/vagas-em-revisao: recrawl da mesma vaga
+  // (ainda só "Remote" em board global) não a devolve para revisão.
+  reviewApprovedAt  DateTime?
   metadataJson      Json?
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
@@ -1921,12 +1931,49 @@ model JobLinkedinCuration {
 model GoogleIndexingLog {
   id        String   @id @default(cuid())
   slug      String
+  // URL exata enviada ao Google (null nos registros anteriores à coluna).
+  url       String?
   type      String
   status    String
   errorMsg  String?
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+enum GoogleIndexingQueueStatus {
+  pending
+  done
+  failed
+  // Status da vaga não bate mais com o tipo na hora do envio (UPDATED de
+  // vaga que saiu do ar, DELETED de vaga que voltou): descartado sem gastar
+  // cota.
+  skipped
+}
+
+// Fila de notificações da Google Indexing API, processada por
+// GoogleIndexingQueueWorker (@Cron + lock). A cota diária (200, somando
+// URL_UPDATED e URL_DELETED, janela do Pacífico) é respeitada no envio, não
+// no enfileiramento. pendingKey = slug enquanto pending (null depois): o
+// @unique garante uma única pendência por vaga, a mais recente vence.
+model GoogleIndexingQueueItem {
+  id            String                    @id @default(cuid())
+  slug          String
+  url           String
+  type          String
+  // Menor primeiro: 0 = URL_DELETED, 10 = vaga nova, 20 = backfill/slug novo.
+  priority      Int
+  status        GoogleIndexingQueueStatus @default(pending)
+  pendingKey    String?                   @unique
+  attempts      Int                       @default(0)
+  nextAttemptAt DateTime                  @default(now())
+  lastError     String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  processedAt   DateTime?
+
+  @@index([status, priority, nextAttemptAt])
+  @@index([status, processedAt])
 }
 
 // Vaga salva/favoritada pelo usuário no Radar de Oportunidades — bookmark

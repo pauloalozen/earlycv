@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { isForeignLocation } from "../jobs/geo-normalizer";
+import { JobLifecycleService } from "../jobs/job-lifecycle.service";
 import {
   companyNameTokens,
   isSameBoard,
@@ -121,6 +122,8 @@ function safeHost(rawUrl: string): string | null {
 export class CompanySourceAuditService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(JobLifecycleService)
+    private readonly jobLifecycle: JobLifecycleService,
   ) {}
 
   async runAudit(): Promise<AuditRunSummary> {
@@ -568,12 +571,20 @@ export class CompanySourceAuditService {
         // publico ate voce revisar e ativar a empresa.
         const isDraftDestination = audit.tier !== "confirmed";
         if (!dryRun) {
+          // Sai do radar antes de trocar de fonte (JobLifecycle: Indexing
+          // API e cache do front), depois reatribui.
+          if (isDraftDestination) {
+            await this.jobLifecycle.closeJobs({
+              reason: "company-source-audit-draft",
+              status: "inactive",
+              where: { jobSourceId: audit.jobSourceId },
+            });
+          }
           const result = await this.database.job.updateMany({
             where: { jobSourceId: audit.jobSourceId },
             data: {
               companyId: destination.companyId,
               jobSourceId: destination.jobSourceId,
-              ...(isDraftDestination ? { status: "inactive" } : {}),
             },
           });
           summary.jobsReassigned += result.count;
@@ -591,12 +602,10 @@ export class CompanySourceAuditService {
         // empresa pra isso). Em ambos os casos so desativa a fonte errada e
         // marca as vagas ja importadas como removed.
         if (!dryRun) {
-          const result = await this.database.job.updateMany({
-            where: {
-              jobSourceId: audit.jobSourceId,
-              status: { not: "removed" },
-            },
-            data: { status: "removed" },
+          const result = await this.jobLifecycle.closeJobs({
+            reason: "company-source-audit-no-owner",
+            status: "removed",
+            where: { jobSourceId: audit.jobSourceId },
           });
           summary.jobsRemoved += result.count;
         } else {
@@ -669,7 +678,11 @@ export class CompanySourceAuditService {
         inactive: 0,
         removed: 0,
       };
-      counts[row.status as "active" | "inactive" | "removed"] = row._count._all;
+      // pending_review não entra na contagem do rascunho (ela só existe para
+      // vaga de board global, que não vira rascunho).
+      if (row.status in counts) {
+        counts[row.status as keyof typeof counts] = row._count._all;
+      }
       jobCountsByCompany.set(row.companyId, counts);
     }
 
@@ -718,9 +731,9 @@ export class CompanySourceAuditService {
       where: { companyId },
       data: { isActive: true, pauseReason: null },
     });
-    await this.database.job.updateMany({
+    await this.jobLifecycle.activateJobs({
+      reason: "company-draft-activated",
       where: { companyId, status: "inactive" },
-      data: { status: "active" },
     });
     return { ok: true } as const;
   }
@@ -737,9 +750,10 @@ export class CompanySourceAuditService {
       where: { companyId },
       data: { isActive: false },
     });
-    await this.database.job.updateMany({
-      where: { companyId, status: { not: "removed" } },
-      data: { status: "removed" },
+    await this.jobLifecycle.closeJobs({
+      reason: "company-draft-discarded",
+      status: "removed",
+      where: { companyId },
     });
     return { ok: true } as const;
   }
