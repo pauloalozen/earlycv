@@ -42,6 +42,9 @@ describe("blog pages", () => {
     expect(metadata.alternates?.canonical).toBe(
       "https://earlycv.com.br/adaptar-curriculo-para-vaga",
     );
+    expect(metadata.openGraph?.url).toBe(
+      "https://earlycv.com.br/adaptar-curriculo-para-vaga",
+    );
     expect(metadata.robots).toEqual({ follow: true, index: true });
     expect(metadata.title).toBeTypeOf("string");
   });

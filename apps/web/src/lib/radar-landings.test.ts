@@ -131,6 +131,23 @@ describe("companyDisplayName", () => {
     // 5+ letras sem grafia no mapa viram nome normal.
     expect(companyDisplayName("ALGAR")).toBe("Algar");
     expect(companyDisplayName("STEFANINI")).toBe("Stefanini");
+    // Palavras de 4 letras que são nome (mapa) x siglas (ficam em caixa alta).
+    expect(companyDisplayName("CASA GRANADO")).toBe("Casa Granado");
+    expect(companyDisplayName("RUMO S/A")).toBe("Rumo");
+    expect(companyDisplayName("C.VALE")).toBe("C.Vale");
+    expect(companyDisplayName("GIRO.TECH")).toBe("Giro.Tech");
+    expect(companyDisplayName("FISIA (NIKE)")).toBe("Fisia (Nike)");
+    expect(companyDisplayName("TSEA ENERGIA (TOSHIBA)")).toBe(
+      "TSEA Energia (Toshiba)",
+    );
+    expect(companyDisplayName("FMU FIAM FAAM")).toBe("FMU FIAM FAAM");
+    // LTDA no meio do nome e "em recuperação judicial" saem.
+    expect(
+      companyDisplayName(
+        "MOBLY COMERCIO VAREJISTA LTDA - EM RECUPERACAO JUDICIAL",
+      ),
+    ).toBe("Mobly Comercio Varejista");
+    expect(companyDisplayName("Oi S.A., em Recuperação Judicial")).toBe("Oi");
     // Travessão do dado vira vírgula (regra de copy: sem travessão em título).
     expect(companyDisplayName("Vivo – Áreas Técnicas")).toBe(
       "Vivo, Áreas Técnicas",

@@ -13,6 +13,13 @@ import { getAbsoluteUrl } from "@/lib/site";
 const PRIMARY_PAGES_LAST_MODIFIED = new Date("2026-05-02");
 const LEGAL_PAGES_LAST_MODIFIED = new Date("2026-04-14");
 const MOCK_INTERVIEW_PAGE_LAST_MODIFIED = new Date("2026-10-01");
+// Páginas de produto indexáveis (título revisado em 2026-10-09).
+const PRODUCT_PAGES_LAST_MODIFIED = new Date("2026-10-09");
+const PRODUCT_PAGES = [
+  "/preparacao-para-entrevista",
+  "/gestao-de-candidaturas",
+  "/radar-de-vagas",
+];
 
 // Gerado a cada leitura (as chamadas à API seguem em cache de 5 min). Como
 // ISR, o sitemap ficava congelado no que a API devolveu durante o build na
@@ -51,6 +58,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    ...PRODUCT_PAGES.map((path) => ({
+      url: getAbsoluteUrl(path),
+      lastModified: PRODUCT_PAGES_LAST_MODIFIED,
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    })),
     // Só entra no sitemap com a venda aberta ao público.
     ...(isMockInterviewPublic()
       ? [

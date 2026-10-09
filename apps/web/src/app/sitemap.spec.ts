@@ -138,3 +138,17 @@ test("sitemap includes the evergreen radar landings that have enough jobs (and o
   assert.equal(has("/radar/empresa/pequena"), false);
   assert.equal(has("/radar/junior"), false);
 });
+
+test("sitemap includes the indexable product pages", async () => {
+  stubSitemapJobsResponse([]);
+
+  const urls = (await sitemap()).map((entry) => entry.url);
+
+  for (const path of [
+    "/preparacao-para-entrevista",
+    "/gestao-de-candidaturas",
+    "/radar-de-vagas",
+  ]) {
+    assert.equal(urls.includes(`https://earlycv.com.br${path}`), true, path);
+  }
+});
