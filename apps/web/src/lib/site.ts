@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 export const siteConfig = {
   defaultTitle: "EarlyCV",
   description:
@@ -19,13 +21,43 @@ export const siteConfig = {
     "vagas no brasil",
   ],
   name: "EarlyCV",
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://www.earlycv.com.br",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://earlycv.com.br",
   ogImage:
     process.env.NEXT_PUBLIC_OG_IMAGE_URL ||
-    `${process.env.NEXT_PUBLIC_SITE_URL || "https://www.earlycv.com.br"}/og-image.png`,
+    `${process.env.NEXT_PUBLIC_SITE_URL || "https://earlycv.com.br"}/og-image.png`,
   titleTemplate: "%s | EarlyCV",
 } as const;
 
 export function getAbsoluteUrl(path = "/") {
   return new URL(path, siteConfig.siteUrl).toString();
+}
+
+// openGraph padrão do layout raiz, sem url. Página que define o próprio
+// openGraph substitui o objeto inteiro (o Next não faz merge profundo), então
+// quem só precisa do og:url espalha este objeto e acrescenta a url.
+export const defaultOpenGraph = {
+  type: "website",
+  title: siteConfig.defaultTitle,
+  description: siteConfig.description,
+  siteName: siteConfig.name,
+  locale: "pt_BR",
+  images: [
+    {
+      url: getAbsoluteUrl(siteConfig.ogImage),
+      width: 1200,
+      height: 630,
+      alt: "EarlyCV - monitoramento de vagas e adaptacao de curriculo",
+    },
+  ],
+} satisfies NonNullable<Metadata["openGraph"]>;
+
+// Página cujo canonical aponta pra outra URL não entra no sitemap: listar
+// uma URL que se declara duplicata de outra é sinal contraditório pro Google.
+export function isSelfCanonical(url: string, canonical?: string): boolean {
+  if (!canonical) return true;
+  const normalize = (value: string) => {
+    const parsed = new URL(value, url);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  };
+  return normalize(canonical) === normalize(url);
 }

@@ -169,10 +169,12 @@ describe("metadata do detalhe (compartilhada pelas duas rotas)", () => {
     const metadata = buildJobMetadata(job);
 
     expect(metadata.alternates?.canonical).toBe(
-      "https://www.earlycv.com.br/radar/analista-acme-1",
+      "https://earlycv.com.br/radar/analista-acme-1",
     );
     expect(metadata.robots).toBeUndefined();
-    expect(metadata.title).toBe("Analista — Acme | EarlyCV");
+    expect(metadata.title).toEqual({
+      absolute: "Analista na Acme (Remoto) | EarlyCV",
+    });
   });
 
   it("vaga inexistente/inativa: noindex", () => {

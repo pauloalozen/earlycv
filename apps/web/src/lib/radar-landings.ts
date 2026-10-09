@@ -276,19 +276,105 @@ export function toTechnologySlug(tech: string): string {
 const LEGAL_SUFFIX = /[\s,.-]+(ltda\.?|s\.?\/?a\.?|eireli|me|epp)$/i;
 const LOWERCASE_CONNECTORS = new Set(["de", "da", "do", "das", "dos", "e"]);
 
+// "MOBLY ... LTDA - EM RECUPERACAO JUDICIAL": situação jurídica não é nome.
+const JUDICIAL_RECOVERY_SUFFIX = /\s*[-,]\s*em recupera[cç][aã]o judicial\.?$/i;
+// "LTDA" no meio do nome (o do fim sai em LEGAL_SUFFIX).
+const LTDA_ANYWHERE = /(^|\s)ltda\.?(?=\s|$)/gi;
+
+// Grafia oficial de marcas e siglas que a regra de caixa abaixo erraria
+// ("TOTVS" virando "Totvs", "IFOOD" virando "Ifood"), e palavras de até 4
+// letras que são nome e não sigla ("VALE" vira "Vale"; sem entrada aqui,
+// até 4 letras fica em caixa alta). Chave: palavra em minúsculas e sem
+// acento. Só se aplica a nome inteiro em caixa alta.
+const COMPANY_WORD_OVERRIDES: Record<string, string> = {
+  aacd: "AACD",
+  ccee: "CCEE",
+  cctvm: "CCTVM",
+  cnpem: "CNPEM",
+  ebac: "EBAC",
+  ifood: "iFood",
+  itau: "Itaú",
+  neobpo: "NeoBPO",
+  pagbank: "PagBank",
+  pagseguro: "PagSeguro",
+  tecban: "TecBan",
+  tmsa: "TMSA",
+  totvs: "TOTVS",
+  yduqs: "YDUQS",
+  ...Object.fromEntries(
+    [
+      "bens",
+      "blip",
+      "cana",
+      "care",
+      "casa",
+      "copa",
+      "data",
+      "deal",
+      "domo",
+      "elis",
+      "eveo",
+      "gera",
+      "giro",
+      "gupy",
+      "ilia",
+      "inco",
+      "kuhn",
+      "lynx",
+      "mais",
+      "nava",
+      "nexa",
+      "next",
+      "nibo",
+      "nike",
+      "nita",
+      "plus",
+      "rent",
+      "road",
+      "rota",
+      "rumo",
+      "sons",
+      "tech",
+      "toky",
+      "tupy",
+      "vale",
+      "vero",
+      "vila",
+      "vita",
+      "zelo",
+    ].map((word) => [word, word.charAt(0).toUpperCase() + word.slice(1)]),
+  ),
+};
+
+// Trecho depois do ponto que é domínio ("IFOOD.COM"), não nome.
+const DOMAIN_SEGMENTS = new Set(["com", "br", "net", "io"]);
+
+function companyWordOverride(word: string): string | undefined {
+  const key = word
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return COMPANY_WORD_OVERRIDES[key];
+}
+
 // Company.name vem cru da ingestão — muitas vezes a razão social em caixa
 // alta ("BTG PACTUAL HOLDING DE SEGUROS LTDA."). Para título e texto, tira
 // o sufixo societário e, só quando o nome inteiro está em caixa alta,
 // normaliza a caixa (siglas curtas como "BRQ" ficam como estão).
 export function companyDisplayName(rawName: string): string {
   // Aspas soltas vindas da ingestão (ex.: `"tivit`).
+  // Travessão vindo do dado ("Vivo – Áreas Técnicas") não entra em título:
+  // vira vírgula.
   let name = rawName
     .replace(/["'“”‘’]/g, "")
+    .replace(/\s*[—–]\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim();
+  name = name.replace(JUDICIAL_RECOVERY_SUFFIX, "").trim();
   for (let i = 0; i < 3 && LEGAL_SUFFIX.test(name); i++) {
     name = name.replace(LEGAL_SUFFIX, "").trim();
   }
+  name = name.replace(LTDA_ANYWHERE, "$1").replace(/\s+/g, " ").trim();
   if (!name) name = rawName.trim();
   if (name !== name.toUpperCase()) return name;
   return name
@@ -296,10 +382,36 @@ export function companyDisplayName(rawName: string): string {
     .map((word, index) => {
       const lower = word.toLowerCase();
       if (index > 0 && LOWERCASE_CONNECTORS.has(lower)) return lower;
-      if (/^[a-z]{1,3}$/i.test(word) || /[&\d]/.test(word)) return word;
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
+      // Cada trecho entre pontos segue a regra sozinho ("C.VALE" -> "C.Vale",
+      // "IFOOD.COM" -> "iFood.com").
+      return word
+        .split(".")
+        .map((segment, segmentIndex) =>
+          segmentIndex > 0 && DOMAIN_SEGMENTS.has(segment.toLowerCase())
+            ? segment.toLowerCase()
+            : displayCompanyWord(segment),
+        )
+        .join(".");
     })
     .join(" ");
+}
+
+function displayCompanyWord(token: string): string {
+  // Pontuação nas pontas ("(NIKE)") fica de fora da regra de caixa.
+  const [, before = "", word = "", after = ""] =
+    token.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u) ?? [];
+  return `${before}${displayCompanyCore(word)}${after}`;
+}
+
+function displayCompanyCore(word: string): string {
+  if (!word) return word;
+  const override = companyWordOverride(word);
+  if (override) return override;
+  // Até 4 letras fica como veio (sigla: "BTG", "CPFL"). Na dúvida, manter a
+  // caixa: sigla em minúscula parece erro, marca em caixa alta não.
+  if (/^[a-z]{1,4}$/i.test(word) || /[&\d]/.test(word)) return word;
+  const lower = word.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 const RADAR_CRUMB = { name: "Vagas", path: "/radar" };
@@ -626,7 +738,7 @@ export function landingSeoTitle(
     summary && summary.total > 0
       ? `${landing.heading}: ${formatCount(summary.total)} ${summary.total === 1 ? "vaga aberta" : "vagas abertas"}`
       : landing.heading;
-  return page > 1 ? `${base} — página ${page}` : base;
+  return page > 1 ? `${base} (página ${page})` : base;
 }
 
 function truncateAtWord(text: string, max: number): string {
@@ -716,6 +828,15 @@ export function percent(part: number, total: number): number {
   return Math.round((part / total) * 100);
 }
 
+// landing.subject é sempre plural ("vagas remotas de Dados", "vagas que
+// pedem React"); para o texto com 1 vaga.
+function singularSubject(subject: string): string {
+  return subject
+    .replace(/^vagas remotas\b/, "vaga remota")
+    .replace(/^vagas que pedem\b/, "vaga que pede")
+    .replace(/^vagas\b/, "vaga");
+}
+
 export type LandingFaqItem = { question: string; answer: string };
 
 // Perguntas e respostas montadas com os números do recorte — conteúdo
@@ -728,7 +849,7 @@ export function landingFaq(
   const total = formatCount(summary.total);
   items.push({
     question: `Quantas ${landing.subject} estão abertas?`,
-    answer: `Agora o EarlyCV tem ${total} ${summary.total === 1 ? "vaga aberta" : "vagas abertas"} nesse recorte${summary.newLast7Days > 0 ? `, sendo ${formatCount(summary.newLast7Days)} publicadas nos últimos 7 dias` : ""}. A lista é atualizada várias vezes ao dia a partir dos sites de carreira das empresas.`,
+    answer: `${total} ${summary.total === 1 ? `${singularSubject(landing.subject)} aberta` : `${landing.subject} abertas`} agora${summary.newLast7Days > 0 ? `, ${formatCount(summary.newLast7Days)} ${summary.newLast7Days === 1 ? "publicada" : "publicadas"} nos últimos 7 dias` : ""}. A lista é atualizada várias vezes ao dia e você vê quais combinam com seu currículo.`,
   });
 
   const remote = summary.workModels.find((item) => item.value === "remote");

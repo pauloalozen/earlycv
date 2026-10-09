@@ -129,7 +129,13 @@ describe("/radar/[slug] para vaga que saiu do radar", () => {
     });
 
     expect(metadata.robots).toEqual({ index: false, follow: true });
-    expect(String(metadata.title)).toContain("Vaga encerrada");
+    expect(metadata.title).toEqual({
+      absolute: `Vaga encerrada: ${closedJob.title} na ${closedJob.company} | EarlyCV`,
+    });
+    // Canonical e og:url na própria vaga (nunca herdados da home).
+    const url = `https://earlycv.com.br/radar/${closedJob.slug}`;
+    expect(metadata.alternates?.canonical).toBe(url);
+    expect(metadata.openGraph?.url).toBe(url);
   });
 
   it("logado vê o aviso de que a candidatura continua salva", async () => {

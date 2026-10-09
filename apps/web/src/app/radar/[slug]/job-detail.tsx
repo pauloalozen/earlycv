@@ -21,6 +21,12 @@ import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getMyPlan } from "@/lib/plans-api";
+import {
+  buildJobPostingJsonLd,
+  buildJobSeoDescription,
+  buildJobSeoTitle,
+  cleanJobTitleForDisplay,
+} from "@/lib/job-seo";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
 import { jobLandingLinks, type RadarLandingIndex } from "@/lib/radar-landings";
@@ -430,12 +436,17 @@ function CompatCard({
 }
 
 function sanitizeJobHtml(html: string) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/javascript:/gi, "");
+  return (
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/\son\w+="[^"]*"/gi, "")
+      .replace(/\son\w+='[^']*'/gi, "")
+      .replace(/javascript:/gi, "")
+      // A página já tem o <h1> do cargo: <h1> vindo da descrição da vaga vira
+      // <h2> (h2..h6 ficam como estão).
+      .replace(/<(\/?)h1(\s[^>]*)?>/gi, "<$1h2$2>")
+  );
 }
 
 type JobSection = { title: string; bodyHtml: string };
@@ -457,25 +468,6 @@ export function splitHtmlSections(descriptionHtml: string): JobSection[] {
   return sections.length > 0
     ? sections
     : [{ title: "Descrição da vaga", bodyHtml: safeHtml }];
-}
-
-// Valores normalizados pelos adapters de ingestão (ver
-// apps/api/src/ingestion/adapters/gupy.adapter.ts EMPLOYMENT_TYPE_MAP) —
-// não são "CLT"/"PJ" literais. talent_pool não é um tipo de contrato real
-// (é banco de talentos), por isso fica de fora do mapa e o campo é omitido.
-const SCHEMA_EMPLOYMENT_TYPE: Record<string, string> = {
-  full_time: "FULL_TIME",
-  contractor: "CONTRACTOR",
-  pj: "CONTRACTOR",
-  autonomous: "CONTRACTOR",
-  temporary: "TEMPORARY",
-  internship: "INTERN",
-  apprentice: "INTERN",
-};
-
-function toSchemaEmploymentType(value: string | null): string | undefined {
-  if (!value) return undefined;
-  return SCHEMA_EMPLOYMENT_TYPE[value];
 }
 
 // Rótulo pra exibir no badge/card — mesmo valor normalizado acima (snake_
@@ -502,19 +494,8 @@ export function buildJobMetadata(job: PublicJob | null): Metadata {
     };
   }
 
-  const techTags = (job.technologies ?? []).slice(0, 3).join(", ");
-
-  const title = `${job.title} — ${job.company} | EarlyCV`;
-  const description = [
-    `Vaga de ${job.title} na ${job.company}`,
-    job.location ? `em ${job.location}` : null,
-    job.workModel === "remote" ? "(Remoto)" : null,
-    techTags ? `· ${techTags}` : null,
-    "— Veja compatibilidade com seu perfil e adapte seu CV em segundos.",
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .slice(0, 160);
+  const title = buildJobSeoTitle(job);
+  const description = buildJobSeoDescription(job);
   const url = getAbsoluteUrl(`/radar/${job.slug}`);
 
   return {
@@ -708,7 +689,8 @@ export function JobDetailView({
   const adaptarJobHref = user ? `${adaptarHref}?jobId=${job.id}` : adaptarHref;
 
   const sections = splitHtmlSections(job.descriptionHtml);
-  const titleParts = splitJobTitleForDisplay(job.title);
+  const displayTitle = cleanJobTitleForDisplay(job.title);
+  const titleParts = splitJobTitleForDisplay(displayTitle);
 
   const workModelLabel = job.workModel
     ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
@@ -730,68 +712,13 @@ export function JobDetailView({
     !!job.publishedAtSource &&
     Date.now() - new Date(job.publishedAtSource).getTime() < 3 * 86_400_000;
 
-  const validThrough = new Date(
-    new Date(job.lastSeenAt).getTime() + 30 * 86_400_000,
-  ).toISOString();
-
   // Links para as landings perenes em que a vaga se encaixa (só as com
   // volume para serem indexáveis — ver lib/radar-landings.ts).
   const internalLinks = jobLandingLinks(job, landingIndex ?? null);
 
-  // job.city/job.state já vêm normalizados (geo-normalizer.ts, na
-  // ingestão) — city em title case, state como sigla de UF. addressCountry
-  // fixo "BR" porque hoje 100% das vagas publicáveis são do Brasil. Sem
-  // cidade nem estado, jobLocation inteiro é omitido — nunca inventar
-  // localização só pra preencher o schema.
-  const hasStructuredLocation = !!(job.city || job.state);
-  const jobLocation = hasStructuredLocation
-    ? {
-        "@type": "Place",
-        address: {
-          "@type": "PostalAddress",
-          ...(job.city ? { addressLocality: job.city } : {}),
-          ...(job.state ? { addressRegion: job.state } : {}),
-          addressCountry: "BR",
-        },
-      }
-    : undefined;
-
-  const jobJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "JobPosting",
-    title: job.title,
-    // Vaga sem descriptionClean nunca chega aqui em teoria — a query
-    // pública já exige título+descrição não vazios — mas o fallback evita
-    // um JobPosting com description: "" reprovando no Rich Results Test se
-    // essa premissa mudar.
-    description:
-      job.description.trim() ||
-      `Vaga de ${job.title} na ${job.company}. Candidate-se e adapte seu CV com IA.`,
-    datePosted: job.publishedAtSource ?? job.firstSeenAt,
-    validThrough,
-    employmentType: toSchemaEmploymentType(job.employmentType),
-    hiringOrganization: {
-      "@type": "Organization",
-      name: job.company,
-      ...(job.companyWebsiteUrl ? { sameAs: job.companyWebsiteUrl } : {}),
-    },
-    ...(jobLocation ? { jobLocation } : {}),
-    ...(job.workModel === "remote" ? { jobLocationType: "TELECOMMUTE" } : {}),
-    applicantLocationRequirements: { "@type": "Country", name: "Brasil" },
-    // A candidatura acontece no site da empresa/ATS (ExternalApplyGate), não
-    // no EarlyCV — declarar true viola a diretriz de JobPosting do Google.
-    directApply: false,
-    url: getAbsoluteUrl(`/radar/${job.slug}`),
-    ...(job.externalJobId
-      ? {
-          identifier: {
-            "@type": "PropertyValue",
-            name: "EarlyCV",
-            value: job.externalJobId,
-          },
-        }
-      : {}),
-  };
+  // null = vaga sem markup (banco de talentos, estrangeira ou sem
+  // localização válida): ver buildJobPostingJsonLd.
+  const jobJsonLd = buildJobPostingJsonLd(job);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -806,7 +733,7 @@ export function JobDetailView({
       {
         "@type": "ListItem",
         position: 2,
-        name: job.title,
+        name: displayTitle,
         item: getAbsoluteUrl(`/radar/${job.slug}`),
       },
     ],
@@ -824,7 +751,11 @@ export function JobDetailView({
       }}
     >
       <RadarAnalysisPreviewProvider>
-        <script type="application/ld+json">{JSON.stringify(jobJsonLd)}</script>
+        {jobJsonLd ? (
+          <script type="application/ld+json">
+            {JSON.stringify(jobJsonLd)}
+          </script>
+        ) : null}
         <script type="application/ld+json">
           {JSON.stringify(breadcrumbJsonLd)}
         </script>
@@ -891,7 +822,7 @@ export function JobDetailView({
             </Link>
             <span style={{ color: "#c8c6bf", flexShrink: 0 }}>›</span>
             <span className="job-breadcrumb-title" style={{ color: "#0a0a0a" }}>
-              {job.title}
+              {displayTitle}
             </span>
           </nav>
 

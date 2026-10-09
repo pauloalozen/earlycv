@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
+import { isSelfCanonical } from "@/lib/site";
 import sitemap from "./sitemap";
 
 const originalFetch = globalThis.fetch;
@@ -137,4 +138,31 @@ test("sitemap includes the evergreen radar landings that have enough jobs (and o
   assert.equal(has("/radar/area/data_ai/junior"), false);
   assert.equal(has("/radar/empresa/pequena"), false);
   assert.equal(has("/radar/junior"), false);
+});
+
+test("sitemap includes the indexable product pages", async () => {
+  stubSitemapJobsResponse([]);
+
+  const urls = (await sitemap()).map((entry) => entry.url);
+
+  for (const path of [
+    "/analise-de-curriculo",
+    "/carta-de-apresentacao",
+    "/preparacao-para-entrevista",
+    "/gestao-de-candidaturas",
+    "/radar-de-vagas",
+  ]) {
+    assert.equal(urls.includes(`https://earlycv.com.br${path}`), true, path);
+  }
+});
+
+test("isSelfCanonical: só entra no sitemap quem é o próprio canonical", () => {
+  const url = "https://earlycv.com.br/blog/post";
+  assert.equal(isSelfCanonical(url), true);
+  assert.equal(isSelfCanonical(url, url), true);
+  assert.equal(isSelfCanonical(url, "/blog/post/"), true);
+  assert.equal(
+    isSelfCanonical(url, "https://earlycv.com.br/adaptar-curriculo-para-vaga"),
+    false,
+  );
 });

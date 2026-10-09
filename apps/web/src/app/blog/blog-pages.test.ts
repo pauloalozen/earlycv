@@ -37,8 +37,13 @@ describe("blog pages", () => {
       params: Promise.resolve({ slug: "como-adaptar-curriculo-para-vaga" }),
     });
 
+    // O post declara canonical próprio no frontmatter, apontando pra página
+    // perene equivalente (artigo-2-adaptar-curriculo.md).
     expect(metadata.alternates?.canonical).toBe(
-      "https://www.earlycv.com.br/blog/como-adaptar-curriculo-para-vaga",
+      "https://earlycv.com.br/adaptar-curriculo-para-vaga",
+    );
+    expect(metadata.openGraph?.url).toBe(
+      "https://earlycv.com.br/adaptar-curriculo-para-vaga",
     );
     expect(metadata.robots).toEqual({ follow: true, index: true });
     expect(metadata.title).toBeTypeOf("string");
