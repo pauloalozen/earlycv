@@ -8,18 +8,22 @@ import {
   listEligibleLandings,
 } from "@/lib/radar-landings";
 import { getSeoSitemapEntries } from "@/lib/seo-pages/pages";
-import { getAbsoluteUrl } from "@/lib/site";
+import { getAbsoluteUrl, isSelfCanonical } from "@/lib/site";
 
 const PRIMARY_PAGES_LAST_MODIFIED = new Date("2026-05-02");
 const LEGAL_PAGES_LAST_MODIFIED = new Date("2026-04-14");
 const MOCK_INTERVIEW_PAGE_LAST_MODIFIED = new Date("2026-10-01");
-// Páginas de produto indexáveis (título revisado em 2026-10-09).
+// Páginas de produto indexáveis (entraram no sitemap em 2026-10-09).
 const PRODUCT_PAGES_LAST_MODIFIED = new Date("2026-10-09");
 const PRODUCT_PAGES = [
+  "/analise-de-curriculo",
+  "/carta-de-apresentacao",
   "/preparacao-para-entrevista",
   "/gestao-de-candidaturas",
   "/radar-de-vagas",
 ];
+
+type SitemapEntry = MetadataRoute.Sitemap[number] & { canonical?: string };
 
 // Gerado a cada leitura (as chamadas à API seguem em cache de 5 min). Como
 // ISR, o sitemap ficava congelado no que a API devolveu durante o build na
@@ -39,7 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const landings = landingIndex ? listEligibleLandings(landingIndex) : [];
   const now = new Date();
 
-  return [
+  const entries: SitemapEntry[] = [
     {
       url: getAbsoluteUrl("/"),
       lastModified: PRIMARY_PAGES_LAST_MODIFIED,
@@ -110,6 +114,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: entry.lastModified,
       changeFrequency: entry.changeFrequency,
       priority: entry.priority,
+      canonical: entry.canonical,
     })),
     ...getSeoSitemapEntries().map((entry) => ({
       url: getAbsoluteUrl(entry.path),
@@ -118,4 +123,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: entry.priority,
     })),
   ];
+
+  return entries
+    .filter((entry) => isSelfCanonical(entry.url, entry.canonical))
+    .map(({ canonical: _canonical, ...entry }) => entry);
 }

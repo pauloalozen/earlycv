@@ -50,3 +50,14 @@ export const defaultOpenGraph = {
     },
   ],
 } satisfies NonNullable<Metadata["openGraph"]>;
+
+// Página cujo canonical aponta pra outra URL não entra no sitemap: listar
+// uma URL que se declara duplicata de outra é sinal contraditório pro Google.
+export function isSelfCanonical(url: string, canonical?: string): boolean {
+  if (!canonical) return true;
+  const normalize = (value: string) => {
+    const parsed = new URL(value, url);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  };
+  return normalize(canonical) === normalize(url);
+}
