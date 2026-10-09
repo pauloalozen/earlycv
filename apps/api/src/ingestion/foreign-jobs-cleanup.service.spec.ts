@@ -224,3 +224,32 @@ test("vaga ativa só Remote de board global vai para revisão (pending_review), 
     { ids: ["job-review"], status: "pending_review" },
   ]);
 });
+
+test("vaga aprovada na revisão só pula a regra do Remote sozinho: se virar estrangeira, sai como estrangeira", async () => {
+  const approved = (id: string, locationText: string) => ({
+    id,
+    title: "Product Manager",
+    country: "Remote",
+    state: null,
+    locationText,
+    reviewApprovedAt: new Date("2026-10-01T00:00:00.000Z"),
+    status: "active",
+    company: { name: "Seed" },
+    jobSource: {
+      isGlobalBoard: true,
+      sourceUrl: "https://boards.greenhouse.io/seed",
+    },
+  });
+  const { service } = createFixture([
+    approved("aprovada-remote", "Remote"),
+    approved("aprovada-virou-eua", "New York, USA, Remote"),
+  ]);
+
+  const preview = await service.preview();
+
+  assert.deepEqual(preview.review, []);
+  assert.deepEqual(
+    preview.foreign.map((f) => f.jobId),
+    ["aprovada-virou-eua"],
+  );
+});
