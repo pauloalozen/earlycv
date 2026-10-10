@@ -129,6 +129,14 @@ export function companyDisplayName(rawName: string): string {
     .join(" ");
 }
 
+// Company.displayName (editado no admin) vence; sem ele, o nome calculado.
+export function resolveCompanyDisplayName(company: {
+  name: string;
+  displayName?: string | null;
+}): string {
+  return company.displayName?.trim() || companyDisplayName(company.name);
+}
+
 function displayCompanyWord(token: string): string {
   // Pontuação nas pontas ("(NIKE)") fica de fora da regra de caixa.
   const [, before = "", word = "", after = ""] =

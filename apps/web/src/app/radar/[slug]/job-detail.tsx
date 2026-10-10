@@ -20,6 +20,7 @@ import { SaveJobCtaBtn, SaveJobTextBtn } from "@/app/radar/save-job-btn";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
+import { jobCompanyDisplayName } from "@/lib/company-display";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import {
   buildJobPostingJsonLd,
@@ -599,7 +600,7 @@ export function SimCard({
         {formatJobTitle(job.title)}
       </div>
       <div style={{ fontSize: 12, color: "#6a6560", marginBottom: 16 }}>
-        {job.company}
+        {jobCompanyDisplayName(job)}
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <span
@@ -935,7 +936,7 @@ export function JobDetailView({
                     marginBottom: 2,
                   }}
                 >
-                  {job.company}
+                  {jobCompanyDisplayName(job)}
                 </div>
                 {job.location ? (
                   <div style={{ fontSize: 12, color: "#6a6560" }}>
@@ -1391,7 +1392,7 @@ export function JobDetailView({
                 <dl style={{ margin: 0 }}>
                   {(
                     [
-                      { label: "Empresa", value: job.company },
+                      { label: "Empresa", value: jobCompanyDisplayName(job) },
                       job.location
                         ? { label: "Localização", value: job.location }
                         : null,

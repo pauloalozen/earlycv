@@ -1,4 +1,5 @@
 import { formatJobTitle } from "@earlycv/config/job-display";
+import { jobCompanyDisplayName } from "@/lib/company-display";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { AnalyzeCardBtn } from "./analyze-card-btn";
 import { ClosedJobBadge, isJobClosed } from "./closed-job-badge";
@@ -208,7 +209,7 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
       </div>
 
       <div style={{ fontSize: 12.5, color: "#6a6560", marginBottom: 10 }}>
-        {job.company}
+        {jobCompanyDisplayName(job)}
       </div>
 
       <div

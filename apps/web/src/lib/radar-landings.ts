@@ -6,9 +6,13 @@
 // sitemap.ts importa este módulo e roda nos testes via node:test puro.
 
 import { companyDisplayName } from "@earlycv/config/job-display";
+import {
+  companyCountDisplayName,
+  jobCompanyDisplayName,
+} from "./company-display";
 import { toCompanySlug } from "./company-slug";
 
-export { companyDisplayName };
+export { companyCountDisplayName, companyDisplayName, jobCompanyDisplayName };
 
 // Abaixo disso a landing não é indexável (noindex) e não entra no sitemap
 // nem nos links internos — página quase vazia indexada é o que o Google
@@ -29,7 +33,14 @@ export type RadarLandingFilters = {
 };
 
 export type CountItem = { value: string; count: number };
-export type CompanyCount = { name: string; slug: string; count: number };
+export type CompanyCount = {
+  name: string;
+  slug: string;
+  count: number;
+  // Nome de exibição resolvido na API (Company.displayName ou o calculado).
+  // Opcional: resposta de API anterior ao campo cai no cálculo local.
+  displayName?: string;
+};
 export type CityCount = {
   city: string;
   state: string;
@@ -335,8 +346,11 @@ export function areaJuniorLanding(area: string): RadarLanding | null {
   };
 }
 
-export function companyLanding(rawName: string): RadarLanding {
-  const display = companyDisplayName(rawName);
+// rawName é a chave (filtro e slug); display só muda o texto.
+export function companyLanding(
+  rawName: string,
+  display: string = companyDisplayName(rawName),
+): RadarLanding {
   const path = `/radar/empresa/${toCompanySlug(rawName)}`;
   return {
     kind: "company",
@@ -534,7 +548,10 @@ export function listEligibleLandings(
     push(cityLanding(city), city.count);
   }
   for (const company of index.companies) {
-    push(companyLanding(company.name), company.count);
+    push(
+      companyLanding(company.name, companyCountDisplayName(company)),
+      company.count,
+    );
   }
 
   return result;
@@ -622,7 +639,7 @@ export function landingSeoDescription(
   }
   const companies = summary.companies
     .slice(0, landing.kind === "company" ? 0 : 3)
-    .map((company) => companyDisplayName(company.name));
+    .map(companyCountDisplayName);
   const parts = [
     `${formatCount(summary.total)} ${landing.subject} abertas agora`,
     companies.length > 0 ? ` em empresas como ${joinList(companies)}` : "",
@@ -651,7 +668,7 @@ export function landingIntro(
   if (landing.kind !== "company") {
     const companies = summary.companies
       .slice(0, 3)
-      .map((company) => companyDisplayName(company.name));
+      .map(companyCountDisplayName);
     if (companies.length > 0) {
       sentences.push(`Quem mais contrata: ${joinList(companies)}.`);
     }
@@ -728,7 +745,7 @@ export function landingFaq(
   if (landing.kind !== "company" && summary.companies.length > 0) {
     const companies = summary.companies
       .slice(0, 5)
-      .map((company) => companyDisplayName(company.name));
+      .map(companyCountDisplayName);
     items.push({
       question: "Quais empresas estão contratando?",
       answer: `As empresas com mais vagas abertas agora são ${joinList(companies)}.`,
@@ -924,8 +941,8 @@ export function jobLandingLinks(
       links.push({ href: area.path, label: `← Todas as ${area.subject}` });
     }
     links.push({
-      href: companyLanding(job.company).path,
-      label: `Vagas ${companyDisplayName(job.company)}`,
+      href: companyLanding(job.company, jobCompanyDisplayName(job)).path,
+      label: `Vagas ${jobCompanyDisplayName(job)}`,
     });
     if (isRemote) {
       links.push({ href: remoteLanding().path, label: "Ver vagas remotas" });
@@ -948,8 +965,8 @@ export function jobLandingLinks(
     });
   }
   candidates.push({
-    landing: companyLanding(job.company),
-    label: `Vagas ${companyDisplayName(job.company)}`,
+    landing: companyLanding(job.company, jobCompanyDisplayName(job)),
+    label: `Vagas ${jobCompanyDisplayName(job)}`,
   });
   if (job.city && job.state) {
     const jobCitySlug = toCompanySlug(job.city);

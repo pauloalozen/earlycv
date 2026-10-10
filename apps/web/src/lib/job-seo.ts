@@ -1,6 +1,6 @@
 import { formatJobTitle } from "@earlycv/config/job-display";
 import type { PublicJob } from "@/lib/public-jobs-api";
-import { companyDisplayName } from "@/lib/radar-landings";
+import { jobCompanyDisplayName } from "@/lib/radar-landings";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 // Helpers de SEO da página de vaga (/radar/[slug]): <title>, meta
@@ -9,7 +9,13 @@ import { getAbsoluteUrl, siteConfig } from "@/lib/site";
 
 type JobSeoInput = Pick<
   PublicJob,
-  "city" | "company" | "country" | "state" | "title" | "workModel"
+  | "city"
+  | "company"
+  | "companyDisplayName"
+  | "country"
+  | "state"
+  | "title"
+  | "workModel"
 >;
 
 const SEO_TITLE_MAX = 60;
@@ -33,7 +39,7 @@ export function jobSeoLocation(job: JobSeoInput): string | null {
 // O cargo nunca é cortado: se só ele já estoura, o título fica sem empresa.
 export function buildJobSeoTitle(job: JobSeoInput): string {
   const cargo = cleanJobTitleForDisplay(job.title);
-  const empresa = companyDisplayName(job.company);
+  const empresa = jobCompanyDisplayName(job);
   const local = jobSeoLocation(job);
 
   const withLocal = `${cargo} na ${empresa}${local ? ` (${local})` : ""}${SEO_TITLE_SUFFIX}`;
@@ -60,7 +66,7 @@ function truncateAtWord(text: string, max: number): string {
 
 export function buildJobSeoDescription(job: JobSeoInput): string {
   const cargo = cleanJobTitleForDisplay(job.title);
-  const empresa = companyDisplayName(job.company);
+  const empresa = jobCompanyDisplayName(job);
   const local = jobSeoLocation(job);
   return truncateAtWord(
     `Vaga de ${cargo} na ${empresa}${local ? `, ${local}` : ""}. Veja grátis sua compatibilidade com a vaga e adapte seu currículo em minutos no EarlyCV.`,
@@ -205,7 +211,7 @@ export function buildJobPostingJsonLd(
   if (!jobLocation && !applicantLocationRequirements) return null;
 
   const cargo = cleanJobTitleForDisplay(job.title);
-  const empresa = companyDisplayName(job.company);
+  const empresa = jobCompanyDisplayName(job);
   const employmentType = toSchemaEmploymentType(job.employmentType);
   const logo = job.companyLogoUrl
     ? new URL(job.companyLogoUrl, siteConfig.siteUrl).toString()

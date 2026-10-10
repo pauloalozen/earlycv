@@ -36,6 +36,9 @@ export type PublicJob = {
   canonicalKey: string;
   city: string | null;
   company: string;
+  // Nome para exibição (Company.displayName ou o calculado na API).
+  // Opcional enquanto a API anterior ao campo estiver no ar.
+  companyDisplayName?: string;
   companyLogoUrl: string | null;
   companyWebsiteUrl: string | null;
   country: string | null;

@@ -5,6 +5,7 @@ import {
   companyDisplayName,
   formatJobTitle,
   hasJobIdPrefix,
+  resolveCompanyDisplayName,
   stripJobIdPrefix,
 } from "./job-display.js";
 
@@ -80,4 +81,19 @@ test("formatJobTitle não mexe em caixa mista e tira o prefixo de ID", () => {
     "Desenvolvedor Java",
   );
   assert.equal(formatJobTitle("123"), "123");
+});
+
+test("resolveCompanyDisplayName prioriza o nome editado no admin", () => {
+  assert.equal(
+    resolveCompanyDisplayName({
+      displayName: " Localiza ",
+      name: "LOCALIZA S.A.",
+    }),
+    "Localiza",
+  );
+  assert.equal(
+    resolveCompanyDisplayName({ displayName: "  ", name: "LOCALIZA S.A." }),
+    "Localiza",
+  );
+  assert.equal(resolveCompanyDisplayName({ name: "ALGAR" }), "Algar");
 });

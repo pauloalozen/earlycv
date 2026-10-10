@@ -1,7 +1,15 @@
+import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
+
 type PublicJobInput = {
   canonicalKey: string;
   city: string | null;
-  company: { name: string; websiteUrl: string | null; logoUrl: string | null };
+  company: {
+    name: string;
+    // Opcional: quem não seleciona o campo cai no nome calculado.
+    displayName?: string | null;
+    websiteUrl: string | null;
+    logoUrl: string | null;
+  };
   country: string | null;
   descriptionClean: string;
   employmentType: string | null;
@@ -26,6 +34,9 @@ export type PublicJobView = {
   canonicalKey: string;
   city: string | null;
   company: string;
+  // Nome para exibição (Company.displayName ou o calculado). `company`
+  // segue cru: é a chave dos filtros e do slug da landing de empresa.
+  companyDisplayName: string;
   companyLogoUrl: string | null;
   companyWebsiteUrl: string | null;
   country: string | null;
@@ -88,6 +99,7 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     canonicalKey: job.canonicalKey,
     city: job.city,
     company: job.company.name,
+    companyDisplayName: resolveCompanyDisplayName(job.company),
     companyLogoUrl: job.company.logoUrl,
     companyWebsiteUrl: job.company.websiteUrl,
     country: job.country,

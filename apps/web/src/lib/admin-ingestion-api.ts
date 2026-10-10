@@ -39,6 +39,8 @@ export type RunEnrichmentSummary = {
 export type CompanyRecord = {
   careersUrl: string | null;
   country: string | null;
+  // Nome de exibição editado no admin; null = calculado a partir de name.
+  displayName: string | null;
   id: string;
   industry: string | null;
   isActive: boolean;
@@ -560,7 +562,7 @@ export async function createCompany(
 
 export async function updateCompany(
   companyId: string,
-  payload: { name: string },
+  payload: { name?: string; displayName?: string | null },
   token?: string,
 ) {
   return apiRequest<CompanyRecord>(`/companies/${companyId}`, token, {

@@ -16,6 +16,16 @@ export class UpdateCompanyDto {
   @MaxLength(160)
   name?: string;
 
+  // Nome de exibição (título e texto públicos). Vazio limpa o campo e volta
+  // para o nome calculado a partir de `name`.
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim() || null : value,
+  )
+  @IsString()
+  @MaxLength(160)
+  displayName?: string | null;
+
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsUrl({ require_protocol: true })

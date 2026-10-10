@@ -1,3 +1,4 @@
+import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
 import {
   BadRequestException,
   ConflictException,
@@ -15,7 +16,6 @@ import {
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
-import { formatCompanyDisplayName } from "./company-display-name";
 import { diversifyByCompany } from "./diversify-by-company";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
@@ -29,6 +29,7 @@ const PUBLIC_JOB_SELECT = {
   city: true,
   company: {
     select: {
+      displayName: true,
       name: true,
       websiteUrl: true,
       logoUrl: true,
@@ -424,13 +425,18 @@ export class JobsService {
       where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: {
         companyId: true,
-        company: { select: { name: true, logoUrl: true } },
+        company: { select: { displayName: true, name: true, logoUrl: true } },
       },
     });
 
     const byCompany = new Map<
       string,
-      { name: string; logoUrl: string | null; jobCount: number }
+      {
+        displayName: string | null;
+        name: string;
+        logoUrl: string | null;
+        jobCount: number;
+      }
     >();
     for (const job of activeJobs) {
       const existing = byCompany.get(job.companyId);
@@ -438,6 +444,7 @@ export class JobsService {
         existing.jobCount += 1;
       } else {
         byCompany.set(job.companyId, {
+          displayName: job.company.displayName,
           name: job.company.name,
           logoUrl: job.company.logoUrl,
           jobCount: 1,
@@ -449,7 +456,7 @@ export class JobsService {
       .sort((a, b) => b.jobCount - a.jobCount)
       .slice(0, limit)
       .map((company) => ({
-        name: formatCompanyDisplayName(company.name),
+        name: resolveCompanyDisplayName(company),
         slug: toCompanySlug(company.name),
         logoUrl: company.logoUrl,
         jobCount: company.jobCount,
@@ -625,7 +632,14 @@ export class JobsService {
     const select = {
       canonicalKey: true,
       city: true,
-      company: { select: { name: true, websiteUrl: true, logoUrl: true } },
+      company: {
+        select: {
+          displayName: true,
+          name: true,
+          websiteUrl: true,
+          logoUrl: true,
+        },
+      },
       country: true,
       descriptionClean: true,
       descriptionRaw: true,
@@ -713,7 +727,14 @@ export class JobsService {
       where: { ...where, ...(jobIds ? { id: { in: jobIds } } : {}) },
       include: {
         enrichment: true,
-        company: { select: { name: true, websiteUrl: true, logoUrl: true } },
+        company: {
+          select: {
+            displayName: true,
+            name: true,
+            websiteUrl: true,
+            logoUrl: true,
+          },
+        },
       },
     });
   }

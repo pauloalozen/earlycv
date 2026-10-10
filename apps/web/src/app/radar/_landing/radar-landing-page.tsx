@@ -8,7 +8,7 @@ import { toHeaderAvailableCredits } from "@/lib/header-credits";
 import { getMyPlan } from "@/lib/plans-api";
 import {
   cityLanding,
-  companyDisplayName,
+  companyCountDisplayName,
   companyLanding,
   formatCount,
   getRadarLandingIndex,
@@ -387,9 +387,11 @@ function LandingInsights({
     landing.kind === "company"
       ? []
       : summary.companies.slice(0, 8).map((company) => ({
-          label: companyDisplayName(company.name),
+          label: companyCountDisplayName(company),
           count: company.count,
-          href: linkIfEligible(companyLanding(company.name).path),
+          href: linkIfEligible(
+            companyLanding(company.name, companyCountDisplayName(company)).path,
+          ),
         }));
   const technologies: RankedItem[] = summary.technologies
     .filter((tech) => tech.value !== landing.filters.technology)

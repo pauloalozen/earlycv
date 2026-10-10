@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import {
+  companyCountDisplayName,
   companyLanding,
   findCompanyBySlug,
   getRadarLandingIndex,
@@ -18,7 +19,9 @@ import type { RadarSearchParams } from "../../jobs-listing";
 async function resolveLanding(companySlug: string) {
   const index = await getRadarLandingIndex();
   const company = index ? findCompanyBySlug(index, companySlug) : null;
-  return company ? companyLanding(company.name) : null;
+  return company
+    ? companyLanding(company.name, companyCountDisplayName(company))
+    : null;
 }
 
 type PageProps = {
