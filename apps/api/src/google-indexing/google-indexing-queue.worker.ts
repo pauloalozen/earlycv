@@ -12,6 +12,7 @@ import { GoogleIndexingService } from "./google-indexing.service";
 import {
   INDEXING_PRIORITY,
   JOB_POSTING_ELIGIBILITY_SELECT,
+  wasNotifiedToGoogle,
 } from "./google-indexing-queue.service";
 import {
   countIndexingSentTodayByType,
@@ -222,7 +223,8 @@ export class GoogleIndexingQueueWorker {
   // UPDATED só para vaga pública (active + integridade) que tem JobPosting
   // (shouldEmitJobPosting: virou banco de talentos ou perdeu a localização
   // desde o enfileiramento, não envia); DELETED só para vaga que não está
-  // mais active (ou nem existe). Mudou desde o enfileiramento: a pendência é
+  // mais active (ou nem existe) e que o Google já recebeu (URL_UPDATED com
+  // sucesso no log). Mudou desde o enfileiramento: a pendência é
   // descartada sem gastar cota.
   private async matchesCurrentStatus(
     slug: string,
@@ -239,7 +241,8 @@ export class GoogleIndexingQueueWorker {
       select: { status: true },
       where: { slug },
     });
-    return job === null || job.status !== "active";
+    if (job !== null && job.status === "active") return false;
+    return wasNotifiedToGoogle(this.database, slug);
   }
 
   // where inclui status/type: se o enqueue trocou o tipo da pendência no

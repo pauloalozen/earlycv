@@ -25,7 +25,7 @@ export const INDEXING_PRIORITY = {
 
 export type IndexingQueueClient = Pick<
   Prisma.TransactionClient,
-  "googleIndexingQueueItem" | "job"
+  "googleIndexingLog" | "googleIndexingQueueItem" | "job"
 >;
 
 // Campos que shouldEmitJobPosting precisa (mesma regra do JSON-LD no web).
@@ -48,6 +48,21 @@ async function hasJobPosting(
     where: { slug },
   });
   return job !== null && shouldEmitJobPosting(job);
+}
+
+// URL_DELETED só para vaga que o Google já recebeu: tem URL_UPDATED com
+// sucesso no log. Vaga nunca notificada fecha sem pedido de remoção (o
+// noindex da página encerrada e a saída do sitemap resolvem), sem gastar
+// cota.
+export async function wasNotifiedToGoogle(
+  client: Pick<IndexingQueueClient, "googleIndexingLog">,
+  slug: string,
+): Promise<boolean> {
+  const log = await client.googleIndexingLog.findFirst({
+    select: { id: true },
+    where: { slug, status: "SUCCESS", type: "URL_UPDATED" },
+  });
+  return log !== null;
 }
 
 export type EnqueueIndexingInput = {
@@ -79,6 +94,12 @@ export class GoogleIndexingQueueService {
       if (
         item.type === "URL_UPDATED" &&
         !(await hasJobPosting(client, item.slug))
+      ) {
+        continue;
+      }
+      if (
+        item.type === "URL_DELETED" &&
+        !(await wasNotifiedToGoogle(client, item.slug))
       ) {
         continue;
       }

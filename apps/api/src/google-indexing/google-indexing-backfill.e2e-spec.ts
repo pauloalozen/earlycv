@@ -77,6 +77,21 @@ async function addLog(
   });
 }
 
+// URL_UPDATED com sucesso num dia antigo: a vaga já foi notificada (pré-
+// requisito de URL_DELETED) sem consumir a cota de hoje.
+const SEEDED_AT = new Date("2026-01-01T12:00:00Z");
+
+async function markNotified(slugs: string[]) {
+  await prisma.googleIndexingLog.createMany({
+    data: slugs.map((slug) => ({
+      createdAt: SEEDED_AT,
+      slug,
+      status: "SUCCESS" as const,
+      type: "URL_UPDATED" as const,
+    })),
+  });
+}
+
 // Espelha GoogleIndexingService.send: sempre grava um log, nunca lança.
 function makeIndexingStub(
   outcomes: Record<string, "SUCCESS" | "ERROR" | "QUOTA"> = {},
@@ -268,6 +283,7 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     await addJob({ slug: "ativa" });
     await addJob({ slug: "fechada", status: "inactive" });
     await addJob({ slug: "fechou-depois" });
+    await markNotified([slugOf("fechada")]);
     const service = makeService();
     await service.queue.enqueue([
       {
@@ -295,7 +311,7 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     const first = await service.worker.runOnce();
     assert.equal(first.sent, 1);
     const sent = await prisma.googleIndexingLog.findFirst({
-      where: { slug: { startsWith: tag } },
+      where: { createdAt: { gt: SEEDED_AT }, slug: { startsWith: tag } },
     });
     assert.equal(sent?.slug, slugOf("fechada"));
     assert.equal(sent?.type, "URL_DELETED");
@@ -319,6 +335,7 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     await addJob({ slug: "vaga" });
     const service = makeService();
     const slug = slugOf("vaga");
+    await markNotified([slug]);
 
     await service.queue.enqueue([
       { priority: INDEXING_PRIORITY.backfill, slug, type: "URL_UPDATED" },
@@ -532,6 +549,7 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
       status: "inactive",
     });
     await addJob({ country: null, slug: "sem-local", status: "inactive" });
+    await markNotified([slugOf("banco"), slugOf("sem-local")]);
     const service = makeService();
 
     const enqueued = await service.queue.enqueue(
@@ -628,6 +646,7 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
       await addJob({ slug: `nova-${i}` });
       updated.push(slugOf(`nova-${i}`));
     }
+    await markNotified(deleted);
     const service = makeService();
     await service.queue.enqueue([
       ...deleted.map((slug) => ({
@@ -651,7 +670,11 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     const logs = await prisma.googleIndexingLog.groupBy({
       by: ["type"],
       _count: { _all: true },
-      where: { slug: { startsWith: tag }, status: "SUCCESS" },
+      where: {
+        createdAt: { gt: SEEDED_AT },
+        slug: { startsWith: tag },
+        status: "SUCCESS",
+      },
     });
     const sent = Object.fromEntries(logs.map((l) => [l.type, l._count._all]));
     assert.equal(sent.URL_UPDATED, 140);
@@ -690,5 +713,47 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
       pending.map((i) => i.slug),
       [slugOf("backfill")],
     );
+  });
+
+  test("URL_DELETED só para vaga já notificada: nunca notificada fecha sem pedido de remoção", async () => {
+    await addJob({ slug: "notificada", status: "inactive" });
+    await addJob({ slug: "nunca-notificada", status: "inactive" });
+    await addLog("nunca-notificada", "ERROR", "falhou antes");
+    await markNotified([slugOf("notificada")]);
+    const service = makeService();
+
+    const enqueued = await service.queue.enqueue(
+      ["notificada", "nunca-notificada"].map((slug) => ({
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf(slug),
+        type: "URL_DELETED" as const,
+      })),
+    );
+
+    assert.equal(enqueued, 1);
+    assert.deepEqual(
+      (await queueItems()).map((i) => i.slug),
+      [slugOf("notificada")],
+    );
+  });
+
+  test("worker marca skipped o DELETED de vaga sem URL_UPDATED de sucesso", async () => {
+    await addJob({ slug: "sem-log", status: "inactive" });
+    await prisma.googleIndexingQueueItem.create({
+      data: {
+        pendingKey: slugOf("sem-log"),
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf("sem-log"),
+        type: "URL_DELETED",
+        url: `https://example.com/radar/${slugOf("sem-log")}`,
+      },
+    });
+    const service = makeService();
+
+    const result = await service.worker.runOnce();
+
+    assert.equal(result.sent, 0);
+    assert.equal(result.skipped, 1);
+    assert.equal((await queueItems())[0]?.status, "skipped");
   });
 });
