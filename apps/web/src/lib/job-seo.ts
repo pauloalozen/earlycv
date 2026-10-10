@@ -1,3 +1,4 @@
+import { formatJobTitle } from "@earlycv/config/job-display";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { companyDisplayName } from "@/lib/radar-landings";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
@@ -15,14 +16,10 @@ const SEO_TITLE_MAX = 60;
 const SEO_TITLE_SUFFIX = " | EarlyCV";
 const SEO_DESCRIPTION_MAX = 155;
 
-// Alguns ATS (Lever da CI&T) prefixam o título com o ID interno da vaga
-// ("[Job-32186] Senior AI Developer"). A correção na origem é da ingestão;
-// aqui só não exibimos o prefixo.
+// Cargo para exibição: sem o prefixo "[Job-N]" do Lever da CI&T e, quando
+// veio inteiro em caixa alta, em caixa de título (ver formatJobTitle).
 export function cleanJobTitleForDisplay(title: string): string {
-  return title
-    .replace(/^\[Job-\d+\]\s*/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return formatJobTitle(title);
 }
 
 // "Remoto" para vaga remota; senão a cidade; senão nada.

@@ -1,3 +1,4 @@
+import { formatJobTitle } from "@earlycv/config/job-display";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { AnalyzeCardBtn } from "./analyze-card-btn";
 import { ClosedJobBadge, isJobClosed } from "./closed-job-badge";
@@ -177,7 +178,7 @@ export function JobMetaRow({ job }: { job: PublicJob }) {
             lineHeight: 1.3,
           }}
         >
-          {job.title}
+          {formatJobTitle(job.title)}
         </RadarOpportunityLink>
         {alreadyAnalyzed ? (
           <span

@@ -1,3 +1,4 @@
+import { formatJobTitle } from "@earlycv/config/job-display";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
@@ -20,13 +21,13 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { getMyPlan } from "@/lib/plans-api";
 import {
   buildJobPostingJsonLd,
   buildJobSeoDescription,
   buildJobSeoTitle,
   cleanJobTitleForDisplay,
 } from "@/lib/job-seo";
+import { getMyPlan } from "@/lib/plans-api";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
 import { jobLandingLinks, type RadarLandingIndex } from "@/lib/radar-landings";
@@ -583,7 +584,7 @@ export function SimCard({
           lineHeight: 1.35,
         }}
       >
-        {job.title}
+        {formatJobTitle(job.title)}
       </div>
       <div style={{ fontSize: 12, color: "#6a6560", marginBottom: 16 }}>
         {job.company}
