@@ -5,18 +5,30 @@
 // Vaga classificada como estrangeira não é tocada (o saneamento dela é do
 // cleanup:foreign-jobs).
 //
-// Toda vaga alterada ganha contentUpdatedAt (o sitemap avisa o Google). Só
-// a ativa que passou de "sem JobPosting" para "com JobPosting"
-// (shouldEmitJobPosting) vai para a fila da Indexing API (URL_UPDATED).
+// Fila da Indexing API: só vaga pública ativa que passou de "sem
+// JobPosting" para "com JobPosting" ganha URL_UPDATED (prioridade de
+// backfill). A comparação é com a regra ANTERIOR ao PR 2b (sem cidade nem
+// UF, vaga não remota não tinha jobLocation), então entram também as vagas
+// que ganharam JobPosting só pela regra nova (país BR sem cidade), mesmo
+// sem mudança de localização: o backfill não pega de novo quem já foi
+// notificado antes, quando a página ainda não tinha JobPosting. Toda vaga
+// alterada ou enfileirada ganha contentUpdatedAt (o lastmod do sitemap
+// avisa o Google sem depender da cota).
 //
 // Por padrão roda em --dry-run (só lê e reporta, inclusive quantas
-// pendências vai criar). Passe --apply pra gravar. Idempotente: rodar de
-// novo não muda nada.
+// pendências vai criar). Passe --apply pra gravar. Idempotente: vaga que já
+// tem URL_UPDATED pendente, ou enviado com sucesso desde a mudança de
+// regra, não entra de novo.
 //
 //   npm run jobs:normalize-locations --workspace @earlycv/api
 //   npm run jobs:normalize-locations --workspace @earlycv/api -- --apply
 
-import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
+import {
+  isTalentPool,
+  type JobPostingEligibilityInput,
+  resolveAddressCountry,
+  shouldEmitJobPosting,
+} from "@earlycv/config/job-posting";
 import { PrismaClient } from "@prisma/client";
 
 import type { DatabaseService } from "../database/database.service";
@@ -27,9 +39,21 @@ import {
 } from "../google-indexing/google-indexing-queue.service";
 import { withNormalizedLocation } from "../ingestion/location-normalization";
 import { classifyJobLocation } from "../jobs/geo-normalizer";
+import { PUBLIC_JOB_INTEGRITY_WHERE } from "../jobs/public-job-integrity";
 
 const APPLY = process.argv.includes("--apply");
 const LOG = "[normalize-job-locations]";
+// Dia em que a regra do JobPosting mudou (PR 2b). URL_UPDATED com sucesso a
+// partir daqui já reflete a página com JobPosting.
+const JOB_POSTING_RULE_CHANGED_AT = new Date("2026-10-10T00:00:00Z");
+
+// Regra do JobPosting antes do PR 2b: jobLocation só com cidade ou UF;
+// remota só com applicantLocationRequirements.
+function hadJobPostingBeforePr2b(job: JobPostingEligibilityInput): boolean {
+  if (isTalentPool(job.employmentType)) return false;
+  if (resolveAddressCountry(job) !== "BR") return false;
+  return !!job.city || !!job.state || job.workModel === "remote";
+}
 
 async function main() {
   const prisma = new PrismaClient();
@@ -53,6 +77,14 @@ async function main() {
       },
       orderBy: { id: "asc" },
     });
+    const publicActive = new Set(
+      (
+        await prisma.job.findMany({
+          select: { id: true },
+          where: { ...PUBLIC_JOB_INTEGRITY_WHERE, status: "active" },
+        })
+      ).map((job) => job.id),
+    );
 
     const counts = {
       cityChanged: 0,
@@ -62,12 +94,16 @@ async function main() {
       stateFilled: 0,
       workModelRemote: 0,
     };
-    let changedJobs = 0;
+    type Change = {
+      city: string | null;
+      id: string;
+      state: string | null;
+      workModel: string | null;
+    };
+    const changes = new Map<string, Change>();
+    const gainedCandidates = new Map<string, Change & { slug: string }>();
     let changedActive = 0;
-    let updated = 0;
     const samples: string[] = [];
-    // Ativas que passam a ter JobPosting: as únicas que vão para a fila.
-    const gainedJobPosting: string[] = [];
 
     for (const job of jobs) {
       const input = {
@@ -98,62 +134,116 @@ async function main() {
         title: "",
         ...input,
       });
-      const city = next.city ?? null;
-      const state = next.state ?? null;
-      const workModel = next.workModel ?? null;
+      const change: Change = {
+        city: next.city ?? null,
+        id: job.id,
+        state: next.state ?? null,
+        workModel: next.workModel ?? null,
+      };
+
       if (
-        city === job.city &&
-        state === job.state &&
-        workModel === job.workModel
+        job.slug &&
+        publicActive.has(job.id) &&
+        !hadJobPostingBeforePr2b(job) &&
+        shouldEmitJobPosting({ ...job, ...change })
+      ) {
+        gainedCandidates.set(job.slug, { ...change, slug: job.slug });
+      }
+
+      if (
+        change.city === job.city &&
+        change.state === job.state &&
+        change.workModel === job.workModel
       ) {
         continue;
       }
 
-      if (city !== job.city) {
+      if (change.city !== job.city) {
         if (job.city) counts.cityChanged += 1;
         else counts.cityFilled += 1;
       }
-      if (state !== job.state) {
+      if (change.state !== job.state) {
         if (job.state) counts.stateChanged += 1;
         else counts.stateFilled += 1;
       }
-      if (workModel !== job.workModel) counts.workModelRemote += 1;
-      changedJobs += 1;
+      if (change.workModel !== job.workModel) counts.workModelRemote += 1;
+      changes.set(job.id, change);
       if (job.status === "active") changedActive += 1;
       if (samples.length < 40) {
         samples.push(
-          `${job.status} "${job.locationText}" city=${job.city ?? "-"} state=${job.state ?? "-"} workModel=${job.workModel ?? "-"} -> city=${city ?? "-"} state=${state ?? "-"} workModel=${workModel ?? "-"}`,
+          `${job.status} "${job.locationText}" city=${job.city ?? "-"} state=${job.state ?? "-"} workModel=${job.workModel ?? "-"} -> city=${change.city ?? "-"} state=${change.state ?? "-"} workModel=${change.workModel ?? "-"}`,
         );
-      }
-
-      if (
-        job.status === "active" &&
-        job.slug &&
-        !shouldEmitJobPosting(job) &&
-        shouldEmitJobPosting({ ...job, city, state, workModel })
-      ) {
-        gainedJobPosting.push(job.slug);
-      }
-
-      if (APPLY) {
-        await prisma.job.update({
-          where: { id: job.id },
-          data: { city, contentUpdatedAt: new Date(), state, workModel },
-        });
-        updated += 1;
       }
     }
 
+    // Uma vez só: fora quem já tem URL_UPDATED pendente ou enviado com
+    // sucesso desde a mudança de regra.
+    const candidateSlugs = [...gainedCandidates.keys()];
+    const alreadyHandled = new Set([
+      ...(
+        await prisma.googleIndexingQueueItem.findMany({
+          select: { slug: true },
+          where: {
+            slug: { in: candidateSlugs },
+            status: "pending",
+            type: "URL_UPDATED",
+          },
+        })
+      ).map((item) => item.slug),
+      ...(
+        await prisma.googleIndexingLog.findMany({
+          select: { slug: true },
+          where: {
+            createdAt: { gte: JOB_POSTING_RULE_CHANGED_AT },
+            slug: { in: candidateSlugs },
+            status: "SUCCESS",
+            type: "URL_UPDATED",
+          },
+        })
+      ).map((log) => log.slug),
+    ]);
+    const gained = [...gainedCandidates.values()].filter(
+      (candidate) => !alreadyHandled.has(candidate.slug),
+    );
+    const gainedOnlyByRule = gained.filter(
+      (candidate) => !changes.has(candidate.id),
+    ).length;
+
+    let updated = 0;
     let enqueued = 0;
     if (APPLY) {
+      const now = new Date();
+      for (const change of changes.values()) {
+        await prisma.job.update({
+          where: { id: change.id },
+          data: {
+            city: change.city,
+            contentUpdatedAt: now,
+            state: change.state,
+            workModel: change.workModel,
+          },
+        });
+        updated += 1;
+      }
+      const ruleOnlyIds = gained
+        .filter((candidate) => !changes.has(candidate.id))
+        .map((candidate) => candidate.id);
+      if (ruleOnlyIds.length > 0) {
+        const result = await prisma.job.updateMany({
+          data: { contentUpdatedAt: now },
+          where: { id: { in: ruleOnlyIds } },
+        });
+        updated += result.count;
+      }
+
       const database = prisma as unknown as DatabaseService;
       enqueued = await new GoogleIndexingQueueService(
         database,
         new GoogleIndexingService(database),
       ).enqueue(
-        gainedJobPosting.map((slug) => ({
+        gained.map((candidate) => ({
           priority: INDEXING_PRIORITY.backfill,
-          slug,
+          slug: candidate.slug,
           type: "URL_UPDATED" as const,
         })),
       );
@@ -161,7 +251,7 @@ async function main() {
 
     for (const sample of samples) console.log(`${LOG} ${sample}`);
     console.log(
-      `${LOG} concluído: ${jobs.length} vagas verificadas, ${changedJobs} a normalizar (ativas: ${changedActive}); cidade preenchida=${counts.cityFilled}, cidade corrigida=${counts.cityChanged}, UF preenchida=${counts.stateFilled}, UF corrigida=${counts.stateChanged}, workModel->remote=${counts.workModelRemote}, estrangeiras ignoradas=${counts.foreignSkipped}; ${gainedJobPosting.length} pendências URL_UPDATED na Indexing API (ativas que passam a ter JobPosting)${APPLY ? `; ${updated} gravadas, ${enqueued} enfileiradas` : " (nenhuma gravada: rode com --apply)"}.`,
+      `${LOG} concluído: ${jobs.length} vagas verificadas, ${changes.size} a normalizar (ativas: ${changedActive}); cidade preenchida=${counts.cityFilled}, cidade corrigida=${counts.cityChanged}, UF preenchida=${counts.stateFilled}, UF corrigida=${counts.stateChanged}, workModel->remote=${counts.workModelRemote}, estrangeiras ignoradas=${counts.foreignSkipped}; ${gained.length} pendências URL_UPDATED na Indexing API (ativas públicas que passam a ter JobPosting em relação à regra anterior; ${gainedOnlyByRule} só pela regra nova, sem mudança de localização)${APPLY ? `; ${updated} gravadas, ${enqueued} enfileiradas` : " (nenhuma gravada: rode com --apply)"}.`,
     );
   } finally {
     await prisma.$disconnect();
