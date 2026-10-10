@@ -1,6 +1,6 @@
 ---
 title: "Transição de carreira para tech: como reposicionar seu currículo para entrar em uma nova área"
-description: "Mudar de área não significa começar do zero. Entenda como profissionais de carreira não-técnica estão entrando com sucesso em tech, dados e produto — e como reposicionar o currículo existente para destacar o que realmente importa para o novo mercado."
+description: "Mudar de área não significa começar do zero. Entenda como profissionais de carreira não-técnica estão entrando com sucesso em tech, dados e produto, e como reposicionar o currículo existente para destacar o que realmente importa para o novo mercado."
 slug: transicao-carreira-tech-curriculo
 publishedAt: "2026-04-29"
 updatedAt: "2026-04-29"

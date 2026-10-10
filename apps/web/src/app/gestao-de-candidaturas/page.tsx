@@ -26,13 +26,13 @@ const url = getAbsoluteUrl("/gestao-de-candidaturas");
 export const metadata: Metadata = {
   title: "Gestão de Candidaturas: Pare de Perder o Controle das Suas Vagas",
   description:
-    "Suas candidaturas não precisam viver numa planilha. Acompanhe vaga salva, CV usado, status, entrevista e preparação — tudo num só lugar, conectado.",
+    "Suas candidaturas não precisam viver numa planilha. Acompanhe vaga salva, CV usado, status, entrevista e preparação, tudo num só lugar e conectado.",
   alternates: { canonical: url },
   openGraph: {
     title:
       "Gestão de Candidaturas: Pare de Perder o Controle das Suas Vagas | EarlyCV",
     description:
-      "Acompanhe cada candidatura num só lugar — vaga, CV, status, entrevista e preparação.",
+      "Acompanhe cada candidatura num só lugar: vaga, CV, status, entrevista e preparação.",
     url,
     type: "website",
   },
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     title:
       "Gestão de Candidaturas: Pare de Perder o Controle das Suas Vagas | EarlyCV",
     description:
-      "Acompanhe cada candidatura num só lugar — vaga, CV, status, entrevista e preparação.",
+      "Acompanhe cada candidatura num só lugar: vaga, CV, status, entrevista e preparação.",
   },
 };
 
