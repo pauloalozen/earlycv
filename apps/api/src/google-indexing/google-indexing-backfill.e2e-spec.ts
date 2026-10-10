@@ -32,6 +32,7 @@ type JobOpts = {
   // Padrão: vaga do Brasil comum (a ingestão sempre grava country).
   country?: string | null;
   employmentType?: string | null;
+  dominantArea?: "DATA_AI" | "OTHER";
 };
 
 async function addJob(opts: JobOpts) {
@@ -56,7 +57,7 @@ async function addJob(opts: JobOpts) {
   });
   await prisma.jobEnrichment.create({
     data: {
-      dominantArea: "DATA_AI",
+      dominantArea: opts.dominantArea ?? "DATA_AI",
       enrichmentStatus: opts.enrichment ?? "COMPLETED",
       jobId: job.id,
     },
@@ -598,5 +599,96 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
       slugOf("a"),
       slugOf("b"),
     ]);
+  });
+
+  test("backfill só pega vaga pública: área OTHER não entra nem volta ao lote", async () => {
+    await addJob({ dominantArea: "OTHER", slug: "outra-area" });
+    await addJob({ slug: "publica" });
+    const service = makeService();
+
+    const result = await service.runBackfillBatch();
+
+    assert.equal(result.enqueued, 1);
+    assert.deepEqual(
+      (await queueItems()).map((i) => i.slug),
+      [slugOf("publica")],
+    );
+    assert.equal((await service.getStatus()).totalEligible, 1);
+  });
+
+  test("piso de DELETED: 300 DELETED e 150 UPDATED pendentes, cota 200 => 140 UPDATED + 60 DELETED", async () => {
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "200";
+    const deleted: string[] = [];
+    const updated: string[] = [];
+    for (let i = 0; i < 300; i++) {
+      await addJob({ slug: `fechada-${i}`, status: "inactive" });
+      deleted.push(slugOf(`fechada-${i}`));
+    }
+    for (let i = 0; i < 150; i++) {
+      await addJob({ slug: `nova-${i}` });
+      updated.push(slugOf(`nova-${i}`));
+    }
+    const service = makeService();
+    await service.queue.enqueue([
+      ...deleted.map((slug) => ({
+        priority: INDEXING_PRIORITY.deleted,
+        slug,
+        type: "URL_DELETED" as const,
+      })),
+      ...updated.map((slug) => ({
+        priority: INDEXING_PRIORITY.newJob,
+        slug,
+        type: "URL_UPDATED" as const,
+      })),
+    ]);
+
+    // Um dia inteiro de execuções (20 envios por execução).
+    for (let run = 0; run < 15; run++) {
+      const result = await service.worker.runOnce();
+      if (result.sent === 0) break;
+    }
+
+    const logs = await prisma.googleIndexingLog.groupBy({
+      by: ["type"],
+      _count: { _all: true },
+      where: { slug: { startsWith: tag }, status: "SUCCESS" },
+    });
+    const sent = Object.fromEntries(logs.map((l) => [l.type, l._count._all]));
+    assert.equal(sent.URL_UPDATED, 140);
+    assert.equal(sent.URL_DELETED, 60);
+
+    const panel = await service.queue.getPanel();
+    assert.deepEqual(panel.sentTodayByType, { deleted: 60, updated: 140 });
+    assert.equal(panel.remainingToday, 0);
+  });
+
+  test("sem DELETED pendente, UPDATED usa a cota inteira; backfill fica por último", async () => {
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "3";
+    await addJob({ slug: "backfill" });
+    await addJob({ slug: "nova-1" });
+    await addJob({ slug: "nova-2" });
+    await addJob({ slug: "nova-3" });
+    const service = makeService();
+    await service.queue.enqueue([
+      {
+        priority: INDEXING_PRIORITY.backfill,
+        slug: slugOf("backfill"),
+        type: "URL_UPDATED",
+      },
+      ...["nova-1", "nova-2", "nova-3"].map((slug) => ({
+        priority: INDEXING_PRIORITY.newJob,
+        slug: slugOf(slug),
+        type: "URL_UPDATED" as const,
+      })),
+    ]);
+
+    const result = await service.worker.runOnce();
+
+    assert.equal(result.sent, 3);
+    const pending = (await queueItems()).filter((i) => i.status === "pending");
+    assert.deepEqual(
+      pending.map((i) => i.slug),
+      [slugOf("backfill")],
+    );
   });
 });

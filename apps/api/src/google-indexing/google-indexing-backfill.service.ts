@@ -52,13 +52,19 @@ export class GoogleIndexingBackfillService {
     JOIN "JobEnrichment" e ON e."jobId" = j.id
     JOIN "Company" c ON c.id = j."companyId"`;
 
-  // Banco de talentos sai já no SQL (é o caso comum de vaga sem
-  // JobPosting); o resto de shouldEmitJobPosting é conferido em
-  // getPendingSlugs, que pagina até completar o lote.
+  // Mesmo filtro de vaga pública do worker (PUBLIC_JOB_INTEGRITY_WHERE):
+  // vaga que não é pública (área OTHER, sem título ou descrição) seria
+  // enfileirada, descartada no envio e voltaria todo dia ao lote. Banco de
+  // talentos também sai já no SQL (é o caso comum de vaga sem JobPosting);
+  // o resto de shouldEmitJobPosting é conferido em getPendingSlugs, que
+  // pagina até completar o lote.
   private readonly eligibleWhereSql = Prisma.sql`
     WHERE j.slug IS NOT NULL
       AND j.status = 'active'
+      AND j.title <> ''
+      AND j."descriptionClean" <> ''
       AND e."enrichmentStatus" = 'COMPLETED'
+      AND e."dominantArea" <> 'OTHER'
       AND j."employmentType" IS DISTINCT FROM 'talent_pool'`;
 
   // "Notificada" = tem URL_UPDATED com sucesso DEPOIS do último URL_DELETED
