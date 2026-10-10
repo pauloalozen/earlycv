@@ -1,5 +1,7 @@
 import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
 
+import { type ParsedCity, parseJobLocations } from "./location-parser";
+
 type PublicJobInput = {
   canonicalKey: string;
   city: string | null;
@@ -48,6 +50,9 @@ export type PublicJobView = {
   id: string;
   lastSeenAt: string;
   location: string;
+  // Cidades reconhecidas pelo parser (até 3, grafia do IBGE) para o
+  // jobLocation do JobPosting. Vazio: sem cidade reconhecida.
+  locations: ParsedCity[];
   publishedAtSource: string | null;
   seniorityLevel: string | null;
   slug: string;
@@ -112,6 +117,12 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     id: job.id,
     lastSeenAt: job.lastSeenAt.toISOString(),
     location: job.locationText,
+    locations: parseJobLocations({
+      city: job.city,
+      country: job.country,
+      locationText: job.locationText,
+      state: job.state,
+    }),
     publishedAtSource: job.publishedAtSource?.toISOString() ?? null,
     seniorityLevel: job.seniorityLevel,
     // Jobs sem slug (ainda não backfilled) nunca deveriam chegar aqui — as

@@ -266,14 +266,60 @@ describe("/radar/[slug] JSON-LD JobPosting", () => {
     expect(jsonLd.jobLocation.address.addressRegion).toBeUndefined();
   });
 
-  it("does not emit JobPosting for a non-remote job without city/state (never invents a location)", async () => {
-    const jsonLd = await renderJobPosting({
+  it("non-remote Brazilian job without city/state gets jobLocation with only the country (never invents a city)", async () => {
+    const jsonLd = await renderJobJsonLd({
       city: null,
       state: null,
       workModel: "hybrid",
     });
 
-    expect(jsonLd).toBeNull();
+    expect(jsonLd.jobLocation).toEqual({
+      "@type": "Place",
+      address: { "@type": "PostalAddress", addressCountry: "BR" },
+    });
+  });
+
+  it("uses the parsed locations from the API, as a list when there is more than one city", async () => {
+    const jsonLd = await renderJobJsonLd({
+      city: "São Paulo",
+      locations: [
+        { city: "São Paulo", state: "SP" },
+        { city: "Rio de Janeiro", state: "RJ" },
+      ],
+      state: "SP",
+    });
+
+    expect(jsonLd.jobLocation).toEqual([
+      {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "São Paulo",
+          addressRegion: "SP",
+          addressCountry: "BR",
+        },
+      },
+      {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Rio de Janeiro",
+          addressRegion: "RJ",
+          addressCountry: "BR",
+        },
+      },
+    ]);
+  });
+
+  it("prefers the single parsed location over raw city/state", async () => {
+    const jsonLd = await renderJobJsonLd({
+      city: null,
+      locations: [{ city: "Curitiba", state: "PR" }],
+      state: null,
+    });
+
+    expect(jsonLd.jobLocation.address.addressLocality).toBe("Curitiba");
+    expect(jsonLd.jobLocation.address.addressRegion).toBe("PR");
   });
 
   it("includes jobLocationType TELECOMMUTE when workModel is remote", async () => {

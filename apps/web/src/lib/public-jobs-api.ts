@@ -51,6 +51,9 @@ export type PublicJob = {
   id: string;
   lastSeenAt: string;
   location: string;
+  // Cidades reconhecidas na API (até 3, grafia do IBGE). Opcional enquanto
+  // a API anterior ao campo estiver no ar.
+  locations?: Array<{ city: string; state: string }>;
   publishedAtSource: string | null;
   seniorityLevel: string | null;
   slug: string;

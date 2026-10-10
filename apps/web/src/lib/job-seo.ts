@@ -169,9 +169,41 @@ type JobPostingInput = JobSeoInput &
     | "externalJobId"
     | "firstSeenAt"
     | "lastSeenAt"
+    | "locations"
     | "publishedAtSource"
     | "slug"
   >;
+
+function place(city: string | null, state: string | null) {
+  return {
+    "@type": "Place",
+    address: {
+      "@type": "PostalAddress",
+      ...(city ? { addressLocality: city } : {}),
+      ...(state ? { addressRegion: state } : {}),
+      addressCountry: "BR",
+    },
+  };
+}
+
+// Vaga do Brasil: as cidades reconhecidas na API (até 3, "São Paulo ou
+// Rio de Janeiro"); sem elas, city/state da ingestão; sem nada disso, só o
+// país, exceto em vaga remota (applicantLocationRequirements já diz
+// Brasil). Nunca inventa cidade.
+function buildJobLocation(
+  job: Pick<JobPostingInput, "city" | "locations" | "state">,
+  isRemote: boolean,
+) {
+  const locations = job.locations ?? [];
+  if (locations.length > 1) {
+    return locations.map((item) => place(item.city, item.state));
+  }
+  if (locations.length === 1 && locations[0]) {
+    return place(locations[0].city, locations[0].state);
+  }
+  if (job.city || job.state) return place(job.city, job.state);
+  return isRemote ? undefined : place(null, null);
+}
 
 // JobPosting da vaga aberta, ou null quando a vaga não deve ter markup:
 // - banco de talentos (não é vaga aberta);
@@ -189,22 +221,7 @@ export function buildJobPostingJsonLd(
   const isRemote = job.workModel === "remote";
   const isBr = countryClass === "BR";
 
-  // job.city/job.state já vêm normalizados (geo-normalizer.ts, na
-  // ingestão): city em title case, state como sigla de UF. Sem cidade nem
-  // estado, ou sem país confiável, jobLocation é omitido: nunca inventar
-  // localização só pra preencher o schema.
-  const jobLocation =
-    isBr && (job.city || job.state)
-      ? {
-          "@type": "Place",
-          address: {
-            "@type": "PostalAddress",
-            ...(job.city ? { addressLocality: job.city } : {}),
-            ...(job.state ? { addressRegion: job.state } : {}),
-            addressCountry: "BR",
-          },
-        }
-      : undefined;
+  const jobLocation = isBr ? buildJobLocation(job, isRemote) : undefined;
   const applicantLocationRequirements =
     isRemote && isBr ? { "@type": "Country", name: "Brasil" } : undefined;
 
