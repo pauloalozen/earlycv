@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildPublicJobSlug, toPublicJobView } from "./public-job-view";
+import {
+  buildPublicJobSlug,
+  jobIdFromPublicSlug,
+  toPublicJobView,
+} from "./public-job-view";
 
 test("buildPublicJobSlug creates stable slug with job id suffix", () => {
   assert.equal(
@@ -61,4 +65,17 @@ test("toPublicJobView falls back to empty string when slug is null, and to [] wh
 
   assert.equal(view.slug, "");
   assert.deepEqual(view.technologies, []);
+});
+
+test("jobIdFromPublicSlug devolve o cuid do fim do slug", () => {
+  assert.equal(
+    jobIdFromPublicSlug("dev-java-acme-cmg1abcdefghijklmnopqrstu"),
+    "cmg1abcdefghijklmnopqrstu",
+  );
+  assert.equal(
+    jobIdFromPublicSlug("dev-java-acme-cmg1abcdefghijklmnopqrstu_2"),
+    "cmg1abcdefghijklmnopqrstu",
+  );
+  assert.equal(jobIdFromPublicSlug("dev-java-acme-123"), null);
+  assert.equal(jobIdFromPublicSlug(""), null);
 });

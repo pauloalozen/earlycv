@@ -112,6 +112,23 @@ export function fetchClosedPublicJobCached(slug: string) {
   });
 }
 
+// Slug que não existe mais (regenerado na API): devolve o slug atual da
+// mesma vaga, para a página responder 308. Só consultado quando nem a vaga
+// ativa nem a encerrada existem com esse slug.
+export function fetchCurrentJobSlug(slug: string, mode: PublicFetchMode) {
+  return publicGet<{ slug: string }>(
+    `/public/jobs/${encodeURIComponent(slug)}/current-slug`,
+    mode,
+  );
+}
+
+export function fetchCurrentJobSlugCached(slug: string) {
+  return fetchCurrentJobSlug(slug, {
+    kind: "cached",
+    tags: [jobCacheTag(slug)],
+  });
+}
+
 // Lista genérica (anônima) para "vagas similares". Nunca personalizada:
 // este cliente não envia credenciais.
 export function fetchPublicSimilarJobsCached(limit = 4) {

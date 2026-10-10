@@ -652,3 +652,28 @@ test("list applies aderencia filter by opportunity category, not by raw score", 
   );
   assert.deepEqual(level1And5.data.map((j) => j.id).sort(), ["high", "low"]);
 });
+
+test("getCurrentSlug devolve o slug atual ou 404", async () => {
+  const jobsService = {
+    getCurrentPublicSlug: async (slug: string) =>
+      slug === "antigo-cmg1abcdefghijklmnopqrstu"
+        ? "novo-cmg1abcdefghijklmnopqrstu"
+        : null,
+  };
+  const controller = new PublicJobsController(
+    jobsService as never,
+    undefined as never,
+    new MatchingEngine({} as never),
+    undefined as never,
+    undefined as never,
+  );
+
+  assert.deepEqual(
+    await controller.getCurrentSlug("antigo-cmg1abcdefghijklmnopqrstu"),
+    { slug: "novo-cmg1abcdefghijklmnopqrstu" },
+  );
+  await assert.rejects(
+    () => controller.getCurrentSlug("nao-existe"),
+    NotFoundException,
+  );
+});

@@ -74,6 +74,15 @@ export function buildPublicJobSlug(id: string, title: string, company: string) {
   return `${slugify(title)}-${slugify(company)}-${safeId}`;
 }
 
+// O slug termina no Job.id (cuid, sem hífen), com sufixo "_N" só no caso
+// teórico de colisão (ver buildUniqueJobSlug). Quando o slug de uma vaga é
+// regenerado, a URL antiga ainda leva ao id e vira 308 para a nova.
+export function jobIdFromPublicSlug(slug: string): string | null {
+  const last = slug.split("-").pop() ?? "";
+  const id = last.split("_")[0] ?? "";
+  return /^[a-z0-9]{20,32}$/.test(id) ? id : null;
+}
+
 export function toPublicJobView(job: PublicJobInput): PublicJobView {
   return {
     canonicalKey: job.canonicalKey,

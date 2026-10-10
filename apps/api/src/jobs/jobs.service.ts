@@ -22,7 +22,7 @@ import type { UpdateJobDto } from "./dto/update-job.dto";
 import { normalizeState } from "./geo-normalizer";
 import { JobLifecycleService } from "./job-lifecycle.service";
 import { PUBLIC_JOB_INTEGRITY_WHERE } from "./public-job-integrity";
-import { toCompanySlug } from "./public-job-view";
+import { jobIdFromPublicSlug, toCompanySlug } from "./public-job-view";
 
 const PUBLIC_JOB_SELECT = {
   canonicalKey: true,
@@ -360,6 +360,24 @@ export class JobsService {
       },
       select: PUBLIC_JOB_SELECT,
     });
+  }
+
+  // Slug que não existe mais (regenerado: título corrigido, empresa
+  // reatribuída). Devolve o slug atual da mesma vaga pelo id no fim do slug,
+  // para a página responder 308. Só vaga que um dia pôde ser pública.
+  async getCurrentPublicSlug(staleSlug: string): Promise<string | null> {
+    const id = jobIdFromPublicSlug(staleSlug);
+    if (!id) return null;
+    const job = await this.database.job.findFirst({
+      where: {
+        id,
+        status: { in: ["active", "inactive", "removed"] },
+        ...PUBLIC_JOB_INTEGRITY_WHERE,
+      },
+      select: { slug: true },
+    });
+    if (!job?.slug || job.slug === staleSlug) return null;
+    return job.slug;
   }
 
   // Usado por /radar/empresa/[empresa]. Company não tem campo de slug
