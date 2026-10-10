@@ -1,3 +1,4 @@
+import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
 import {
   BadRequestException,
   ConflictException,
@@ -15,20 +16,20 @@ import {
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
-import { formatCompanyDisplayName } from "./company-display-name";
 import { diversifyByCompany } from "./diversify-by-company";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import { normalizeState } from "./geo-normalizer";
 import { JobLifecycleService } from "./job-lifecycle.service";
 import { PUBLIC_JOB_INTEGRITY_WHERE } from "./public-job-integrity";
-import { toCompanySlug } from "./public-job-view";
+import { jobIdFromPublicSlug, toCompanySlug } from "./public-job-view";
 
 const PUBLIC_JOB_SELECT = {
   canonicalKey: true,
   city: true,
   company: {
     select: {
+      displayName: true,
       name: true,
       websiteUrl: true,
       logoUrl: true,
@@ -362,6 +363,24 @@ export class JobsService {
     });
   }
 
+  // Slug que não existe mais (regenerado: título corrigido, empresa
+  // reatribuída). Devolve o slug atual da mesma vaga pelo id no fim do slug,
+  // para a página responder 308. Só vaga que um dia pôde ser pública.
+  async getCurrentPublicSlug(staleSlug: string): Promise<string | null> {
+    const id = jobIdFromPublicSlug(staleSlug);
+    if (!id) return null;
+    const job = await this.database.job.findFirst({
+      where: {
+        id,
+        status: { in: ["active", "inactive", "removed"] },
+        ...PUBLIC_JOB_INTEGRITY_WHERE,
+      },
+      select: { slug: true },
+    });
+    if (!job?.slug || job.slug === staleSlug) return null;
+    return job.slug;
+  }
+
   // Usado por /radar/empresa/[empresa]. Company não tem campo de slug
   // persistido, então o casamento é feito em memória: pega o nome de cada
   // empresa com pelo menos 1 vaga pública, computa o slug (toCompanySlug,
@@ -406,13 +425,18 @@ export class JobsService {
       where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: {
         companyId: true,
-        company: { select: { name: true, logoUrl: true } },
+        company: { select: { displayName: true, name: true, logoUrl: true } },
       },
     });
 
     const byCompany = new Map<
       string,
-      { name: string; logoUrl: string | null; jobCount: number }
+      {
+        displayName: string | null;
+        name: string;
+        logoUrl: string | null;
+        jobCount: number;
+      }
     >();
     for (const job of activeJobs) {
       const existing = byCompany.get(job.companyId);
@@ -420,6 +444,7 @@ export class JobsService {
         existing.jobCount += 1;
       } else {
         byCompany.set(job.companyId, {
+          displayName: job.company.displayName,
           name: job.company.name,
           logoUrl: job.company.logoUrl,
           jobCount: 1,
@@ -431,7 +456,7 @@ export class JobsService {
       .sort((a, b) => b.jobCount - a.jobCount)
       .slice(0, limit)
       .map((company) => ({
-        name: formatCompanyDisplayName(company.name),
+        name: resolveCompanyDisplayName(company),
         slug: toCompanySlug(company.name),
         logoUrl: company.logoUrl,
         jobCount: company.jobCount,
@@ -607,7 +632,14 @@ export class JobsService {
     const select = {
       canonicalKey: true,
       city: true,
-      company: { select: { name: true, websiteUrl: true, logoUrl: true } },
+      company: {
+        select: {
+          displayName: true,
+          name: true,
+          websiteUrl: true,
+          logoUrl: true,
+        },
+      },
       country: true,
       descriptionClean: true,
       descriptionRaw: true,
@@ -695,7 +727,14 @@ export class JobsService {
       where: { ...where, ...(jobIds ? { id: { in: jobIds } } : {}) },
       include: {
         enrichment: true,
-        company: { select: { name: true, websiteUrl: true, logoUrl: true } },
+        company: {
+          select: {
+            displayName: true,
+            name: true,
+            websiteUrl: true,
+            logoUrl: true,
+          },
+        },
       },
     });
   }

@@ -1,7 +1,17 @@
+import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
+
+import { type ParsedCity, parseJobLocations } from "./location-parser";
+
 type PublicJobInput = {
   canonicalKey: string;
   city: string | null;
-  company: { name: string; websiteUrl: string | null; logoUrl: string | null };
+  company: {
+    name: string;
+    // Opcional: quem não seleciona o campo cai no nome calculado.
+    displayName?: string | null;
+    websiteUrl: string | null;
+    logoUrl: string | null;
+  };
   country: string | null;
   descriptionClean: string;
   employmentType: string | null;
@@ -26,6 +36,9 @@ export type PublicJobView = {
   canonicalKey: string;
   city: string | null;
   company: string;
+  // Nome para exibição (Company.displayName ou o calculado). `company`
+  // segue cru: é a chave dos filtros e do slug da landing de empresa.
+  companyDisplayName: string;
   companyLogoUrl: string | null;
   companyWebsiteUrl: string | null;
   country: string | null;
@@ -37,6 +50,9 @@ export type PublicJobView = {
   id: string;
   lastSeenAt: string;
   location: string;
+  // Cidades reconhecidas pelo parser (até 3, grafia do IBGE) para o
+  // jobLocation do JobPosting. Vazio: sem cidade reconhecida.
+  locations: ParsedCity[];
   publishedAtSource: string | null;
   seniorityLevel: string | null;
   slug: string;
@@ -74,11 +90,21 @@ export function buildPublicJobSlug(id: string, title: string, company: string) {
   return `${slugify(title)}-${slugify(company)}-${safeId}`;
 }
 
+// O slug termina no Job.id (cuid, sem hífen), com sufixo "_N" só no caso
+// teórico de colisão (ver buildUniqueJobSlug). Quando o slug de uma vaga é
+// regenerado, a URL antiga ainda leva ao id e vira 308 para a nova.
+export function jobIdFromPublicSlug(slug: string): string | null {
+  const last = slug.split("-").pop() ?? "";
+  const id = last.split("_")[0] ?? "";
+  return /^[a-z0-9]{20,32}$/.test(id) ? id : null;
+}
+
 export function toPublicJobView(job: PublicJobInput): PublicJobView {
   return {
     canonicalKey: job.canonicalKey,
     city: job.city,
     company: job.company.name,
+    companyDisplayName: resolveCompanyDisplayName(job.company),
     companyLogoUrl: job.company.logoUrl,
     companyWebsiteUrl: job.company.websiteUrl,
     country: job.country,
@@ -91,6 +117,12 @@ export function toPublicJobView(job: PublicJobInput): PublicJobView {
     id: job.id,
     lastSeenAt: job.lastSeenAt.toISOString(),
     location: job.locationText,
+    locations: parseJobLocations({
+      city: job.city,
+      country: job.country,
+      locationText: job.locationText,
+      state: job.state,
+    }),
     publishedAtSource: job.publishedAtSource?.toISOString() ?? null,
     seniorityLevel: job.seniorityLevel,
     // Jobs sem slug (ainda não backfilled) nunca deveriam chegar aqui — as

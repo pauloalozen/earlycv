@@ -650,3 +650,55 @@ test("listPublicFiltered diversifies companies over the whole ordered set before
   );
   assert.equal(page1.total, 7);
 });
+
+test("getCurrentPublicSlug devolve o slug atual da vaga pelo id no fim do slug antigo", async () => {
+  const calls: unknown[] = [];
+  const database = {
+    job: {
+      findFirst: async (args: { where: unknown }) => {
+        calls.push(args.where);
+        return { slug: "dev-java-acme-cmg1abcdefghijklmnopqrstu" };
+      },
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  const slug = await service.getCurrentPublicSlug(
+    "job-32186-dev-java-acme-cmg1abcdefghijklmnopqrstu",
+  );
+
+  assert.equal(slug, "dev-java-acme-cmg1abcdefghijklmnopqrstu");
+  const where = calls[0] as {
+    id: string;
+    enrichment?: { enrichmentStatus?: string };
+  };
+  assert.equal(where.id, "cmg1abcdefghijklmnopqrstu");
+  assert.equal(where.enrichment?.enrichmentStatus, "COMPLETED");
+});
+
+test("getCurrentPublicSlug devolve null quando o slug já é o atual ou não tem id", async () => {
+  const database = {
+    job: {
+      findFirst: async () => ({
+        slug: "dev-java-acme-cmg1abcdefghijklmnopqrstu",
+      }),
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  assert.equal(
+    await service.getCurrentPublicSlug(
+      "dev-java-acme-cmg1abcdefghijklmnopqrstu",
+    ),
+    null,
+  );
+  assert.equal(await service.getCurrentPublicSlug("nao-existe"), null);
+});

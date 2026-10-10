@@ -232,7 +232,7 @@ test("PandapeAdapter decodes HTML entities from the listing card (title/location
     );
 
     assert.equal(observations[0]?.title, "Fiscal de Prevenção de Perdas");
-    assert.equal(observations[0]?.city, "São José Dos Campos");
+    assert.equal(observations[0]?.city, "São José dos Campos");
   } finally {
     fetchMock.restore();
   }

@@ -1,3 +1,4 @@
+import { companyDisplayName } from "@earlycv/config/job-display";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/app/admin/_components/admin-button";
@@ -12,10 +13,11 @@ import {
 import { getBackofficeSessionToken } from "@/lib/backoffice-session.server";
 import { cn } from "@/lib/cn";
 import { buildAdminMetadata } from "@/lib/route-metadata";
+import { AdminCard, AT } from "../../_components/admin-primitives";
 import { AdminShellHeader } from "../../_components/admin-shell-header";
 import { AdminStatusBadge } from "../../_components/admin-status-badge";
 import { AdminTokenState } from "../../_components/admin-token-state";
-import { deleteCompanyAction } from "./actions";
+import { deleteCompanyAction, updateCompanyDisplayNameAction } from "./actions";
 
 export const metadata = buildAdminMetadata("Detalhe da empresa");
 
@@ -82,10 +84,13 @@ export default async function AdminCompanyDetailPage({
       token,
     ),
   ])
-    .then(([companyRecord, sourcesPage]) => ({
-      data: { companyRecord, sourcesPage },
-      kind: "ok",
-    }) as const)
+    .then(
+      ([companyRecord, sourcesPage]) =>
+        ({
+          data: { companyRecord, sourcesPage },
+          kind: "ok",
+        }) as const,
+    )
     .catch((error: unknown) =>
       isApiNotFoundError(error)
         ? ({ kind: "not-found" } as const)
@@ -155,6 +160,52 @@ export default async function AdminCompanyDetailPage({
         />
 
         <StatusBanner message={message} status={status} />
+
+        <AdminCard>
+          <form
+            action={updateCompanyDisplayNameAction}
+            style={{ display: "flex", flexDirection: "column", gap: 10 }}
+          >
+            <input name="companyId" type="hidden" value={company.id} />
+            <label
+              htmlFor="company-display-name"
+              style={{ fontSize: 13, fontWeight: 600, color: AT.ink }}
+            >
+              Nome de exibição
+            </label>
+            <p style={{ margin: 0, fontSize: 12.5, color: AT.muted }}>
+              Aparece nas páginas públicas (vaga e landing da empresa). Deixe
+              vazio para usar o nome calculado:{" "}
+              <strong style={{ color: AT.ink2 }}>
+                {companyDisplayName(company.name)}
+              </strong>
+              . O nome cadastrado continua sendo usado nos filtros e na URL.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                defaultValue={company.displayName ?? ""}
+                id="company-display-name"
+                maxLength={160}
+                name="displayName"
+                placeholder={companyDisplayName(company.name)}
+                style={{
+                  flex: "1 1 260px",
+                  height: 32,
+                  padding: "0 12px",
+                  borderRadius: 6,
+                  border: `1px solid ${AT.border}`,
+                  background: "#fff",
+                  fontSize: 13,
+                  color: AT.ink,
+                }}
+                type="text"
+              />
+              <button className={buttonVariants({ size: "sm" })} type="submit">
+                Salvar
+              </button>
+            </div>
+          </form>
+        </AdminCard>
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card padding="sm" variant="muted">

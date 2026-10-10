@@ -1,3 +1,4 @@
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -8,12 +9,14 @@ import {
   type IndexingNotificationType,
 } from "./google-indexing.service";
 import {
-  countIndexingSentToday,
+  countIndexingSentTodayByType,
   getIndexingDailyLimit,
+  INDEXING_DELETED_DAILY_FLOOR,
 } from "./indexing-quota";
 
-// Prioridade de envio: menor primeiro. Remoção vem antes de tudo (vaga fora
-// do ar indexada é pior que vaga nova demorando a aparecer).
+// Prioridade dentro de cada tipo: menor primeiro. A ordem entre tipos é do
+// worker (pickBatch): UPDATED de vaga nova, DELETED (com piso diário),
+// UPDATED de backfill.
 export const INDEXING_PRIORITY = {
   deleted: 0,
   newJob: 10,
@@ -22,8 +25,45 @@ export const INDEXING_PRIORITY = {
 
 export type IndexingQueueClient = Pick<
   Prisma.TransactionClient,
-  "googleIndexingQueueItem"
+  "googleIndexingLog" | "googleIndexingQueueItem" | "job"
 >;
+
+// Campos que shouldEmitJobPosting precisa (mesma regra do JSON-LD no web).
+export const JOB_POSTING_ELIGIBILITY_SELECT = {
+  city: true,
+  country: true,
+  employmentType: true,
+  state: true,
+  workModel: true,
+} satisfies Prisma.JobSelect;
+
+// URL_UPDATED só para página com JobPosting: banco de talentos, vaga
+// estrangeira ou sem localização confiável não vão para a Indexing API.
+async function hasJobPosting(
+  client: Pick<IndexingQueueClient, "job">,
+  slug: string,
+): Promise<boolean> {
+  const job = await client.job.findUnique({
+    select: JOB_POSTING_ELIGIBILITY_SELECT,
+    where: { slug },
+  });
+  return job !== null && shouldEmitJobPosting(job);
+}
+
+// URL_DELETED só para vaga que o Google já recebeu: tem URL_UPDATED com
+// sucesso no log. Vaga nunca notificada fecha sem pedido de remoção (o
+// noindex da página encerrada e a saída do sitemap resolvem), sem gastar
+// cota.
+export async function wasNotifiedToGoogle(
+  client: Pick<IndexingQueueClient, "googleIndexingLog">,
+  slug: string,
+): Promise<boolean> {
+  const log = await client.googleIndexingLog.findFirst({
+    select: { id: true },
+    where: { slug, status: "SUCCESS", type: "URL_UPDATED" },
+  });
+  return log !== null;
+}
 
 export type EnqueueIndexingInput = {
   slug: string;
@@ -51,6 +91,18 @@ export class GoogleIndexingQueueService {
     let changed = 0;
     for (const item of items) {
       if (!item.slug) continue;
+      if (
+        item.type === "URL_UPDATED" &&
+        !(await hasJobPosting(client, item.slug))
+      ) {
+        continue;
+      }
+      if (
+        item.type === "URL_DELETED" &&
+        !(await wasNotifiedToGoogle(client, item.slug))
+      ) {
+        continue;
+      }
       if (await enqueueOne(client, item)) changed += 1;
     }
     return changed;
@@ -61,12 +113,14 @@ export class GoogleIndexingQueueService {
     dailyLimit: number;
     sentToday: number;
     remainingToday: number;
+    sentTodayByType: { updated: number; deleted: number };
+    deletedDailyFloor: number;
     pending: { updated: number; deleted: number };
     failed: number;
   }> {
     const dailyLimit = getIndexingDailyLimit();
-    const [sentToday, grouped, failed] = await Promise.all([
-      countIndexingSentToday(this.database),
+    const [sentTodayByType, grouped, failed] = await Promise.all([
+      countIndexingSentTodayByType(this.database),
       this.database.googleIndexingQueueItem.groupBy({
         by: ["type"],
         _count: { _all: true },
@@ -76,6 +130,7 @@ export class GoogleIndexingQueueService {
         where: { status: "failed" },
       }),
     ]);
+    const sentToday = sentTodayByType.updated + sentTodayByType.deleted;
     const countOf = (type: IndexingNotificationType) =>
       grouped.find((row) => row.type === type)?._count._all ?? 0;
 
@@ -87,8 +142,10 @@ export class GoogleIndexingQueueService {
         deleted: countOf("URL_DELETED"),
         updated: countOf("URL_UPDATED"),
       },
+      deletedDailyFloor: INDEXING_DELETED_DAILY_FLOOR,
       remainingToday: Math.max(0, dailyLimit - sentToday),
       sentToday,
+      sentTodayByType,
     };
   }
 }

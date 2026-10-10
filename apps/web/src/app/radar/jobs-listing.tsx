@@ -1,6 +1,8 @@
+import { formatJobTitle } from "@earlycv/config/job-display";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
+import { jobCompanyDisplayName } from "@/lib/company-display";
 import {
   getPublicJobFacets,
   listPublicJobs,
@@ -617,7 +619,7 @@ function CarouselCard({
             marginBottom: 4,
           }}
         >
-          {job.title}
+          {formatJobTitle(job.title)}
         </RadarOpportunityLink>
         <span
           style={{
@@ -629,7 +631,7 @@ function CarouselCard({
             whiteSpace: "nowrap",
           }}
         >
-          {job.company} · {job.location}
+          {jobCompanyDisplayName(job)} · {job.location}
         </span>
       </div>
       {skills.length > 0 ? (

@@ -80,11 +80,19 @@ export function normalizeState(
   return { sigla, nome: STATE_NAME_BY_SIGLA.get(sigla) as string };
 }
 
+// Conectivos ficam em minúscula ("Taboão da Serra", não "Taboão Da
+// Serra"), menos na primeira palavra.
+const CITY_CONNECTORS = new Set(["da", "das", "de", "do", "dos", "e"]);
+
 function titleCase(value: string): string {
   return value
     .toLowerCase()
     .split(" ")
-    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+    .map((word, index) =>
+      !word || (index > 0 && CITY_CONNECTORS.has(word))
+        ? word
+        : word[0].toUpperCase() + word.slice(1),
+    )
     .join(" ");
 }
 

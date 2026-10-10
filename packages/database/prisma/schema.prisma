@@ -915,6 +915,10 @@ model Company {
   id                  String               @id @default(cuid())
   name                String
   normalizedName      String               @unique
+  // Nome de exibição editado no admin. Null = calculado por
+  // companyDisplayName(name) (@earlycv/config/job-display). name continua
+  // sendo a chave de filtro e de slug.
+  displayName         String?
   websiteUrl          String?
   careersUrl          String?
   linkedinUrl         String?
@@ -1866,7 +1870,10 @@ model Job {
   country           String?
   workModel         String?
   seniorityLevel    String?
+  // Normalizado na ingestão (ver ingestion/employment-type.ts); o valor
+  // como veio da fonte fica em employmentTypeRaw.
   employmentType    String?
+  employmentTypeRaw String?
   salaryMin         Int?
   salaryMax         Int?
   salaryCurrency    String?

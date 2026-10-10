@@ -34,6 +34,18 @@ function queueStatItems(queue: GoogleIndexingQueueStatus) {
     { label: "Na fila: remoção", value: queue.pending.deleted },
     { label: "Na fila: publicação", value: queue.pending.updated },
     { label: "Enviadas hoje", value: queue.sentToday },
+    ...(queue.sentTodayByType
+      ? [
+          {
+            label: "Hoje: publicação",
+            value: queue.sentTodayByType.updated,
+          },
+          {
+            label: `Hoje: remoção (piso ${queue.deletedDailyFloor ?? 60})`,
+            value: queue.sentTodayByType.deleted,
+          },
+        ]
+      : []),
     { label: "Cota restante hoje", value: queue.remainingToday },
     { label: "Falhas (5 tentativas)", value: queue.failed },
   ];

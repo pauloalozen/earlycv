@@ -39,6 +39,8 @@ export type RunEnrichmentSummary = {
 export type CompanyRecord = {
   careersUrl: string | null;
   country: string | null;
+  // Nome de exibição editado no admin; null = calculado a partir de name.
+  displayName: string | null;
   id: string;
   industry: string | null;
   isActive: boolean;
@@ -496,6 +498,10 @@ export type GoogleIndexingQueueStatus = {
   enabled: boolean;
   dailyLimit: number;
   sentToday: number;
+  // Opcional enquanto a API anterior ao campo estiver no ar.
+  sentTodayByType?: { updated: number; deleted: number };
+  // Envios do dia reservados para remoção enquanto houver DELETED pendente.
+  deletedDailyFloor?: number;
   remainingToday: number;
   pending: { updated: number; deleted: number };
   failed: number;
@@ -560,7 +566,7 @@ export async function createCompany(
 
 export async function updateCompany(
   companyId: string,
-  payload: { name: string },
+  payload: { name?: string; displayName?: string | null },
   token?: string,
 ) {
   return apiRequest<CompanyRecord>(`/companies/${companyId}`, token, {

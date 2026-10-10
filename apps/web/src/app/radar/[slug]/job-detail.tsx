@@ -1,3 +1,4 @@
+import { formatJobTitle } from "@earlycv/config/job-display";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
@@ -19,14 +20,15 @@ import { SaveJobCtaBtn, SaveJobTextBtn } from "@/app/radar/save-job-btn";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
+import { jobCompanyDisplayName } from "@/lib/company-display";
 import { toHeaderAvailableCredits } from "@/lib/header-credits";
-import { getMyPlan } from "@/lib/plans-api";
 import {
   buildJobPostingJsonLd,
   buildJobSeoDescription,
   buildJobSeoTitle,
   cleanJobTitleForDisplay,
 } from "@/lib/job-seo";
+import { getMyPlan } from "@/lib/plans-api";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { type ExistingApplicationDto, getJobMatchScore } from "@/lib/radar-api";
 import { jobLandingLinks, type RadarLandingIndex } from "@/lib/radar-landings";
@@ -473,8 +475,20 @@ export function splitHtmlSections(descriptionHtml: string): JobSection[] {
 // Rótulo pra exibir no badge/card — mesmo valor normalizado acima (snake_
 // case), só formatado pra leitura ("full_time" -> "Full time"). "pj" fica
 // em caixa alta (sigla), o resto vira frase com só a primeira letra maiúscula.
+// Vocabulário normalizado da ingestão (apps/api/src/ingestion/
+// employment-type.ts). Valor fora do mapa (vaga antiga ainda não
+// normalizada) cai na regra genérica abaixo.
 const EMPLOYMENT_TYPE_DISPLAY_OVERRIDES: Record<string, string> = {
+  apprentice: "Jovem aprendiz",
+  autonomous: "Autônomo",
+  clt: "CLT",
+  full_time: "Tempo integral",
+  internship: "Estágio",
+  part_time: "Meio período",
   pj: "PJ",
+  talent_pool: "Banco de talentos",
+  temporary: "Temporário",
+  trainee: "Trainee",
 };
 
 export function formatEmploymentType(value: string): string {
@@ -583,10 +597,10 @@ export function SimCard({
           lineHeight: 1.35,
         }}
       >
-        {job.title}
+        {formatJobTitle(job.title)}
       </div>
       <div style={{ fontSize: 12, color: "#6a6560", marginBottom: 16 }}>
-        {job.company}
+        {jobCompanyDisplayName(job)}
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <span
@@ -922,7 +936,7 @@ export function JobDetailView({
                     marginBottom: 2,
                   }}
                 >
-                  {job.company}
+                  {jobCompanyDisplayName(job)}
                 </div>
                 {job.location ? (
                   <div style={{ fontSize: 12, color: "#6a6560" }}>
@@ -1378,7 +1392,7 @@ export function JobDetailView({
                 <dl style={{ margin: 0 }}>
                   {(
                     [
-                      { label: "Empresa", value: job.company },
+                      { label: "Empresa", value: jobCompanyDisplayName(job) },
                       job.location
                         ? { label: "Localização", value: job.location }
                         : null,

@@ -5,7 +5,14 @@
 // Sem "import server-only" pelo mesmo motivo de internal-jobs-api.ts: o
 // sitemap.ts importa este módulo e roda nos testes via node:test puro.
 
+import { companyDisplayName } from "@earlycv/config/job-display";
+import {
+  companyCountDisplayName,
+  jobCompanyDisplayName,
+} from "./company-display";
 import { toCompanySlug } from "./company-slug";
+
+export { companyCountDisplayName, companyDisplayName, jobCompanyDisplayName };
 
 // Abaixo disso a landing não é indexável (noindex) e não entra no sitemap
 // nem nos links internos — página quase vazia indexada é o que o Google
@@ -26,7 +33,14 @@ export type RadarLandingFilters = {
 };
 
 export type CountItem = { value: string; count: number };
-export type CompanyCount = { name: string; slug: string; count: number };
+export type CompanyCount = {
+  name: string;
+  slug: string;
+  count: number;
+  // Nome de exibição resolvido na API (Company.displayName ou o calculado).
+  // Opcional: resposta de API anterior ao campo cai no cálculo local.
+  displayName?: string;
+};
 export type CityCount = {
   city: string;
   state: string;
@@ -273,147 +287,6 @@ export function toTechnologySlug(tech: string): string {
   );
 }
 
-const LEGAL_SUFFIX = /[\s,.-]+(ltda\.?|s\.?\/?a\.?|eireli|me|epp)$/i;
-const LOWERCASE_CONNECTORS = new Set(["de", "da", "do", "das", "dos", "e"]);
-
-// "MOBLY ... LTDA - EM RECUPERACAO JUDICIAL": situação jurídica não é nome.
-const JUDICIAL_RECOVERY_SUFFIX = /\s*[-,]\s*em recupera[cç][aã]o judicial\.?$/i;
-// "LTDA" no meio do nome (o do fim sai em LEGAL_SUFFIX).
-const LTDA_ANYWHERE = /(^|\s)ltda\.?(?=\s|$)/gi;
-
-// Grafia oficial de marcas e siglas que a regra de caixa abaixo erraria
-// ("TOTVS" virando "Totvs", "IFOOD" virando "Ifood"), e palavras de até 4
-// letras que são nome e não sigla ("VALE" vira "Vale"; sem entrada aqui,
-// até 4 letras fica em caixa alta). Chave: palavra em minúsculas e sem
-// acento. Só se aplica a nome inteiro em caixa alta.
-const COMPANY_WORD_OVERRIDES: Record<string, string> = {
-  aacd: "AACD",
-  ccee: "CCEE",
-  cctvm: "CCTVM",
-  cnpem: "CNPEM",
-  ebac: "EBAC",
-  ifood: "iFood",
-  itau: "Itaú",
-  neobpo: "NeoBPO",
-  pagbank: "PagBank",
-  pagseguro: "PagSeguro",
-  tecban: "TecBan",
-  tmsa: "TMSA",
-  totvs: "TOTVS",
-  yduqs: "YDUQS",
-  ...Object.fromEntries(
-    [
-      "bens",
-      "blip",
-      "cana",
-      "care",
-      "casa",
-      "copa",
-      "data",
-      "deal",
-      "domo",
-      "elis",
-      "eveo",
-      "gera",
-      "giro",
-      "gupy",
-      "ilia",
-      "inco",
-      "kuhn",
-      "lynx",
-      "mais",
-      "nava",
-      "nexa",
-      "next",
-      "nibo",
-      "nike",
-      "nita",
-      "plus",
-      "rent",
-      "road",
-      "rota",
-      "rumo",
-      "sons",
-      "tech",
-      "toky",
-      "tupy",
-      "vale",
-      "vero",
-      "vila",
-      "vita",
-      "zelo",
-    ].map((word) => [word, word.charAt(0).toUpperCase() + word.slice(1)]),
-  ),
-};
-
-// Trecho depois do ponto que é domínio ("IFOOD.COM"), não nome.
-const DOMAIN_SEGMENTS = new Set(["com", "br", "net", "io"]);
-
-function companyWordOverride(word: string): string | undefined {
-  const key = word
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  return COMPANY_WORD_OVERRIDES[key];
-}
-
-// Company.name vem cru da ingestão — muitas vezes a razão social em caixa
-// alta ("BTG PACTUAL HOLDING DE SEGUROS LTDA."). Para título e texto, tira
-// o sufixo societário e, só quando o nome inteiro está em caixa alta,
-// normaliza a caixa (siglas curtas como "BRQ" ficam como estão).
-export function companyDisplayName(rawName: string): string {
-  // Aspas soltas vindas da ingestão (ex.: `"tivit`).
-  // Travessão vindo do dado ("Vivo – Áreas Técnicas") não entra em título:
-  // vira vírgula.
-  let name = rawName
-    .replace(/["'“”‘’]/g, "")
-    .replace(/\s*[—–]\s*/g, ", ")
-    .replace(/\s+/g, " ")
-    .trim();
-  name = name.replace(JUDICIAL_RECOVERY_SUFFIX, "").trim();
-  for (let i = 0; i < 3 && LEGAL_SUFFIX.test(name); i++) {
-    name = name.replace(LEGAL_SUFFIX, "").trim();
-  }
-  name = name.replace(LTDA_ANYWHERE, "$1").replace(/\s+/g, " ").trim();
-  if (!name) name = rawName.trim();
-  if (name !== name.toUpperCase()) return name;
-  return name
-    .split(/\s+/)
-    .map((word, index) => {
-      const lower = word.toLowerCase();
-      if (index > 0 && LOWERCASE_CONNECTORS.has(lower)) return lower;
-      // Cada trecho entre pontos segue a regra sozinho ("C.VALE" -> "C.Vale",
-      // "IFOOD.COM" -> "iFood.com").
-      return word
-        .split(".")
-        .map((segment, segmentIndex) =>
-          segmentIndex > 0 && DOMAIN_SEGMENTS.has(segment.toLowerCase())
-            ? segment.toLowerCase()
-            : displayCompanyWord(segment),
-        )
-        .join(".");
-    })
-    .join(" ");
-}
-
-function displayCompanyWord(token: string): string {
-  // Pontuação nas pontas ("(NIKE)") fica de fora da regra de caixa.
-  const [, before = "", word = "", after = ""] =
-    token.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u) ?? [];
-  return `${before}${displayCompanyCore(word)}${after}`;
-}
-
-function displayCompanyCore(word: string): string {
-  if (!word) return word;
-  const override = companyWordOverride(word);
-  if (override) return override;
-  // Até 4 letras fica como veio (sigla: "BTG", "CPFL"). Na dúvida, manter a
-  // caixa: sigla em minúscula parece erro, marca em caixa alta não.
-  if (/^[a-z]{1,4}$/i.test(word) || /[&\d]/.test(word)) return word;
-  const lower = word.toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
-}
-
 const RADAR_CRUMB = { name: "Vagas", path: "/radar" };
 
 export function areaLanding(area: string): RadarLanding | null {
@@ -473,8 +346,11 @@ export function areaJuniorLanding(area: string): RadarLanding | null {
   };
 }
 
-export function companyLanding(rawName: string): RadarLanding {
-  const display = companyDisplayName(rawName);
+// rawName é a chave (filtro e slug); display só muda o texto.
+export function companyLanding(
+  rawName: string,
+  display: string = companyDisplayName(rawName),
+): RadarLanding {
   const path = `/radar/empresa/${toCompanySlug(rawName)}`;
   return {
     kind: "company",
@@ -672,7 +548,10 @@ export function listEligibleLandings(
     push(cityLanding(city), city.count);
   }
   for (const company of index.companies) {
-    push(companyLanding(company.name), company.count);
+    push(
+      companyLanding(company.name, companyCountDisplayName(company)),
+      company.count,
+    );
   }
 
   return result;
@@ -760,7 +639,7 @@ export function landingSeoDescription(
   }
   const companies = summary.companies
     .slice(0, landing.kind === "company" ? 0 : 3)
-    .map((company) => companyDisplayName(company.name));
+    .map(companyCountDisplayName);
   const parts = [
     `${formatCount(summary.total)} ${landing.subject} abertas agora`,
     companies.length > 0 ? ` em empresas como ${joinList(companies)}` : "",
@@ -789,7 +668,7 @@ export function landingIntro(
   if (landing.kind !== "company") {
     const companies = summary.companies
       .slice(0, 3)
-      .map((company) => companyDisplayName(company.name));
+      .map(companyCountDisplayName);
     if (companies.length > 0) {
       sentences.push(`Quem mais contrata: ${joinList(companies)}.`);
     }
@@ -866,7 +745,7 @@ export function landingFaq(
   if (landing.kind !== "company" && summary.companies.length > 0) {
     const companies = summary.companies
       .slice(0, 5)
-      .map((company) => companyDisplayName(company.name));
+      .map(companyCountDisplayName);
     items.push({
       question: "Quais empresas estão contratando?",
       answer: `As empresas com mais vagas abertas agora são ${joinList(companies)}.`,
@@ -1062,8 +941,8 @@ export function jobLandingLinks(
       links.push({ href: area.path, label: `← Todas as ${area.subject}` });
     }
     links.push({
-      href: companyLanding(job.company).path,
-      label: `Vagas ${companyDisplayName(job.company)}`,
+      href: companyLanding(job.company, jobCompanyDisplayName(job)).path,
+      label: `Vagas ${jobCompanyDisplayName(job)}`,
     });
     if (isRemote) {
       links.push({ href: remoteLanding().path, label: "Ver vagas remotas" });
@@ -1086,8 +965,8 @@ export function jobLandingLinks(
     });
   }
   candidates.push({
-    landing: companyLanding(job.company),
-    label: `Vagas ${companyDisplayName(job.company)}`,
+    landing: companyLanding(job.company, jobCompanyDisplayName(job)),
+    label: `Vagas ${jobCompanyDisplayName(job)}`,
   });
   if (job.city && job.state) {
     const jobCitySlug = toCompanySlug(job.city);

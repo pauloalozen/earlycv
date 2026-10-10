@@ -1,3 +1,4 @@
+import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
 import { Inject, Injectable } from "@nestjs/common";
 import { JobArea, Prisma, SeniorityLevel } from "@prisma/client";
 
@@ -205,14 +206,18 @@ export class RadarLandingsService {
 
   private async countCompanies(filtersSql: Prisma.Sql, limit?: number) {
     const rows = await this.database.$queryRaw<
-      Array<{ name: string; count: number }>
+      Array<{ name: string; displayName: string | null; count: number }>
     >`
-      SELECT c.name AS name, count(*)::int AS count
+      SELECT c.name AS name, c."displayName" AS "displayName", count(*)::int AS count
       ${publicJobsFromSql} ${publicJobsWhereSql} ${filtersSql}
-      GROUP BY c.id, c.name
-      ORDER BY 2 DESC, 1 ASC
+      GROUP BY c.id, c.name, c."displayName"
+      ORDER BY 3 DESC, 1 ASC
       ${limit ? Prisma.sql`LIMIT ${limit}` : Prisma.empty}`;
     return rows.map((row) => ({
+      displayName: resolveCompanyDisplayName({
+        displayName: row.displayName,
+        name: row.name.trim(),
+      }),
       name: row.name.trim(),
       slug: toCompanySlug(row.name),
       count: Number(row.count),

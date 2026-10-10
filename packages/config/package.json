@@ -31,6 +31,16 @@
       "types": "./src/env.ts",
       "default": "./dist/env.js"
     },
+    "./job-display": {
+      "development": "./src/job-display.ts",
+      "types": "./src/job-display.ts",
+      "default": "./dist/job-display.js"
+    },
+    "./job-posting": {
+      "development": "./src/job-posting.ts",
+      "types": "./src/job-posting.ts",
+      "default": "./dist/job-posting.js"
+    },
     "./opportunity-level": {
       "types": "./src/opportunity-level.ts",
       "default": "./dist/opportunity-level.js"
