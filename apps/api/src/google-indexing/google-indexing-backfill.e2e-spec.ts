@@ -29,6 +29,9 @@ type JobOpts = {
   status?: "active" | "inactive";
   enrichment?: "COMPLETED" | "PENDING";
   firstSeenAt?: Date;
+  // Padrão: vaga do Brasil comum (a ingestão sempre grava country).
+  country?: string | null;
+  employmentType?: string | null;
 };
 
 async function addJob(opts: JobOpts) {
@@ -37,7 +40,9 @@ async function addJob(opts: JobOpts) {
     data: {
       canonicalKey: `${tag}-ck-${seq}`,
       companyId,
+      country: opts.country === undefined ? "Brasil" : opts.country,
       descriptionClean: "d",
+      employmentType: opts.employmentType ?? null,
       descriptionRaw: "d",
       firstSeenAt: opts.firstSeenAt ?? new Date(),
       lastSeenAt: new Date(),
@@ -496,5 +501,102 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
       [...page1.jobs, ...page2.jobs, ...page3.jobs].map((j) => j.slug),
       [4, 3, 2, 1, 0].map((i) => slugOf(`vaga-${i}`)),
     );
+  });
+
+  test("URL_UPDATED só entra na fila para vaga com JobPosting (shouldEmitJobPosting)", async () => {
+    await addJob({ slug: "comum" });
+    await addJob({ employmentType: "talent_pool", slug: "banco" });
+    await addJob({ country: null, slug: "sem-local" });
+    const service = makeService();
+
+    const enqueued = await service.queue.enqueue(
+      ["comum", "banco", "sem-local"].map((slug) => ({
+        priority: INDEXING_PRIORITY.newJob,
+        slug: slugOf(slug),
+        type: "URL_UPDATED" as const,
+      })),
+    );
+
+    assert.equal(enqueued, 1);
+    assert.deepEqual(
+      (await queueItems()).map((item) => item.slug),
+      [slugOf("comum")],
+    );
+  });
+
+  test("URL_DELETED segue igual para banco de talentos e vaga sem localização", async () => {
+    await addJob({
+      employmentType: "talent_pool",
+      slug: "banco",
+      status: "inactive",
+    });
+    await addJob({ country: null, slug: "sem-local", status: "inactive" });
+    const service = makeService();
+
+    const enqueued = await service.queue.enqueue(
+      ["banco", "sem-local"].map((slug) => ({
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf(slug),
+        type: "URL_DELETED" as const,
+      })),
+    );
+
+    assert.equal(enqueued, 2);
+  });
+
+  test("worker marca skipped a pendência de vaga que perdeu o JobPosting depois do enfileiramento", async () => {
+    const talentPool = await addJob({ slug: "virou-banco" });
+    const noLocation = await addJob({ slug: "perdeu-local" });
+    await addJob({ slug: "segue-comum" });
+    const service = makeService();
+    await service.queue.enqueue(
+      ["virou-banco", "perdeu-local", "segue-comum"].map((slug) => ({
+        priority: INDEXING_PRIORITY.newJob,
+        slug: slugOf(slug),
+        type: "URL_UPDATED" as const,
+      })),
+    );
+    await prisma.job.update({
+      data: { employmentType: "talent_pool" },
+      where: { id: talentPool.id },
+    });
+    await prisma.job.update({
+      data: { country: null },
+      where: { id: noLocation.id },
+    });
+
+    const result = await service.worker.runOnce();
+
+    assert.equal(result.sent, 1);
+    assert.equal(result.skipped, 2);
+    const bySlug = new Map((await queueItems()).map((i) => [i.slug, i.status]));
+    assert.equal(bySlug.get(slugOf("virou-banco")), "skipped");
+    assert.equal(bySlug.get(slugOf("perdeu-local")), "skipped");
+    assert.equal(bySlug.get(slugOf("segue-comum")), "done");
+  });
+
+  test("backfill pula vaga sem JobPosting e completa o lote com as seguintes", async () => {
+    process.env.GOOGLE_INDEXING_BACKFILL_DAILY_LIMIT = "2";
+    await addJob({
+      firstSeenAt: new Date("2026-03-03"),
+      employmentType: "talent_pool",
+      slug: "banco",
+    });
+    await addJob({
+      country: null,
+      firstSeenAt: new Date("2026-03-02"),
+      slug: "sem-local",
+    });
+    await addJob({ firstSeenAt: new Date("2026-03-01"), slug: "a" });
+    await addJob({ firstSeenAt: new Date("2026-02-01"), slug: "b" });
+    const service = makeService();
+
+    const result = await service.runBackfillBatch();
+
+    assert.equal(result.enqueued, 2);
+    assert.deepEqual((await queueItems()).map((i) => i.slug).sort(), [
+      slugOf("a"),
+      slugOf("b"),
+    ]);
   });
 });

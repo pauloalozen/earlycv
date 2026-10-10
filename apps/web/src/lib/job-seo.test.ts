@@ -90,6 +90,10 @@ describe("buildJobSeoDescription", () => {
 describe("toSchemaEmploymentType", () => {
   it.each([
     ["full_time", "FULL_TIME"],
+    // Vocabulário normalizado da ingestão: CLT fica separado no banco, mas
+    // os dois são FULL_TIME no schema.org.
+    ["clt", "FULL_TIME"],
+    ["trainee", "FULL_TIME"],
     ["Full time", "FULL_TIME"],
     ["Full-time", "FULL_TIME"],
     ["CLT", "FULL_TIME"],

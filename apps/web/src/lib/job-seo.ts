@@ -1,4 +1,5 @@
 import { formatJobTitle } from "@earlycv/config/job-display";
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import type { PublicJob } from "@/lib/public-jobs-api";
 import { jobCompanyDisplayName } from "@/lib/radar-landings";
 import { getAbsoluteUrl, siteConfig } from "@/lib/site";
@@ -116,48 +117,12 @@ export function toSchemaEmploymentType(
   return SCHEMA_EMPLOYMENT_TYPE[normalizeKey(value)];
 }
 
-// Banco de talentos não é vaga aberta: a política do Google proíbe
-// JobPosting nesse caso.
-export function isTalentPool(employmentType: string | null): boolean {
-  return !!employmentType && normalizeKey(employmentType) === "talent_pool";
-}
-
-const BR_UF =
-  /^(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)$/;
-const BR_COUNTRY = /(^|[^a-z])(brasil|brazil|br|bra)([^a-z]|$)/i;
-const BR_PLACE_IN_COUNTRY =
-  /(s[aã]o paulo|rio de janeiro|teletrabalho|remoto)/i;
-const FOREIGN_PLACE =
-  /(\busa\b|united|canada|portugal|france|germany|ireland|netherlands|spain|italy|colombia|mexic|argentin|chile|north america|^nl$)/i;
-
-export type JobCountryClass = "BR" | "foreign" | "ambiguous";
-
-// O campo country é sujo ("SP", "Remote; Texas", "Rio de Janeiro ou
-// Teletrabalho"): só conta como Brasil com sinal claro, e só como
-// estrangeira com nome de outro país. Os dois sinais juntos, ou nenhum,
-// ficam ambíguos.
-export function resolveAddressCountry(
-  job: Pick<JobSeoInput, "city" | "country" | "state">,
-): JobCountryClass {
-  const country = job.country?.trim() ?? "";
-  const state = job.state?.trim() ?? "";
-  const city = job.city?.trim() ?? "";
-
-  const isBr =
-    BR_COUNTRY.test(country) ||
-    BR_COUNTRY.test(city) ||
-    BR_UF.test(country) ||
-    BR_UF.test(state) ||
-    BR_PLACE_IN_COUNTRY.test(country);
-  const isForeign =
-    FOREIGN_PLACE.test(country) ||
-    FOREIGN_PLACE.test(state) ||
-    FOREIGN_PLACE.test(city);
-
-  if (isBr && !isForeign) return "BR";
-  if (isForeign && !isBr) return "foreign";
-  return "ambiguous";
-}
+export {
+  isTalentPool,
+  type JobCountryClass,
+  resolveAddressCountry,
+  shouldEmitJobPosting,
+} from "@earlycv/config/job-posting";
 
 type JobPostingInput = JobSeoInput &
   Pick<
@@ -213,19 +178,16 @@ function buildJobLocation(
 export function buildJobPostingJsonLd(
   job: JobPostingInput,
 ): Record<string, unknown> | null {
-  if (isTalentPool(job.employmentType)) return null;
+  // Mesma regra que decide o envio à Indexing API (shouldEmitJobPosting,
+  // @earlycv/config/job-posting): sem JobPosting aqui, sem URL_UPDATED lá.
+  if (!shouldEmitJobPosting(job)) return null;
 
-  const countryClass = resolveAddressCountry(job);
-  if (countryClass === "foreign") return null;
-
+  // shouldEmitJobPosting só passa vaga do Brasil.
   const isRemote = job.workModel === "remote";
-  const isBr = countryClass === "BR";
-
-  const jobLocation = isBr ? buildJobLocation(job, isRemote) : undefined;
-  const applicantLocationRequirements =
-    isRemote && isBr ? { "@type": "Country", name: "Brasil" } : undefined;
-
-  if (!jobLocation && !applicantLocationRequirements) return null;
+  const jobLocation = buildJobLocation(job, isRemote);
+  const applicantLocationRequirements = isRemote
+    ? { "@type": "Country", name: "Brasil" }
+    : undefined;
 
   const cargo = cleanJobTitleForDisplay(job.title);
   const empresa = jobCompanyDisplayName(job);

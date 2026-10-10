@@ -1,3 +1,4 @@
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -12,6 +13,8 @@ import {
 } from "./indexing-quota";
 
 export { DEFAULT_INDEXING_DAILY_LIMIT as DEFAULT_BACKFILL_DAILY_LIMIT } from "./indexing-quota";
+
+const BACKFILL_MAX_PAGES = 20;
 
 export type IndexingStatus = "pending" | "notified" | "failed";
 
@@ -49,10 +52,14 @@ export class GoogleIndexingBackfillService {
     JOIN "JobEnrichment" e ON e."jobId" = j.id
     JOIN "Company" c ON c.id = j."companyId"`;
 
+  // Banco de talentos sai já no SQL (é o caso comum de vaga sem
+  // JobPosting); o resto de shouldEmitJobPosting é conferido em
+  // getPendingSlugs, que pagina até completar o lote.
   private readonly eligibleWhereSql = Prisma.sql`
     WHERE j.slug IS NOT NULL
       AND j.status = 'active'
-      AND e."enrichmentStatus" = 'COMPLETED'`;
+      AND e."enrichmentStatus" = 'COMPLETED'
+      AND j."employmentType" IS DISTINCT FROM 'talent_pool'`;
 
   // "Notificada" = tem URL_UPDATED com sucesso DEPOIS do último URL_DELETED
   // com sucesso. Vaga inativada manda URL_DELETED (ingestion.service.ts);
@@ -98,11 +105,38 @@ export class GoogleIndexingBackfillService {
   // recentes para as mais antigas, limitado ao que o lote precisa.
   async getPendingSlugs(limit: number): Promise<string[]> {
     if (limit <= 0) return [];
-    const rows = await this.database.$queryRaw<Array<{ slug: string }>>`
-      SELECT j.slug ${this.eligibleFromSql} ${this.eligibleWhereSql} ${this.notNotifiedSql}
-      ORDER BY j."firstSeenAt" DESC
-      LIMIT ${limit}`;
-    return rows.map((row) => row.slug);
+    // Vaga sem JobPosting nunca é enfileirada (GoogleIndexingQueueService),
+    // então continua "não notificada": sem filtrar aqui, ela voltaria a
+    // ocupar o começo do lote todo dia.
+    const slugs: string[] = [];
+    const pageSize = Math.max(limit, 100);
+    for (
+      let page = 0;
+      page < BACKFILL_MAX_PAGES && slugs.length < limit;
+      page++
+    ) {
+      const rows = await this.database.$queryRaw<
+        Array<{
+          slug: string;
+          city: string | null;
+          country: string | null;
+          employmentType: string | null;
+          state: string | null;
+          workModel: string | null;
+        }>
+      >`
+        SELECT j.slug, j.city, j.country, j."employmentType", j.state, j."workModel"
+        ${this.eligibleFromSql} ${this.eligibleWhereSql} ${this.notNotifiedSql}
+        ORDER BY j."firstSeenAt" DESC, j.id
+        LIMIT ${pageSize} OFFSET ${page * pageSize}`;
+      for (const row of rows) {
+        if (slugs.length < limit && shouldEmitJobPosting(row)) {
+          slugs.push(row.slug);
+        }
+      }
+      if (rows.length < pageSize) break;
+    }
+    return slugs;
   }
 
   private async getCounts(): Promise<{ total: number; notified: number }> {

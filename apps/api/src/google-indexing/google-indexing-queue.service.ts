@@ -1,3 +1,4 @@
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -22,8 +23,30 @@ export const INDEXING_PRIORITY = {
 
 export type IndexingQueueClient = Pick<
   Prisma.TransactionClient,
-  "googleIndexingQueueItem"
+  "googleIndexingQueueItem" | "job"
 >;
+
+// Campos que shouldEmitJobPosting precisa (mesma regra do JSON-LD no web).
+export const JOB_POSTING_ELIGIBILITY_SELECT = {
+  city: true,
+  country: true,
+  employmentType: true,
+  state: true,
+  workModel: true,
+} satisfies Prisma.JobSelect;
+
+// URL_UPDATED só para página com JobPosting: banco de talentos, vaga
+// estrangeira ou sem localização confiável não vão para a Indexing API.
+async function hasJobPosting(
+  client: Pick<IndexingQueueClient, "job">,
+  slug: string,
+): Promise<boolean> {
+  const job = await client.job.findUnique({
+    select: JOB_POSTING_ELIGIBILITY_SELECT,
+    where: { slug },
+  });
+  return job !== null && shouldEmitJobPosting(job);
+}
 
 export type EnqueueIndexingInput = {
   slug: string;
@@ -51,6 +74,12 @@ export class GoogleIndexingQueueService {
     let changed = 0;
     for (const item of items) {
       if (!item.slug) continue;
+      if (
+        item.type === "URL_UPDATED" &&
+        !(await hasJobPosting(client, item.slug))
+      ) {
+        continue;
+      }
       if (await enqueueOne(client, item)) changed += 1;
     }
     return changed;

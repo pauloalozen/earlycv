@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
@@ -8,6 +9,7 @@ import { DatabaseService } from "../database/database.service";
 import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository";
 import { PUBLIC_JOB_INTEGRITY_WHERE } from "../jobs/public-job-integrity";
 import { GoogleIndexingService } from "./google-indexing.service";
+import { JOB_POSTING_ELIGIBILITY_SELECT } from "./google-indexing-queue.service";
 import {
   countIndexingSentToday,
   getIndexingDailyLimit,
@@ -141,19 +143,21 @@ export class GoogleIndexingQueueWorker {
     }
   }
 
-  // UPDATED só para vaga pública (active + integridade); DELETED só para vaga
-  // que não está mais active (ou nem existe). Status mudou desde o
-  // enfileiramento: a pendência é descartada sem gastar cota.
+  // UPDATED só para vaga pública (active + integridade) que tem JobPosting
+  // (shouldEmitJobPosting: virou banco de talentos ou perdeu a localização
+  // desde o enfileiramento, não envia); DELETED só para vaga que não está
+  // mais active (ou nem existe). Mudou desde o enfileiramento: a pendência é
+  // descartada sem gastar cota.
   private async matchesCurrentStatus(
     slug: string,
     type: string,
   ): Promise<boolean> {
     if (type === "URL_UPDATED") {
       const job = await this.database.job.findFirst({
-        select: { id: true },
+        select: JOB_POSTING_ELIGIBILITY_SELECT,
         where: { ...PUBLIC_JOB_INTEGRITY_WHERE, slug, status: "active" },
       });
-      return job !== null;
+      return job !== null && shouldEmitJobPosting(job);
     }
     const job = await this.database.job.findUnique({
       select: { status: true },
