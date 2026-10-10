@@ -36,6 +36,7 @@ import {
 } from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
 import { withCleanTitle } from "./clean-title";
+import { resolveEmploymentType } from "./employment-type";
 import { isForbiddenIngestionError } from "./errors";
 import { getStaleCutoff } from "./stale-policy";
 import type {
@@ -1010,6 +1011,12 @@ export class IngestionService {
       };
     }
 
+    const { employmentType, employmentTypeRaw } = resolveEmploymentType({
+      employmentType: observation.employmentType,
+      employmentTypeRaw: observation.employmentTypeRaw,
+      title: observation.title,
+    });
+
     const payload = {
       city: observation.city,
       companyId: jobSource.company.id,
@@ -1021,7 +1028,8 @@ export class IngestionService {
       country: observation.country ?? "Brasil",
       descriptionClean: observation.descriptionClean,
       descriptionRaw: observation.descriptionRaw,
-      employmentType: observation.employmentType,
+      employmentType,
+      employmentTypeRaw,
       externalJobId: observation.externalJobId,
       firstSeenAt,
       jobSourceId: jobSource.id,
@@ -1057,6 +1065,7 @@ export class IngestionService {
           descriptionClean: undefined,
           descriptionRaw: undefined,
           employmentType: undefined,
+          employmentTypeRaw: undefined,
           locationText: undefined,
           metadataJson: undefined,
           normalizedTitle: undefined,

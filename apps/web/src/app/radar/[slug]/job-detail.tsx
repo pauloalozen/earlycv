@@ -474,8 +474,20 @@ export function splitHtmlSections(descriptionHtml: string): JobSection[] {
 // Rótulo pra exibir no badge/card — mesmo valor normalizado acima (snake_
 // case), só formatado pra leitura ("full_time" -> "Full time"). "pj" fica
 // em caixa alta (sigla), o resto vira frase com só a primeira letra maiúscula.
+// Vocabulário normalizado da ingestão (apps/api/src/ingestion/
+// employment-type.ts). Valor fora do mapa (vaga antiga ainda não
+// normalizada) cai na regra genérica abaixo.
 const EMPLOYMENT_TYPE_DISPLAY_OVERRIDES: Record<string, string> = {
+  apprentice: "Jovem aprendiz",
+  autonomous: "Autônomo",
+  clt: "CLT",
+  full_time: "Tempo integral",
+  internship: "Estágio",
+  part_time: "Meio período",
   pj: "PJ",
+  talent_pool: "Banco de talentos",
+  temporary: "Temporário",
+  trainee: "Trainee",
 };
 
 export function formatEmploymentType(value: string): string {

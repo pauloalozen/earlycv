@@ -76,6 +76,7 @@ const SCHEMA_EMPLOYMENT_TYPE: Record<string, string> = {
   fulltime: "FULL_TIME",
   clt: "FULL_TIME",
   efetivo: "FULL_TIME",
+  trainee: "FULL_TIME",
   vacancy_type_trainee: "FULL_TIME",
   part_time: "PART_TIME",
   parttime: "PART_TIME",
