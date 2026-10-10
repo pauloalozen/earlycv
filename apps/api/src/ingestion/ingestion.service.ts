@@ -35,6 +35,7 @@ import {
   WorkdayAdapter,
 } from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
+import { withCleanTitle } from "./clean-title";
 import { isForbiddenIngestionError } from "./errors";
 import { getStaleCutoff } from "./stale-policy";
 import type {
@@ -916,8 +917,9 @@ export class IngestionService {
 
   private async upsertObservation(
     jobSource: JobSourceContext,
-    observation: NormalizedJobObservation,
+    rawObservation: NormalizedJobObservation,
   ) {
+    const observation = withCleanTitle(rawObservation);
     // Vagas de boards globais (Workday/Greenhouse/Ashby de empresas com
     // operação Brasil, mas board único mundial) trazem vaga de qualquer
     // país junto com as brasileiras. classifyJobLocation() usa o country

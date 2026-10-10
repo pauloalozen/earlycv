@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   companyDisplayName,
   formatJobTitle,
+  hasJobIdPrefix,
   stripJobIdPrefix,
 } from "./job-display.js";
 
@@ -33,6 +34,19 @@ test("stripJobIdPrefix remove o ID interno do Lever da CI&T", () => {
     "Senior AI Developer",
   );
   assert.equal(stripJobIdPrefix("[job-1]   Dev   Java"), "Dev Java");
+  assert.equal(stripJobIdPrefix("[Job - 30501] AI Engineer"), "AI Engineer");
+  assert.equal(hasJobIdPrefix("[Job - 30501] AI Engineer"), true);
+  assert.equal(stripJobIdPrefix("[ Job - 30678] C# Developer"), "C# Developer");
+  assert.equal(
+    stripJobIdPrefix("[Job 29685] AI Orchestrator"),
+    "AI Orchestrator",
+  );
+  assert.equal(
+    stripJobIdPrefix("[Job 31273 Data Analytics Senior"),
+    "Data Analytics Senior",
+  );
+  assert.equal(hasJobIdPrefix("Dev  Java"), false);
+  assert.equal(hasJobIdPrefix("[Jobs] Dev"), false);
   assert.equal(stripJobIdPrefix("Dev [Job-1] Java"), "Dev [Job-1] Java");
 });
 

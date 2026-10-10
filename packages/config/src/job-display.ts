@@ -150,7 +150,13 @@ function displayCompanyCore(word: string): string {
 // Alguns ATS (Lever da CI&T) prefixam o título com o ID interno da vaga
 // ("[Job-32186] Senior AI Developer"). A ingestão já grava sem o prefixo;
 // a exibição tira de novo para vaga antiga ainda não corrigida.
-const JOB_ID_PREFIX = /^\[Job-\d+\]\s*/i;
+// Também vem com espaços, sem hífen e até sem o colchete de fechamento
+// ("[Job - 30501]", "[ Job - 30678]", "[Job 29685]", "[Job 31273 Data").
+const JOB_ID_PREFIX = /^\s*\[\s*Job\s*-?\s*\d+\s*\]?\s*/i;
+
+export function hasJobIdPrefix(title: string): boolean {
+  return JOB_ID_PREFIX.test(title);
+}
 
 export function stripJobIdPrefix(title: string): string {
   return title.replace(JOB_ID_PREFIX, "").replace(/\s+/g, " ").trim();
