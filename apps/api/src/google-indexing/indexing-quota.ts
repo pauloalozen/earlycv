@@ -13,6 +13,11 @@ export function getIndexingDailyLimit(): number {
     : DEFAULT_INDEXING_DAILY_LIMIT;
 }
 
+// URL_UPDATED de vaga nova passa à frente de URL_DELETED, mas a remoção tem
+// um piso: enquanto houver DELETED pendente, os últimos envios da cota do
+// dia ficam reservados para ela (ver GoogleIndexingQueueWorker).
+export const INDEXING_DELETED_DAILY_FLOOR = 60;
+
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
 // Offset (ms) do horário do Pacífico em relação ao UTC num instante: -7h no
@@ -67,4 +72,21 @@ export async function countIndexingSentToday(
       status: "SUCCESS",
     },
   });
+}
+
+export async function countIndexingSentTodayByType(
+  database: Pick<DatabaseService, "googleIndexingLog">,
+  now = new Date(),
+): Promise<{ updated: number; deleted: number }> {
+  const grouped = await database.googleIndexingLog.groupBy({
+    by: ["type"],
+    _count: { _all: true },
+    where: {
+      createdAt: { gte: startOfPacificDay(now) },
+      status: "SUCCESS",
+    },
+  });
+  const countOf = (type: string) =>
+    grouped.find((row) => row.type === type)?._count._all ?? 0;
+  return { deleted: countOf("URL_DELETED"), updated: countOf("URL_UPDATED") };
 }

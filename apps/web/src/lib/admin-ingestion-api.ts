@@ -498,6 +498,10 @@ export type GoogleIndexingQueueStatus = {
   enabled: boolean;
   dailyLimit: number;
   sentToday: number;
+  // Opcional enquanto a API anterior ao campo estiver no ar.
+  sentTodayByType?: { updated: number; deleted: number };
+  // Envios do dia reservados para remoção enquanto houver DELETED pendente.
+  deletedDailyFloor?: number;
   remainingToday: number;
   pending: { updated: number; deleted: number };
   failed: number;

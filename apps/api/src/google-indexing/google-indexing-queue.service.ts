@@ -9,12 +9,14 @@ import {
   type IndexingNotificationType,
 } from "./google-indexing.service";
 import {
-  countIndexingSentToday,
+  countIndexingSentTodayByType,
   getIndexingDailyLimit,
+  INDEXING_DELETED_DAILY_FLOOR,
 } from "./indexing-quota";
 
-// Prioridade de envio: menor primeiro. Remoção vem antes de tudo (vaga fora
-// do ar indexada é pior que vaga nova demorando a aparecer).
+// Prioridade dentro de cada tipo: menor primeiro. A ordem entre tipos é do
+// worker (pickBatch): UPDATED de vaga nova, DELETED (com piso diário),
+// UPDATED de backfill.
 export const INDEXING_PRIORITY = {
   deleted: 0,
   newJob: 10,
@@ -90,12 +92,14 @@ export class GoogleIndexingQueueService {
     dailyLimit: number;
     sentToday: number;
     remainingToday: number;
+    sentTodayByType: { updated: number; deleted: number };
+    deletedDailyFloor: number;
     pending: { updated: number; deleted: number };
     failed: number;
   }> {
     const dailyLimit = getIndexingDailyLimit();
-    const [sentToday, grouped, failed] = await Promise.all([
-      countIndexingSentToday(this.database),
+    const [sentTodayByType, grouped, failed] = await Promise.all([
+      countIndexingSentTodayByType(this.database),
       this.database.googleIndexingQueueItem.groupBy({
         by: ["type"],
         _count: { _all: true },
@@ -105,6 +109,7 @@ export class GoogleIndexingQueueService {
         where: { status: "failed" },
       }),
     ]);
+    const sentToday = sentTodayByType.updated + sentTodayByType.deleted;
     const countOf = (type: IndexingNotificationType) =>
       grouped.find((row) => row.type === type)?._count._all ?? 0;
 
@@ -116,8 +121,10 @@ export class GoogleIndexingQueueService {
         deleted: countOf("URL_DELETED"),
         updated: countOf("URL_UPDATED"),
       },
+      deletedDailyFloor: INDEXING_DELETED_DAILY_FLOOR,
       remainingToday: Math.max(0, dailyLimit - sentToday),
       sentToday,
+      sentTodayByType,
     };
   }
 }
