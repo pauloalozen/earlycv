@@ -5,14 +5,26 @@
 // Vaga classificada como estrangeira não é tocada (o saneamento dela é do
 // cleanup:foreign-jobs).
 //
-// Por padrão roda em --dry-run (só lê e reporta). Passe --apply pra gravar.
-// Idempotente: rodar de novo não muda nada.
+// Toda vaga alterada ganha contentUpdatedAt (o sitemap avisa o Google). Só
+// a ativa que passou de "sem JobPosting" para "com JobPosting"
+// (shouldEmitJobPosting) vai para a fila da Indexing API (URL_UPDATED).
+//
+// Por padrão roda em --dry-run (só lê e reporta, inclusive quantas
+// pendências vai criar). Passe --apply pra gravar. Idempotente: rodar de
+// novo não muda nada.
 //
 //   npm run jobs:normalize-locations --workspace @earlycv/api
 //   npm run jobs:normalize-locations --workspace @earlycv/api -- --apply
 
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { PrismaClient } from "@prisma/client";
 
+import type { DatabaseService } from "../database/database.service";
+import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
+import {
+  GoogleIndexingQueueService,
+  INDEXING_PRIORITY,
+} from "../google-indexing/google-indexing-queue.service";
 import { withNormalizedLocation } from "../ingestion/location-normalization";
 import { classifyJobLocation } from "../jobs/geo-normalizer";
 
@@ -30,9 +42,11 @@ async function main() {
       select: {
         city: true,
         country: true,
+        employmentType: true,
         id: true,
         jobSource: { select: { isGlobalBoard: true } },
         locationText: true,
+        slug: true,
         state: true,
         status: true,
         workModel: true,
@@ -52,6 +66,8 @@ async function main() {
     let changedActive = 0;
     let updated = 0;
     const samples: string[] = [];
+    // Ativas que passam a ter JobPosting: as únicas que vão para a fila.
+    const gainedJobPosting: string[] = [];
 
     for (const job of jobs) {
       const input = {
@@ -110,18 +126,42 @@ async function main() {
         );
       }
 
+      if (
+        job.status === "active" &&
+        job.slug &&
+        !shouldEmitJobPosting(job) &&
+        shouldEmitJobPosting({ ...job, city, state, workModel })
+      ) {
+        gainedJobPosting.push(job.slug);
+      }
+
       if (APPLY) {
         await prisma.job.update({
           where: { id: job.id },
-          data: { city, state, workModel },
+          data: { city, contentUpdatedAt: new Date(), state, workModel },
         });
         updated += 1;
       }
     }
 
+    let enqueued = 0;
+    if (APPLY) {
+      const database = prisma as unknown as DatabaseService;
+      enqueued = await new GoogleIndexingQueueService(
+        database,
+        new GoogleIndexingService(database),
+      ).enqueue(
+        gainedJobPosting.map((slug) => ({
+          priority: INDEXING_PRIORITY.backfill,
+          slug,
+          type: "URL_UPDATED" as const,
+        })),
+      );
+    }
+
     for (const sample of samples) console.log(`${LOG} ${sample}`);
     console.log(
-      `${LOG} concluído: ${jobs.length} vagas verificadas, ${changedJobs} a normalizar (ativas: ${changedActive}); cidade preenchida=${counts.cityFilled}, cidade corrigida=${counts.cityChanged}, UF preenchida=${counts.stateFilled}, UF corrigida=${counts.stateChanged}, workModel->remote=${counts.workModelRemote}, estrangeiras ignoradas=${counts.foreignSkipped}${APPLY ? `, ${updated} gravadas` : " (nenhuma gravada: rode com --apply)"}.`,
+      `${LOG} concluído: ${jobs.length} vagas verificadas, ${changedJobs} a normalizar (ativas: ${changedActive}); cidade preenchida=${counts.cityFilled}, cidade corrigida=${counts.cityChanged}, UF preenchida=${counts.stateFilled}, UF corrigida=${counts.stateChanged}, workModel->remote=${counts.workModelRemote}, estrangeiras ignoradas=${counts.foreignSkipped}; ${gainedJobPosting.length} pendências URL_UPDATED na Indexing API (ativas que passam a ter JobPosting)${APPLY ? `; ${updated} gravadas, ${enqueued} enfileiradas` : " (nenhuma gravada: rode com --apply)"}.`,
     );
   } finally {
     await prisma.$disconnect();

@@ -4,14 +4,28 @@
 // (resolveEmploymentType): vaga com "banco de talentos" no título vira
 // talent_pool, "Homeoffice" e valor desconhecido ficam sem tipo.
 //
-// Por padrão roda em --dry-run (só lê e reporta). Passe --apply pra gravar.
-// Idempotente: rodar de novo não muda nada.
+// Fila da Indexing API: só vaga ativa que passou de "sem JobPosting" para
+// "com JobPosting" (shouldEmitJobPosting) ganha URL_UPDATED. A que só mudou
+// o tipo visível ganha contentUpdatedAt (o sitemap avisa o Google); a que
+// só ganhou employmentTypeRaw não muda nada na página.
+//
+// Por padrão roda em --dry-run (só lê e reporta, inclusive quantas
+// pendências vai criar). Passe --apply pra gravar. Idempotente: rodar de
+// novo não muda nada.
 //
 //   npm run jobs:normalize-employment-types --workspace @earlycv/api
 //   npm run jobs:normalize-employment-types --workspace @earlycv/api -- --apply
 
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { PrismaClient } from "@prisma/client";
 
+import type { DatabaseService } from "../database/database.service";
+import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
+import {
+  GoogleIndexingQueueService,
+  INDEXING_PRIORITY,
+  JOB_POSTING_ELIGIBILITY_SELECT,
+} from "../google-indexing/google-indexing-queue.service";
 import { resolveEmploymentType } from "../ingestion/employment-type";
 
 const APPLY = process.argv.includes("--apply");
@@ -27,9 +41,10 @@ async function main() {
   try {
     const jobs = await prisma.job.findMany({
       select: {
-        employmentType: true,
+        ...JOB_POSTING_ELIGIBILITY_SELECT,
         employmentTypeRaw: true,
         id: true,
+        slug: true,
         status: true,
         title: true,
       },
@@ -46,8 +61,11 @@ async function main() {
         employmentTypeRaw: string | null;
         from: string | null;
         ids: string[];
+        visible: boolean;
       }
     >();
+    // Ativas que passam a ter JobPosting: as únicas que vão para a fila.
+    const gainedJobPosting: string[] = [];
     for (const job of jobs) {
       const next = resolveEmploymentType({
         employmentType: job.employmentType,
@@ -60,6 +78,16 @@ async function main() {
       ) {
         continue;
       }
+      const visible = next.employmentType !== job.employmentType;
+      if (
+        visible &&
+        job.status === "active" &&
+        job.slug &&
+        !shouldEmitJobPosting(job) &&
+        shouldEmitJobPosting({ ...job, employmentType: next.employmentType })
+      ) {
+        gainedJobPosting.push(job.slug);
+      }
       const key = JSON.stringify([
         job.employmentType,
         next.employmentType,
@@ -71,6 +99,7 @@ async function main() {
         employmentTypeRaw: next.employmentTypeRaw,
         from: job.employmentType,
         ids: [],
+        visible,
       };
       group.ids.push(job.id);
       if (job.status === "active") group.active += 1;
@@ -92,7 +121,9 @@ async function main() {
     }
 
     let updated = 0;
+    let enqueued = 0;
     if (APPLY) {
+      const now = new Date();
       for (const group of groups.values()) {
         for (let i = 0; i < group.ids.length; i += CHUNK) {
           const result = await prisma.job.updateMany({
@@ -100,19 +131,34 @@ async function main() {
             data: {
               employmentType: group.employmentType,
               employmentTypeRaw: group.employmentTypeRaw,
+              ...(group.visible ? { contentUpdatedAt: now } : {}),
             },
           });
           updated += result.count;
         }
       }
+      const database = prisma as unknown as DatabaseService;
+      enqueued = await new GoogleIndexingQueueService(
+        database,
+        new GoogleIndexingService(database),
+      ).enqueue(
+        gainedJobPosting.map((slug) => ({
+          priority: INDEXING_PRIORITY.backfill,
+          slug,
+          type: "URL_UPDATED" as const,
+        })),
+      );
     }
 
     const changed = [...groups.values()].reduce(
       (sum, group) => sum + group.ids.length,
       0,
     );
+    const visibleChanged = [...groups.values()]
+      .filter((group) => group.visible)
+      .reduce((sum, group) => sum + group.ids.length, 0);
     console.log(
-      `${LOG} concluído: ${jobs.length} vagas verificadas, ${changed} a normalizar${APPLY ? `, ${updated} gravadas` : " (nenhuma gravada: rode com --apply)"}.`,
+      `${LOG} concluído: ${jobs.length} vagas verificadas, ${changed} a normalizar (${visibleChanged} com tipo visível alterado ganham contentUpdatedAt), ${gainedJobPosting.length} pendências URL_UPDATED na Indexing API (ativas que passam a ter JobPosting)${APPLY ? `; ${updated} gravadas, ${enqueued} enfileiradas` : " (nenhuma gravada: rode com --apply)"}.`,
     );
   } finally {
     await prisma.$disconnect();

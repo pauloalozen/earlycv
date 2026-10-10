@@ -1,8 +1,9 @@
 // PR 2b, decisão A (restrita): regenera o slug só das vagas com o ID interno
 // do ATS no título ("[Job-32186] ...") e das vagas com empresa reatribuída
 // (ver planSlugRegeneration). A URL antiga responde 308 para a nova pelo
-// cuid no fim do slug. Vaga ativa vai para a fila da Indexing API
-// (URL_UPDATED, prioridade de backfill).
+// cuid no fim do slug. Vaga ativa com JobPosting (shouldEmitJobPosting) vai
+// para a fila da Indexing API (URL_UPDATED, prioridade de backfill): a URL
+// mudou.
 //
 // Por padrão roda em --dry-run (só lê e reporta). Passe --apply pra gravar.
 // Rodar depois do deploy que limpa o título na ingestão.
@@ -16,6 +17,7 @@
 //   npm run jobs:regenerate-slugs --workspace @earlycv/api -- --apply
 //   npm run jobs:regenerate-slugs --workspace @earlycv/api -- --include-company-changed
 
+import { shouldEmitJobPosting } from "@earlycv/config/job-posting";
 import { type Prisma, PrismaClient } from "@prisma/client";
 
 import type { DatabaseService } from "../database/database.service";
@@ -23,6 +25,7 @@ import { GoogleIndexingService } from "../google-indexing/google-indexing.servic
 import {
   GoogleIndexingQueueService,
   INDEXING_PRIORITY,
+  JOB_POSTING_ELIGIBILITY_SELECT,
 } from "../google-indexing/google-indexing-queue.service";
 import { planSlugRegeneration } from "../jobs/job-slug-regeneration";
 
@@ -47,6 +50,7 @@ async function main() {
     const jobs = await prisma.job.findMany({
       where: { slug: { not: null } },
       select: {
+        ...JOB_POSTING_ELIGIBILITY_SELECT,
         company: { select: { name: true } },
         id: true,
         normalizedTitle: true,
@@ -59,6 +63,7 @@ async function main() {
 
     const counts = { company_changed: 0, job_id_prefix: 0 };
     let planned = 0;
+    let toEnqueue = 0;
     let updated = 0;
     let enqueued = 0;
     let failed = 0;
@@ -79,6 +84,8 @@ async function main() {
 
       planned += 1;
       for (const reason of plan.reasons) counts[reason] += 1;
+      const willEnqueue = job.status === "active" && shouldEmitJobPosting(job);
+      if (willEnqueue) toEnqueue += 1;
       console.log(
         `${LOG} [${plan.reasons.join("+")}] status=${job.status} ${job.slug} -> ${plan.baseSlug}`,
       );
@@ -101,7 +108,7 @@ async function main() {
                 : {}),
             },
           });
-          if (job.status === "active") {
+          if (willEnqueue) {
             enqueued += await indexingQueue.enqueue(
               [
                 {
@@ -125,7 +132,7 @@ async function main() {
     }
 
     console.log(
-      `${LOG} concluído: ${jobs.length} vagas verificadas, ${planned} com slug a regenerar (job_id_prefix=${counts.job_id_prefix}, company_changed=${counts.company_changed})${APPLY ? `, ${updated} gravadas, ${enqueued} enfileiradas na Indexing API, ${failed} falhas` : " (nenhuma gravada: rode com --apply)"}.`,
+      `${LOG} concluído: ${jobs.length} vagas verificadas, ${planned} com slug a regenerar (job_id_prefix=${counts.job_id_prefix}, company_changed=${counts.company_changed}), ${toEnqueue} pendências URL_UPDATED na Indexing API${APPLY ? `; ${updated} gravadas, ${enqueued} enfileiradas, ${failed} falhas` : " (nenhuma gravada: rode com --apply)"}.`,
     );
   } finally {
     await prisma.$disconnect();
