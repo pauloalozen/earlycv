@@ -145,6 +145,24 @@ export class DiscoveredCompaniesController {
     return this.discoveredCompaniesService.dismiss(id);
   }
 
+  // Descarte em massa dos selecionados na Fila. Teto de 1000 por chamada
+  // (a tela manda no máximo uma página de 50).
+  @Post("dismiss-bulk")
+  @HttpCode(200)
+  dismissBulk(@Body("ids") ids: unknown) {
+    if (
+      !Array.isArray(ids) ||
+      ids.length === 0 ||
+      ids.length > 1000 ||
+      !ids.every((id) => typeof id === "string" && id.length > 0)
+    ) {
+      throw new BadRequestException(
+        "ids must be a non-empty array of strings (max 1000)",
+      );
+    }
+    return this.discoveredCompaniesService.dismissMany(ids);
+  }
+
   // Apaga só os candidatos PENDING (fila ainda não processada) — nunca
   // toca no histórico (VALIDATED/NO_ACTIVE_JOBS/NO_TECH_JOBS/INVALID/
   // IMPORTED/DISMISSED).
