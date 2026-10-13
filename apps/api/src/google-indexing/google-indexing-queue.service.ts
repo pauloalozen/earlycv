@@ -7,9 +7,11 @@ import {
   GoogleIndexingService,
   type IndexingNotificationType,
 } from "./google-indexing.service";
+import { INDEXING_EXPIRED_REASON } from "./google-indexing-queue.worker";
 import {
   countIndexingSentToday,
   getIndexingDailyLimit,
+  startOfPacificDay,
 } from "./indexing-quota";
 
 // Prioridade de envio: menor primeiro. Remoção vem antes de tudo (vaga fora
@@ -63,9 +65,10 @@ export class GoogleIndexingQueueService {
     remainingToday: number;
     pending: { updated: number; deleted: number };
     failed: number;
+    expiredToday: number;
   }> {
     const dailyLimit = getIndexingDailyLimit();
-    const [sentToday, grouped, failed] = await Promise.all([
+    const [sentToday, grouped, failed, expiredToday] = await Promise.all([
       countIndexingSentToday(this.database),
       this.database.googleIndexingQueueItem.groupBy({
         by: ["type"],
@@ -75,6 +78,14 @@ export class GoogleIndexingQueueService {
       this.database.googleIndexingQueueItem.count({
         where: { status: "failed" },
       }),
+      this.database.googleIndexingQueueItem.count({
+        where: {
+          lastError: INDEXING_EXPIRED_REASON,
+          processedAt: { gte: startOfPacificDay(new Date()) },
+          status: "skipped",
+          type: "URL_DELETED",
+        },
+      }),
     ]);
     const countOf = (type: IndexingNotificationType) =>
       grouped.find((row) => row.type === type)?._count._all ?? 0;
@@ -82,6 +93,7 @@ export class GoogleIndexingQueueService {
     return {
       dailyLimit,
       enabled: this.googleIndexingService.isEnabled(),
+      expiredToday,
       failed,
       pending: {
         deleted: countOf("URL_DELETED"),
@@ -131,8 +143,11 @@ async function enqueueOne(
 
   if (existing.type !== item.type) {
     await client.googleIndexingQueueItem.update({
+      // createdAt reinicia: é uma pendência nova (a validade do DELETED conta
+      // a partir daqui).
       data: {
         attempts: 0,
+        createdAt: new Date(),
         lastError: null,
         nextAttemptAt: new Date(),
         priority: item.priority,
