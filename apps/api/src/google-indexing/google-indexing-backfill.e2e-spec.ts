@@ -13,6 +13,7 @@ import { IngestionLockRepository } from "../ingestion/ingestion-lock.repository"
 import { GoogleIndexingBackfillService } from "./google-indexing-backfill.service";
 import {
   GoogleIndexingQueueService,
+  INDEXING_EXPIRED_REASON,
   INDEXING_PRIORITY,
 } from "./google-indexing-queue.service";
 import { GoogleIndexingQueueWorker } from "./google-indexing-queue.worker";
@@ -354,6 +355,82 @@ describe("GoogleIndexingBackfillService (banco real)", () => {
     assert.equal(items.length, 1);
     assert.equal(items[0]?.type, "URL_DELETED");
     assert.equal(items[0]?.priority, INDEXING_PRIORITY.deleted);
+  });
+
+  test("DELETED com mais de 7 dias na fila vence como skipped (expired), sem envio", async () => {
+    await addJob({ slug: "velha", status: "inactive" });
+    await addJob({ slug: "recente", status: "inactive" });
+    await addJob({ slug: "trocou" });
+    // DELETED só entra na fila para vaga já notificada ao Google.
+    await addLog("velha", "SUCCESS");
+    await addLog("recente", "SUCCESS");
+    await addLog("trocou", "SUCCESS");
+    const service = makeService();
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000);
+    const expiredBefore = (await service.queue.getPanel()).expiredToday;
+
+    await service.queue.enqueue([
+      {
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf("velha"),
+        type: "URL_DELETED",
+      },
+      {
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf("recente"),
+        type: "URL_DELETED",
+      },
+      {
+        priority: INDEXING_PRIORITY.newJob,
+        slug: slugOf("trocou"),
+        type: "URL_UPDATED",
+      },
+    ]);
+    await prisma.googleIndexingQueueItem.updateMany({
+      data: { createdAt: daysAgo(8) },
+      where: { slug: slugOf("velha") },
+    });
+    await prisma.googleIndexingQueueItem.updateMany({
+      data: { createdAt: daysAgo(6) },
+      where: { slug: slugOf("recente") },
+    });
+    await prisma.googleIndexingQueueItem.updateMany({
+      data: { createdAt: daysAgo(10) },
+      where: { slug: slugOf("trocou") },
+    });
+    // Virou DELETED agora: a validade conta da troca, não da pendência antiga.
+    await prisma.job.updateMany({
+      data: { status: "inactive" },
+      where: { slug: slugOf("trocou") },
+    });
+    await service.queue.enqueue([
+      {
+        priority: INDEXING_PRIORITY.deleted,
+        slug: slugOf("trocou"),
+        type: "URL_DELETED",
+      },
+    ]);
+
+    const result = await service.worker.runOnce();
+
+    assert.equal(result.expired, 1);
+    assert.equal(result.sent, 2);
+    const bySlug = new Map((await queueItems()).map((i) => [i.slug, i]));
+    const velha = bySlug.get(slugOf("velha"));
+    assert.equal(velha?.status, "skipped");
+    assert.equal(velha?.lastError, INDEXING_EXPIRED_REASON);
+    assert.equal(velha?.pendingKey, null);
+    assert.equal(bySlug.get(slugOf("recente"))?.status, "done");
+    assert.equal(bySlug.get(slugOf("trocou"))?.status, "done");
+    const sentSlugs = (
+      await prisma.googleIndexingLog.findMany({
+        where: { slug: { startsWith: tag }, type: "URL_DELETED" },
+      })
+    ).map((l) => l.slug);
+    assert.deepEqual(sentSlugs.sort(), [slugOf("recente"), slugOf("trocou")]);
+
+    const panel = await service.queue.getPanel();
+    assert.equal(panel.expiredToday - expiredBefore, 1);
   });
 
   test("uses the default daily limit of 200 when env var is unset", async () => {

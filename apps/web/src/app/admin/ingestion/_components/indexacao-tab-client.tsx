@@ -48,6 +48,7 @@ function queueStatItems(queue: GoogleIndexingQueueStatus) {
       : []),
     { label: "Cota restante hoje", value: queue.remainingToday },
     { label: "Falhas (5 tentativas)", value: queue.failed },
+    { label: "Remoções vencidas hoje (7 dias)", value: queue.expiredToday },
   ];
 }
 

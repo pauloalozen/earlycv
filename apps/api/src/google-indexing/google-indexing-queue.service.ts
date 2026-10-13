@@ -12,7 +12,12 @@ import {
   countIndexingSentTodayByType,
   getIndexingDailyLimit,
   INDEXING_DELETED_DAILY_FLOOR,
+  startOfPacificDay,
 } from "./indexing-quota";
+
+// Motivo gravado em lastError quando um URL_DELETED vence na fila (ver
+// GoogleIndexingQueueWorker.expireStaleDeleted).
+export const INDEXING_EXPIRED_REASON = "expired";
 
 // Prioridade dentro de cada tipo: menor primeiro. A ordem entre tipos é do
 // worker (pickBatch): UPDATED de vaga nova, DELETED (com piso diário),
@@ -117,9 +122,10 @@ export class GoogleIndexingQueueService {
     deletedDailyFloor: number;
     pending: { updated: number; deleted: number };
     failed: number;
+    expiredToday: number;
   }> {
     const dailyLimit = getIndexingDailyLimit();
-    const [sentTodayByType, grouped, failed] = await Promise.all([
+    const [sentTodayByType, grouped, failed, expiredToday] = await Promise.all([
       countIndexingSentTodayByType(this.database),
       this.database.googleIndexingQueueItem.groupBy({
         by: ["type"],
@@ -129,6 +135,14 @@ export class GoogleIndexingQueueService {
       this.database.googleIndexingQueueItem.count({
         where: { status: "failed" },
       }),
+      this.database.googleIndexingQueueItem.count({
+        where: {
+          lastError: INDEXING_EXPIRED_REASON,
+          processedAt: { gte: startOfPacificDay(new Date()) },
+          status: "skipped",
+          type: "URL_DELETED",
+        },
+      }),
     ]);
     const sentToday = sentTodayByType.updated + sentTodayByType.deleted;
     const countOf = (type: IndexingNotificationType) =>
@@ -137,6 +151,7 @@ export class GoogleIndexingQueueService {
     return {
       dailyLimit,
       enabled: this.googleIndexingService.isEnabled(),
+      expiredToday,
       failed,
       pending: {
         deleted: countOf("URL_DELETED"),
@@ -188,8 +203,11 @@ async function enqueueOne(
 
   if (existing.type !== item.type) {
     await client.googleIndexingQueueItem.update({
+      // createdAt reinicia: é uma pendência nova (a validade do DELETED conta
+      // a partir daqui).
       data: {
         attempts: 0,
+        createdAt: new Date(),
         lastError: null,
         nextAttemptAt: new Date(),
         priority: item.priority,
