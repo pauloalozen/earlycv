@@ -865,6 +865,16 @@ export class DiscoveredCompaniesService {
     });
   }
 
+  // Descarte em massa (seleção na Fila) — um updateMany só, com a mesma
+  // regra do dismiss unitário: candidato já IMPORTED nunca é tocado.
+  async dismissMany(ids: string[]): Promise<{ dismissedCount: number }> {
+    const { count } = await this.database.discoveredCompany.updateMany({
+      data: { status: "DISMISSED" },
+      where: { id: { in: ids }, status: { not: "IMPORTED" } },
+    });
+    return { dismissedCount: count };
+  }
+
   private async getOrThrow(id: string) {
     const candidate = await this.database.discoveredCompany.findUnique({
       where: { id },
