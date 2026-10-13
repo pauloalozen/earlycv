@@ -7,13 +7,18 @@ import type { ClosedPublicJob } from "@/lib/public-jobs-api";
 
 const mocks = vi.hoisted(() => ({
   fetchClosedPublicJob: vi.fn(),
+  fetchCurrentJobSlug: vi.fn(),
   fetchPublicJob: vi.fn(),
   getCurrentAppUserFromCookies: vi.fn<() => Promise<AppSessionUser | null>>(),
   listPublicJobs: vi.fn(),
   notFound: vi.fn<() => never>(),
+  permanentRedirect: vi.fn<(url: string) => never>(),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
+vi.mock("next/navigation", () => ({
+  notFound: mocks.notFound,
+  permanentRedirect: mocks.permanentRedirect,
+}));
 vi.mock("@/components/public-footer", () => ({
   PublicFooter: () => <div>footer</div>,
 }));
@@ -28,6 +33,7 @@ vi.mock("@/lib/public-jobs-api", () => ({
 }));
 vi.mock("@/lib/public-jobs-client", () => ({
   fetchClosedPublicJob: mocks.fetchClosedPublicJob,
+  fetchCurrentJobSlug: mocks.fetchCurrentJobSlug,
   fetchPublicJob: mocks.fetchPublicJob,
 }));
 vi.mock("@/lib/resumes-api", () => ({ getMyMasterResume: vi.fn() }));
@@ -129,7 +135,13 @@ describe("/radar/[slug] para vaga que saiu do radar", () => {
     });
 
     expect(metadata.robots).toEqual({ index: false, follow: true });
-    expect(String(metadata.title)).toContain("Vaga encerrada");
+    expect(metadata.title).toEqual({
+      absolute: `Vaga encerrada: ${closedJob.title} na ${closedJob.company} | EarlyCV`,
+    });
+    // Canonical e og:url na própria vaga (nunca herdados da home).
+    const url = `https://earlycv.com.br/radar/${closedJob.slug}`;
+    expect(metadata.alternates?.canonical).toBe(url);
+    expect(metadata.openGraph?.url).toBe(url);
   });
 
   it("logado vê o aviso de que a candidatura continua salva", async () => {
@@ -162,5 +174,38 @@ describe("/radar/[slug] para vaga que saiu do radar", () => {
     await expect(
       JobPage({ params: Promise.resolve({ slug: "nao-existe" }) }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("slug antigo de vaga com slug regenerado vira 308 para o slug atual", async () => {
+    mocks.fetchClosedPublicJob.mockResolvedValue({ status: "not-found" });
+    mocks.fetchCurrentJobSlug.mockResolvedValue({
+      status: "ok",
+      data: { slug: "dev-java-acme-cmg1abcdefghijklmnopqrstu" },
+    });
+    mocks.permanentRedirect.mockImplementation(() => {
+      throw new Error("NEXT_REDIRECT");
+    });
+
+    await expect(
+      JobPage({
+        params: Promise.resolve({
+          slug: "job-1-dev-java-acme-cmg1abcdefghijklmnopqrstu",
+        }),
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.permanentRedirect).toHaveBeenCalledWith(
+      "/radar/dev-java-acme-cmg1abcdefghijklmnopqrstu",
+    );
+    expect(mocks.notFound).not.toHaveBeenCalled();
+  });
+
+  it("falha ao buscar o slug atual não derruba o 404", async () => {
+    mocks.fetchClosedPublicJob.mockResolvedValue({ status: "not-found" });
+    mocks.fetchCurrentJobSlug.mockRejectedValue(new Error("timeout"));
+
+    await expect(
+      JobPage({ params: Promise.resolve({ slug: "nao-existe" }) }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(mocks.permanentRedirect).not.toHaveBeenCalled();
   });
 });

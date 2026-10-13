@@ -25,9 +25,11 @@ test("sitemap includes /blog and published blog posts", async () => {
     urls.some((url) => url.endsWith("/blog")),
     true,
   );
+  // O post tem canonical customizado apontando pra /adaptar-curriculo-para-vaga
+  // (artigo-2-adaptar-curriculo.md): fica fora do sitemap.
   assert.equal(
     urls.some((url) => url.endsWith("/blog/como-adaptar-curriculo-para-vaga")),
-    true,
+    false,
   );
   assert.equal(
     urls.some((url) => url.endsWith("/blog/rascunho-blog-exemplo")),

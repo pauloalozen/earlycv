@@ -37,13 +37,13 @@ const COMPANIES = [
 ] as const;
 
 export const metadata: Metadata = {
-  title: "Radar de Vagas — Oportunidades com Maior Aderência ao Seu Perfil",
+  title: "Radar de Vagas: Oportunidades com Maior Aderência ao Seu Perfil",
   description:
     "O Radar EarlyCV encontra vagas de tecnologia em centenas de empresas e mostra primeiro as oportunidades com maior aderência ao seu perfil.",
   alternates: { canonical: url },
   openGraph: {
     title:
-      "Radar de Vagas — Oportunidades com Maior Aderência ao Seu Perfil | EarlyCV",
+      "Radar de Vagas: Oportunidades com Maior Aderência ao Seu Perfil | EarlyCV",
     description:
       "Vagas de tecnologia rastreadas direto na fonte, com aderência calculada pro seu perfil.",
     url,
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     title:
-      "Radar de Vagas — Oportunidades com Maior Aderência ao Seu Perfil | EarlyCV",
+      "Radar de Vagas: Oportunidades com Maior Aderência ao Seu Perfil | EarlyCV",
     description:
       "Vagas de tecnologia rastreadas direto na fonte, com aderência calculada pro seu perfil.",
   },

@@ -342,6 +342,20 @@ export class PublicJobsController {
     return toClosedPublicJobView(found);
   }
 
+  // Slug antigo de vaga cujo slug foi regenerado: o front responde 308 para
+  // o slug atual. 404 quando o slug não leva a vaga nenhuma.
+  @Get(":slug/current-slug")
+  @UseGuards(PublicJobsGhostModeGuard)
+  async getCurrentSlug(@Param("slug") slug: string) {
+    const current = await this.jobsService.getCurrentPublicSlug(slug);
+
+    if (!current) {
+      throw new NotFoundException("job not found");
+    }
+
+    return { slug: current };
+  }
+
   @Get(":slug/score")
   @UseGuards(JwtAuthGuard)
   async getScore(

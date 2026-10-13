@@ -7,7 +7,10 @@ import { PublicFooter } from "@/components/public-footer";
 import { PublicNavBar } from "@/components/public-nav-bar";
 import type { AppSessionUser } from "@/lib/app-session";
 import { toCompanySlug } from "@/lib/company-slug";
+import { cleanJobTitleForDisplay } from "@/lib/job-seo";
 import type { ClosedPublicJob, PublicJob } from "@/lib/public-jobs-api";
+import { jobCompanyDisplayName } from "@/lib/radar-landings";
+import { getAbsoluteUrl } from "@/lib/site";
 import {
   formatEmploymentType,
   SENIORITY_LABELS,
@@ -24,12 +27,21 @@ const SERIF =
 
 // Vaga encerrada não é conteúdo indexável (o Google já é avisado da remoção
 // na inativação) e não leva JobPosting JSON-LD, mas os links dela continuam
-// valendo pro crawler seguir.
+// valendo pro crawler seguir. Canonical e og:url na própria URL: herdar os
+// do layout apontava pra home, sinal contraditório com o noindex.
 export function buildClosedJobMetadata(job: ClosedPublicJob): Metadata {
+  const cargo = cleanJobTitleForDisplay(job.title);
+  const empresa = jobCompanyDisplayName(job);
+  const title = `Vaga encerrada: ${cargo} na ${empresa} | EarlyCV`;
+  const description = `A vaga de ${cargo} na ${empresa} foi encerrada. Veja outras vagas abertas no EarlyCV.`;
+  const url = getAbsoluteUrl(`/radar/${job.slug}`);
   return {
-    title: `Vaga encerrada — ${job.title} — ${job.company}`,
-    description: `A vaga de ${job.title} na ${job.company} foi encerrada. Veja outras vagas abertas no EarlyCV.`,
+    title: { absolute: title },
+    description,
     robots: { index: false, follow: true },
+    alternates: { canonical: url },
+    openGraph: { type: "article", url, title, description },
+    twitter: { title, description },
   };
 }
 
@@ -80,7 +92,8 @@ export function ClosedJobView({
   user: AppSessionUser | null;
 }) {
   const sections = splitHtmlSections(job.descriptionHtml);
-  const titleParts = splitJobTitleForDisplay(job.title);
+  const displayTitle = cleanJobTitleForDisplay(job.title);
+  const titleParts = splitJobTitleForDisplay(displayTitle);
   const workModelLabel = job.workModel
     ? (WORK_MODEL_LABELS[job.workModel] ?? job.workModel)
     : null;
@@ -92,7 +105,7 @@ export function ClosedJobView({
     { href: "/radar", label: "Ver vagas abertas" },
     {
       href: `/radar/empresa/${toCompanySlug(job.company)}`,
-      label: `Vagas abertas na ${job.company}`,
+      label: `Vagas abertas na ${jobCompanyDisplayName(job)}`,
     },
   ];
   if (job.dominantArea) {
@@ -107,7 +120,7 @@ export function ClosedJobView({
   }
 
   const details = [
-    { label: "Empresa", value: job.company },
+    { label: "Empresa", value: jobCompanyDisplayName(job) },
     job.location ? { label: "Localização", value: job.location } : null,
     workModelLabel ? { label: "Modelo", value: workModelLabel } : null,
     job.employmentType
@@ -173,7 +186,7 @@ export function ClosedJobView({
               minWidth: 0,
             }}
           >
-            {job.title}
+            {displayTitle}
           </span>
         </nav>
 
@@ -242,10 +255,10 @@ export function ClosedJobView({
               maxWidth: 720,
             }}
           >
-            Ela saiu da página de carreiras da {job.company}: o processo foi
-            encerrado ou a vaga foi retirada pela empresa. Vista pela última vez
-            em {formatDate(job.lastSeenAt)}. O conteúdo abaixo fica disponível
-            só para consulta.
+            Ela saiu da página de carreiras da {jobCompanyDisplayName(job)}: o
+            processo foi encerrado ou a vaga foi retirada pela empresa. Vista
+            pela última vez em {formatDate(job.lastSeenAt)}. O conteúdo abaixo
+            fica disponível só para consulta.
             {user
               ? " Se você tinha uma candidatura para ela, nada foi apagado — tudo continua em Candidaturas."
               : null}
@@ -303,7 +316,7 @@ export function ClosedJobView({
                   marginBottom: 2,
                 }}
               >
-                {job.company}
+                {jobCompanyDisplayName(job)}
               </div>
               {job.location ? (
                 <div style={{ fontSize: 12, color: "#6a6560" }}>

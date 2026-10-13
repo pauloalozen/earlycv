@@ -325,6 +325,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.googleIndexingLog;
   }
 
+  get googleIndexingQueueItem() {
+    return this.prisma.googleIndexingQueueItem;
+  }
+
   get talentProfile() {
     return this.prisma.talentProfile;
   }

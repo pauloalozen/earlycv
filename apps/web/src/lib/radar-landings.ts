@@ -5,7 +5,14 @@
 // Sem "import server-only" pelo mesmo motivo de internal-jobs-api.ts: o
 // sitemap.ts importa este módulo e roda nos testes via node:test puro.
 
+import { companyDisplayName } from "@earlycv/config/job-display";
+import {
+  companyCountDisplayName,
+  jobCompanyDisplayName,
+} from "./company-display";
 import { toCompanySlug } from "./company-slug";
+
+export { companyCountDisplayName, companyDisplayName, jobCompanyDisplayName };
 
 // Abaixo disso a landing não é indexável (noindex) e não entra no sitemap
 // nem nos links internos — página quase vazia indexada é o que o Google
@@ -26,7 +33,14 @@ export type RadarLandingFilters = {
 };
 
 export type CountItem = { value: string; count: number };
-export type CompanyCount = { name: string; slug: string; count: number };
+export type CompanyCount = {
+  name: string;
+  slug: string;
+  count: number;
+  // Nome de exibição resolvido na API (Company.displayName ou o calculado).
+  // Opcional: resposta de API anterior ao campo cai no cálculo local.
+  displayName?: string;
+};
 export type CityCount = {
   city: string;
   state: string;
@@ -273,35 +287,6 @@ export function toTechnologySlug(tech: string): string {
   );
 }
 
-const LEGAL_SUFFIX = /[\s,.-]+(ltda\.?|s\.?\/?a\.?|eireli|me|epp)$/i;
-const LOWERCASE_CONNECTORS = new Set(["de", "da", "do", "das", "dos", "e"]);
-
-// Company.name vem cru da ingestão — muitas vezes a razão social em caixa
-// alta ("BTG PACTUAL HOLDING DE SEGUROS LTDA."). Para título e texto, tira
-// o sufixo societário e, só quando o nome inteiro está em caixa alta,
-// normaliza a caixa (siglas curtas como "BRQ" ficam como estão).
-export function companyDisplayName(rawName: string): string {
-  // Aspas soltas vindas da ingestão (ex.: `"tivit`).
-  let name = rawName
-    .replace(/["'“”‘’]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  for (let i = 0; i < 3 && LEGAL_SUFFIX.test(name); i++) {
-    name = name.replace(LEGAL_SUFFIX, "").trim();
-  }
-  if (!name) name = rawName.trim();
-  if (name !== name.toUpperCase()) return name;
-  return name
-    .split(/\s+/)
-    .map((word, index) => {
-      const lower = word.toLowerCase();
-      if (index > 0 && LOWERCASE_CONNECTORS.has(lower)) return lower;
-      if (/^[a-z]{1,3}$/i.test(word) || /[&\d]/.test(word)) return word;
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join(" ");
-}
-
 const RADAR_CRUMB = { name: "Vagas", path: "/radar" };
 
 export function areaLanding(area: string): RadarLanding | null {
@@ -361,8 +346,11 @@ export function areaJuniorLanding(area: string): RadarLanding | null {
   };
 }
 
-export function companyLanding(rawName: string): RadarLanding {
-  const display = companyDisplayName(rawName);
+// rawName é a chave (filtro e slug); display só muda o texto.
+export function companyLanding(
+  rawName: string,
+  display: string = companyDisplayName(rawName),
+): RadarLanding {
   const path = `/radar/empresa/${toCompanySlug(rawName)}`;
   return {
     kind: "company",
@@ -560,7 +548,10 @@ export function listEligibleLandings(
     push(cityLanding(city), city.count);
   }
   for (const company of index.companies) {
-    push(companyLanding(company.name), company.count);
+    push(
+      companyLanding(company.name, companyCountDisplayName(company)),
+      company.count,
+    );
   }
 
   return result;
@@ -626,7 +617,7 @@ export function landingSeoTitle(
     summary && summary.total > 0
       ? `${landing.heading}: ${formatCount(summary.total)} ${summary.total === 1 ? "vaga aberta" : "vagas abertas"}`
       : landing.heading;
-  return page > 1 ? `${base} — página ${page}` : base;
+  return page > 1 ? `${base} (página ${page})` : base;
 }
 
 function truncateAtWord(text: string, max: number): string {
@@ -648,7 +639,7 @@ export function landingSeoDescription(
   }
   const companies = summary.companies
     .slice(0, landing.kind === "company" ? 0 : 3)
-    .map((company) => companyDisplayName(company.name));
+    .map(companyCountDisplayName);
   const parts = [
     `${formatCount(summary.total)} ${landing.subject} abertas agora`,
     companies.length > 0 ? ` em empresas como ${joinList(companies)}` : "",
@@ -677,7 +668,7 @@ export function landingIntro(
   if (landing.kind !== "company") {
     const companies = summary.companies
       .slice(0, 3)
-      .map((company) => companyDisplayName(company.name));
+      .map(companyCountDisplayName);
     if (companies.length > 0) {
       sentences.push(`Quem mais contrata: ${joinList(companies)}.`);
     }
@@ -716,6 +707,15 @@ export function percent(part: number, total: number): number {
   return Math.round((part / total) * 100);
 }
 
+// landing.subject é sempre plural ("vagas remotas de Dados", "vagas que
+// pedem React"); para o texto com 1 vaga.
+function singularSubject(subject: string): string {
+  return subject
+    .replace(/^vagas remotas\b/, "vaga remota")
+    .replace(/^vagas que pedem\b/, "vaga que pede")
+    .replace(/^vagas\b/, "vaga");
+}
+
 export type LandingFaqItem = { question: string; answer: string };
 
 // Perguntas e respostas montadas com os números do recorte — conteúdo
@@ -728,7 +728,7 @@ export function landingFaq(
   const total = formatCount(summary.total);
   items.push({
     question: `Quantas ${landing.subject} estão abertas?`,
-    answer: `Agora o EarlyCV tem ${total} ${summary.total === 1 ? "vaga aberta" : "vagas abertas"} nesse recorte${summary.newLast7Days > 0 ? `, sendo ${formatCount(summary.newLast7Days)} publicadas nos últimos 7 dias` : ""}. A lista é atualizada várias vezes ao dia a partir dos sites de carreira das empresas.`,
+    answer: `${total} ${summary.total === 1 ? `${singularSubject(landing.subject)} aberta` : `${landing.subject} abertas`} agora${summary.newLast7Days > 0 ? `, ${formatCount(summary.newLast7Days)} ${summary.newLast7Days === 1 ? "publicada" : "publicadas"} nos últimos 7 dias` : ""}. A lista é atualizada várias vezes ao dia e você vê quais combinam com seu currículo.`,
   });
 
   const remote = summary.workModels.find((item) => item.value === "remote");
@@ -745,7 +745,7 @@ export function landingFaq(
   if (landing.kind !== "company" && summary.companies.length > 0) {
     const companies = summary.companies
       .slice(0, 5)
-      .map((company) => companyDisplayName(company.name));
+      .map(companyCountDisplayName);
     items.push({
       question: "Quais empresas estão contratando?",
       answer: `As empresas com mais vagas abertas agora são ${joinList(companies)}.`,
@@ -941,8 +941,8 @@ export function jobLandingLinks(
       links.push({ href: area.path, label: `← Todas as ${area.subject}` });
     }
     links.push({
-      href: companyLanding(job.company).path,
-      label: `Vagas ${companyDisplayName(job.company)}`,
+      href: companyLanding(job.company, jobCompanyDisplayName(job)).path,
+      label: `Vagas ${jobCompanyDisplayName(job)}`,
     });
     if (isRemote) {
       links.push({ href: remoteLanding().path, label: "Ver vagas remotas" });
@@ -965,8 +965,8 @@ export function jobLandingLinks(
     });
   }
   candidates.push({
-    landing: companyLanding(job.company),
-    label: `Vagas ${companyDisplayName(job.company)}`,
+    landing: companyLanding(job.company, jobCompanyDisplayName(job)),
+    label: `Vagas ${jobCompanyDisplayName(job)}`,
   });
   if (job.city && job.state) {
     const jobCitySlug = toCompanySlug(job.city);

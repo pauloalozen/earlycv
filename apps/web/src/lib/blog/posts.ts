@@ -119,5 +119,8 @@ export function getBlogSitemapEntries() {
     lastModified: new Date(post.updatedAt || post.publishedAt),
     priority: 0.65,
     slug: post.slug,
+    // Canonical customizado do frontmatter: o sitemap descarta o post quando
+    // ele aponta pra outra URL.
+    canonical: post.canonical,
   }));
 }

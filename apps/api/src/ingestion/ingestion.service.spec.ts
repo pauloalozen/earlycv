@@ -12,6 +12,7 @@ import { CompaniesModule } from "../companies/companies.module";
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesModule } from "../job-sources/job-sources.module";
+import { JobLifecycle } from "../jobs/job-lifecycle.service";
 import { IngestionFetchError } from "./errors";
 import { IngestionModule } from "./ingestion.module";
 import { IngestionService } from "./ingestion.service";
@@ -192,17 +193,6 @@ function createIngestionServiceFixture(options?: {
     },
   };
 
-  const indexingCalls: Array<{ slug: string; type: "indexing" | "removal" }> =
-    [];
-  const googleIndexingService = {
-    notifyIndexing: async (slug: string) => {
-      indexingCalls.push({ slug, type: "indexing" });
-    },
-    notifyRemoval: async (slug: string) => {
-      indexingCalls.push({ slug, type: "removal" });
-    },
-  };
-
   const revalidationCalls: Array<{ slug: string | null; reason: string }> = [];
   const webRevalidation = {
     requestJobRevalidation: (slug: string | null, reason: string) => {
@@ -212,6 +202,49 @@ function createIngestionServiceFixture(options?: {
       }
     },
   };
+
+  // JobLifecycle de verdade sobre o banco fake: o fluxo de vaga parada passa
+  // por closeJobs (status + URL_DELETED + revalidação) e o upsert por
+  // onStatusChanged. A fila da Indexing API é um fake que registra.
+  const indexingCalls: Array<{ slug: string; type: "indexing" | "removal" }> =
+    [];
+  const indexingQueue = {
+    enqueue: async (
+      items: Array<{ slug: string; type: "URL_UPDATED" | "URL_DELETED" }>,
+    ) => {
+      for (const item of items) {
+        indexingCalls.push({
+          slug: item.slug,
+          type: item.type === "URL_DELETED" ? "removal" : "indexing",
+        });
+      }
+      return items.length;
+    },
+  };
+  const lifecycleDatabase = {
+    job: {
+      // closeJobs consulta com { AND: [where, { status: { not } }] }; o fake
+      // do banco entende o where original.
+      findMany: async ({
+        where,
+      }: {
+        where: { AND?: Array<Record<string, unknown>> };
+      }) => {
+        const original = where.AND?.[0] ?? where;
+        const rows = await database.job.findMany({ where: original });
+        return rows.map((row) => ({ ...row, id: row.slug, status: "active" }));
+      },
+      updateMany: async () => ({ count: 0 }),
+    },
+  };
+  const jobLifecycle = new JobLifecycle(
+    lifecycleDatabase as never,
+    indexingQueue,
+    {
+      requestJobRevalidation: (slug, reason) =>
+        webRevalidation.requestJobRevalidation(slug ?? null, reason),
+    },
+  );
 
   const adapter = {
     sourceType: "custom_html" as const,
@@ -253,7 +286,7 @@ function createIngestionServiceFixture(options?: {
     { sourceType: "pandape", collect: async () => [] } as never,
     { sourceType: "eightfold", collect: async () => [] } as never,
     { sourceType: "solides", collect: async () => [] } as never,
-    googleIndexingService as never,
+    jobLifecycle as never,
     webRevalidation as never,
   );
 

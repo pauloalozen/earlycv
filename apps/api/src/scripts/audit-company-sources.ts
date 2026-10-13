@@ -24,12 +24,14 @@
 import { PrismaClient } from "@prisma/client";
 import type { DatabaseService } from "../database/database.service";
 import { CompanySourceAuditService } from "../ingestion/company-source-audit.service";
+import { buildScriptJobLifecycle } from "./support-job-lifecycle";
 
 async function main() {
   const prisma = new PrismaClient();
   try {
     const service = new CompanySourceAuditService(
       prisma as unknown as DatabaseService,
+      buildScriptJobLifecycle(prisma),
     );
     const summary = await service.runAudit();
     console.log(

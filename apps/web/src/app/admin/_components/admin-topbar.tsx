@@ -32,6 +32,11 @@ const NAV_ITEMS = [
     label: "Curadoria de Vagas",
     href: "/admin/curadoria-vagas",
   },
+  {
+    id: "vagas-em-revisao",
+    label: "Vagas em Revisão",
+    href: "/admin/vagas-em-revisao",
+  },
   { id: "templates", label: "Templates", href: "/admin/templates" },
   { id: "cv-benchmark", label: "CV Benchmark", href: "/admin/cv-benchmark" },
   {

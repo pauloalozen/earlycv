@@ -9,6 +9,7 @@ import {
   GoogleIndexingBackfillService,
   type IndexingStatus,
 } from "./google-indexing-backfill.service";
+import { GoogleIndexingQueueService } from "./google-indexing-queue.service";
 
 const INDEXING_STATUSES: IndexingStatus[] = ["pending", "notified", "failed"];
 
@@ -26,7 +27,16 @@ export class GoogleIndexingAdminController {
   constructor(
     @Inject(GoogleIndexingBackfillService)
     private readonly backfillService: GoogleIndexingBackfillService,
+    @Inject(GoogleIndexingQueueService)
+    private readonly queueService: GoogleIndexingQueueService,
   ) {}
+
+  // Painel da fila: pendentes por tipo, enviados hoje e cota restante.
+  @Get("queue-status")
+  async getQueueStatus(@Res({ passthrough: true }) response: Response) {
+    response.setHeader("Cache-Control", "no-store");
+    return this.queueService.getPanel();
+  }
 
   @Get("backfill-status")
   async getBackfillStatus(@Res({ passthrough: true }) response: Response) {

@@ -58,7 +58,9 @@ export async function generateMetadata({
       publishedTime: post.publishedAt,
       title,
       type: "article",
-      url: ownUrl,
+      // og:url sempre igual ao canonical, inclusive no canonical customizado
+      // do frontmatter.
+      url: canonical,
     },
     robots: { follow: true, index: true },
     title,

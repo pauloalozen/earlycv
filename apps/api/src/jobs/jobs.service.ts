@@ -1,3 +1,4 @@
+import { resolveCompanyDisplayName } from "@earlycv/config/job-display";
 import {
   BadRequestException,
   ConflictException,
@@ -15,18 +16,20 @@ import {
 import { CompaniesService } from "../companies/companies.service";
 import { DatabaseService } from "../database/database.service";
 import { JobSourcesService } from "../job-sources/job-sources.service";
-import { formatCompanyDisplayName } from "./company-display-name";
 import { diversifyByCompany } from "./diversify-by-company";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import { normalizeState } from "./geo-normalizer";
-import { toCompanySlug } from "./public-job-view";
+import { JobLifecycleService } from "./job-lifecycle.service";
+import { PUBLIC_JOB_INTEGRITY_WHERE } from "./public-job-integrity";
+import { jobIdFromPublicSlug, toCompanySlug } from "./public-job-view";
 
 const PUBLIC_JOB_SELECT = {
   canonicalKey: true,
   city: true,
   company: {
     select: {
+      displayName: true,
       name: true,
       websiteUrl: true,
       logoUrl: true,
@@ -51,34 +54,6 @@ const PUBLIC_JOB_SELECT = {
   title: true,
   workModel: true,
 } satisfies Prisma.JobSelect;
-
-// Captura falhou (ex: Gupy devolveu detail sem conteudo, ou payload sem
-// titulo) — a vaga fica visivel só pro admin (getById), nunca pro público,
-// mesmo que status siga "active". Reaproveitado em toda query pública.
-const PUBLIC_JOB_INTEGRITY_WHERE = {
-  descriptionClean: { not: "" },
-  title: { not: "" },
-  // Vagas sem slug (ainda não backfilled após a migration que adicionou o
-  // campo) ficam fora do público até o backfill rodar — evita link quebrado
-  // /vagas/null-... antes do backfill manual.
-  slug: { not: null },
-  // Vaga ainda PENDING/PROCESSING/FAILED/SKIPPED de enriquecimento não tem
-  // dominantArea/technologies/seniority — sem isso o Radar não calcula
-  // compatibilidade nenhuma pra ninguém, então ela não entra no portal até
-  // o enriquecimento terminar (worker assíncrono, ver
-  // ingestion.service.ts). Decisão de produto: vaga "crua" não é conteúdo
-  // publicável, nem pro anônimo nem pro logado.
-  //
-  // dominantArea=OTHER ("Geral" no filtro) é o catch-all do LLM pra vaga
-  // fora da taxonomia tech (RH, jurídico, engenharia não-tech etc.) — boards
-  // globais (Workday/Greenhouse) trazem essas vagas junto com as tech de
-  // verdade. Decisão de produto: não é o público do radar, nunca aparece no
-  // portal (nem listagem, nem facet, nem /radar/[slug] direto).
-  enrichment: {
-    enrichmentStatus: "COMPLETED",
-    dominantArea: { not: "OTHER" },
-  },
-} satisfies Prisma.JobWhereInput;
 
 function splitCsv(value: string): string[] {
   return value
@@ -195,6 +170,8 @@ export class JobsService {
     private readonly companiesService: CompaniesService,
     @Inject(JobSourcesService)
     private readonly jobSourcesService: JobSourcesService,
+    @Inject(JobLifecycleService)
+    private readonly jobLifecycle: JobLifecycleService,
   ) {}
 
   async create(dto: CreateJobDto) {
@@ -386,6 +363,24 @@ export class JobsService {
     });
   }
 
+  // Slug que não existe mais (regenerado: título corrigido, empresa
+  // reatribuída). Devolve o slug atual da mesma vaga pelo id no fim do slug,
+  // para a página responder 308. Só vaga que um dia pôde ser pública.
+  async getCurrentPublicSlug(staleSlug: string): Promise<string | null> {
+    const id = jobIdFromPublicSlug(staleSlug);
+    if (!id) return null;
+    const job = await this.database.job.findFirst({
+      where: {
+        id,
+        status: { in: ["active", "inactive", "removed"] },
+        ...PUBLIC_JOB_INTEGRITY_WHERE,
+      },
+      select: { slug: true },
+    });
+    if (!job?.slug || job.slug === staleSlug) return null;
+    return job.slug;
+  }
+
   // Usado por /radar/empresa/[empresa]. Company não tem campo de slug
   // persistido, então o casamento é feito em memória: pega o nome de cada
   // empresa com pelo menos 1 vaga pública, computa o slug (toCompanySlug,
@@ -430,13 +425,18 @@ export class JobsService {
       where: { status: "active", ...PUBLIC_JOB_INTEGRITY_WHERE },
       select: {
         companyId: true,
-        company: { select: { name: true, logoUrl: true } },
+        company: { select: { displayName: true, name: true, logoUrl: true } },
       },
     });
 
     const byCompany = new Map<
       string,
-      { name: string; logoUrl: string | null; jobCount: number }
+      {
+        displayName: string | null;
+        name: string;
+        logoUrl: string | null;
+        jobCount: number;
+      }
     >();
     for (const job of activeJobs) {
       const existing = byCompany.get(job.companyId);
@@ -444,6 +444,7 @@ export class JobsService {
         existing.jobCount += 1;
       } else {
         byCompany.set(job.companyId, {
+          displayName: job.company.displayName,
           name: job.company.name,
           logoUrl: job.company.logoUrl,
           jobCount: 1,
@@ -455,7 +456,7 @@ export class JobsService {
       .sort((a, b) => b.jobCount - a.jobCount)
       .slice(0, limit)
       .map((company) => ({
-        name: formatCompanyDisplayName(company.name),
+        name: resolveCompanyDisplayName(company),
         slug: toCompanySlug(company.name),
         logoUrl: company.logoUrl,
         jobCount: company.jobCount,
@@ -631,7 +632,14 @@ export class JobsService {
     const select = {
       canonicalKey: true,
       city: true,
-      company: { select: { name: true, websiteUrl: true, logoUrl: true } },
+      company: {
+        select: {
+          displayName: true,
+          name: true,
+          websiteUrl: true,
+          logoUrl: true,
+        },
+      },
       country: true,
       descriptionClean: true,
       descriptionRaw: true,
@@ -719,7 +727,14 @@ export class JobsService {
       where: { ...where, ...(jobIds ? { id: { in: jobIds } } : {}) },
       include: {
         enrichment: true,
-        company: { select: { name: true, websiteUrl: true, logoUrl: true } },
+        company: {
+          select: {
+            displayName: true,
+            name: true,
+            websiteUrl: true,
+            logoUrl: true,
+          },
+        },
       },
     });
   }
@@ -836,7 +851,7 @@ export class JobsService {
       dto.lastSeenAt,
     );
 
-    return this.database.job.update({
+    const updated = await this.database.job.update({
       where: { id: jobId },
       data: {
         ...dto,
@@ -848,6 +863,24 @@ export class JobsService {
             : new Date(dto.publishedAtSource),
       },
     });
+
+    // Status alterado à mão no admin: mesmos efeitos do JobLifecycle
+    // (Indexing API e cache do front).
+    if (dto.status && dto.status !== currentJob.status) {
+      await this.jobLifecycle.onStatusChanged({
+        from: currentJob.status,
+        slug: currentJob.slug,
+        to: dto.status,
+      });
+      if (currentJob.slug) {
+        this.jobLifecycle.revalidateAfterCommit(
+          [currentJob.slug],
+          dto.status === "active" ? "published" : "inactivated",
+        );
+      }
+    }
+
+    return updated;
   }
 
   // Correção manual de classificação errada do enrichment (ex: LLM jogou em
@@ -890,17 +923,34 @@ export class JobsService {
   async bulkSetStatusByJobSource(jobSourceId: string, status: JobStatus) {
     const jobSource = await this.jobSourcesService.getById(jobSourceId);
 
-    const { count } = await this.database.job.updateMany({
-      data: { status },
-      where: { jobSourceId: jobSource.id },
-    });
+    const where = { jobSourceId: jobSource.id };
+    const { count } =
+      status === "active"
+        ? await this.jobLifecycle.activateJobs({
+            reason: "admin-bulk-status-by-source",
+            where,
+          })
+        : await this.jobLifecycle.closeJobs({
+            reason: "admin-bulk-status-by-source",
+            status,
+            where,
+          });
 
     return { count, status } as const;
   }
 
   async remove(jobId: string) {
-    await this.getById(jobId);
+    const job = await this.getById(jobId);
+    // Vaga apagada que estava no radar: tira do índice do Google antes (a
+    // pendência não depende do Job existir).
+    await this.jobLifecycle.onStatusChanged({
+      from: job.status,
+      slug: job.slug,
+      to: "removed",
+    });
     await this.database.job.delete({ where: { id: jobId } });
+    if (job.slug)
+      this.jobLifecycle.revalidateAfterCommit([job.slug], "inactivated");
 
     return { ok: true } as const;
   }

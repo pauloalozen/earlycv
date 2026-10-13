@@ -15,8 +15,8 @@ import type {
 } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
-import { isForeignLocation } from "../jobs/geo-normalizer";
+import { classifyJobLocation } from "../jobs/geo-normalizer";
+import { JobLifecycleService } from "../jobs/job-lifecycle.service";
 import { buildPublicJobSlug } from "../jobs/public-job-view";
 import { WebRevalidationService } from "../web-revalidation/web-revalidation.service";
 import {
@@ -35,7 +35,10 @@ import {
   WorkdayAdapter,
 } from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
+import { withCleanTitle } from "./clean-title";
+import { resolveEmploymentType } from "./employment-type";
 import { isForbiddenIngestionError } from "./errors";
+import { withNormalizedLocation } from "./location-normalization";
 import { getStaleCutoff } from "./stale-policy";
 import type {
   IngestionCollectContext,
@@ -128,8 +131,8 @@ export class IngestionService {
     @Inject(PandapeAdapter) pandapeAdapter: PandapeAdapter,
     @Inject(EightfoldAdapter) eightfoldAdapter: EightfoldAdapter,
     @Inject(SolidesAdapter) solidesAdapter: SolidesAdapter,
-    @Inject(GoogleIndexingService)
-    private readonly googleIndexingService: GoogleIndexingService,
+    @Inject(JobLifecycleService)
+    private readonly jobLifecycle: JobLifecycleService,
     // Opcional e por último: cache do front (ISR do detalhe da vaga). Nunca
     // lança nem bloqueia — ver WebRevalidationService.
     @Optional()
@@ -916,30 +919,59 @@ export class IngestionService {
 
   private async upsertObservation(
     jobSource: JobSourceContext,
-    observation: NormalizedJobObservation,
+    rawObservation: NormalizedJobObservation,
   ) {
+    const cleanObservation = withCleanTitle(rawObservation);
     // Vagas de boards globais (Workday/Greenhouse/Ashby de empresas com
     // operação Brasil, mas board único mundial) trazem vaga de qualquer
-    // país junto com as brasileiras. isForeignLocation() usa o country
+    // país junto com as brasileiras. classifyJobLocation() usa o country
     // real da fonte (sem o fallback "Brasil" que os adapters aplicavam
-    // antes — ver comentário em cada adapter) e, quando ele vem vazio, cai
-    // pro state batendo com estado americano/país estrangeiro reconhecido.
-    // Rejeitada aqui, a vaga nunca chega a ser criada/atualizada — não tem
-    // Job nem JobEnrichment, então nunca aparece pro público.
-    if (isForeignLocation(observation.country, observation.state)) {
+    // antes — ver comentário em cada adapter), o state, a cidade e o
+    // locationText. Estrangeira: rejeitada aqui, a vaga nunca chega a ser
+    // criada/atualizada — não tem Job nem JobEnrichment, então nunca aparece
+    // pro público.
+    const locationClass = classifyJobLocation({
+      city: cleanObservation.city,
+      country: cleanObservation.country,
+      isGlobalBoard: jobSource.isGlobalBoard,
+      locationText: cleanObservation.locationText,
+      state: cleanObservation.state,
+    });
+    if (locationClass === "foreign") {
       return {
         previewItem: {
           action: "skipped",
-          canonicalKey: observation.canonicalKey,
-          message: `Skipped non-Brazilian job location (country=${observation.country ?? "null"}, state=${observation.state ?? "null"}).`,
-          title: observation.title,
+          canonicalKey: cleanObservation.canonicalKey,
+          message: `Skipped non-Brazilian job location (country=${cleanObservation.country ?? "null"}, state=${cleanObservation.state ?? "null"}, location=${cleanObservation.locationText ?? "null"}).`,
+          title: cleanObservation.title,
         } satisfies IngestionPreviewItem,
       };
     }
+    // Cidade/UF canônicas só depois de a vaga ser classificada como do
+    // Brasil (ou em revisão) com os dados crus: o parser nunca transforma
+    // vaga estrangeira em brasileira ("Toledo, Ohio" não vira Toledo/PR).
+    const observation = withNormalizedLocation(cleanObservation);
 
     const existingJob = await this.database.job.findUnique({
       where: { canonicalKey: observation.canonicalKey },
     });
+
+    // Só "Remote" vindo de board global: não dá pra saber se é do Brasil.
+    // Vaga nova entra em pending_review (fora do radar até revisão no
+    // admin); vaga já aprovada (reviewApprovedAt) segue normal; vaga
+    // rejeitada (removed) não volta.
+    const needsReview =
+      locationClass === "review" && !existingJob?.reviewApprovedAt;
+    if (needsReview && existingJob?.status === "removed") {
+      return {
+        previewItem: {
+          action: "skipped",
+          canonicalKey: observation.canonicalKey,
+          message: "Skipped job rejected in location review.",
+          title: observation.title,
+        } satisfies IngestionPreviewItem,
+      };
+    }
     const normalizedSourceJobUrl = normalizeUrl(observation.sourceJobUrl);
     const firstSeenAt =
       existingJob?.firstSeenAt ?? new Date(observation.firstSeenAt);
@@ -984,6 +1016,12 @@ export class IngestionService {
       };
     }
 
+    const { employmentType, employmentTypeRaw } = resolveEmploymentType({
+      employmentType: observation.employmentType,
+      employmentTypeRaw: observation.employmentTypeRaw,
+      title: observation.title,
+    });
+
     const payload = {
       city: observation.city,
       companyId: jobSource.company.id,
@@ -995,7 +1033,8 @@ export class IngestionService {
       country: observation.country ?? "Brasil",
       descriptionClean: observation.descriptionClean,
       descriptionRaw: observation.descriptionRaw,
-      employmentType: observation.employmentType,
+      employmentType,
+      employmentTypeRaw,
       externalJobId: observation.externalJobId,
       firstSeenAt,
       jobSourceId: jobSource.id,
@@ -1011,7 +1050,9 @@ export class IngestionService {
       seniorityLevel: observation.seniorityLevel,
       sourceJobUrl: normalizedSourceJobUrl,
       state: observation.state,
-      status: observation.status ?? "active",
+      status: needsReview
+        ? ("pending_review" as const)
+        : (observation.status ?? "active"),
       title: observation.title,
       workModel: observation.workModel,
     };
@@ -1029,6 +1070,7 @@ export class IngestionService {
           descriptionClean: undefined,
           descriptionRaw: undefined,
           employmentType: undefined,
+          employmentTypeRaw: undefined,
           locationText: undefined,
           metadataJson: undefined,
           normalizedTitle: undefined,
@@ -1092,7 +1134,20 @@ export class IngestionService {
 
     // Cache do front (ISR do detalhe): vaga que muda de status ou de
     // conteúdo. Só enfileira (não lança/bloqueia); o TTL cobre falhas.
-    const nextStatus = observation.status ?? "active";
+    // Indexing API: mesma regra do JobLifecycle (saiu do radar -> DELETED,
+    // voltou -> UPDATED).
+    const nextStatus = payload.status;
+    await this.jobLifecycle
+      .onStatusChanged({
+        from: existingJob.status,
+        slug: existingJob.slug,
+        to: nextStatus,
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `indexing enqueue failed for ${existingJob.slug ?? existingJob.id}: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+      });
     if (existingJob.status === "active" && nextStatus !== "active") {
       this.requestWebRevalidation(existingJob.slug, "inactivated");
     } else if (existingJob.status !== "active" && nextStatus === "active") {
@@ -1157,32 +1212,14 @@ export class IngestionService {
       lastSeenAt: { lt: cutoff },
     };
 
-    // Busca os slugs antes do updateMany — updateMany não devolve as linhas
-    // afetadas, e o Google Indexing API precisa saber qual URL cada vaga
-    // inativada tinha pra pedir a deindexação (ver notifyRemoval abaixo).
-    const staleJobs = await this.database.job.findMany({
+    // JobLifecycle: muda o status, enfileira URL_DELETED de cada vaga que
+    // estava no radar e pede a revalidação do cache do front.
+    const { count } = await this.jobLifecycle.closeJobs({
+      reason: "stale-source-jobs",
+      status: "inactive",
       where,
-      select: { slug: true },
     });
 
-    const result = await this.database.job.updateMany({
-      where,
-      data: {
-        status: "inactive",
-      },
-    });
-
-    // Invalida o cache do front ANTES do laço do Google (que é awaited e
-    // lento): só enfileira, nunca lança nem bloqueia a ingestão.
-    for (const job of staleJobs) {
-      this.requestWebRevalidation(job.slug, "inactivated");
-    }
-
-    for (const job of staleJobs) {
-      if (!job.slug) continue;
-      await this.googleIndexingService.notifyRemoval(job.slug);
-    }
-
-    return result.count;
+    return count;
   }
 }

@@ -92,6 +92,9 @@ export type JobSourceContext = Pick<
     name: string;
     normalizedName: string;
   };
+  // Opcional: contextos sintéticos (sondagem de descoberta) não são board
+  // global. Ver JobSource.isGlobalBoard.
+  isGlobalBoard?: boolean;
 };
 
 export type IngestionRunSummary = {

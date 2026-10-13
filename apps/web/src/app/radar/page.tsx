@@ -16,19 +16,19 @@ import { RadarViewTracker } from "./radar-view-tracker";
 export function generateMetadata(): Metadata {
   const url = getAbsoluteUrl("/radar");
   return {
-    title: { absolute: "Vagas em Tech | Radar de Oportunidades — EarlyCV" },
+    title: { absolute: "Vagas em Tech | Radar de Oportunidades | EarlyCV" },
     description:
       "Encontre vagas de tecnologia, dados e produto com score de compatibilidade personalizado. Adapte seu CV em segundos.",
     alternates: { canonical: url },
     openGraph: {
-      title: "Radar de Oportunidades — Vagas Tech | EarlyCV",
+      title: "Radar de Oportunidades: Vagas Tech | EarlyCV",
       description:
         "Vagas de tech com score de compatibilidade para o seu perfil.",
       url,
       type: "website",
     },
     twitter: {
-      title: "Radar de Oportunidades — Vagas Tech | EarlyCV",
+      title: "Radar de Oportunidades: Vagas Tech | EarlyCV",
       description:
         "Vagas de tech com score de compatibilidade para o seu perfil.",
     },

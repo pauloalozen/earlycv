@@ -30,19 +30,19 @@ const url = getAbsoluteUrl("/analise-de-curriculo");
 export const metadata: Metadata = {
   title: "Análise de Currículo com Score ATS Grátis",
   description:
-    "Descubra por que seu currículo está sendo eliminado antes de alguém ler. Receba um score ATS de 0 a 100, com keywords, lacunas e sugestões de ajuste — grátis.",
+    "Descubra por que seu currículo está sendo eliminado antes de alguém ler. Receba um score ATS de 0 a 100, com keywords, lacunas e sugestões de ajuste. Grátis.",
   alternates: { canonical: url },
   openGraph: {
     title: "Análise de Currículo com Score ATS Grátis | EarlyCV",
     description:
-      "Score ATS de 0 a 100, keywords ausentes e sugestões de ajuste — vaga por vaga.",
+      "Score ATS de 0 a 100, keywords ausentes e sugestões de ajuste, vaga por vaga.",
     url,
     type: "website",
   },
   twitter: {
     title: "Análise de Currículo com Score ATS Grátis | EarlyCV",
     description:
-      "Score ATS de 0 a 100, keywords ausentes e sugestões de ajuste — vaga por vaga.",
+      "Score ATS de 0 a 100, keywords ausentes e sugestões de ajuste, vaga por vaga.",
   },
 };
 

@@ -546,23 +546,27 @@ test("listAdmin combines search and radarVisibilityFilter=oculta as independent 
   );
 });
 
-test("bulkSetStatusByJobSource atualiza status de todas as vagas da fonte e valida que a fonte existe", async () => {
-  const updateManyCalls: Array<{ where: unknown; data: unknown }> = [];
-  const database = {
-    job: {
-      updateMany: async (args: { where: unknown; data: unknown }) => {
-        updateManyCalls.push(args);
-        return { count: 5 };
-      },
+test("bulkSetStatusByJobSource fecha as vagas da fonte pelo JobLifecycle e valida que a fonte existe", async () => {
+  const closeCalls: Array<{ where: unknown; status: string }> = [];
+  const activateCalls: Array<{ where: unknown }> = [];
+  const jobLifecycle = {
+    activateJobs: async (args: { where: unknown }) => {
+      activateCalls.push(args);
+      return { count: 2, slugs: [] };
+    },
+    closeJobs: async (args: { where: unknown; status: string }) => {
+      closeCalls.push(args);
+      return { count: 5, slugs: [] };
     },
   };
   const jobSourcesService = {
     getById: async (id: string) => ({ id }),
   };
   const service = new JobsService(
-    database as never,
+    {} as never,
     undefined as never,
     jobSourcesService as never,
+    jobLifecycle as never,
   );
 
   const result = await service.bulkSetStatusByJobSource(
@@ -571,8 +575,16 @@ test("bulkSetStatusByJobSource atualiza status de todas as vagas da fonte e vali
   );
 
   assert.deepEqual(result, { count: 5, status: "inactive" });
-  assert.deepEqual(updateManyCalls[0]?.where, { jobSourceId: "source-1" });
-  assert.deepEqual(updateManyCalls[0]?.data, { status: "inactive" });
+  assert.deepEqual(closeCalls[0]?.where, { jobSourceId: "source-1" });
+  assert.equal(closeCalls[0]?.status, "inactive");
+
+  // Reativar a fonte inteira passa por activateJobs (enfileira URL_UPDATED).
+  const reactivated = await service.bulkSetStatusByJobSource(
+    "source-1",
+    "active" as never,
+  );
+  assert.deepEqual(reactivated, { count: 2, status: "active" });
+  assert.deepEqual(activateCalls[0]?.where, { jobSourceId: "source-1" });
 });
 
 test("bulkSetStatusByJobSource propaga erro quando a fonte não existe (getById lança)", async () => {
@@ -637,4 +649,56 @@ test("listPublicFiltered diversifies companies over the whole ordered set before
     ["a4", "c1", "a5"],
   );
   assert.equal(page1.total, 7);
+});
+
+test("getCurrentPublicSlug devolve o slug atual da vaga pelo id no fim do slug antigo", async () => {
+  const calls: unknown[] = [];
+  const database = {
+    job: {
+      findFirst: async (args: { where: unknown }) => {
+        calls.push(args.where);
+        return { slug: "dev-java-acme-cmg1abcdefghijklmnopqrstu" };
+      },
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  const slug = await service.getCurrentPublicSlug(
+    "job-32186-dev-java-acme-cmg1abcdefghijklmnopqrstu",
+  );
+
+  assert.equal(slug, "dev-java-acme-cmg1abcdefghijklmnopqrstu");
+  const where = calls[0] as {
+    id: string;
+    enrichment?: { enrichmentStatus?: string };
+  };
+  assert.equal(where.id, "cmg1abcdefghijklmnopqrstu");
+  assert.equal(where.enrichment?.enrichmentStatus, "COMPLETED");
+});
+
+test("getCurrentPublicSlug devolve null quando o slug já é o atual ou não tem id", async () => {
+  const database = {
+    job: {
+      findFirst: async () => ({
+        slug: "dev-java-acme-cmg1abcdefghijklmnopqrstu",
+      }),
+    },
+  };
+  const service = new JobsService(
+    database as never,
+    undefined as never,
+    undefined as never,
+  );
+
+  assert.equal(
+    await service.getCurrentPublicSlug(
+      "dev-java-acme-cmg1abcdefghijklmnopqrstu",
+    ),
+    null,
+  );
+  assert.equal(await service.getCurrentPublicSlug("nao-existe"), null);
 });

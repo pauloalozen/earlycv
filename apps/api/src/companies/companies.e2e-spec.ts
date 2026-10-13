@@ -107,7 +107,7 @@ test("company endpoints reject authenticated product users without internal admi
   const user = await registerUser(app, database, "company-forbidden");
 
   await request(app.getHttpServer())
-    .get("/api/companies")
+    .get("/api/companies/paginated")
     .set("Authorization", `Bearer ${user.accessToken}`)
     .expect(403);
 
@@ -143,14 +143,16 @@ test("company endpoints create, update, list, and delete catalog records with no
   assert.equal(createResponse.body.name, createdName);
   assert.equal(createResponse.body.normalizedName, createdNormalizedName);
 
+  // A listagem é paginada no banco (o antigo GET /companies saiu); a busca
+  // pelo rótulo único isola a empresa deste teste.
   await request(server)
-    .get("/api/companies")
+    .get(`/api/companies/paginated?search=${companyLabel}`)
     .set("Authorization", `Bearer ${user.accessToken}`)
     .expect(200)
     .expect(({ body }) => {
-      assert.equal(Array.isArray(body), true);
+      assert.equal(Array.isArray(body.rows), true);
       assert.equal(
-        body.some(
+        body.rows.some(
           (company: { id: string; normalizedName: string }) =>
             company.id === (createResponse.body.id as string) &&
             company.normalizedName === createdNormalizedName,
@@ -184,12 +186,12 @@ test("company endpoints create, update, list, and delete catalog records with no
     });
 
   await request(server)
-    .get("/api/companies")
+    .get(`/api/companies/paginated?search=${companyLabel}`)
     .set("Authorization", `Bearer ${user.accessToken}`)
     .expect(200)
     .expect(({ body }) => {
       assert.equal(
-        body.some(
+        body.rows.some(
           (company: { id: string }) =>
             company.id === (createResponse.body.id as string),
         ),

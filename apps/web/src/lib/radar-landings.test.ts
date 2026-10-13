@@ -114,6 +114,45 @@ describe("companyDisplayName", () => {
     expect(companyDisplayName("Itaú Unibanco")).toBe("Itaú Unibanco");
     expect(companyDisplayName("AB InBev Brasil")).toBe("AB InBev Brasil");
   });
+
+  it("mantém siglas de até 4 letras e aplica a grafia oficial de marcas", () => {
+    expect(companyDisplayName("CPFL SERVICOS")).toBe("CPFL Servicos");
+    expect(companyDisplayName("AACD")).toBe("AACD");
+    expect(companyDisplayName("CCEE")).toBe("CCEE");
+    expect(companyDisplayName("TOTVS S.A.")).toBe("TOTVS");
+    expect(companyDisplayName("PAGBANK")).toBe("PagBank");
+    expect(companyDisplayName("ITAU UNIBANCO S.A.")).toBe("Itaú Unibanco");
+    expect(companyDisplayName("XP INVESTIMENTOS CCTVM S.A.")).toBe(
+      "XP Investimentos CCTVM",
+    );
+    expect(
+      companyDisplayName("IFOOD.COM AGENCIA DE RESTAURANTES ONLINE S.A."),
+    ).toBe("iFood.com Agencia de Restaurantes Online");
+    // 5+ letras sem grafia no mapa viram nome normal.
+    expect(companyDisplayName("ALGAR")).toBe("Algar");
+    expect(companyDisplayName("STEFANINI")).toBe("Stefanini");
+    // Palavras de 4 letras que são nome (mapa) x siglas (ficam em caixa alta).
+    expect(companyDisplayName("CASA GRANADO")).toBe("Casa Granado");
+    expect(companyDisplayName("RUMO S/A")).toBe("Rumo");
+    expect(companyDisplayName("C.VALE")).toBe("C.Vale");
+    expect(companyDisplayName("GIRO.TECH")).toBe("Giro.Tech");
+    expect(companyDisplayName("FISIA (NIKE)")).toBe("Fisia (Nike)");
+    expect(companyDisplayName("TSEA ENERGIA (TOSHIBA)")).toBe(
+      "TSEA Energia (Toshiba)",
+    );
+    expect(companyDisplayName("FMU FIAM FAAM")).toBe("FMU FIAM FAAM");
+    // LTDA no meio do nome e "em recuperação judicial" saem.
+    expect(
+      companyDisplayName(
+        "MOBLY COMERCIO VAREJISTA LTDA - EM RECUPERACAO JUDICIAL",
+      ),
+    ).toBe("Mobly Comercio Varejista");
+    expect(companyDisplayName("Oi S.A., em Recuperação Judicial")).toBe("Oi");
+    // Travessão do dado vira vírgula (regra de copy: sem travessão em título).
+    expect(companyDisplayName("Vivo – Áreas Técnicas")).toBe(
+      "Vivo, Áreas Técnicas",
+    );
+  });
 });
 
 describe("tecnologias", () => {
@@ -174,7 +213,7 @@ describe("textos da landing", () => {
       "Vagas remotas de tecnologia: 1.338 vagas abertas",
     );
     expect(landingSeoTitle(remoteLanding(), SUMMARY, 3)).toBe(
-      "Vagas remotas de tecnologia: 1.338 vagas abertas — página 3",
+      "Vagas remotas de tecnologia: 1.338 vagas abertas (página 3)",
     );
     expect(landingSeoTitle(remoteLanding(), null, 1)).toBe(
       "Vagas remotas de tecnologia",
@@ -196,6 +235,10 @@ describe("textos da landing", () => {
 
     const faq = landingFaq(dataAiLanding(), SUMMARY);
     expect(faq[0]?.answer).toContain("1.338");
+    expect(faq[0]?.answer).not.toMatch(/[—–]/);
+    expect(faq[0]?.answer).toContain(
+      "você vê quais combinam com seu currículo",
+    );
     // recorte sem filtro de modalidade: pergunta sobre home office com %
     expect(faq.some((item) => item.answer.includes("45%"))).toBe(true);
     // landing remota não pergunta se há vaga remota
@@ -204,6 +247,18 @@ describe("textos da landing", () => {
         item.question.startsWith("Existem"),
       ),
     ).toBe(false);
+  });
+
+  it("FAQ de contagem: plural com os 7 dias, singular e sem os 7 dias quando N = 0", () => {
+    expect(landingFaq(remoteLanding(), SUMMARY)[0]?.answer).toBe(
+      "1.338 vagas remotas (home office) de tecnologia abertas agora, 203 publicadas nos últimos 7 dias. A lista é atualizada várias vezes ao dia e você vê quais combinam com seu currículo.",
+    );
+    expect(
+      landingFaq(remoteLanding(), { ...SUMMARY, total: 1, newLast7Days: 0 })[0]
+        ?.answer,
+    ).toBe(
+      "1 vaga remota (home office) de tecnologia aberta agora. A lista é atualizada várias vezes ao dia e você vê quais combinam com seu currículo.",
+    );
   });
 
   it("empresa não se lista como 'quem mais contrata' na própria página", () => {

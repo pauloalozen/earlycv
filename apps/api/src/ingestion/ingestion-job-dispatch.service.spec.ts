@@ -133,7 +133,7 @@ function createFixture() {
   const googleIndexingBackfillService = {
     runBackfillBatch: async () => {
       backfillCalls += 1;
-      return { dailyLimit: 200, failed: 0, processed: 3, succeeded: 3 };
+      return { dailyLimit: 200, enqueued: 3, notifiedToday: 0 };
     },
   } as unknown as GoogleIndexingBackfillService;
 
@@ -302,7 +302,7 @@ test("dispatchJob GOOGLE_INDEXING_BACKFILL chama runBackfillBatch() e resume o r
 
   assert.equal(getBackfillCalls(), 1);
   assert.equal(run.status, "COMPLETED");
-  assert.equal(run.errorMessage, "3/3 notificados, 0 falharam");
+  assert.equal(run.errorMessage, "3 vagas enfileiradas para notificação");
 
   const jobUpdates = getJobUpdates();
   assert.equal(jobUpdates.length, 1);

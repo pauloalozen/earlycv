@@ -14,7 +14,10 @@ import type OpenAI from "openai";
 import { getAiModel } from "../common/ai-client-factory";
 import { trackJob } from "../common/memory-diagnostics";
 import { DatabaseService } from "../database/database.service";
-import { GoogleIndexingService } from "../google-indexing/google-indexing.service";
+import {
+  GoogleIndexingQueueService,
+  INDEXING_PRIORITY,
+} from "../google-indexing/google-indexing-queue.service";
 import { WebRevalidationService } from "../web-revalidation/web-revalidation.service";
 import { doesSecondsCronMatchDate } from "./cron-utils";
 import { EnrichmentConfigService } from "./enrichment-config.service";
@@ -81,8 +84,8 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
     private readonly lockRepository: IngestionLockRepository,
     @Inject(EnrichmentConfigService)
     private readonly enrichmentConfigService: EnrichmentConfigService,
-    @Inject(GoogleIndexingService)
-    private readonly googleIndexingService: GoogleIndexingService,
+    @Inject(GoogleIndexingQueueService)
+    private readonly indexingQueue: GoogleIndexingQueueService,
     @Optional()
     @Inject(JOB_ENRICHMENT_AI_CLIENT)
     aiClient?: OpenAI,
@@ -564,7 +567,20 @@ export class JobEnrichmentWorker implements OnApplicationBootstrap {
       // 404ava. status !== "active" cobre o caso de "Forçar LLM" reprocessar
       // manualmente uma vaga já inativada.
       if (enrichment.job.slug && enrichment.job.status === "active") {
-        await this.googleIndexingService.notifyIndexing(enrichment.job.slug);
+        // Enfileirar nunca derruba o enrichment, que já foi gravado.
+        await this.indexingQueue
+          .enqueue([
+            {
+              priority: INDEXING_PRIORITY.newJob,
+              slug: enrichment.job.slug,
+              type: "URL_UPDATED",
+            },
+          ])
+          .catch((error: unknown) => {
+            this.logger.warn(
+              `indexing enqueue failed for ${enrichment.job.slug}: ${error instanceof Error ? error.message : "unknown"}`,
+            );
+          });
         // Vaga passa a ser pública (ou foi reprocessada): expira já o cache
         // do front, inclusive um 404 em cache de quando ela não existia.
         this.requestWebRevalidation(enrichment.job.slug);

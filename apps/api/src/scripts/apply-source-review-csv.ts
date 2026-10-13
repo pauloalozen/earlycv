@@ -48,6 +48,7 @@ import {
 import { isSameBoard } from "../ingestion/company-source-audit-heuristics";
 import { normalizeCompanyName } from "../ingestion/name-normalization";
 import { canonicalizeSourceUrl } from "../ingestion/url-normalization";
+import { buildScriptJobLifecycle } from "./support-job-lifecycle";
 
 const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
@@ -495,13 +496,18 @@ async function processRow(prisma: PrismaClient, row: Row) {
     });
     log(`  MARCA ${jobs} vaga(s) como removed e EXCLUI fonte ${source.id}`);
     if (!DRY_RUN) {
-      await prisma.$transaction([
-        prisma.job.updateMany({
-          where: { jobSourceId: source.id, status: { not: "removed" } },
-          data: { status: "removed" },
-        }),
-        prisma.jobSource.delete({ where: { id: source.id } }),
-      ]);
+      // JobLifecycle: URL_DELETED das vagas que estavam no radar sai na
+      // mesma transação da exclusão da fonte.
+      const lifecycle = buildScriptJobLifecycle(prisma);
+      await prisma.$transaction(async (tx) => {
+        await lifecycle.closeJobs({
+          reason: "source-review-csv",
+          status: "removed",
+          tx,
+          where: { jobSourceId: source.id },
+        });
+        await tx.jobSource.delete({ where: { id: source.id } });
+      });
     }
     summary.vagasRemovidas += jobs;
     summary.fontesExcluidas += 1;

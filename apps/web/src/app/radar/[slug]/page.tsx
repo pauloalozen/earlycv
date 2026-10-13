@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 
 import { getCurrentAppUserFromCookies } from "@/lib/app-session.server";
@@ -8,7 +8,11 @@ import {
   listPublicJobs,
   type PublicJob,
 } from "@/lib/public-jobs-api";
-import { fetchClosedPublicJob, fetchPublicJob } from "@/lib/public-jobs-client";
+import {
+  fetchClosedPublicJob,
+  fetchCurrentJobSlug,
+  fetchPublicJob,
+} from "@/lib/public-jobs-client";
 import { getRadarLandingIndex } from "@/lib/radar-landings";
 import { buildClosedJobMetadata, ClosedJobView } from "./closed-job-view";
 import { buildJobMetadata, JobDetailView, loadJobViewer } from "./job-detail";
@@ -48,6 +52,20 @@ const loadClosedJob = cache(
   },
 );
 
+// Slug antigo (regenerado na API) vira 308 para o slug atual da vaga.
+async function redirectIfStaleSlug(slug: string): Promise<void> {
+  let current: string | null = null;
+  try {
+    const result = await fetchCurrentJobSlug(slug, { kind: "no-store" });
+    current = result.status === "ok" ? result.data.slug : null;
+  } catch {
+    current = null;
+  }
+  if (current && current !== slug) {
+    permanentRedirect(`/radar/${encodeURIComponent(current)}`);
+  }
+}
+
 export async function generateMetadata({
   params,
 }: JobPageProps): Promise<Metadata> {
@@ -56,7 +74,9 @@ export async function generateMetadata({
   if (job) return buildJobMetadata(job);
 
   const closedJob = await loadClosedJob(slug);
-  return closedJob ? buildClosedJobMetadata(closedJob) : buildJobMetadata(null);
+  if (closedJob) return buildClosedJobMetadata(closedJob);
+  await redirectIfStaleSlug(slug);
+  return buildJobMetadata(null);
 }
 
 export default async function JobPage({ params }: JobPageProps) {
@@ -67,7 +87,10 @@ export default async function JobPage({ params }: JobPageProps) {
 
   if (!job) {
     const closedJob = await loadClosedJob(slug);
-    if (!closedJob) notFound();
+    if (!closedJob) {
+      await redirectIfStaleSlug(slug);
+      notFound();
+    }
 
     const similarJobs = await listPublicJobs({ limit: 3, page: 1 })
       .then((r) => r.data.slice(0, 3))
