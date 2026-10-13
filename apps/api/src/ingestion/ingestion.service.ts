@@ -35,7 +35,10 @@ import {
   WorkdayAdapter,
 } from "./adapters";
 import { evaluate403CircuitBreaker } from "./circuit-breaker-policy";
+import { withCleanTitle } from "./clean-title";
+import { resolveEmploymentType } from "./employment-type";
 import { isForbiddenIngestionError } from "./errors";
+import { withNormalizedLocation } from "./location-normalization";
 import { getStaleCutoff } from "./stale-policy";
 import type {
   IngestionCollectContext,
@@ -916,8 +919,9 @@ export class IngestionService {
 
   private async upsertObservation(
     jobSource: JobSourceContext,
-    observation: NormalizedJobObservation,
+    rawObservation: NormalizedJobObservation,
   ) {
+    const cleanObservation = withCleanTitle(rawObservation);
     // Vagas de boards globais (Workday/Greenhouse/Ashby de empresas com
     // operação Brasil, mas board único mundial) trazem vaga de qualquer
     // país junto com as brasileiras. classifyJobLocation() usa o country
@@ -927,22 +931,26 @@ export class IngestionService {
     // criada/atualizada — não tem Job nem JobEnrichment, então nunca aparece
     // pro público.
     const locationClass = classifyJobLocation({
-      city: observation.city,
-      country: observation.country,
+      city: cleanObservation.city,
+      country: cleanObservation.country,
       isGlobalBoard: jobSource.isGlobalBoard,
-      locationText: observation.locationText,
-      state: observation.state,
+      locationText: cleanObservation.locationText,
+      state: cleanObservation.state,
     });
     if (locationClass === "foreign") {
       return {
         previewItem: {
           action: "skipped",
-          canonicalKey: observation.canonicalKey,
-          message: `Skipped non-Brazilian job location (country=${observation.country ?? "null"}, state=${observation.state ?? "null"}, location=${observation.locationText ?? "null"}).`,
-          title: observation.title,
+          canonicalKey: cleanObservation.canonicalKey,
+          message: `Skipped non-Brazilian job location (country=${cleanObservation.country ?? "null"}, state=${cleanObservation.state ?? "null"}, location=${cleanObservation.locationText ?? "null"}).`,
+          title: cleanObservation.title,
         } satisfies IngestionPreviewItem,
       };
     }
+    // Cidade/UF canônicas só depois de a vaga ser classificada como do
+    // Brasil (ou em revisão) com os dados crus: o parser nunca transforma
+    // vaga estrangeira em brasileira ("Toledo, Ohio" não vira Toledo/PR).
+    const observation = withNormalizedLocation(cleanObservation);
 
     const existingJob = await this.database.job.findUnique({
       where: { canonicalKey: observation.canonicalKey },
@@ -1008,6 +1016,12 @@ export class IngestionService {
       };
     }
 
+    const { employmentType, employmentTypeRaw } = resolveEmploymentType({
+      employmentType: observation.employmentType,
+      employmentTypeRaw: observation.employmentTypeRaw,
+      title: observation.title,
+    });
+
     const payload = {
       city: observation.city,
       companyId: jobSource.company.id,
@@ -1019,7 +1033,8 @@ export class IngestionService {
       country: observation.country ?? "Brasil",
       descriptionClean: observation.descriptionClean,
       descriptionRaw: observation.descriptionRaw,
-      employmentType: observation.employmentType,
+      employmentType,
+      employmentTypeRaw,
       externalJobId: observation.externalJobId,
       firstSeenAt,
       jobSourceId: jobSource.id,
@@ -1055,6 +1070,7 @@ export class IngestionService {
           descriptionClean: undefined,
           descriptionRaw: undefined,
           employmentType: undefined,
+          employmentTypeRaw: undefined,
           locationText: undefined,
           metadataJson: undefined,
           normalizedTitle: undefined,

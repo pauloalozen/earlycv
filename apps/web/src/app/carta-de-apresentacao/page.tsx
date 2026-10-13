@@ -26,19 +26,19 @@ const url = getAbsoluteUrl("/carta-de-apresentacao");
 export const metadata: Metadata = {
   title: "Carta de Apresentação Personalizada para Cada Vaga",
   description:
-    "Não envie a mesma carta pra toda empresa. O EarlyCV gera uma carta de apresentação personalizada a partir do seu currículo e da vaga — sem inventar experiências.",
+    "Não envie a mesma carta pra toda empresa. O EarlyCV gera uma carta de apresentação personalizada a partir do seu currículo e da vaga, sem inventar experiências.",
   alternates: { canonical: url },
   openGraph: {
     title: "Carta de Apresentação Personalizada para Cada Vaga | EarlyCV",
     description:
-      "Carta de apresentação gerada a partir do seu currículo e da vaga — sem inventar experiências.",
+      "Carta de apresentação gerada a partir do seu currículo e da vaga, sem inventar experiências.",
     url,
     type: "website",
   },
   twitter: {
     title: "Carta de Apresentação Personalizada para Cada Vaga | EarlyCV",
     description:
-      "Carta de apresentação gerada a partir do seu currículo e da vaga — sem inventar experiências.",
+      "Carta de apresentação gerada a partir do seu currículo e da vaga, sem inventar experiências.",
   },
 };
 

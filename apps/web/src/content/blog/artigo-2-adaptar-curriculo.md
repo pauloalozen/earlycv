@@ -1,6 +1,6 @@
 ---
 title: "Como adaptar o currículo para cada vaga sem reescrever tudo do zero"
-description: "Um currículo único para todas as vagas é o erro mais comum de quem está procurando emprego. Aprenda o método para personalizar seu documento por candidatura em menos tempo do que parece — e por que isso faz diferença real na taxa de retorno."
+description: "Um currículo único para todas as vagas é o erro mais comum de quem está procurando emprego. Aprenda o método para personalizar seu documento por candidatura em menos tempo do que parece, e por que isso faz diferença real na taxa de retorno."
 slug: como-adaptar-curriculo-para-vaga
 canonical: "https://earlycv.com.br/adaptar-curriculo-para-vaga"
 publishedAt: "2026-05-03"

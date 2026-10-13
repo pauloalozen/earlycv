@@ -53,6 +53,10 @@ test("normalizeCity aplica title case e reaproveita a tabela de UFs pra restaura
   assert.equal(normalizeCity("rio de janeiro"), "Rio de Janeiro");
   assert.equal(normalizeCity("belo horizonte"), "Belo Horizonte");
   assert.equal(normalizeCity("  campinas  "), "Campinas");
+  assert.equal(normalizeCity("TABOÃO DA SERRA"), "Taboão da Serra");
+  assert.equal(normalizeCity("Mogi Das Cruzes"), "Mogi das Cruzes");
+  assert.equal(normalizeCity("são josé dos campos"), "São José dos Campos");
+  assert.equal(normalizeCity("de lá"), "De Lá");
 });
 
 test("normalizeCity retorna null pra entrada vazia/nula", () => {

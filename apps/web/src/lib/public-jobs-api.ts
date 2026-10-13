@@ -36,6 +36,9 @@ export type PublicJob = {
   canonicalKey: string;
   city: string | null;
   company: string;
+  // Nome para exibição (Company.displayName ou o calculado na API).
+  // Opcional enquanto a API anterior ao campo estiver no ar.
+  companyDisplayName?: string;
   companyLogoUrl: string | null;
   companyWebsiteUrl: string | null;
   country: string | null;
@@ -48,6 +51,9 @@ export type PublicJob = {
   id: string;
   lastSeenAt: string;
   location: string;
+  // Cidades reconhecidas na API (até 3, grafia do IBGE). Opcional enquanto
+  // a API anterior ao campo estiver no ar.
+  locations?: Array<{ city: string; state: string }>;
   publishedAtSource: string | null;
   seniorityLevel: string | null;
   slug: string;

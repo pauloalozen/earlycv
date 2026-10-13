@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 
 import {
@@ -10,6 +10,7 @@ import { buildJobMetadata, JobDetailView } from "@/app/radar/[slug]/job-detail";
 import type { ClosedPublicJob, PublicJob } from "@/lib/public-jobs-api";
 import {
   fetchClosedPublicJobCached,
+  fetchCurrentJobSlugCached,
   fetchPublicJobCached,
   fetchPublicSimilarJobsCached,
 } from "@/lib/public-jobs-client";
@@ -54,6 +55,15 @@ const loadClosedJob = cache(
   },
 );
 
+// Slug antigo (regenerado na API) vira 308 para o slug atual da vaga. Mesma
+// regra de erro: falha da API lança, só 404 real segue para notFound().
+async function redirectIfStaleSlug(slug: string): Promise<void> {
+  const result = await fetchCurrentJobSlugCached(slug);
+  if (result.status === "ok" && result.data.slug !== slug) {
+    permanentRedirect(`/radar/${encodeURIComponent(result.data.slug)}`);
+  }
+}
+
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
@@ -62,7 +72,9 @@ export async function generateMetadata({
   if (job) return buildJobMetadata(job);
 
   const closedJob = await loadClosedJob(slug);
-  return closedJob ? buildClosedJobMetadata(closedJob) : buildJobMetadata(null);
+  if (closedJob) return buildClosedJobMetadata(closedJob);
+  await redirectIfStaleSlug(slug);
+  return buildJobMetadata(null);
 }
 
 export default async function PublicJobPage({ params }: PageProps) {
@@ -71,7 +83,10 @@ export default async function PublicJobPage({ params }: PageProps) {
 
   if (!job) {
     const closedJob = await loadClosedJob(slug);
-    if (!closedJob) notFound();
+    if (!closedJob) {
+      await redirectIfStaleSlug(slug);
+      notFound();
+    }
 
     const closedSimilarJobs = await fetchPublicSimilarJobsCached()
       .then((result) =>
