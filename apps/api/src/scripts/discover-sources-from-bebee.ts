@@ -5,12 +5,12 @@
 // sabemos ler (Gupy, Pandapé, Sólides, InHire, Workday...), ele revela a
 // empresa + o board dela. Este script:
 //
-//   1. Lê o sitemap BR de vagas do beBee e fica só com as vagas dos feeds
-//      que trazem apply_url de ATS (TheirStack e Fantastic Jobs — ver
-//      BEBEE_ATS_ORIGINS).
+//   1. Lê as páginas mais recentes do sitemap BR de vagas do beBee e fica só
+//      com as vagas dos feeds que trazem apply_url de ATS (TheirStack e
+//      Fantastic Jobs — ver BEBEE_ATS_ORIGINS).
 //   2. Baixa as páginas ainda não vistas (com pausa entre requisições) e
 //      guarda o resultado num cache JSONL local, pra rodar em várias
-//      sessões sem rebaixar nada (o sitemap tem ~35 mil vagas desses feeds).
+//      sessões sem rebaixar nada.
 //   3. Converte cada apply_url em board de ATS (matchAdapterUrl) e cruza com
 //      o banco: fonte já cadastrada, candidato já na Descoberta, empresa já
 //      existente (board novo pra revisar à mão) ou candidato novo.
@@ -23,7 +23,8 @@
 //   npm run discover:bebee-sources --workspace @earlycv/api                  # dry-run
 //   npm run discover:bebee-sources --workspace @earlycv/api -- --apply
 //   Opções: --limit=500 (páginas novas baixadas nesta execução; 0 = só
-//   reprocessa o cache), --delay-ms=700, --origins=t7xk,fj,
+//   reprocessa o cache, sem nem ler o sitemap), --sitemap-pages=1,
+//   --delay-ms=700, --origins=t7xk,fj,
 //   --cache=caminho.jsonl, --report=caminho.csv
 
 import {
@@ -60,6 +61,11 @@ function argValue(name: string) {
 
 const LIMIT = Number(argValue("limit") ?? 500);
 const DELAY_MS = Number(argValue("delay-ms") ?? 700);
+const SITEMAP_PAGES_ARG = Number(argValue("sitemap-pages") ?? 1);
+const SITEMAP_PAGES =
+  Number.isFinite(SITEMAP_PAGES_ARG) && SITEMAP_PAGES_ARG >= 1
+    ? Math.floor(SITEMAP_PAGES_ARG)
+    : 1;
 const ORIGINS = (
   argValue("origins") ?? Object.keys(BEBEE_ATS_ORIGINS).join(",")
 )
@@ -113,12 +119,16 @@ async function fetchText(url: string, timeoutMs = 20_000) {
   return response.text();
 }
 
-// O índice de sitemaps não lista o BR, mas /sitemaps/jobs/br existe; as
-// páginas seguintes (/2, /3...) respondem 503 quando não existem. O XML tem
-// ~9 MB e o servidor leva ~15 s pra comprimir — timeout próprio.
+// O índice de sitemaps não lista o BR, mas /sitemaps/jobs/br existe. Desde
+// out/2026 ele pagina (/2, /3... dezenas de páginas de 50 mil URLs), da mais
+// recente pra mais antiga: cada página cobre ~1–2 dias. A descoberta só
+// quer vaga recente (tenant de ATS ativo), então lê só as primeiras
+// SITEMAP_PAGES — ler tudo dava 1 milhão de URLs, quase todas de vaga já
+// encerrada. Página inexistente responde 503. O XML é grande e o servidor
+// demora pra comprimir — timeout próprio.
 async function loadSitemapUrls() {
   const urls: string[] = [];
-  for (let page = 1; page <= 20; page++) {
+  for (let page = 1; page <= SITEMAP_PAGES; page++) {
     const url = page === 1 ? SITEMAP_URL : `${SITEMAP_URL}/${page}`;
     let xml: string;
     try {
@@ -188,7 +198,7 @@ async function main() {
     });
     const pending = candidates.filter((url) => !cache.has(url));
     log(
-      `sitemap: ${sitemapUrls.length} vaga(s), ${candidates.length} das origens escolhidas, ${pending.length} ainda não baixadas`,
+      `sitemap (${SITEMAP_PAGES} página(s) mais recente(s)): ${sitemapUrls.length} vaga(s), ${candidates.length} das origens escolhidas, ${pending.length} ainda não baixadas`,
     );
 
     let fetched = 0;
