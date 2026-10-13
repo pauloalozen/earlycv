@@ -499,6 +499,7 @@ export type GoogleIndexingQueueStatus = {
   remainingToday: number;
   pending: { updated: number; deleted: number };
   failed: number;
+  expiredToday: number;
 };
 
 export type GoogleIndexingJobStatus = "pending" | "notified" | "failed";

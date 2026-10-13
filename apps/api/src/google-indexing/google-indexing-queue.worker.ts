@@ -22,6 +22,10 @@ export const INDEXING_SENDS_PER_RUN = 20;
 export const INDEXING_MAX_ATTEMPTS = 5;
 const RETRY_BASE_DELAY_MS = 5 * 60 * 1000;
 const RETENTION_DAYS = 30;
+// URL_DELETED parado na fila há mais que isso já não vale o envio: o Google
+// recrawleia a página nesse intervalo e vê a vaga fora do ar sozinho.
+export const INDEXING_DELETED_TTL_DAYS = 7;
+export const INDEXING_EXPIRED_REASON = "expired";
 
 // Processa a fila de GoogleIndexingQueueItem: respeita a cota diária
 // (janela do Pacífico, URL_UPDATED + URL_DELETED), manda remoção antes de
@@ -48,12 +52,19 @@ export class GoogleIndexingQueueWorker {
   }
 
   async runOnce(now = new Date()): Promise<{
+    expired: number;
     sent: number;
     skipped: number;
     failed: number;
     quotaExceeded: boolean;
   }> {
-    const result = { failed: 0, quotaExceeded: false, sent: 0, skipped: 0 };
+    const result = {
+      expired: 0,
+      failed: 0,
+      quotaExceeded: false,
+      sent: 0,
+      skipped: 0,
+    };
     const owner = `indexing-queue-${randomUUID()}`;
     const acquired = await this.lockRepository.acquire(
       LOCK_ID,
@@ -64,6 +75,7 @@ export class GoogleIndexingQueueWorker {
 
     try {
       await this.purgeOldItemsOncePerDay(now);
+      result.expired = await this.expireStaleDeleted(now);
       if (!this.googleIndexingService.isEnabled()) return result;
 
       const remaining =
@@ -130,9 +142,9 @@ export class GoogleIndexingQueueWorker {
         }
       }
 
-      if (result.sent || result.skipped || result.failed) {
+      if (result.sent || result.skipped || result.failed || result.expired) {
         this.logger.log(
-          `indexing queue: sent=${result.sent} skipped=${result.skipped} failed=${result.failed} quotaExceeded=${result.quotaExceeded}`,
+          `indexing queue: sent=${result.sent} skipped=${result.skipped} expired=${result.expired} failed=${result.failed} quotaExceeded=${result.quotaExceeded}`,
         );
       }
       return result;
@@ -174,6 +186,28 @@ export class GoogleIndexingQueueWorker {
       data: { pendingKey: null, processedAt: now, status },
       where: { id, status: "pending", type },
     });
+  }
+
+  // createdAt de uma pendência DELETED é quando ela virou DELETED (a troca de
+  // tipo no enqueue reinicia o createdAt). Vence como skipped, sem envio.
+  private async expireStaleDeleted(now: Date): Promise<number> {
+    const cutoff = new Date(
+      now.getTime() - INDEXING_DELETED_TTL_DAYS * 86_400_000,
+    );
+    const { count } = await this.database.googleIndexingQueueItem.updateMany({
+      data: {
+        lastError: INDEXING_EXPIRED_REASON,
+        pendingKey: null,
+        processedAt: now,
+        status: "skipped",
+      },
+      where: {
+        createdAt: { lt: cutoff },
+        status: "pending",
+        type: "URL_DELETED",
+      },
+    });
+    return count;
   }
 
   private async purgeOldItemsOncePerDay(now: Date) {
