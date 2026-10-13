@@ -176,6 +176,22 @@ function createFixture(options?: {
         candidates.set(where.id, updated);
         return updated;
       },
+      updateMany: async ({
+        data,
+        where,
+      }: {
+        data: Partial<Candidate>;
+        where: { id: { in: string[] }; status: { not: string } };
+      }) => {
+        let count = 0;
+        for (const id of where.id.in) {
+          const candidate = candidates.get(id);
+          if (!candidate || candidate.status === where.status.not) continue;
+          candidates.set(id, { ...candidate, ...data, updatedAt: new Date() });
+          count += 1;
+        }
+        return { count };
+      },
       deleteMany: async ({ where }: { where?: ListWhere } = {}) => {
         const toDelete = [...candidates.values()].filter((c) =>
           matchesWhere(c, where),
@@ -1110,6 +1126,29 @@ test("dismiss marca DISMISSED e recusa candidato já IMPORTED", async () => {
 
   await candidates.set(candidate.id, { ...candidate, status: "IMPORTED" });
   await assert.rejects(() => service.dismiss(candidate.id));
+});
+
+test("dismissMany descarta os selecionados e nunca toca em IMPORTED", async () => {
+  const { service, candidates } = createFixture();
+  await service.importCandidatesCsv({
+    csvText: "nome\nEmpresa A\nEmpresa B\nEmpresa C\nJa Importada",
+  });
+  const [a, b, c, imported] = [...candidates.values()];
+  await candidates.set(b.id, { ...b, status: "VALIDATED" });
+  await candidates.set(imported.id, { ...imported, status: "IMPORTED" });
+
+  const result = await service.dismissMany([
+    a.id,
+    b.id,
+    imported.id,
+    "inexistente",
+  ]);
+  assert.equal(result.dismissedCount, 2);
+
+  assert.equal(candidates.get(a.id)?.status, "DISMISSED");
+  assert.equal(candidates.get(b.id)?.status, "DISMISSED");
+  assert.equal(candidates.get(c.id)?.status, "PENDING");
+  assert.equal(candidates.get(imported.id)?.status, "IMPORTED");
 });
 
 test("clearPending apaga só os PENDING, nunca o histórico já processado", async () => {

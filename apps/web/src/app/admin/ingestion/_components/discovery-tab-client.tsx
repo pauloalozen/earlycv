@@ -56,6 +56,11 @@ type ListResponse = {
 
 const PAGE_SIZE = 50;
 
+// Quantos candidatos o "Validar selecionados" processa ao mesmo tempo. Cada
+// validação faz probes no ATS com pausa entre eles; mais que isso aumenta a
+// chance de rate limit no mesmo ATS (resultado inconclusivo).
+const BULK_VALIDATE_CONCURRENCY = 3;
+
 const MANUAL_ADAPTER_TYPES = [
   "gupy",
   "greenhouse",
@@ -106,6 +111,20 @@ const STATUS_TONE: Record<
   VALIDATED: "ok",
 };
 
+// A API devolve o registro inteiro do Prisma; a tabela só usa estes campos.
+function pickRowFields(
+  data: DiscoveredCompanyRow,
+): Partial<DiscoveredCompanyRow> {
+  return {
+    adapterType: data.adapterType,
+    careersUrl: data.careersUrl,
+    errorMessage: data.errorMessage,
+    jobCount: data.jobCount,
+    rawJobCount: data.rawJobCount,
+    status: data.status,
+  };
+}
+
 export function DiscoveryTabClient() {
   const [rows, setRows] = useState<DiscoveredCompanyRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -122,6 +141,13 @@ export function DiscoveryTabClient() {
   const [clearingPending, setClearingPending] = useState(false);
   const [showClearPendingModal, setShowClearPendingModal] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [bulkProgress, setBulkProgress] = useState<{
+    label: string;
+    done: number;
+    total: number;
+  } | null>(null);
   const [manualFormRowId, setManualFormRowId] = useState<string | null>(null);
   const [manualCareersUrl, setManualCareersUrl] = useState("");
   const [manualAdapterType, setManualAdapterType] = useState<string>(
@@ -191,6 +217,63 @@ export function DiscoveryTabClient() {
     }
     return result;
   }, [rows, adapterFilter, sortField, sortDir]);
+
+  // Validar/descartar atualiza a linha no lugar em vez de recarregar a
+  // lista: a API ordena por updatedAt desc, então recarregar jogava a linha
+  // mexida pro topo e reordenava a tabela a cada clique. As contagens por
+  // status são ajustadas localmente pelo mesmo motivo.
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const applyRowUpdate = useCallback(
+    (id: string, patch: Partial<DiscoveredCompanyRow>) => {
+      const current = rowsRef.current.find((row) => row.id === id);
+      if (!current) return;
+      const next = { ...current, ...patch };
+      rowsRef.current = rowsRef.current.map((row) =>
+        row.id === id ? next : row,
+      );
+      setRows(rowsRef.current);
+      if (next.status !== current.status) {
+        setStatusCounts((counts) => ({
+          ...counts,
+          [current.status]: Math.max(0, (counts[current.status] ?? 0) - 1),
+          [next.status]: (counts[next.status] ?? 0) + 1,
+        }));
+      }
+    },
+    [],
+  );
+
+  function setBusy(id: string, busy: boolean) {
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  const selectableRows = displayedRows.filter(
+    (row) => row.status !== "IMPORTED",
+  );
+  const allSelected =
+    selectableRows.length > 0 &&
+    selectableRows.every((row) => selectedIds.has(row.id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(
+      allSelected ? new Set() : new Set(selectableRows.map((row) => row.id)),
+    );
+  }
 
   // Exporta TODOS os candidatos que batem com os filtros atuais (status +
   // busca), não só a página de 50 exibida na tela — pagina por baixo dos
@@ -281,6 +364,7 @@ export function DiscoveryTabClient() {
       if (res.ok) {
         const data: ListResponse = await res.json();
         setRows(data.rows);
+        setSelectedIds(new Set());
         setTotal(data.total);
         setStatusCounts(data.statusCounts);
       }
@@ -365,9 +449,102 @@ export function DiscoveryTabClient() {
       setMessage(
         `"${data.name}" revalidado: ${STATUS_LABELS[data.status as DiscoveredCompanyStatus] ?? data.status}.`,
       );
-      await fetchRows();
+      applyRowUpdate(id, pickRowFields(data));
     } finally {
       setPendingActionId(null);
+    }
+  }
+
+  // Valida os selecionados reaproveitando o endpoint unitário, N por vez
+  // (BULK_VALIDATE_CONCURRENCY). Cada linha muda de status assim que a
+  // validação dela termina; fechar a aba no meio só interrompe o que falta.
+  async function handleValidateSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setError(null);
+    setMessage(null);
+    setBulkProgress({ done: 0, label: "Validando", total: ids.length });
+    const failures: string[] = [];
+    let validated = 0;
+    const queue = [...ids];
+
+    async function worker() {
+      for (;;) {
+        const id = queue.shift();
+        if (!id) return;
+        setBusy(id, true);
+        try {
+          const res = await fetch(
+            `/api/admin/ingestion/discovery/${id}/validate`,
+            { method: "POST" },
+          );
+          const data = await res.json().catch(() => null);
+          if (res.ok && data) {
+            applyRowUpdate(id, pickRowFields(data));
+            validated += 1;
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          } else {
+            const name =
+              rowsRef.current.find((row) => row.id === id)?.name ?? id;
+            failures.push(`${name}: ${data?.message ?? `HTTP ${res.status}`}`);
+          }
+        } catch {
+          const name = rowsRef.current.find((row) => row.id === id)?.name ?? id;
+          failures.push(`${name}: falha de rede`);
+        } finally {
+          setBusy(id, false);
+          setBulkProgress((prev) =>
+            prev ? { ...prev, done: prev.done + 1 } : prev,
+          );
+        }
+      }
+    }
+
+    try {
+      await Promise.all(
+        Array.from(
+          { length: Math.min(BULK_VALIDATE_CONCURRENCY, ids.length) },
+          worker,
+        ),
+      );
+    } finally {
+      setBulkProgress(null);
+    }
+
+    setMessage(`${validated}/${ids.length} candidato(s) validado(s).`);
+    if (failures.length > 0) {
+      setError(
+        `${failures.length} falharam (continuam selecionados): ${failures.join(" · ")}`,
+      );
+    }
+  }
+
+  async function handleDismissSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setError(null);
+    setMessage(null);
+    setBulkProgress({ done: 0, label: "Descartando", total: ids.length });
+    try {
+      const res = await fetch("/api/admin/ingestion/discovery/dismiss-bulk", {
+        body: JSON.stringify({ ids }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.message ?? "Falha ao descartar selecionados.");
+        return;
+      }
+      for (const id of ids) applyRowUpdate(id, { status: "DISMISSED" });
+      setSelectedIds(new Set());
+      setMessage(`${data.dismissedCount} candidato(s) descartado(s).`);
+    } finally {
+      setBulkProgress(null);
     }
   }
 
@@ -486,7 +663,7 @@ export function DiscoveryTabClient() {
         setError(data?.message ?? "Falha ao descartar candidato.");
         return;
       }
-      await fetchRows();
+      applyRowUpdate(id, { status: "DISMISSED" });
     } finally {
       setPendingActionId(null);
     }
@@ -698,9 +875,79 @@ export function DiscoveryTabClient() {
           );
         })()}
 
+      {(selectedIds.size > 0 || bulkProgress) && (
+        <div
+          style={{
+            alignItems: "center",
+            background: AT.card,
+            border: `1px solid ${AT.border}`,
+            borderRadius: 8,
+            display: "flex",
+            flexWrap: "wrap",
+            fontSize: 13,
+            gap: 8,
+            justifyContent: "space-between",
+            padding: "8px 12px",
+          }}
+        >
+          <span style={{ color: AT.ink2 }}>
+            {bulkProgress ? (
+              <>
+                {bulkProgress.label}{" "}
+                <strong style={{ color: AT.ink }}>
+                  {bulkProgress.done}/{bulkProgress.total}
+                </strong>
+                ...
+              </>
+            ) : (
+              <>
+                <strong style={{ color: AT.ink }}>{selectedIds.size}</strong>{" "}
+                selecionado(s)
+              </>
+            )}
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              className={buttonVariants({ size: "sm" })}
+              disabled={Boolean(bulkProgress) || selectedIds.size === 0}
+              onClick={handleValidateSelected}
+              type="button"
+            >
+              Validar selecionados
+            </button>
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              disabled={Boolean(bulkProgress) || selectedIds.size === 0}
+              onClick={handleDismissSelected}
+              type="button"
+            >
+              Descartar selecionados
+            </button>
+            <button
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              disabled={Boolean(bulkProgress)}
+              onClick={() => setSelectedIds(new Set())}
+              type="button"
+            >
+              Limpar seleção
+            </button>
+          </div>
+        </div>
+      )}
+
       <AdminTable>
         <thead>
           <tr>
+            <AdminTh w={36}>
+              <input
+                aria-label="Selecionar todos da página"
+                checked={allSelected}
+                disabled={Boolean(bulkProgress) || selectableRows.length === 0}
+                onChange={toggleSelectAll}
+                style={{ accentColor: AT.ink, cursor: "pointer" }}
+                type="checkbox"
+              />
+            </AdminTh>
             <AdminTh>Nome</AdminTh>
             <AdminTh w={110}>
               <button
@@ -759,6 +1006,18 @@ export function DiscoveryTabClient() {
             displayedRows.map((row) => (
               <Fragment key={row.id}>
                 <tr>
+                  <AdminTd>
+                    {row.status !== "IMPORTED" && (
+                      <input
+                        aria-label={`Selecionar ${row.name}`}
+                        checked={selectedIds.has(row.id)}
+                        disabled={Boolean(bulkProgress)}
+                        onChange={() => toggleSelected(row.id)}
+                        style={{ accentColor: AT.ink, cursor: "pointer" }}
+                        type="checkbox"
+                      />
+                    )}
+                  </AdminTd>
                   <AdminTd>{row.name}</AdminTd>
                   <AdminTd mono>{row.adapterType ?? "—"}</AdminTd>
                   <AdminTd mono muted>
@@ -805,11 +1064,13 @@ export function DiscoveryTabClient() {
                             size: "sm",
                             variant: "outline",
                           })}
-                          disabled={pendingActionId === row.id}
+                          disabled={
+                            pendingActionId === row.id || busyIds.has(row.id)
+                          }
                           onClick={() => handleValidateOne(row.id)}
                           type="button"
                         >
-                          Validar
+                          {busyIds.has(row.id) ? "Validando..." : "Validar"}
                         </button>
                       )}
                       {(row.status === "VALIDATED" ||
@@ -817,7 +1078,9 @@ export function DiscoveryTabClient() {
                         row.status === "NO_ACTIVE_JOBS") && (
                         <button
                           className={buttonVariants({ size: "sm" })}
-                          disabled={pendingActionId === row.id}
+                          disabled={
+                            pendingActionId === row.id || busyIds.has(row.id)
+                          }
                           onClick={() => handlePromote(row.id)}
                           type="button"
                         >
@@ -831,7 +1094,9 @@ export function DiscoveryTabClient() {
                             size: "sm",
                             variant: "outline",
                           })}
-                          disabled={pendingActionId === row.id}
+                          disabled={
+                            pendingActionId === row.id || busyIds.has(row.id)
+                          }
                           onClick={() =>
                             manualFormRowId === row.id
                               ? setManualFormRowId(null)
@@ -850,7 +1115,9 @@ export function DiscoveryTabClient() {
                             size: "sm",
                             variant: "outline",
                           })}
-                          disabled={pendingActionId === row.id}
+                          disabled={
+                            pendingActionId === row.id || busyIds.has(row.id)
+                          }
                           onClick={() => handleDismiss(row.id)}
                           type="button"
                         >
@@ -863,7 +1130,7 @@ export function DiscoveryTabClient() {
                 {manualFormRowId === row.id && (
                   <tr key={`${row.id}-manual-form`}>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       style={{
                         padding: "10px 16px",
                         borderBottom: `1px solid ${AT.borderSoft}`,
@@ -917,7 +1184,9 @@ export function DiscoveryTabClient() {
                         </select>
                         <button
                           className={buttonVariants({ size: "sm" })}
-                          disabled={pendingActionId === row.id}
+                          disabled={
+                            pendingActionId === row.id || busyIds.has(row.id)
+                          }
                           onClick={() => handlePromoteManual(row.id)}
                           type="button"
                         >
